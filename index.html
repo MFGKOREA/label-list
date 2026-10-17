@@ -58,6 +58,7 @@ body {
 .wrap { max-width: 680px; margin: 0 auto; display: grid; gap: 20px; }
 header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.store { display: block; font-size: 13px; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; margin-bottom: 2px; }
 .today { color: var(--muted); font-size: 13px; font-family: var(--font-num); }
 
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -133,12 +134,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <body>
 <div class="wrap">
   <header>
-    <h1>한글표시사항 리스트</h1>
+    <div>
+      <span class="store">MG수원컨벤션점</span>
+      <h1>한글표시사항 리스트</h1>
+    </div>
     <div class="today" id="today"></div>
   </header>
 
   <div class="summary">
-    <div class="sum exp"><b id="cExp">0</b><span>기한 지남</span></div>
+    <div class="sum exp"><b id="cExp">0</b><span>7일 이내</span></div>
     <div class="sum soon"><b id="cSoon">0</b><span>30일 이내</span></div>
     <div class="sum ok"><b id="cOk">0</b><span>여유</span></div>
   </div>
@@ -230,7 +234,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const expiryOf = (it) => it.mode === "period" ? addPeriod(it.mfg, it.num, it.unit) : it.expiry;
   const today = () => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); };
   const daysLeft = (iso) => Math.round((parse(iso) - today()) / DAY);
-  const status = (n) => n < 0 ? "exp" : n <= 30 ? "soon" : "ok";
+  const status = (n) => n <= 7 ? "exp" : n <= 30 ? "soon" : "ok"; // 7일 이내(지난 것 포함) / 30일 이내 / 여유
   const ddayText = (n) => n === 0 ? "D-DAY" : n > 0 ? `D-${n}` : `D+${-n}`;
 
   // ---- storage: Google Sheet via Apps Script API, localStorage as a fast first paint ----
@@ -254,7 +258,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   function apply(list) { items = list; lsSave(); render(); $("note").textContent = ""; showAlertOnce(); }
 
-  // ---- 기한 임박 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 (7일 미만 / 30일 미만) ----
+  // ---- 기한 임박 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 (7일 이내 / 30일 이내) ----
   const SKIP = "label-list-alert-skip";
   let alertShown = false;
   function alertRow({ it, exp, n }) {
@@ -267,13 +271,13 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     alertShown = true;
     try { if (localStorage.getItem(SKIP) === toISO(today())) return; } catch {}
     const rows = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
-      .filter((r) => r.n < 30).sort((a, b) => a.n - b.n);
+      .filter((r) => r.n <= 30).sort((a, b) => a.n - b.n);
     if (!rows.length) return;
-    const week = rows.filter((r) => r.n < 7), month = rows.filter((r) => r.n >= 7);
+    const week = rows.filter((r) => r.n <= 7), month = rows.filter((r) => r.n > 7);
     $("alertTitle").textContent = `유통기한 확인할 품목 ${rows.length}개`;
     $("alertBody").innerHTML =
-      (week.length ? `<h4 class="grp exp">7일 미만 · ${week.length}개</h4><ul>${week.map(alertRow).join("")}</ul>` : "") +
-      (month.length ? `<h4 class="grp soon">30일 미만 · ${month.length}개</h4><ul>${month.map(alertRow).join("")}</ul>` : "");
+      (week.length ? `<h4 class="grp exp">7일 이내 · ${week.length}개</h4><ul>${week.map(alertRow).join("")}</ul>` : "") +
+      (month.length ? `<h4 class="grp soon">30일 이내 · ${month.length}개</h4><ul>${month.map(alertRow).join("")}</ul>` : "");
     $("alert").hidden = false;
     $("alertClose").focus();
   }
@@ -380,7 +384,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       const del = pendingDelete === it.id
         ? `<button class="confirm" data-act="del" data-id="${it.id}">삭제 확인</button><button data-act="keep">취소</button>`
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
-      return `<li class="${s === "exp" ? "expired" : ""}">
+      return `<li class="${n < 0 ? "expired" : ""}">
         <div class="dday ${s}">${ddayText(n)}</div>
         <div class="info"><div class="name">${esc(it.name)}</div>
           <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${basis}${memo}</div></div>
