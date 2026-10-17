@@ -114,6 +114,11 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 .popup { background: var(--surface); color: var(--fg); border-radius: 14px; width: 100%; max-width: 420px; max-height: 80vh; overflow: auto; padding: 20px; display: grid; gap: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .25); }
 .popup h3 { margin: 0; font-size: 17px; }
 .popup ul { border-radius: 10px; }
+.alert-body { display: grid; gap: 8px; }
+.grp { margin: 6px 0 0; font-size: 13px; font-weight: 600; }
+.grp:first-child { margin-top: 0; }
+.grp.exp { color: var(--danger); }
+.grp.soon { color: var(--warn); }
 .popup li { grid-template-columns: 64px 1fr; padding: 10px 12px; }
 .popup .actions { justify-content: stretch; }
 .popup .actions .btn { flex: 1; }
@@ -190,7 +195,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <div class="overlay" id="alert" hidden>
   <div class="popup" role="dialog" aria-modal="true" aria-labelledby="alertTitle">
     <h3 id="alertTitle"></h3>
-    <ul id="alertList"></ul>
+    <div id="alertBody" class="alert-body"></div>
     <div class="actions">
       <button type="button" class="btn" id="alertToday">오늘 하루 안 보기</button>
       <button type="button" class="btn primary" id="alertClose">확인</button>
@@ -249,22 +254,26 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   function apply(list) { items = list; lsSave(); render(); $("note").textContent = ""; showAlertOnce(); }
 
-  // ---- 7일 미만 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 ----
-  const ALERT_DAYS = 7;
+  // ---- 기한 임박 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 (7일 미만 / 30일 미만) ----
   const SKIP = "label-list-alert-skip";
   let alertShown = false;
+  function alertRow({ it, exp, n }) {
+    return `<li><div class="dday ${status(n)}">${ddayText(n)}</div>
+      <div class="info"><div class="name">${esc(it.name)}</div>
+        <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${it.memo ? `<span>${esc(it.memo)}</span>` : ""}</div></div></li>`;
+  }
   function showAlertOnce() {
     if (alertShown) return;
     alertShown = true;
     try { if (localStorage.getItem(SKIP) === toISO(today())) return; } catch {}
-    const near = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
-      .filter((r) => r.n < ALERT_DAYS).sort((a, b) => a.n - b.n);
-    if (!near.length) return;
-    $("alertTitle").textContent = `유통기한 7일 미만 ${near.length}개`;
-    $("alertList").innerHTML = near.map(({ it, exp, n }) => `<li>
-      <div class="dday ${status(n)}">${ddayText(n)}</div>
-      <div class="info"><div class="name">${esc(it.name)}</div>
-        <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${it.memo ? `<span>${esc(it.memo)}</span>` : ""}</div></div></li>`).join("");
+    const rows = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
+      .filter((r) => r.n < 30).sort((a, b) => a.n - b.n);
+    if (!rows.length) return;
+    const week = rows.filter((r) => r.n < 7), month = rows.filter((r) => r.n >= 7);
+    $("alertTitle").textContent = `유통기한 확인할 품목 ${rows.length}개`;
+    $("alertBody").innerHTML =
+      (week.length ? `<h4 class="grp exp">7일 미만 · ${week.length}개</h4><ul>${week.map(alertRow).join("")}</ul>` : "") +
+      (month.length ? `<h4 class="grp soon">30일 미만 · ${month.length}개</h4><ul>${month.map(alertRow).join("")}</ul>` : "");
     $("alert").hidden = false;
     $("alertClose").focus();
   }
