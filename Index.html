@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="한글표시사항">
+<meta name="theme-color" content="#f5f6f4">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f5a46'/%3E%3Crect x='16' y='18' width='32' height='5' rx='2.5' fill='white'/%3E%3Crect x='16' y='30' width='24' height='5' rx='2.5' fill='white'/%3E%3Crect x='16' y='42' width='16' height='5' rx='2.5' fill='white'/%3E%3C/svg%3E">
+<title>한글표시사항 리스트</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column — summary strip, add form, list sorted by remaining days */
+:root {
+  --bg: #f5f6f4;
+  --surface: #ffffff;
+  --fg: #1b1f1d;
+  --muted: #6b726e;
+  --line: #e2e5e1;
+  --accent: #1f5a46;
+  --accent-ink: #ffffff;
+  --danger: #b4322a;
+  --danger-bg: #fbeceb;
+  --warn: #9a5b00;
+  --warn-bg: #fdf3e2;
+  --ok: #2c6b4f;
+  --ok-bg: #e9f3ee;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121514; --surface: #1a1e1c; --fg: #e8ebe9; --muted: #9aa29d; --line: #2b302d;
+    --accent: #7cc4a6; --accent-ink: #0f1a15;
+    --danger: #f08a82; --danger-bg: #3a1f1d; --warn: #e9b65f; --warn-bg: #33281a; --ok: #86cfae; --ok-bg: #1b2c24;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121514; --surface: #1a1e1c; --fg: #e8ebe9; --muted: #9aa29d; --line: #2b302d;
+  --accent: #7cc4a6; --accent-ink: #0f1a15;
+  --danger: #f08a82; --danger-bg: #3a1f1d; --warn: #e9b65f; --warn-bg: #33281a; --ok: #86cfae; --ok-bg: #1b2c24;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 56px;
+}
+.wrap { max-width: 680px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.today { color: var(--muted); font-size: 13px; font-family: var(--font-num); }
+
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sum { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; display: grid; gap: 2px; }
+.sum b { font-family: var(--font-num); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.sum span { font-size: 12px; color: var(--muted); }
+.sum.exp b { color: var(--danger); }
+.sum.soon b { color: var(--warn); }
+.sum.ok b { color: var(--ok); }
+
+form { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+.row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.row > * { min-width: 0; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+input, select {
+  font: inherit; font-size: 15px; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; width: 100%; min-width: 0;
+}
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: inline-grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 3px; }
+.seg button { font: inherit; font-size: 13px; font-weight: 500; border: 0; background: transparent; color: var(--muted); padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.period { display: grid; grid-template-columns: 1fr 90px; gap: 6px; }
+.preview { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+.preview b { color: var(--fg); font-family: var(--font-num); font-weight: 500; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 14px; font-weight: 600; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--fg); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.listhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.listhead h2 { font-size: 14px; margin: 0; font-weight: 600; }
+.listhead input { max-width: 200px; padding: 6px 10px; font-size: 13px; }
+ul { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+li { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); }
+li:first-child { border-top: 0; }
+.dday { font-family: var(--font-num); font-size: 13px; font-weight: 500; text-align: center; border-radius: 6px; padding: 5px 0; font-variant-numeric: tabular-nums; }
+.dday.exp { background: var(--danger-bg); color: var(--danger); }
+.dday.soon { background: var(--warn-bg); color: var(--warn); }
+.dday.ok { background: var(--ok-bg); color: var(--ok); }
+.info { min-width: 0; }
+.name { font-weight: 600; overflow-wrap: anywhere; }
+.meta { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.meta .date { font-family: var(--font-num); color: var(--fg); }
+li.expired .name { text-decoration: line-through; text-decoration-color: var(--muted); }
+.ops { display: flex; gap: 4px; }
+.ops button { font: inherit; font-size: 12.5px; border: 0; background: transparent; color: var(--muted); padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.ops button:hover { background: var(--bg); color: var(--fg); }
+.ops button.confirm { color: var(--danger); font-weight: 600; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); font-size: 14px; background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
+.note { font-size: 12px; color: var(--muted); text-align: center; }
+
+.overlay { position: fixed; inset: 0; background: rgb(0 0 0 / .45); display: grid; place-items: center; z-index: 20;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.popup { background: var(--surface); color: var(--fg); border-radius: 14px; width: 100%; max-width: 420px; max-height: 80vh; overflow: auto; padding: 20px; display: grid; gap: 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .25); }
+.popup h3 { margin: 0; font-size: 17px; }
+.popup ul { border-radius: 10px; }
+.popup li { grid-template-columns: 64px 1fr; padding: 10px 12px; }
+.popup .actions { justify-content: stretch; }
+.popup .actions .btn { flex: 1; }
+@media (max-width: 480px) {
+  .row { grid-template-columns: 1fr; }
+  li { grid-template-columns: 56px 1fr; }
+  .ops { grid-column: 2; margin-left: -8px; }
+  .listhead input { max-width: 140px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>한글표시사항 리스트</h1>
+    <div class="today" id="today"></div>
+  </header>
+
+  <div class="summary">
+    <div class="sum exp"><b id="cExp">0</b><span>기한 지남</span></div>
+    <div class="sum soon"><b id="cSoon">0</b><span>30일 이내</span></div>
+    <div class="sum ok"><b id="cOk">0</b><span>여유</span></div>
+  </div>
+
+  <form id="form" autocomplete="off">
+    <div class="row">
+      <label>제품명
+        <input id="fName" required placeholder="예: 냉동 새우살 500g">
+      </label>
+      <label>특이사항 (선택)
+        <input id="fMemo" placeholder="예: 냉동보관 / 개봉 후 냉장">
+      </label>
+    </div>
+    <div class="seg" role="group" aria-label="기한 입력 방식">
+      <button type="button" id="mDate" aria-pressed="true">유통기한 직접 입력</button>
+      <button type="button" id="mPeriod" aria-pressed="false">제조일로부터 기간</button>
+    </div>
+    <div class="row" id="byDate">
+      <label>유통기한
+        <input type="date" id="fExpiry">
+      </label>
+    </div>
+    <div class="row" id="byPeriod" hidden>
+      <label>제조일자
+        <input type="date" id="fMfg">
+      </label>
+      <label>제조일로부터
+        <span class="period">
+          <input type="number" id="fNum" min="1" step="1" value="3" inputmode="numeric">
+          <select id="fUnit">
+            <option value="y">년</option>
+            <option value="m">개월</option>
+            <option value="d">일</option>
+          </select>
+        </span>
+      </label>
+    </div>
+    <div class="preview" id="preview"></div>
+    <div class="actions">
+      <button type="button" class="btn" id="cancel" hidden>취소</button>
+      <button type="submit" class="btn primary" id="submit">추가</button>
+    </div>
+  </form>
+
+  <div class="listhead">
+    <h2>기한 짧은 순 <span id="total" style="color:var(--muted);font-weight:400"></span></h2>
+    <input id="q" type="search" placeholder="검색">
+  </div>
+  <ul id="list" hidden></ul>
+  <div class="empty" id="empty">아직 등록된 제품이 없습니다. 위에서 제품명과 유통기한을 입력해 추가하세요.</div>
+  <div class="note" id="note"></div>
+</div>
+
+<div class="overlay" id="alert" hidden>
+  <div class="popup" role="dialog" aria-modal="true" aria-labelledby="alertTitle">
+    <h3 id="alertTitle"></h3>
+    <ul id="alertList"></ul>
+    <div class="actions">
+      <button type="button" class="btn" id="alertToday">오늘 하루 안 보기</button>
+      <button type="button" class="btn primary" id="alertClose">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const DAY = 86400000;
+  const UNIT = { y: "년", m: "개월", d: "일" };
+  let items = [];
+  let mode = "date";
+  let editId = null;
+  let pendingDelete = null;
+
+  // ---- date helpers (local dates as YYYY-MM-DD) ----
+  const pad = (n) => String(n).padStart(2, "0");
+  const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const fmt = (s) => s ? s.replaceAll("-", ".") : "";
+  function addPeriod(mfg, num, unit) {
+    const d = parse(mfg);
+    if (unit === "d") return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() + num));
+    const months = unit === "y" ? num * 12 : num;
+    const target = new Date(d.getFullYear(), d.getMonth() + months, 1);
+    const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    target.setDate(Math.min(d.getDate(), last));
+    return toISO(target);
+  }
+  const expiryOf = (it) => it.mode === "period" ? addPeriod(it.mfg, it.num, it.unit) : it.expiry;
+  const today = () => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); };
+  const daysLeft = (iso) => Math.round((parse(iso) - today()) / DAY);
+  const status = (n) => n < 0 ? "exp" : n <= 30 ? "soon" : "ok";
+  const ddayText = (n) => n === 0 ? "D-DAY" : n > 0 ? `D-${n}` : `D+${-n}`;
+
+  // ---- storage: Google Sheet via Apps Script API, localStorage as a fast first paint ----
+  const LS = "label-list-items";
+  function lsLoad() { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } }
+  function lsSave() { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} }
+  // 구글 시트 주소(Apps Script 웹앱 /exec). 배포를 새로 만들면 이 주소만 바꾸면 됩니다.
+  const API = "https://script.google.com/macros/s/AKfycbzwZq4CFKrfZ_iJqU2TPCsp7P8_neh8j8SDx_zNHDx7PGd4tjVXDcI3SpnIACQm_ESz/exec";
+  async function call(fn, arg) {
+    const res = fn === "listItems"
+      ? await fetch(API + "?api=1&t=" + Date.now())
+      : await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(fn === "saveItem" ? { action: "save", item: arg } : { action: "delete", id: arg }),
+        });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error(data && data.error || "응답 오류");
+    return data;
+  }
+  function apply(list) { items = list; lsSave(); render(); $("note").textContent = ""; showAlertOnce(); }
+
+  // ---- 7일 미만 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 ----
+  const ALERT_DAYS = 7;
+  const SKIP = "label-list-alert-skip";
+  let alertShown = false;
+  function showAlertOnce() {
+    if (alertShown) return;
+    alertShown = true;
+    try { if (localStorage.getItem(SKIP) === toISO(today())) return; } catch {}
+    const near = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
+      .filter((r) => r.n < ALERT_DAYS).sort((a, b) => a.n - b.n);
+    if (!near.length) return;
+    $("alertTitle").textContent = `유통기한 7일 미만 ${near.length}개`;
+    $("alertList").innerHTML = near.map(({ it, exp, n }) => `<li>
+      <div class="dday ${status(n)}">${ddayText(n)}</div>
+      <div class="info"><div class="name">${esc(it.name)}</div>
+        <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${it.memo ? `<span>${esc(it.memo)}</span>` : ""}</div></div></li>`).join("");
+    $("alert").hidden = false;
+    $("alertClose").focus();
+  }
+  const closeAlert = () => { $("alert").hidden = true; };
+  $("alertClose").onclick = closeAlert;
+  $("alertToday").onclick = () => { try { localStorage.setItem(SKIP, toISO(today())); } catch {} closeAlert(); };
+  $("alert").addEventListener("click", (e) => { if (e.target.id === "alert") closeAlert(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAlert(); });
+
+  async function save(it) {
+    const i = items.findIndex((x) => x.id === it.id); i >= 0 ? items[i] = it : items.push(it); render();
+    apply(await call("saveItem", it));
+  }
+  async function remove(id) {
+    items = items.filter((x) => x.id !== id); render();
+    apply(await call("deleteItem", id));
+  }
+  async function refresh() {
+    if (document.hidden || editId) return;
+    try { apply(await call("listItems")); }
+    catch { $("note").textContent = "목록을 불러오지 못했습니다. 인터넷 연결을 확인하세요."; }
+  }
+
+  // ---- form ----
+  function setMode(m) {
+    mode = m;
+    $("mDate").setAttribute("aria-pressed", m === "date");
+    $("mPeriod").setAttribute("aria-pressed", m === "period");
+    $("byDate").hidden = m !== "date";
+    $("byPeriod").hidden = m !== "period";
+    updatePreview();
+  }
+  function readForm() {
+    const it = { name: $("fName").value.trim(), memo: $("fMemo").value.trim(), mode };
+    if (mode === "date") { if (!$("fExpiry").value) return null; it.expiry = $("fExpiry").value; }
+    else {
+      const num = parseInt($("fNum").value, 10);
+      if (!$("fMfg").value || !(num > 0)) return null;
+      Object.assign(it, { mfg: $("fMfg").value, num, unit: $("fUnit").value });
+    }
+    return it;
+  }
+  function updatePreview() {
+    const it = readForm();
+    if (!it) { $("preview").textContent = mode === "date" ? "유통기한 날짜를 선택하세요." : "제조일자와 기간을 입력하면 유통기한이 계산됩니다."; return; }
+    const exp = expiryOf(it), n = daysLeft(exp);
+    $("preview").innerHTML = `유통기한 <b>${fmt(exp)}</b> · ${n < 0 ? `${-n}일 지남` : n === 0 ? "오늘까지" : `${n}일 남음`}`;
+  }
+  function resetForm() {
+    editId = null;
+    $("form").reset();
+    $("fNum").value = 3;
+    $("submit").textContent = "추가";
+    $("cancel").hidden = true;
+    setMode(mode);
+  }
+  function startEdit(it) {
+    editId = it.id;
+    $("fName").value = it.name; $("fMemo").value = it.memo || "";
+    if (it.mode === "period") { $("fMfg").value = it.mfg; $("fNum").value = it.num; $("fUnit").value = it.unit; }
+    else $("fExpiry").value = it.expiry;
+    setMode(it.mode);
+    $("submit").textContent = "수정 저장";
+    $("cancel").hidden = false;
+    $("form").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("fName").focus({ preventScroll: true });
+  }
+
+  $("mDate").onclick = () => setMode("date");
+  $("mPeriod").onclick = () => setMode("period");
+  $("form").addEventListener("input", updatePreview);
+  $("cancel").onclick = resetForm;
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const it = readForm();
+    if (!it || !it.name) { updatePreview(); if (!it?.name) $("fName").focus(); return; }
+    it.id = editId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+    it.updatedAt = Date.now();
+    try { await save(it); resetForm(); $("fName").focus(); }
+    catch { $("preview").textContent = "저장하지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요."; }
+  });
+  $("q").addEventListener("input", render);
+
+  // ---- render ----
+  function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function render() {
+    const rows = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
+      .sort((a, b) => a.n - b.n || a.it.name.localeCompare(b.it.name, "ko"));
+    const c = { exp: 0, soon: 0, ok: 0 };
+    rows.forEach((r) => c[status(r.n)]++);
+    $("cExp").textContent = c.exp; $("cSoon").textContent = c.soon; $("cOk").textContent = c.ok;
+    $("total").textContent = rows.length ? `· ${rows.length}개` : "";
+
+    const q = $("q").value.trim().toLowerCase();
+    const shown = q ? rows.filter((r) => (r.it.name + " " + (r.it.memo || "")).toLowerCase().includes(q)) : rows;
+    $("list").hidden = !shown.length;
+    $("empty").hidden = !!shown.length;
+    $("empty").textContent = rows.length ? "검색 결과가 없습니다." : "아직 등록된 제품이 없습니다. 위에서 제품명과 유통기한을 입력해 추가하세요.";
+
+    $("list").innerHTML = shown.map(({ it, exp, n }) => {
+      const s = status(n);
+      const basis = it.mode === "period" ? `<span>제조 ${fmt(it.mfg)} + ${it.num}${UNIT[it.unit]}</span>` : "";
+      const memo = it.memo ? `<span>${esc(it.memo)}</span>` : "";
+      const del = pendingDelete === it.id
+        ? `<button class="confirm" data-act="del" data-id="${it.id}">삭제 확인</button><button data-act="keep">취소</button>`
+        : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
+      return `<li class="${s === "exp" ? "expired" : ""}">
+        <div class="dday ${s}">${ddayText(n)}</div>
+        <div class="info"><div class="name">${esc(it.name)}</div>
+          <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${basis}${memo}</div></div>
+        <div class="ops">${del}</div></li>`;
+    }).join("");
+  }
+  $("list").addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const id = b.dataset.id, act = b.dataset.act;
+    if (act === "edit") startEdit(items.find((x) => x.id === id));
+    else if (act === "ask") { pendingDelete = id; render(); }
+    else if (act === "keep") { pendingDelete = null; render(); }
+    else if (act === "del") { pendingDelete = null; if (editId === id) resetForm(); try { await remove(id); } catch { refresh(); } }
+  });
+
+  // ---- boot ----
+  const t = today();
+  $("today").textContent = `오늘 ${fmt(toISO(t))} (${"일월화수목금토"[t.getDay()]})`;
+  $("fExpiry").value = ""; setMode("date");
+  items = lsLoad(); render();
+
+  refresh();
+  setInterval(refresh, 20000);
+  document.addEventListener("visibilitychange", refresh);
+})();
+</script>
+</body>
+</html>
