@@ -379,7 +379,7 @@ svg { display: block; }
 .tipcard { display: grid; gap: 4px; background: var(--chick); color: var(--chick-ink); border-radius: 16px; padding: 14px 16px; margin-bottom: 8px; }
 .tipcard b { font-size: 14px; font-weight: 800; }
 .tipcard span { font-size: 13.5px; line-height: 1.5; }
-.calc { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; }
+.calc { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: center; }
 .calc div { display: grid; gap: 2px; }
 .calc b { font-size: 15px; font-weight: 800; }
 .calc span { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
@@ -647,7 +647,7 @@ svg { display: block; }
     <div class="sect"><span>계산 방법</span><small>A + B → C</small></div>
     <div class="group">
       <div class="cell calc"><i class="lt la">A</i><div><b>수불현황</b><span>지난달에 실제로 쓴 양으로 계산해요.</span></div></div>
-      <div class="cell calc"><i class="lt lb">B</i><div><b>레시피</b><span>메뉴가 팔린 개수 × 레시피로 계산해요. 메뉴가 바뀌면 바로 반영돼요.</span></div></div>
+      <div class="cell calc"><i class="lt lb">B</i><div><b>메뉴별 매출현황</b><span>메뉴가 팔린 개수 × 레시피로 계산해요. 메뉴가 바뀌면 바로 반영돼요.</span></div></div>
       <div class="cell calc"><i class="lt lc">C</i><div><b>최종 발주량</b><span>A와 B로 구한 필요량에서 재고와 익일 입고량을 빼요. 초록 칸 숫자예요.</span></div></div>
     </div>
     <div class="sect"><span>데이터 자동계산</span><small>입력할 것 없음</small></div>
@@ -661,7 +661,7 @@ svg { display: block; }
 
     <div class="sect"><span>다른 화면</span></div>
     <div class="group">
-      <div class="cell guide"><span class="gi c1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span><div><b>프랩</b><span>오늘 프랩량이 나와요. D+2는 "2일 안에 다 써야 해요"라는 뜻이에요.</span></div></div>
+      <div class="cell guide"><span class="gi c1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span><div><b>프랩</b><span>오늘 프랩량이 나와요. 2days는 "2일 안에 다 써야 해요"라는 뜻이에요.</span></div></div>
       <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>데이터 리포트</b><span>앱이 지난주에 얼마나 잘 맞혔는지 점수로 보여줘요.</span></div></div>
     </div>
 
@@ -2098,7 +2098,7 @@ svg { display: block; }
     $("kSales").innerHTML = act ? `${Math.round(100 - Math.abs(act - f) / act * 100)}<small>%</small>` : "–";
     $("kItems").innerHTML = `${new Set(list.map((s) => s.key)).size}<small>개</small>`;
     $("kLogs").innerHTML = `${(db.onhand || []).filter((l) => mondayOf(l.t.slice(0, 10)) === rWeek).length}<small>건</small>`;
-    const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 레시피", "메뉴 판매 기준", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +(100 - v).toFixed(1)]);
+    const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 메뉴별 매출현황", "메뉴 판매 × 레시피", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +(100 - v).toFixed(1)]);
     const max = Math.max(...ms.map((m) => m[2]), 1);
     $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${n === "C 최종" ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${v / max * 100}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     const miss = list.map((s) => ({ ...s, e: (s.actual - s.pF) / s.actual })).sort((p, q) => Math.abs(q.e) - Math.abs(p.e)).slice(0, 5);
