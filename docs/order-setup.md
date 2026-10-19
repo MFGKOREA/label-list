@@ -68,4 +68,4 @@
 
 ## 6. 주소
 
-GitHub Pages가 켜져 있으면 `https://sinoo-0744.github.io/label-list/order.html`로 열 수 있습니다. 이 작업이 `main` 브랜치에 합쳐진 뒤부터 열립니다.
+GitHub Pages가 켜져 있으면 `https://mfgkorea.github.io/label-list/order.html`로 열 수 있습니다. 이 작업이 `main` 브랜치에 합쳐진 뒤부터 열립니다.
