@@ -891,6 +891,14 @@ svg { display: block; }
       name: ["품목명칭", "품목명", "품명"], usage: ["사용출고", "실사출고", "출고수량", "사용량"], code: ["품목코드"], group: ["통합그룹"], unit: ["단위"], spec: ["사양및규격", "규격"],
     }, ["name", "usage"], /수불/);
     if (!h) throw new Error("'품목명'과 '사용출고(사용량)' 칸을 찾지 못했어요");
+    // 사용량 후보 칸이 여럿이면 우선순위대로 보되, 값이 거의 다 0인 칸은 건너뜀 (양식마다 채우는 칸이 달라서)
+    const USAGE = ["사용출고", "실사출고", "출고수량", "사용량"];
+    const data = h.rows.slice(h.r + 1).filter((row) => str(cell(row, h.col, "name")));
+    const filled = (j) => data.filter((row) => num(row[j]) > 0).length;
+    const head = h.rows[h.r] || [];
+    const cands = USAGE.flatMap((w) => head.map((c, j) => (c != null && clean(c).includes(w) && !/금액/.test(clean(c)) ? j : -1)).filter((j) => j >= 0));
+    const pick = [...new Set(cands)].find((j) => filled(j) >= data.length * 0.1);
+    if (pick != null) h.col.usage = pick;
     // 머리글 아래에 '수량/금액' 줄이 하나 더 있는 양식은 그 줄을 건너뜀
     const out = [];
     h.rows.slice(h.r + 1).forEach((row) => {
@@ -1530,7 +1538,7 @@ svg { display: block; }
     { k: "line", t: "Line 레시피", acc: ".pdf", parse: async (f) => ({ recipes: await parseRecipePdf(f) }), info: (v) => `레시피 ${v.recipes.length}개` },
     { k: "prep", t: "Prep 레시피", acc: ".pdf", parse: async (f) => ({ recipes: await parseRecipePdf(f) }), info: (v) => `프랩 ${v.recipes.length}개` },
     { k: "sales", t: "메뉴별 매출현황", acc: ".xlsx,.xls,.csv", parse: async (f) => ({ rows: await parseSales(f) }), info: (v) => `메뉴 ${v.rows.length}개 · ${won(v.rows.reduce((a, x) => a + x.qty, 0))}개 판매` },
-    { k: "ledger", t: "수불현황", acc: ".xlsx,.xls,.csv", parse: async (f) => ({ rows: await parseLedger(f) }), info: (v) => `품목 ${v.rows.length}개` },
+    { k: "ledger", t: "수불현황", acc: ".xlsx,.xls,.csv", parse: async (f) => ({ rows: await parseLedger(f) }), info: (v) => { const n = v.rows.filter((r) => r.usage > 0).length; return `품목 ${v.rows.length}개 · 사용량 있는 품목 ${n}개${n < v.rows.length * 0.1 ? " (사용량 칸을 못 찾은 것 같아요)" : ""}`; } },
   ];
   let selMonth = (() => { const n = new Date(); return iso(new Date(n.getFullYear(), n.getMonth() - 1, 1)).slice(0, 7); })();
   function monthList() {
