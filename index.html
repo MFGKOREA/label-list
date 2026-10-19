@@ -242,7 +242,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <div class="overlay" id="resetBox" hidden>
   <div class="popup" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
     <h3 id="resetTitle">품목을 모두 지울까요?</h3>
-    <p class="reset-text"><b id="resetStore"></b>의 품목과 사진이 모두 지워지고 되돌릴 수 없습니다.</p>
+    <p class="reset-text"><b id="resetStore"></b>의 품목이 모두 지워지고 되돌릴 수 없습니다.</p>
     <div class="reset-msg" id="resetMsg"></div>
     <div class="actions">
       <button type="button" class="btn" id="resetCancel">취소</button>
@@ -294,22 +294,21 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const ddayText = (n) => n === 0 ? "D-DAY" : n > 0 ? `D-${n}` : `D+${-n}`;
 
   // ---- storage: Google Sheet via Apps Script API, localStorage as a fast first paint ----
-  // ---- 매장: 링크 끝 ?store=코드 로 구분. 코드 없이 열면 수원컨벤션점(기존 링크 그대로) ----
-  // 매장을 늘릴 때는 아래 목록에 한 줄 추가하고, 링크 끝에 ?store=코드 를 붙여 주면 됩니다.
+  // ---- 매장: 링크 끝 ?store=코드 로 구분. 코드 없이 열면 수원컨벤션점 ----
+  // 매장마다 구글 프로젝트(웹 앱 /exec 주소)가 따로 있습니다. 매장을 늘릴 때는 아래에 한 줄 추가.
   const STORES = {
-    suwon: "MG수원컨벤션점",
-    lwt: "MG롯데시네마월드타워점",
+    suwon: { name: "MG수원컨벤션점", api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
+    lwt: { name: "MG롯데시네마월드타워점", api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
   };
   const STORE = new URLSearchParams(location.search).get("store") || "suwon";
   const storeKnown = Object.prototype.hasOwnProperty.call(STORES, STORE);
-  $("storeName").textContent = storeKnown ? STORES[STORE] : "등록되지 않은 매장";
-  document.title = (storeKnown ? STORES[STORE] + " · " : "") + "한글표시사항 리스트";
+  $("storeName").textContent = storeKnown ? STORES[STORE].name : "등록되지 않은 매장";
+  document.title = (storeKnown ? STORES[STORE].name + " · " : "") + "한글표시사항 리스트";
 
-  const LS = "label-list-items" + (STORE === "suwon" ? "" : "-" + STORE);
+  const LS = "label-list-items-v2-" + STORE; // 새 프로젝트로 옮기며 캐시 이름 변경
   function lsLoad() { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } }
   function lsSave() { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} }
-  // 구글 시트 주소(Apps Script 웹앱 /exec). 배포를 새로 만들면 이 주소만 바꾸면 됩니다.
-  const API = "https://script.google.com/macros/s/AKfycbzwZq4CFKrfZ_iJqU2TPCsp7P8_neh8j8SDx_zNHDx7PGd4tjVXDcI3SpnIACQm_ESz/exec";
+  const API = storeKnown ? STORES[STORE].api : "";
   async function call(fn, arg) {
     const body = fn === "saveItem" ? { action: "save", item: arg, store: STORE }
       : fn === "deleteItem" ? { action: "delete", id: arg, store: STORE }
@@ -482,7 +481,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   items = lsLoad(); render();
 
   // ---- 매장 품목 전체 초기화 (확인창) ----
-  $("resetStore").textContent = storeKnown ? STORES[STORE] : "";
+  $("resetStore").textContent = storeKnown ? STORES[STORE].name : "";
   const closeReset = () => { $("resetBox").hidden = true; $("resetMsg").textContent = ""; $("resetGo").disabled = false; };
   $("resetOpen").onclick = () => { $("resetBox").hidden = false; $("resetCancel").focus(); };
   $("resetCancel").onclick = closeReset;
