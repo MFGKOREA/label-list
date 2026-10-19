@@ -1221,12 +1221,12 @@ svg { display: block; }
       const ea = mse(it.scoreA.length ? it.scoreA : it.errA), eb = mse(it.scoreB.length ? it.scoreB : it.errB);
       if (ea != null && eb != null && ea + eb > 0) wA = Math.min(0.85, Math.max(0.15, (1 / Math.max(ea, 1e-4)) / (1 / Math.max(ea, 1e-4) + 1 / Math.max(eb, 1e-4))));
       use = wA * useA + (1 - wA) * useB;
-    } else use = useA ?? useB;
+    } else use = useA ?? useB ?? (it.rateG != null ? it.rateG * g100 : null);
     if (use == null) return { none: true };
     const spread = useA != null && useB != null ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
     const errs = it.scoreF.length >= 3 ? it.scoreF : null;
-    const sigma = errs ? Math.sqrt(errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8)) : Math.max(0.1, (spread ?? 0.2) / 2);
+    const sigma = errs ? Math.sqrt(errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8)) : Math.max(0.1, (spread ?? 0.2) / 2, useA == null && useB == null ? 0.25 : 0);
     let ss = Z * sigma * use / Math.sqrt(Math.max(1, win.days));
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (use / win.days) * it.shelf);
@@ -1245,9 +1245,10 @@ svg { display: block; }
     const byKey = new Map();
     logs.forEach((l) => { if (!byKey.has(l.k)) byKey.set(l.k, []); byKey.get(l.k).push(l); });
     M.scores = [];
-    M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; });
+    M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; it.rateG = null; });
     byKey.forEach((list, key) => {
       const it = M.items.find((i) => i.key === key); if (!it) return;
+      let uG = 0, gG = 0;
       for (let i = 1; i < list.length; i++) {
         const a = list[i - 1], b = list[i];
         const d1 = a.t.slice(0, 10), d2 = b.t.slice(0, 10);
@@ -1259,12 +1260,14 @@ svg { display: block; }
         const pA = it.rateA != null ? it.fixedA * days + it.rateA * g : null;
         const pB = it.rateB != null ? it.rateB * g : null;
         const pF = pA != null && pB != null ? (pA + pB) / 2 : pA ?? pB;
-        if (pF == null) continue;
+        // 수불·레시피 데이터가 없는 품목(세제 등)은 재고 입력만으로 100만원당 사용량을 배움
+        if (pF == null) { if (g > 0) { uG += actual; gG += g; } continue; }
         if (pA != null) it.scoreA.push((pA - actual) / actual);
         if (pB != null) it.scoreB.push((pB - actual) / actual);
         it.scoreF.push((pF - actual) / actual);
         M.scores.push({ key, name: it.name, end: d2, actual, pA, pB, pF });
       }
+      if (gG > 0) it.rateG = uG / gG;
     });
   }
 
@@ -1361,6 +1364,7 @@ svg { display: block; }
     const c0 = calc(it, win, 0, 0);
     let tag = "";
     if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
+    else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}%</span>`;
     d.innerHTML =
