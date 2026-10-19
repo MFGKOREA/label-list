@@ -93,8 +93,6 @@ button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 .preview { font-size: 13px; color: var(--muted); min-height: 1.5em; }
 .preview b { color: var(--fg); font-family: var(--font-num); font-weight: 500; }
 .form-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
-.photo-field { display: flex; align-items: center; gap: 6px; }
-.photo-prev { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-left: auto; }
 .btn { white-space: nowrap; font: inherit; font-size: 14px; font-weight: 500; border-radius: 999px; padding: 9px 18px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--fg); }
 .btn:hover { border-color: var(--brass); }
@@ -120,16 +118,23 @@ li:first-child { border-top: 0; }
 .meta { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
 .meta .date { font-family: var(--font-num); color: var(--fg); }
 li.expired .name { text-decoration: line-through; text-decoration-color: var(--muted); }
-.thumb { flex: none; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--bg); cursor: zoom-in; box-shadow: inset 0 0 0 1px var(--line); }
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ops { display: flex; gap: 2px; }
 .ops button { font: inherit; font-size: 12.5px; border: 0; background: transparent; color: var(--muted); padding: 6px 9px; border-radius: 999px; cursor: pointer; }
 .ops button:hover { background: var(--bg); color: var(--fg); }
 .ops button.confirm { color: var(--danger); font-weight: 600; }
 .empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 14px; background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); }
 .note { font-size: 12px; color: var(--muted); text-align: center; }
+.reset { display: flex; justify-content: center; padding-top: 14px; }
+.reset-open { font: inherit; font-size: 13px; font-weight: 600; color: var(--danger); background: none; border: 0; cursor: pointer; padding: 8px 12px; border-radius: 999px; }
+.reset-open:hover { background: var(--danger-bg); }
+.reset-text { margin: 0; font-size: 14px; color: var(--muted); }
+.reset-text b { color: var(--fg); }
+.reset-msg { font-size: 13px; color: var(--danger); }
+.reset-msg:empty { display: none; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+.btn.danger:hover { background: var(--danger); border-color: var(--danger); filter: brightness(1.08); }
 
-/* popup + photo viewer */
+/* popups */
 .overlay { position: fixed; inset: 0; background: rgb(8 14 11 / .55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 20;
   padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
 .popup { background: var(--surface); color: var(--fg); border-radius: 20px; width: 100%; max-width: 420px; max-height: 82vh; overflow: auto; padding: 24px 20px 20px; display: grid; gap: 16px; box-shadow: 0 20px 50px rgb(0 0 0 / .3); }
@@ -144,7 +149,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 .popup li { grid-template-columns: 62px 1fr; padding: 12px 14px; }
 .popup .actions { justify-content: stretch; margin-left: 0; flex-wrap: nowrap; }
 .popup .actions .btn { flex: 1; }
-.viewer img { max-width: 100%; max-height: 82vh; border-radius: 14px; box-shadow: 0 20px 50px rgb(0 0 0 / .4); background: var(--surface); }
 
 @media (max-width: 480px) {
   h1 { font-size: 24px; }
@@ -215,12 +219,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     </div>
     <div class="preview" id="preview"></div>
     <div class="form-foot">
-      <div class="photo-field">
-        <img id="photoPrev" class="photo-prev" alt="선택한 사진" hidden>
-        <button type="button" class="btn small" id="photoBtn">사진 추가</button>
-        <button type="button" class="btn small" id="photoDel" hidden>사진 삭제</button>
-        <input type="file" id="photoInput" accept="image/*" hidden>
-      </div>
       <div class="actions">
         <button type="button" class="btn" id="cancel" hidden>취소</button>
         <button type="submit" class="btn primary" id="submit">추가</button>
@@ -235,9 +233,24 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   <ul id="list" hidden></ul>
   <div class="empty" id="empty">아직 등록된 제품이 없습니다. 위에서 제품명과 유통기한을 입력해 추가하세요.</div>
   <div class="note" id="note"></div>
+
+  <div class="reset" id="resetZone">
+    <button type="button" class="reset-open" id="resetOpen">초기화</button>
+  </div>
 </div>
 
-<div class="overlay viewer" id="viewer" hidden><img id="viewerImg" alt="품목 사진"></div>
+<div class="overlay" id="resetBox" hidden>
+  <div class="popup" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
+    <h3 id="resetTitle">품목을 모두 지울까요?</h3>
+    <p class="reset-text"><b id="resetStore"></b>의 품목과 사진이 모두 지워지고 되돌릴 수 없습니다.</p>
+    <div class="reset-msg" id="resetMsg"></div>
+    <div class="actions">
+      <button type="button" class="btn" id="resetCancel">취소</button>
+      <button type="button" class="btn danger" id="resetGo">초기화</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="overlay" id="alert" hidden>
   <div class="popup" role="dialog" aria-modal="true" aria-labelledby="alertTitle">
@@ -300,7 +313,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   async function call(fn, arg) {
     const body = fn === "saveItem" ? { action: "save", item: arg, store: STORE }
       : fn === "deleteItem" ? { action: "delete", id: arg, store: STORE }
-      : { action: "upload", data: arg };
+      : { action: "clear", store: STORE };
     const res = fn === "listItems"
       ? await fetch(API + "?api=1&store=" + encodeURIComponent(STORE) + "&t=" + Date.now())
       : await fetch(API, {
@@ -310,46 +323,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    if (!data || data.error || (fn !== "upload" && !Array.isArray(data))) throw new Error(data && data.error || "응답 오류");
+    if (!data || data.error || !Array.isArray(data)) throw new Error(data && data.error || "응답 오류");
     return data;
   }
 
-  // ---- 사진: 휴대폰에서 1024px JPEG로 줄여서 올리고, 드라이브 파일 id로 저장 ----
-  const safeId = (s) => /^[\w-]{10,120}$/.test(s || "") ? s : "";
-  const photoUrl = (id, w) => `https://drive.google.com/thumbnail?id=${id}&sz=w${w}`;
-  let photoId = "", photoData = null;
-  function showPhoto(src) {
-    $("photoPrev").hidden = !src;
-    if (src) $("photoPrev").src = src; else $("photoPrev").removeAttribute("src");
-        $("photoDel").hidden = !src;
-  }
-  async function shrink(file) {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = new Image();
-      await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; });
-      const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      return c.toDataURL("image/jpeg", 0.75);
-    } finally { URL.revokeObjectURL(url); }
-  }
-  $("photoBtn").onclick = () => $("photoInput").click();
-  $("photoInput").addEventListener("change", async () => {
-    const f = $("photoInput").files[0]; $("photoInput").value = "";
-    if (!f) return;
-    try { photoData = await shrink(f); showPhoto(photoData); }
-    catch { $("preview").textContent = "이 사진은 열 수 없습니다. 다른 사진을 골라 주세요."; }
-  });
-  $("photoDel").onclick = () => { photoData = null; photoId = ""; showPhoto(""); };
-  function openViewer(id) { $("viewerImg").src = photoUrl(id, 1600); $("viewer").hidden = false; }
-  $("viewer").onclick = () => { $("viewer").hidden = true; };
-  const thumbHtml = (it, clickable) => {
-    const id = safeId(it.photo); if (!id) return "";
-    const img = `<img src="${photoUrl(id, 160)}" alt="" loading="lazy">`;
-    return clickable ? `<button type="button" class="thumb" data-act="view" data-photo="${id}" aria-label="사진 크게 보기">${img}</button>` : `<span class="thumb">${img}</span>`;
-  };
   function apply(list) { items = list; lsSave(); render(); $("note").textContent = ""; showAlertOnce(); }
 
   // ---- 기한 임박 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 (7일 이내 / 30일 이내) ----
@@ -357,7 +334,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   let alertShown = false;
   function alertRow({ it, exp, n }) {
     return `<li><div class="dday ${status(n)}">${ddayText(n)}</div>
-      <div class="info">${thumbHtml(it, false)}<div class="txt"><div class="name">${esc(it.name)}</div>
+      <div class="info"><div class="txt"><div class="name">${esc(it.name)}</div>
         <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${it.memo ? `<span>${esc(it.memo)}</span>` : ""}</div></div></div></li>`;
   }
   function showAlertOnce() {
@@ -379,7 +356,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("alertClose").onclick = closeAlert;
   $("alertToday").onclick = () => { try { localStorage.setItem(SKIP, toISO(today())); } catch {} closeAlert(); };
   $("alert").addEventListener("click", (e) => { if (e.target.id === "alert") closeAlert(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("viewer").hidden = true; } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("resetBox").hidden = true; } });
 
   async function save(it) {
     const i = items.findIndex((x) => x.id === it.id); i >= 0 ? items[i] = it : items.push(it); render();
@@ -424,7 +401,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     editId = null;
     $("form").reset();
     $("fNum").value = 3;
-    photoId = ""; photoData = null; showPhoto("");
     $("submit").textContent = "추가";
     $("cancel").hidden = true;
     setMode(mode);
@@ -434,7 +410,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("fName").value = it.name; $("fMemo").value = it.memo || "";
     if (it.mode === "period") { $("fMfg").value = it.mfg; $("fNum").value = it.num; $("fUnit").value = it.unit; }
     else $("fExpiry").value = it.expiry;
-    photoId = safeId(it.photo); photoData = null; showPhoto(photoId ? photoUrl(photoId, 300) : "");
     setMode(it.mode);
     $("submit").textContent = "수정 저장";
     $("cancel").hidden = false;
@@ -452,10 +427,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     if (!it || !it.name) { updatePreview(); if (!it?.name) $("fName").focus(); return; }
     it.id = editId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
     it.updatedAt = Date.now();
-    it.photo = photoId;
     $("submit").disabled = true;
     try {
-      if (photoData) { $("preview").textContent = "사진 올리는 중…"; it.photo = (await call("upload", photoData)).id; }
       await save(it); resetForm(); $("fName").focus();
     }
     catch { $("preview").textContent = "저장하지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요."; }
@@ -488,7 +461,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
       return `<li class="${n < 0 ? "expired" : ""}">
         <div class="dday ${s}">${ddayText(n)}</div>
-        <div class="info">${thumbHtml(it, true)}<div class="txt"><div class="name">${esc(it.name)}</div>
+        <div class="info"><div class="txt"><div class="name">${esc(it.name)}</div>
           <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${basis}${memo}</div></div></div>
         <div class="ops">${del}</div></li>`;
     }).join("");
@@ -496,8 +469,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("list").addEventListener("click", async (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const id = b.dataset.id, act = b.dataset.act;
-    if (act === "view") openViewer(b.dataset.photo);
-    else if (act === "edit") startEdit(items.find((x) => x.id === id));
+    if (act === "edit") startEdit(items.find((x) => x.id === id));
     else if (act === "ask") { pendingDelete = id; render(); }
     else if (act === "keep") { pendingDelete = null; render(); }
     else if (act === "del") { pendingDelete = null; if (editId === id) resetForm(); try { await remove(id); } catch { refresh(); } }
@@ -509,7 +481,22 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("fExpiry").value = ""; setMode("date");
   items = lsLoad(); render();
 
+  // ---- 매장 품목 전체 초기화 (확인창) ----
+  $("resetStore").textContent = storeKnown ? STORES[STORE] : "";
+  const closeReset = () => { $("resetBox").hidden = true; $("resetMsg").textContent = ""; $("resetGo").disabled = false; };
+  $("resetOpen").onclick = () => { $("resetBox").hidden = false; $("resetCancel").focus(); };
+  $("resetCancel").onclick = closeReset;
+  $("resetBox").addEventListener("click", (e) => { if (e.target.id === "resetBox") closeReset(); });
+  $("resetGo").onclick = async () => {
+    $("resetGo").disabled = true; $("resetMsg").textContent = "";
+    $("resetGo").textContent = "지우는 중…";
+    try { apply(await call("clearItems")); resetForm(); closeReset(); $("note").textContent = "품목을 모두 지웠습니다."; }
+    catch { $("resetMsg").textContent = "지우지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요."; $("resetGo").disabled = false; }
+    finally { $("resetGo").textContent = "초기화"; }
+  };
+
   if (!storeKnown) {
+    $("resetZone").hidden = true;
     $("form").hidden = true; $("list").hidden = true;
     $("empty").textContent = "등록되지 않은 매장 링크입니다. 받은 링크를 다시 확인해 주세요.";
     return;
