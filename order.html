@@ -778,6 +778,7 @@ svg { display: block; }
     if (g) return { g: num(g[1]) * (g[2].toLowerCase() === "kg" ? 1000 : 1) };
     const s = String(v || "");
     let m;
+    if ((m = /([\d.,]+)\s*(kg|g)\b/i.exec(s))) return { g: num(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1) };
     if ((m = /([\d./]+)\s*(cc|ml)\b/i.exec(s))) return { ml: frac(m[1]) };
     if ((m = /([\d./]+)\s*l\b/i.exec(s))) return { ml: frac(m[1]) * 1000 };
     if ((m = /([\d./]+)\s*TB\b/.exec(s))) return { ml: frac(m[1]) * 15 };
@@ -1194,7 +1195,9 @@ svg { display: block; }
     function expand(recipe, factor, acc, depth, prepAcc) {
       recipe.ing.forEach((ing) => {
         const q = parseQty(ing.w, ing.v);
-        const t = resolveIng(ing.n);
+        let t = resolveIng(ing.n);
+        // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
+        if (t && t.kind === "prep" && t.id === recipe.name) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
         if (!t || t.skip || !q) return;
         if (t.kind === "item") {
           const it = items.find((i) => i.key === t.id); if (!it) return;
@@ -1206,6 +1209,9 @@ svg { display: block; }
           // 프랩 사용량: g/ml은 이름 그대로, 포션·개수는 "이름|ea"로 따로 셈 (프랩 안의 프랩도 셈)
           if (prepAcc && amount != null) prepAcc.set(p.name, (prepAcc.get(p.name) || 0) + amount * factor);
           else if (prepAcc && q.ea != null) prepAcc.set(p.name + "|ea", (prepAcc.get(p.name + "|ea") || 0) + q.ea * factor);
+          // "1 portion"처럼 개수로 쓴 프랩은 프랩 레시피가 N포션/오더 분량이면 그만큼 나눠 원재료까지 풀기 (어묵 포션 = 어묵 100g)
+          const yc = /([\d.]+)\s*(portion|order|ea)\b/i.exec(String(p.yield || ""));
+          if (amount == null && q.ea != null && yc && !/약/.test(p.yield)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
           const y = yieldOf(p); if (!y || amount == null) return;
           expand(p, (factor * amount) / y, acc, depth + 1, prepAcc);
         }
