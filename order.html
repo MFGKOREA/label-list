@@ -1478,7 +1478,7 @@ svg { display: block; }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
   function rowEl(it, win, inp) {
     const d = document.createElement("div");
-    d.className = "cell";
+    d.className = "cell"; d.dataset.key = it.key;
     const v = inp[it.key] || { s: "", i: "" };
     const unit = it.pk.stock || "재고단위";
     const draw = () => {
@@ -1502,12 +1502,26 @@ svg { display: block; }
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag}</div>` +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span><span>${esc(it.unit || unit)}</span></span>` +
-      `<label class="fld"><span>재고</span><input inputmode="decimal" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${esc(unit)})"></label>` +
-      `<label class="fld"><span>익일</span><input inputmode="decimal" placeholder="–" value="${esc(v.i)}" aria-label="${esc(it.name)} 익일 입고량"></label>` +
+      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${esc(unit)})"></label>` +
+      `<label class="fld"><span>익일</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.i)}" aria-label="${esc(it.name)} 익일 입고량"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
     const live = () => { v.s = si.value.trim(); v.i = ii.value.trim(); d.querySelector(".needbox").innerHTML = draw(); };
     si.addEventListener("input", live); ii.addEventListener("input", live);
+    // 엔터(다음): 재고 → 익일 → 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
+    const jump = (to) => {
+      orderFocus = to;
+      const el = to && document.querySelector(`#v-main .cell[data-key="${CSS.escape(to.key)}"]`);
+      if (el) el.querySelectorAll("input")[to.f].focus(); else document.activeElement.blur();
+      if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
+    si.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); jump({ key: it.key, f: 1 }); } });
+    ii.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const rows = [...document.querySelectorAll("#pinList .cell[data-key], #restList .cell[data-key]")], nx = rows[rows.indexOf(d) + 1];
+      jump(nx ? { key: nx.dataset.key, f: 0 } : null);
+    });
     d.addEventListener("change", () => {
       const all = { ...todayInput() };
       if (v.s === "" && v.i === "") delete all[it.key]; else all[it.key] = { s: v.s, i: v.i };
@@ -1520,6 +1534,7 @@ svg { display: block; }
     return d;
   }
   const localStamp = () => { const n = new Date(); return `${iso(n)} ${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; };
+  let orderFocus = null;
   function renderList() {
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
@@ -1540,6 +1555,7 @@ svg { display: block; }
     rest.appendChild(restFrag);
     if (restN > shown) rest.insertAdjacentHTML("beforeend", `<div class="empty">${restN - shown}개 더 있어요. 검색으로 좁혀 보세요.</div>`);
     if (!pinN) pin.innerHTML = '<div class="empty">아래에서 품목을 찾아 재고를 입력하세요</div>';
+    if (orderFocus) { const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`); if (el) el.querySelectorAll("input")[orderFocus.f].focus(); orderFocus = null; }
     if (!showRest) rest.innerHTML = '<div class="empty">검색하거나 위 버튼을 누르면 품목이 나와요</div>';
     $("pinCount").textContent = pinN;
     $("restCount").textContent = restAll;
