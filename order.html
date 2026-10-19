@@ -981,7 +981,7 @@ svg { display: block; }
       const name = str(cell(row, h.col, "name"));
       const usage = num(cell(row, h.col, "usage"));
       if (!name || !isFinite(usage)) return;
-      out.push({ name, usage, code: str(cell(row, h.col, "code")), group: str(cell(row, h.col, "group")) });
+      out.push({ name, usage, code: str(cell(row, h.col, "code")), group: str(cell(row, h.col, "group")), unit: str(cell(row, h.col, "unit")), spec: str(cell(row, h.col, "spec")) });
     });
     return out;
   }
@@ -1110,6 +1110,16 @@ svg { display: block; }
 
     // 수불현황 행 → 품목
     const ledgerItem = (row) => (row.code && byCode.get(row.code)) || byName.get(row.name) || (row.group && items.find((i) => i.key === row.group)) || (row.code && items.find((i) => i.code && i.code === row.code)) || (() => { const b = best(row.name, items, (i) => i.name); return b.sc >= 0.85 ? b.top : null; })();
+    // 발주 시트에 없고 수불현황에만 있는 품목(구운아몬드슬라이스 등)도 계산·재료 연결에 씀. 발주 목록에는 안 보임
+    if (sheet && sheet.rows && sheet.rows.length) {
+      const hide = new Set(db.hide || []);
+      allMonths.forEach((m) => (mget(m).ledger ? mget(m).ledger.rows : []).forEach((r) => {
+        if (hide.has(r.name) || ledgerItem(r)) return;
+        const it = { name: r.name, code: r.code, group: r.group, vendor: "", unit: r.unit || "", spec: r.spec || "", min: 0, loc: "", key: r.group || r.name, members: [r.name], ledgerOnly: true };
+        it.pk = packOf(it, conv[it.code]);
+        items.push(it); byName.set(r.name, it); if (it.code) byCode.set(it.code, it);
+      }));
+    }
 
     // 레시피
     const line = latestRecipes("line"), prep = latestRecipes("prep");
@@ -1117,7 +1127,7 @@ svg { display: block; }
     const prepSheet = (db["master.prep"] && db["master.prep"].rows) || [];
     // 재료 → 품목 또는 프랩
     const ingCands = [
-      ...items.map((i) => ({ kind: "item", id: i.key, label: i.name, keys: [i.name, ...i.members] })),
+      ...items.map((i) => ({ kind: "item", id: i.key, label: i.ledgerOnly ? `${i.name} · 수불현황에만 있음` : i.name, keys: [i.name, ...i.members], lo: i.ledgerOnly })),
       ...prep.map((p) => {
         const s = prepSheet.find((x) => x.name === p.name || dice(x.name, p.name) > 0.9);
         return { kind: "prep", id: p.name, label: "프랩 · " + (s && s.alias ? s.alias : p.name), keys: [p.name, toKo(p.name), PREP_KO[p.name.toLowerCase()], p.short, s && s.alias].filter(Boolean) };
@@ -1131,9 +1141,9 @@ svg { display: block; }
       if (fixed === "skip") res = { skip: true };
       else if (fixed) res = ingCands.find((c) => `${c.kind}:${c.id}` === fixed) || null;
       if (!fixed) {
-        let top = null, sc = 0;
-        ingCands.forEach((c) => c.keys.forEach((k) => { const v = dice(n, k); if (v > sc) { sc = v; top = c; } }));
-        if (sc >= 0.6) res = { ...top, auto: true, sc };
+        // 자동 연결은 발주 시트 품목·프랩 먼저, 거기 없을 때만 수불현황에만 있는 품목 (0.7 이상)
+        const pick = (cs, min) => { let top = null, sc = 0; cs.forEach((c) => c.keys.forEach((k) => { const v = dice(n, k); if (v > sc) { sc = v; top = c; } })); return sc >= min ? { ...top, auto: true, sc } : null; };
+        res = pick(ingCands.filter((c) => !c.lo), 0.6) || pick(ingCands.filter((c) => c.lo), 0.7);
       }
       ingMap.set(n, res);
       return res;
@@ -1414,9 +1424,9 @@ svg { display: block; }
       b.className = "banner" + (win.est ? " soft" : "");
       b.innerHTML = `<span>오늘 발주 → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}</span><span>${won(win.gross)}원</span>`;
     }
-    const vendors = [...new Set(M.items.map((i) => i.vendor).filter(Boolean))];
+    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
-      const n = M.items.filter((it) => it.vendor === c).length;
+      const n = M.items.filter((it) => !it.ledgerOnly && it.vendor === c).length;
       return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(c)}<span class="cnt">${n}</span></button>`;
     }).join("");
     renderList();
@@ -1473,7 +1483,7 @@ svg { display: block; }
     pin.innerHTML = ""; rest.innerHTML = "";
     let pinN = 0, restN = 0, restAll = 0;
     const showRest = q || cat || open;
-    const list = M.items.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    const list = M.items.filter((i) => !i.ledgerOnly).sort((a, b) => a.name.localeCompare(b.name, "ko"));
     const restFrag = document.createDocumentFragment();
     let shown = 0;
     list.forEach((it) => {
@@ -1821,7 +1831,8 @@ svg { display: block; }
     const actDays = Object.values(db.forecast || {}).filter((f) => isFinite(num(f.act))).length;
     const last = [...M.monthRows].reverse().find((r) => r.menuQty);
     const mapped = last ? last.menuMapped / last.menuQty : 0;
-    const both = M.items.length ? M.items.filter((i) => i.rateA != null && i.rateB != null).length / M.items.length : 0;
+    const own = M.items.filter((i) => !i.ledgerOnly);
+    const both = own.length ? own.filter((i) => i.rateA != null && i.rateB != null).length / own.length : 0;
     const sat = (n, k) => 1 - Math.exp(-n / k); // 처음엔 빨리, 갈수록 천천히 차오름
     const parts = [
       { t: "데이터 파일", d: "수불현황·매출현황·레시피·Gross Sales", v: `${Math.round(files * 10) / 10}개월`, max: 30, p: 30 * sat(files, 6) },
@@ -1875,7 +1886,7 @@ svg { display: block; }
       scores: M.scores.length, act: Object.values(db.forecast || {}).filter((f) => isFinite(num(f.act))).length,
       mapped: last ? Math.round(last.menuMapped / last.menuQty * 100) : 0,
       map: db.map || {}, hide: db.hide || [], order: db["master.order"] ? `${db["master.order"].at}|${db["master.order"].rows.length}` : "",
-      loss: M.items.filter((i) => i.loss !== 1).length, items: M.items.length,
+      loss: M.items.filter((i) => i.loss !== 1).length, items: M.items.filter((i) => !i.ledgerOnly).length,
     };
   }
   const ERR_KO = {
