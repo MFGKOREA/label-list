@@ -364,7 +364,7 @@ svg { display: block; }
 .exn b { font-size: 20px; font-weight: 800; color: inherit; }
 .exn b small { font-size: 12px; margin-left: 2px; }
 .exn > small { font-size: 10.5px; opacity: .8; }
-.legend-row { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13.5px; }
+.legend-row { display: grid; grid-template-columns: minmax(78px, max-content) minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13.5px; }
 .legend-row .chip { justify-self: start; }
 .guide { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start; }
 .guide div { display: grid; gap: 2px; }
@@ -644,7 +644,7 @@ svg { display: block; }
     <div class="sect"><span>작은 표시의 뜻</span></div>
     <div class="group">
       <div class="cell legend-row"><span class="chip ok">일치</span><span>두 가지 계산이 비슷해요. 믿고 주문해도 돼요.</span></div>
-      <div class="cell legend-row"><span class="chip diff">오차 17%</span><span>계산이 서로 달라요. 한 번 더 확인해요.</span></div>
+      <div class="cell legend-row"><span class="chip diff">오차 17% 보정반영</span><span>두 계산이 서로 달라서, 그만큼 필요량에 이미 보정해 뒀어요. 더하거나 뺄 필요 없어요.</span></div>
       <div class="cell legend-row"><span class="chip new">신규 품목</span><span>새로 나온 재료라 아직 배우는 중이에요.</span></div>
     </div>
 
@@ -1513,7 +1513,7 @@ svg { display: block; }
     if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
-    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}%</span>`;
+    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag}</div>` +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span><span>${esc(it.unit || unit)}</span></span>` +
