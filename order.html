@@ -1431,9 +1431,10 @@ svg { display: block; }
     // 낮고 완만한 호 + 시작점 작은 점 + 끝에 작은 채운 화살촉
     const y = H - 3, top = 2, k = Math.min(Math.abs(x2 - x1) * 0.18, 18);
     const d = `M${x1} ${y} C${x1 + k} ${top}, ${x2 - k} ${top}, ${x2} ${y - 1}`;
-    svg.innerHTML = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".9"${to ? "" : ' stroke-dasharray="2 3"'}/>` +
-      `<circle cx="${x1}" cy="${y}" r="2.2" fill="currentColor"/>` +
-      `<path d="M${x2 - 3.5} ${y - 4.5} L${x2} ${y + 0.5} L${x2 + 3.5} ${y - 4.5} Z" fill="currentColor"/>`;
+    // 화살촉은 marker(orient=auto)라 곡선 끝 방향을 따라 함께 휨
+    svg.innerHTML = `<defs><marker id="wkHead" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto"><path d="M1 1.5L9 5L1 8.5Z" fill="currentColor"/></marker></defs>` +
+      `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".9"${to ? "" : ' stroke-dasharray="2 3"'} marker-end="url(#wkHead)"/>` +
+      `<circle cx="${x1}" cy="${y}" r="2.2" fill="currentColor"/>`;
   }
   window.addEventListener("resize", () => { if (!$("v-main").hidden) drawWeekArc(); });
   function renderMain() {
