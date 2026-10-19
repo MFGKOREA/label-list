@@ -460,6 +460,8 @@ svg { display: block; }
 .weekarc { position: absolute; left: 0; top: 0; color: var(--rose-ink); overflow: visible; pointer-events: none; }
 .fld input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .fld input[type="number"]::-webkit-inner-spin-button, .fld input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.banner .bsum { display: inline-flex; align-items: baseline; gap: 6px; margin-left: auto; white-space: nowrap; }
+.banner .bsum small { font-size: 11px; font-weight: 600; color: var(--muted); }
 
 </style>
 </head>
@@ -1476,7 +1478,7 @@ svg { display: block; }
     else if (dow(TODAY) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      b.innerHTML = `<span>오늘 발주 → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>오늘 발주 → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(TODAY)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(TODAY)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
