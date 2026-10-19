@@ -994,7 +994,9 @@ svg { display: block; }
     });
     return out;
   }
-  const SKIP_CATS = /주류|음료|upcharge|쿠폰|^기타$|other|pet|미분류/i;
+  // 쿠폰은 읽어 두되(매출 없이 나가는 요리), 레시피 연결에서 직접 고른 쿠폰만 계산에 넣음
+  const SKIP_CATS = /주류|음료|upcharge|^기타$|other|pet|미분류/i;
+  const COUPON = /쿠폰/;
   async function parseSales(file) {
     const book = await readBook(file);
     const h = findSheet(book, { cat: ["중분류"], menu: ["소분류", "메뉴명", "메뉴"], qty: ["판매수량", "조회일기준", "수량"] }, ["menu"], /메뉴|매출/);
@@ -1248,6 +1250,7 @@ svg { display: block; }
       if (d.sales && line.length) {
         theo = new Map(); prepUse = new Map();
         d.sales.rows.forEach((s) => {
+          if (COUPON.test(s.cat) && !mapCfg.menu[s.menu]) return; // 연결 안 한 쿠폰은 메뉴 수에도 안 셈
           menuQty += s.qty;
           const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return;
           menuMapped += s.qty;
