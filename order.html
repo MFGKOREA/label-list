@@ -1343,7 +1343,7 @@ svg { display: block; }
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (!r.packs) need = '<span class="need enough"><b>충분</b></span>';
+        else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${r1(r.need)}${esc(unit)}</span></span>`;
         else need = `<span class="need buy"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>부족 ${r1(r.short)}${esc(unit)}</span></span>`;
       }
       return need;
