@@ -1091,6 +1091,8 @@ svg { display: block; }
   function latestRecipes(kind) {
     const map = new Map();
     months().forEach((m) => { const f = mget(m)[kind]; if (f && f.recipes) f.recipes.forEach((r) => map.set(r.name, r)); });
+    // PDF에 없는 메뉴(시저 샐러드 등)는 매장에서 알려준 레시피로
+    ((db.customRecipes || {})[kind] || []).forEach((r) => map.set(r.name, r));
     return [...map.values()];
   }
 
