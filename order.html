@@ -1229,6 +1229,15 @@ svg { display: block; }
           pm.acc.forEach((v, k) => theo.set(k, (theo.get(k) || 0) + v * q));
           pm.prepAcc.forEach((v, k) => prepUse.set(k, (prepUse.get(k) || 0) + v * q));
         });
+        // 커팅비프 부족분은 부채살로: prepCfg의 shortOf 품목 사용량을 레시피 계산(B)에 더함
+        Object.values(db.prepCfg || {}).forEach((c) => {
+          const sp = c.shortOf && ((db.prepCfg || {})[c.shortOf] || {}).split; const it = sp && items.find((i) => i.key === c.item);
+          if (!it) return;
+          const n = d.sales.rows.reduce((a, r) => { const x = resolveMenu(r.menu, r.cat); return a + (x && x.recipe && x.recipe.name.startsWith(sp.from) ? r.qty * (x.mult || 1) : 0); }, 0);
+          const need = (prepUse.get(c.shortOf) || 0) + (prepUse.get(c.shortOf + "|ea") || 0) * (sp.portion || 110);
+          const halves = Math.max(0, need - n * sp.g) / (sp.portion || 110);
+          if (halves) theo.set(it.key, (theo.get(it.key) || 0) + halves / (c.per || 2));
+        });
       }
       return { m, gross, days: daysInMonth(m), actual: d.ledger ? actual : null, theo, prepUse, menuQty, menuMapped };
     });
@@ -1557,6 +1566,21 @@ svg { display: block; }
     let g = lastB.prepUse.get(p.name) || 0, ea = lastB.prepUse.get(p.name + "|ea") || 0;
     const cfg = (db.prepCfg || {})[p.name] || {};
     const shelf = p.shelf;
+    // cfg.rate: 매장 기준 "Gross 100만원당 몇 단위" (로즈마리 400만원당 1팩 = 0.25)
+    if (cfg.rate) return { e: cfg.rate * (gToday / 1e6), unit: cfg.unit || "EA", note: `${won(1e6 / cfg.rate)}원당 1${cfg.unit || "EA"}` };
+    // 커팅비프: 시즐 스테이크&립 1개마다 채끝 270g에서 100g이 나옴. 스테이크 파스타·샐러드·플래터·피자에 먼저 쓰고 모자라면 부채살 1/2컷
+    if (cfg.split || cfg.shortOf) {
+      const sp = cfg.split || ((db.prepCfg || {})[cfg.shortOf] || {}).split; if (!sp) return null;
+      const dp = cfg.split ? p.name : cfg.shortOf;
+      const sales = (mget(lastB.m).sales || { rows: [] }).rows;
+      const n = sales.reduce((a, r) => { const x = M.resolveMenu(r.menu, r.cat); return a + (x && x.recipe && x.recipe.name.startsWith(sp.from) ? r.qty * (x.mult || 1) : 0); }, 0);
+      const need = (lastB.prepUse.get(dp) || 0) + (lastB.prepUse.get(dp + "|ea") || 0) * (sp.portion || 110);
+      const supply = n * sp.g;
+      if (cfg.split) return { e: per(Math.min(need, supply)) / sp.g, unit: "포션", note: `시즐 스테이크&립 1개당 ${sp.g}g` };
+      const it = M.items.find((i) => i.key === cfg.item);
+      const halves = per(Math.max(0, need - supply)) / (sp.portion || 110);
+      return { e: halves / (cfg.per || 2), unit: (it && it.pk.stock) || "EA", note: `커팅비프 부족분 · 1EA = 1/2컷 ${cfg.per || 2}개` };
+    }
     // 매장에서 정한 단위 (prepCfg): X = 레시피 1번 분량, PK = 원재료 팩(item) 또는 1포션 1팩, EA = 개수
     if (cfg.unit) {
       const batchG = yg || p.ing.reduce((a, i) => { const q = parseQty(i.w, i.v) || {}; return a + (q.g || q.ml || 0); }, 0) || null;
