@@ -1244,7 +1244,7 @@ svg { display: block; }
       const gross = num(d.gross) || grossFromForecast(m);
       const actual = new Map();
       // itemCfg.as: 예전 코드의 사용량을 지금 품목으로 합침 (설도 200g → 부채살 220g, g 기준으로 환산)
-      const asOf = (r) => { const c = itemCfg[r.name]; const to = c && c.as && items.find((i) => i.key === c.as); if (!to) return null; const gOf = (n) => num((/([\d.]+)\s*g/i.exec(n) || [])[1]); const f = gOf(r.name) && (to.pk.g || gOf(to.name)) ? gOf(r.name) / (to.pk.g || gOf(to.name)) : 1; return { it: to, f }; };
+      const asOf = (r) => { const c = itemCfg[r.name]; const to = c && c.as && items.find((i) => i.key === c.as); if (!to) return null; const gOf = (n) => { const m = /([\d.]+)\s*(kg|g)\b/i.exec(n); return m ? num(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1) : 0; }; const f = gOf(r.name) && (to.pk.g || gOf(to.name)) ? gOf(r.name) / (to.pk.g || gOf(to.name)) : 1; return { it: to, f }; };
       if (d.ledger) d.ledger.rows.forEach((r) => { const a = asOf(r); const it = a ? a.it : ledgerItem(r); if (it && r.usage > 0) actual.set(it.key, (actual.get(it.key) || 0) + r.usage * (a ? a.f : 1)); });
       let theo = null, prepUse = null, menuQty = 0, menuMapped = 0;
       if (d.sales && line.length) {
