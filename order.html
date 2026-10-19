@@ -17,43 +17,43 @@
 <style>
 /* Layout: single-column phone app (max 480px); main screen with 발주/프랩 tabs, pushed screens for Forecast, 데이터 파일, 데이터 리포트, 사용방법 */
 :root {
-  --page: #ebeae5;
-  --bg: #f5f4f0;
+  --page: #ffffff;
+  --bg: #f4f4f4;
   --surface: #ffffff;
-  --fill: rgba(120, 116, 104, .11);
-  --fill-2: #f4f3ef;
-  --fg: #1b1e1c;
-  --muted: #878a85;
-  --line: rgba(27, 30, 28, .08);
-  --accent: #24503f;
+  --fill: rgba(0, 0, 0, .05);
+  --fill-2: #f4f4f4;
+  --fg: #222222;
+  --muted: #8b8b8b;
+  --line: #ebebeb;
+  --accent: #222222;
   --accent-ink: #ffffff;
-  --accent-soft: #e7eee9;
-  --ok: var(--accent); --ok-bg: var(--accent-soft);
-  --chick: #f6efdc; --chick-line: #e3d3a4; --chick-ink: #7a5c17;
-  --rose: #f5e6e0; --rose-line: #e2b7a9; --rose-ink: #a04632;
-  --shadow: 0 1px 2px rgba(27, 30, 28, .04), 0 4px 14px rgba(27, 30, 28, .05);
+  --accent-soft: #f4f4f4;
+  --ok: #41b979; --ok-bg: #ebf7f0;
+  --chick: #f4f4f4; --chick-line: #d3d3d3; --chick-ink: #555555;
+  --rose: #fdeeec; --rose-line: #f5b8b0; --rose-ink: #ef6253;
+  --shadow: 0 0 0 0 transparent;
   --font: "Microsoft GothicNeo", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --page: #090a09; --bg: #0f1110; --surface: #191c1a; --fill: rgba(160, 156, 144, .14); --fill-2: #222523;
-    --fg: #eceeea; --muted: #8f938e; --line: rgba(255, 255, 255, .08);
-    --accent: #8cc7a9; --accent-ink: #0d1813; --accent-soft: #1d2a24;
-    --ok: var(--accent); --ok-bg: var(--accent-soft);
-    --chick: #2f2a1c; --chick-line: #554a2c; --chick-ink: #e6cf8c;
-    --rose: #32211d; --rose-line: #5e3a31; --rose-ink: #eba593;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
+    --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
+    --accent: #f2f2f2; --accent-ink: #000000; --accent-soft: #1f1f1f;
+    --ok: #4cc38a; --ok-bg: #10261b;
+    --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd;
+    --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
+    --shadow: 0 0 0 0 transparent;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --page: #090a09; --bg: #0f1110; --surface: #191c1a; --fill: rgba(160, 156, 144, .14); --fill-2: #222523;
-  --fg: #eceeea; --muted: #8f938e; --line: rgba(255, 255, 255, .08);
-  --accent: #8cc7a9; --accent-ink: #0d1813; --accent-soft: #1d2a24;
-  --ok: var(--accent); --ok-bg: var(--accent-soft);
-  --chick: #2f2a1c; --chick-line: #554a2c; --chick-ink: #e6cf8c;
-  --rose: #32211d; --rose-line: #5e3a31; --rose-ink: #eba593;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
+    --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
+    --accent: #f2f2f2; --accent-ink: #000000; --accent-soft: #1f1f1f;
+    --ok: #4cc38a; --ok-bg: #10261b;
+    --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd;
+    --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
+    --shadow: 0 0 0 0 transparent;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -279,8 +279,14 @@ svg { display: block; }
 .xp-top b small { font-size: 14px; margin-left: 1px; }
 .xp-bar { height: 12px; border-radius: 6px; background: #22302a; box-shadow: inset 0 0 0 1px #2e4236; overflow: hidden; }
 .xp-bar i { display: block; height: 100%; min-width: 2px; border-radius: 6px; background: linear-gradient(90deg, #3dff6e, #b6ff2e); box-shadow: 0 0 12px rgba(140, 255, 58, .8); transition: width .6s ease; }
-.xp-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px; font-size: 11.5px; color: #93ad99; }
-.xp-parts b { color: #d8ffd0; font-weight: 700; }
+.xp-more { display: grid; place-items: center; width: 100%; border: 0; background: none; color: #93ad99; padding: 8px 0 0; }
+.xp-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+.xp-parts { margin-top: 6px; border-top: 1px solid #22302a; }
+.xp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; gap: 10px; align-items: center; padding: 8px 0; font-size: 12.5px; color: #b9d8bf; }
+.xp-row + .xp-row { border-top: 1px solid #1b2620; }
+.xp-row small { display: block; font-size: 11px; color: #6f8a76; }
+.xp-row b { color: #d8ffd0; font-weight: 700; text-align: right; }
+.xp-row em { font-style: normal; text-align: right; font-weight: 700; color: #8cff3a; }
 .hero { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 16px 10px; margin-bottom: 20px; }
 .hero-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .hero-top span { font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -397,6 +403,23 @@ svg { display: block; }
 .busy { opacity: .55; pointer-events: none; }
 .kv b.ok { color: var(--accent); }
 .kv b.bad { color: var(--rose-ink); }
+
+/* 크림(KREAM) 스타일: 흰 카드 + 회색 바탕, 검정 강조, 밑줄 탭, 테두리 칩 */
+.hdr h1 { color: var(--fg); }
+.group, .hero { border-radius: 20px; }
+.seg { background: none; border-radius: 0; padding: 0; box-shadow: inset 0 -1px 0 var(--line); margin-bottom: 16px; }
+.seg button { border-radius: 0; padding: 11px 0 12px; font-size: 15.5px; font-weight: 600; color: var(--muted); }
+.seg button[aria-selected="true"] { background: none; color: var(--fg); font-weight: 800; box-shadow: inset 0 -2px 0 var(--fg); }
+.chips button { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--fg); font-weight: 500; padding: 7px 14px; }
+.chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: none; font-weight: 700; }
+.search { background: var(--surface); border-radius: 12px; }
+.tb.help { box-shadow: inset 0 0 0 1px var(--line); }
+.tb.report { box-shadow: none; color: #fff; }
+.nav .back { color: var(--fg); }
+.banner { background: var(--surface); color: var(--fg); }
+.week div { border-radius: 14px; }
+.week .deliv { box-shadow: none; }
+.need.buy b small { opacity: .8; }
 
 </style>
 </head>
@@ -530,7 +553,8 @@ svg { display: block; }
     <div class="xp" aria-label="학습량">
       <div class="xp-top"><span>학습량</span><b id="xpPct"></b></div>
       <div class="xp-bar"><i id="xpFill"></i></div>
-      <div class="xp-parts" id="xpParts"></div>
+      <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpParts" aria-label="학습 데이터 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
+      <div class="xp-parts" id="xpParts" hidden></div>
     </div>
     <div class="wkpick">
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
@@ -1704,11 +1728,11 @@ svg { display: block; }
     const both = M.items.length ? M.items.filter((i) => i.rateA != null && i.rateB != null).length / M.items.length : 0;
     const sat = (n, k) => 1 - Math.exp(-n / k); // 처음엔 빨리, 갈수록 천천히 차오름
     const parts = [
-      { t: "데이터 파일", v: `${Math.round(files * 10) / 10}개월`, p: 30 * sat(files, 6) },
-      { t: "재고 채점", v: `${M.scores.length}건`, p: 30 * sat(M.scores.length, 400) },
-      { t: "실제 Gross Sales", v: `${actDays}일`, p: 20 * sat(actDays, 120) },
-      { t: "메뉴 연결", v: `${Math.round(mapped * 100)}%`, p: 10 * mapped },
-      { t: "레시피 계산 품목", v: `${Math.round(both * 100)}%`, p: 10 * both },
+      { t: "데이터 파일", d: "수불현황·매출현황·레시피·Gross Sales", v: `${Math.round(files * 10) / 10}개월`, max: 30, p: 30 * sat(files, 6) },
+      { t: "재고 채점", d: "같은 품목 재고를 다른 날 다시 입력", v: `${M.scores.length}건`, max: 30, p: 30 * sat(M.scores.length, 400) },
+      { t: "실제 Gross Sales", d: "Forecast 화면에 적은 날", v: `${actDays}일`, max: 20, p: 20 * sat(actDays, 120) },
+      { t: "메뉴 연결", d: "판매 메뉴 중 레시피에 연결된 비율", v: `${Math.round(mapped * 100)}%`, max: 10, p: 10 * mapped },
+      { t: "레시피 계산 품목", d: "수불과 레시피 둘 다로 계산되는 품목", v: `${Math.round(both * 100)}%`, max: 10, p: 10 * both },
     ];
     return { pct: parts.reduce((a, x) => a + x.p, 0), parts };
   }
@@ -1716,8 +1740,12 @@ svg { display: block; }
     const L = learnLevel(M);
     $("xpPct").innerHTML = `${L.pct.toFixed(3)}<small>%</small>`;
     $("xpFill").style.width = `${Math.min(100, L.pct)}%`;
-    $("xpParts").innerHTML = L.parts.map((x) => `<span>${x.t} <b>${x.v}</b></span>`).join("");
+    $("xpParts").innerHTML = L.parts.map((x) => `<div class="xp-row"><span>${x.t}<small>${x.d}</small></span><b>${x.v}</b><em>${x.p.toFixed(3)}<small>/ ${x.max}%</small></em></div>`).join("");
   }
+  $("xpMore").addEventListener("click", () => {
+    const open = $("xpParts").hidden;
+    $("xpParts").hidden = !open; $("xpMore").setAttribute("aria-expanded", String(open));
+  });
   function renderReport() {
     const M = model();
     renderXp(M);
