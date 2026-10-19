@@ -1579,7 +1579,8 @@ svg { display: block; }
       const ex = prepExpect(M, x.name, x.code, g.v, pdf);
       const shelf = x.shelf || (pdf && pdf.shelf) || (ex && ex.shelf) || null;
       // 한 번에 만드는 소스·오더류는 쉘프라이프 동안 쓸 양으로
-      if (ex && ex.batch && shelf > 1) { ex.e *= shelf; ex.note = (ex.note ? ex.note + " · " : "") + `쉘프라이프 ${shelf}days 반영`; }
+      // 쉘프라이프 동안의 날별 Forecast 합으로 (오늘 매출 × 일수가 아니라)
+      if (ex && ex.batch && shelf > 1 && g.v > 0) { ex.e *= sumGross(TODAY, addDays(TODAY, shelf), false).s / g.v; ex.note = (ex.note ? ex.note + " · " : "") + `쉘프라이프 ${shelf}days 반영`; }
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
     const known = entries.filter((x) => x.ex || store[x.id] != null);
