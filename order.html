@@ -456,7 +456,7 @@ svg { display: block; }
 .xp { position: relative; }
 .xp-pet { position: absolute; right: 16px; top: 46px; width: 68px; height: auto; pointer-events: none; }
 /* 발주일 → 입고일 곡선 화살표 (데이터 리포트 레드) */
-.weekwrap { position: relative; padding-top: 22px; }
+.weekwrap { position: relative; padding-top: 16px; }
 .weekarc { position: absolute; left: 0; top: 0; color: var(--rose-ink); overflow: visible; pointer-events: none; }
 
 </style>
@@ -1424,13 +1424,16 @@ svg { display: block; }
     if (!from || dow(TODAY) === 0) { svg.innerHTML = ""; return; }
     const to = strip.querySelector(".deliv");
     const box = strip.getBoundingClientRect(), a = from.getBoundingClientRect();
-    const W = box.width, H = 26;
+    const W = box.width, H = 18;
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
     const x1 = a.left - box.left + a.width / 2;
-    const x2 = to ? to.getBoundingClientRect().left - box.left + to.getBoundingClientRect().width / 2 : W - 2;
-    const y = H - 2, top = 3, mx = (x1 + x2) / 2;
-    svg.innerHTML = `<defs><marker id="wkHead" viewBox="0 0 8 8" refX="5" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L6 4L1 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>` +
-      `<path d="M${x1} ${y} C${x1} ${top}, ${x2} ${top}, ${x2} ${to ? y : top + 8}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"${to ? "" : ' stroke-dasharray="3 3"'} marker-end="url(#wkHead)"/>`;
+    const x2 = to ? to.getBoundingClientRect().left - box.left + to.getBoundingClientRect().width / 2 : W - 4;
+    // 낮고 완만한 호 + 시작점 작은 점 + 끝에 작은 채운 화살촉
+    const y = H - 3, top = 2, k = Math.min(Math.abs(x2 - x1) * 0.18, 18);
+    const d = `M${x1} ${y} C${x1 + k} ${top}, ${x2 - k} ${top}, ${x2} ${y - 1}`;
+    svg.innerHTML = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".9"${to ? "" : ' stroke-dasharray="2 3"'}/>` +
+      `<circle cx="${x1}" cy="${y}" r="2.2" fill="currentColor"/>` +
+      `<path d="M${x2 - 3.5} ${y - 4.5} L${x2} ${y + 0.5} L${x2 + 3.5} ${y - 4.5} Z" fill="currentColor"/>`;
   }
   window.addEventListener("resize", () => { if (!$("v-main").hidden) drawWeekArc(); });
   function renderMain() {
