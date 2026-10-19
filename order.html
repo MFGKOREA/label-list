@@ -655,7 +655,7 @@ svg { display: block; }
       <div class="cell calc"><i class="lt lx">D</i><div><b>고정량 + 비례량</b></div></div>
       <div class="cell calc"><i class="lt lx">E</i><div><b>A·B 비중</b><span>최근에 더 잘 맞은 계산을 더 믿어요.</span></div></div>
       <div class="cell calc"><i class="lt lx">F</i><div><b>안전재고</b><span>100번 중 95번은 모자라지 않게 여유분을 잡아요.</span></div></div>
-      <div class="cell calc"><i class="lt lx">G</i><div><b>재고 채점</b><span>적어 준 재고로 계산이 맞았는지 채점하고 스스로 고쳐요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">G</i><div><b>재고채점</b><span>적어 준 재고로 계산이 맞았는지 채점하고 스스로 고쳐요.</span></div></div>
       <div class="cell calc"><i class="lt lx">H</i><div><b>프랩량</b><span>오늘 예상 매출로 사용량을 구해요. 쉘프라이프 안에서만요.</span></div></div>
     </div>
 
@@ -1347,7 +1347,7 @@ svg { display: block; }
     return { use, useA, useB, wA, spread, ss, need, short, packs, orderQty };
   }
 
-  // ---------- G: 재고 채점 ----------
+  // ---------- G: 재고채점 ----------
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     const byKey = new Map();
@@ -1901,7 +1901,7 @@ svg { display: block; }
       ["A · 수불현황", `수불현황 + Gross Sales가 있는 달 ${a}개`, `${withA}개 품목`, withA ? "ok" : "bad"],
       ["B · 레시피", `메뉴별 판매 + 레시피가 있는 달 ${b}개`, `${withB}개 품목`, withB ? "ok" : "bad"],
       ["D · 고정량 + 비례량", "3개월 이상 쌓이면 계산", `${D}개 품목`, ""],
-      ["G · 재고 채점", "같은 품목 재고를 두 번 이상 입력하면 채점", `${M.scores.length}건`, ""],
+      ["G · 재고채점", "같은 품목 재고를 두 번 이상 입력하면 채점", `${M.scores.length}건`, ""],
     ].map(([t, s, v, c]) => `<div class="cell kv"><span>${t}<small>${s}</small></span><b class="${c || "mut"}">${v}</b></div>`).join("");
   }
   $("apiSave").onclick = async () => {
@@ -1930,7 +1930,7 @@ svg { display: block; }
     const sat = (n, k) => 1 - Math.exp(-n / k); // 처음엔 빨리, 갈수록 천천히 차오름
     const parts = [
       { t: "데이터 파일", d: "수불현황·매출현황·레시피·Gross Sales", v: `${Math.round(files * 10) / 10}개월`, max: 30, p: 30 * sat(files, 6) },
-      { t: "재고 채점", d: "같은 품목 재고를 다른 날 다시 입력", v: `${M.scores.length}건`, max: 30, p: 30 * sat(M.scores.length, 400) },
+      { t: "재고채점", d: "같은 품목 재고를 다른 날 다시 입력", v: `${M.scores.length}건`, max: 30, p: 30 * sat(M.scores.length, 400) },
       { t: "실제 Gross Sales", d: "Forecast 화면에 적은 날", v: `${actDays}일`, max: 20, p: 20 * sat(actDays, 120) },
       { t: "메뉴 연결", d: "판매 메뉴 중 레시피에 연결된 비율", v: `${Math.round(mapped * 100)}%`, max: 10, p: 10 * mapped },
       { t: "레시피 계산 품목", d: "수불과 레시피 둘 다로 계산되는 품목", v: `${Math.round(both * 100)}%`, max: 10, p: 10 * both },
@@ -2000,7 +2000,7 @@ svg { display: block; }
         out.push(["learn", `${mo(m)} ${KIND_KO[kind]} 학습 (${what})`]);
       }
     });
-    if (b.scores > a.scores) out.push(["learn", `재고 채점 ${b.scores - a.scores}건 추가 (누적 ${b.scores}건)`]);
+    if (b.scores > a.scores) out.push(["learn", `재고채점 ${b.scores - a.scores}건 추가 (누적 ${b.scores}건)`]);
     if (b.act > a.act) out.push(["learn", `실제 Gross Sales ${b.act - a.act}일치 입력`]);
     const gNew = b.gOn.filter((k) => !a.gOn.includes(k));
     if (gNew.length) out.push(["learn", `${nm(gNew[0])}${gNew.length > 1 ? ` 외 ${gNew.length - 1}개` : ""}: 재고 입력만으로 사용량 학습 시작`]);
