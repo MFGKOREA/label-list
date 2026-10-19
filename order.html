@@ -444,6 +444,7 @@ svg { display: block; }
 .xp-detail, .xp-more { color: var(--rose-ink); }
 #v-report .wkpick select, #v-report .wkpick button { color: var(--rose-ink); }
 #v-report .hero-num b, #v-report .kpi b, #v-report .mrow .pc, #v-report .mrow.best .pc { color: var(--rose-ink); }
+.pnote { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); margin-top: 1px; }
 
 </style>
 </head>
@@ -1169,9 +1170,11 @@ svg { display: block; }
         } else if (t.kind === "prep" && depth < 2) {
           const p = prepByName.get(t.id); if (!p) return;
           const amount = q.g ?? q.ml ?? null;
+          // 프랩 사용량: g/ml은 이름 그대로, 포션·개수는 "이름|ea"로 따로 셈 (프랩 안의 프랩도 셈)
           if (prepAcc && amount != null) prepAcc.set(p.name, (prepAcc.get(p.name) || 0) + amount * factor);
+          else if (prepAcc && q.ea != null) prepAcc.set(p.name + "|ea", (prepAcc.get(p.name + "|ea") || 0) + q.ea * factor);
           const y = yieldOf(p); if (!y || amount == null) return;
-          expand(p, (factor * amount) / y, acc, depth + 1, null);
+          expand(p, (factor * amount) / y, acc, depth + 1, prepAcc);
         }
       });
     }
@@ -1490,14 +1493,29 @@ svg { display: block; }
   // ---------- 프랩 ----------
   let prepAll = false;
   // 프랩 1일 예상: 최근 판매 달의 프랩 사용량 ÷ 그달 Gross × 오늘 Forecast
-  function prepExpect(M, name, code, gToday) {
+  // 프랩 1일 예상을 주방에서 세는 단위로: 레시피 1번 분량(1X), 포션, 또는 원재료 PK/EA
+  function prepExpect(M, name, code, gToday, pdf) {
     const lastB = M.withB[M.withB.length - 1];
     if (!lastB || !lastB.prepUse) return null;
-    const p = M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
-    const key = p && p.name;
-    const used = key && lastB.prepUse.get(key);
-    if (!used) return null;
-    return { e: (used / (lastB.gross / 1e6)) * (gToday / 1e6), unit: "g" };
+    const p = pdf || M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
+    if (!p) return null;
+    const per = (v) => (v / (lastB.gross / 1e6)) * (gToday / 1e6);
+    const y = String(p.yield || "");
+    const yg = (() => { const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(y); if (!m) return null; const v = num(m[1]); return /^(kg|l)$/i.test(m[2]) ? v * 1000 : v; })();
+    const yn = (() => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(y); return m ? num(m[1]) : null; })();
+    let g = lastB.prepUse.get(p.name) || 0, ea = lastB.prepUse.get(p.name + "|ea") || 0;
+    if (!g && !ea) return null;
+    // "100g or 150g", "1 Portion (85g 이상)"은 1포션 무게라 포션으로 셈
+    if (yg && (/\bor\b/i.test(y) || yn === 1)) { const n = ea + g / yg; return { e: per(n), unit: "포션", note: `1포션 = ${won(yg)}g` }; }
+    // "850g (약 10 Portion)"처럼 둘 다 있으면 포션을 g으로 바꿔 합침
+    if (yg && yn && ea) { g += ea * (yg / yn); ea = 0; }
+    if (yg && g && !ea) return { e: per(g) / yg, unit: "X", note: `1X = ${won(yg)}${/ml|l\b/i.test(y) ? "ml" : "g"}` };
+    if (ea && !g) return yn > 1 ? { e: per(ea) / yn, unit: "X", note: `1X = ${yn}포션` } : { e: per(ea), unit: "포션" };
+    // 'As needed' 프랩은 원재료 하나면 그 품목의 재고단위로
+    const raw = p.ing.length === 1 ? M.resolveIng(p.ing[0].n) : null;
+    const it = raw && raw.kind === "item" && M.items.find((i) => i.key === raw.id);
+    if (it && g) { const s = toStock({ g: per(g) }, it.pk); if (s != null) return { e: s, unit: it.pk.stock || it.unit || "EA", note: it.name }; }
+    return yg ? { e: per(g) / yg, unit: "X", note: `1X = ${won(yg)}g` } : null;
   }
   function renderPrep() {
     const M = model();
@@ -1513,11 +1531,12 @@ svg { display: block; }
     box.innerHTML = "";
     const entries = list.map((x) => {
       const pdf = M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75);
-      const ex = prepExpect(M, x.name, x.code, g.v);
+      const ex = prepExpect(M, x.name, x.code, g.v, pdf);
       return { ...x, shelf: x.shelf || (pdf && pdf.shelf) || null, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
     const known = entries.filter((x) => x.ex || store[x.id] != null);
     const unknown = entries.length - known.length;
+    const rp = (v) => (v > 0 && v < 1 ? v.toFixed(2).replace(/0$/, "") : r1(v)); // 1 미만은 0.25X처럼 둘째 자리까지
     // g은 1000 넘으면 kg, cc는 L로 보여줌
     const disp = (unit, e) => unit === "g" && e >= 1000 ? { u: "kg", f: 1000 } : unit === "cc" && e >= 1000 ? { u: "L", f: 1000 } : { u: unit, f: 1 };
     (prepAll ? entries : known).forEach(({ name, code, shelf, ex, id }) => {
@@ -1532,12 +1551,12 @@ svg { display: block; }
         const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
         const r = target - (num(v.s) * dd.f || 0);
         if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
-        return `<span class="need buy"><b>${r1(r / dd.f)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
+        return `<span class="need buy"><b>${rp(r / dd.f)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
       };
       d.innerHTML =
-        `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">D+${shelf}</span>` : ""}</div>` +
+        `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}${ex && ex.note ? `<small class="pnote">${esc(ex.note)}</small>` : ""}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">D+${shelf}</span>` : ""}</div>` +
         `<div class="p-bot"><label class="fld"><span>재고(On Hand)${dd.u ? " " + esc(dd.u) : ""}</span><input inputmode="decimal" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
-        `<span class="fld ro"><span>예상${dd.u ? " " + esc(dd.u) : ""}</span><b>${ex ? r1(ex.e / dd.f) : "–"}</b></span><span class="needbox">${draw()}</span></div>`;
+        `<span class="fld ro"${ex && ex.note ? ` title="${esc(ex.note)}"` : ""}><span>예상${dd.u ? " " + esc(dd.u) : ""}</span><b>${ex ? rp(ex.e / dd.f) : "–"}</b></span><span class="needbox">${draw()}</span></div>`;
       const inp = d.querySelector("input");
       inp.addEventListener("input", () => { v.s = inp.value.trim(); d.querySelector(".needbox").innerHTML = draw(); });
       inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all); });
