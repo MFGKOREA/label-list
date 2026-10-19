@@ -931,7 +931,7 @@ svg { display: block; }
     const byCat = new Map();
     rows.slice(start).forEach((row) => {
       const cat = String(cell(row, col, "cat") ?? "").trim(), menu = String(cell(row, col, "menu") ?? "").trim(), qty = num(cell(row, col, "qty"));
-      if (!menu || !isFinite(qty) || menu === "합계") return;
+      if (!menu || !isFinite(qty) || /합계|소계/.test(menu + cat)) return;
       if (!byCat.has(cat)) byCat.set(cat, []);
       byCat.get(cat).push({ cat, menu, qty });
     });
