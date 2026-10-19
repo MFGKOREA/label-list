@@ -462,6 +462,8 @@ svg { display: block; }
 .fld input[type="number"]::-webkit-inner-spin-button, .fld input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .banner .bsum { display: inline-flex; align-items: baseline; gap: 6px; margin-left: auto; white-space: nowrap; }
 .banner .bsum small { font-size: 11px; font-weight: 600; color: var(--muted); }
+.need.need-idle b { font-size: 19px; font-weight: 800; color: var(--fg); }
+.need.need-idle span { color: var(--muted); }
 
 </style>
 </head>
@@ -1496,7 +1498,8 @@ svg { display: block; }
     const draw = () => {
       const s = num(v.s), i = num(v.i) || 0;
       let need;
-      if (!isFinite(s)) need = '<span class="need none"><b>–</b></span>';
+      // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
+      if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle"><b>${r1(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
