@@ -458,6 +458,8 @@ svg { display: block; }
 /* 발주일 → 입고일 곡선 화살표 (데이터 리포트 레드) */
 .weekwrap { position: relative; padding-top: 16px; }
 .weekarc { position: absolute; left: 0; top: 0; color: var(--rose-ink); overflow: visible; pointer-events: none; }
+.fld input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.fld input[type="number"]::-webkit-inner-spin-button, .fld input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 </style>
 </head>
@@ -1698,9 +1700,16 @@ svg { display: block; }
       };
       d.innerHTML =
         `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}${ex && ex.note ? `<small class="pnote">${esc(ex.note)}</small>` : ""}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">${shelf}${shelf > 1 ? "days" : "day"}</span>` : ""}</div>` +
-        `<div class="p-bot"><label class="fld"><span>재고(On Hand)${dd.u ? " " + esc(dd.u) : ""}</span><input inputmode="decimal" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
+        `<div class="p-bot"><label class="fld"><span>재고(On Hand)${dd.u ? " " + esc(dd.u) : ""}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
         `<span class="fld ro"${ex && ex.note ? ` title="${esc(ex.note)}"` : ""}><span>예상${dd.u ? " " + esc(dd.u) : ""}</span><b>${ex ? rpu(ex.e / dd.f, dd.u) : "–"}</b></span><span class="needbox">${draw()}</span></div>`;
       const inp = d.querySelector("input");
+      // 엔터(다음)를 누르면 바로 아래 프랩 재고칸으로 (iOS도 리턴 키가 나오게 type=number)
+      inp.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const all = [...$("prepList").querySelectorAll("input")], next = all[all.indexOf(inp) + 1];
+        if (next) { next.focus(); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else inp.blur();
+      });
       inp.addEventListener("input", () => { v.s = inp.value.trim(); d.querySelector(".needbox").innerHTML = draw(); });
       inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all); });
       box.appendChild(d);
