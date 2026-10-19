@@ -720,6 +720,8 @@ svg { display: block; }
     if ((m = /([\d./]+)\s*tsp\b/i.exec(s))) return { ml: frac(m[1]) * 5 };
     if ((m = /([\d./]+)\s*cup\b/i.exec(s))) return { ml: frac(m[1]) * 240 };
     if ((m = /([\d./]+)\s*oz\b/i.exec(s))) return { g: frac(m[1]) * 28.35 };
+    // 스쿱 번호: #N은 1쿼트(946ml)를 N번 뜨는 크기
+    if ((m = /([\d./]+)\s*scoop\s*\(?\s*#\s*(\d+)/i.exec(s))) return { ml: frac(m[1]) * 946 / num(m[2]) };
     if ((m = /([\d./]+)\s*(ea|pc|pcs|개|slice|장|pk|portion|포션)\b/i.exec(s))) return { ea: frac(m[1]) };
     return null;
   }
@@ -771,6 +773,8 @@ svg { display: block; }
     }
     if ((m = /([\d.]+)\s*(kg|g|ml|l)\s*\/\s*([a-z]+)/i.exec(sp))) { Object.assign(pk, toG(num(m[1]), m[2])); return pk; }
     if ((m = /([\d.]+)\s*(kg|g|ml|l)\b/i.exec(sp))) { Object.assign(pk, toG(num(m[1]), m[2])); return pk; }
+    // "10구/12pk"처럼 1재고단위에 든 개수
+    if ((m = /^([\d.]+)\s*(구|개|ea|입)(?![a-z])/i.exec(sp))) { pk.ea = num(m[1]); return pk; }
     pk.ea = 1;
     return pk;
   }
@@ -1172,6 +1176,9 @@ svg { display: block; }
       const ratios = withB.slice(0, -1).map((r) => { const t = r.theo.get(it.key), a = r.actual && r.actual.get(it.key); return t && a ? a / t : null; }).filter((x) => x && x > 0.5 && x < 3);
       it.loss = ratios.length ? ratios.sort((x, y) => x - y)[Math.floor(ratios.length / 2)] : 1;
       if (it.rateB != null) it.rateB *= it.loss;
+      // 최근 달 실제가 레시피의 3배 넘게 차이 나면 레시피 밖 사용(튀김기름 등)이나 단위 문제라 B를 안 씀
+      const aLast = lastB && lastB.actual && lastB.actual.get(it.key);
+      if (tb && aLast && (aLast / (tb * it.loss) > 3 || aLast / (tb * it.loss) < 1 / 3)) it.rateB = null;
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       withA.forEach((r, idx) => {
