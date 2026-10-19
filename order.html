@@ -1226,7 +1226,8 @@ svg { display: block; }
           // "1 portion"처럼 개수로 쓴 프랩은 프랩 레시피가 N포션/오더 분량이면 그만큼 나눠 원재료까지 풀기 (어묵 포션 = 어묵 100g)
           const yc = /([\d.]+)\s*(portion|order|ea)\b/i.exec(String(p.yield || ""));
           if (amount == null && q.ea != null && yc && !/약/.test(p.yield)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
-          const y = yieldOf(p); if (!y || amount == null) return;
+          // 분량이 "1 Portion"처럼 개수뿐이면 재료 무게 합을 1포션 무게로 (럭스 포션 → 치킨 다이스 50 g)
+          const y = yieldOf(p) || (yc ? p.ing.reduce((a2, i) => { const q2 = parseQty(i.w, i.v) || {}; return a2 + (q2.g || q2.ml || 0); }, 0) * num(yc[1]) : 0); if (!y || amount == null) return;
           expand(p, (factor * amount) / y, acc, depth + 1, prepAcc);
         }
       });
