@@ -1012,9 +1012,9 @@ svg { display: block; }
     const allMonths = months();
     const lastLedgerMonth = [...allMonths].reverse().find((m) => mget(m).ledger);
     if (sheet && sheet.rows && sheet.rows.length) {
-      // 품목코드 칸이 있는 시트에서 코드 없는 줄은 '날짜', '데일리 매출' 같은 메모 줄. 'hide'는 목록에서 뺀 품목
+      // 품목코드 칸이 있는 시트에서 코드 없는 줄은 '날짜', '데일리 매출' 같은 메모 줄. 'hide'는 목록에서 뺀 품목 ("업체:소모품"이면 그 업체 전체)
       const hasCode = (sheet.cols || []).includes("code"), hide = new Set(db.hide || []);
-      items = sheet.rows.filter((r) => !r.off && !(hasCode && !r.code) && !hide.has(r.name)).map((r) => ({ ...r }));
+      items = sheet.rows.filter((r) => !r.off && !(hasCode && !r.code) && !hide.has(r.name) && !hide.has("업체:" + r.vendor)).map((r) => ({ ...r }));
     } else if (lastLedgerMonth) {
       items = mget(lastLedgerMonth).ledger.rows.filter((r) => r.usage > 0).map((r) => ({ name: r.name, group: r.group, code: r.code, vendor: "", unit: "", min: 0, loc: "", fav: false }));
     } else items = [];
