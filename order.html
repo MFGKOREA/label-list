@@ -668,7 +668,8 @@ svg { display: block; }
     .replace(/\(.*?\)|\[.*?\]/g, "")
     .replace(/사용중단|단위\s*발주|단위발주|발주|단발성|냉장|냉동|통합|_+/g, " ")
     .replace(/[\d.,]+\s*(kg|g|ml|l|ea|개|pk|미)?/g, " ")
-    .replace(/[^a-z가-힣]/g, "");
+    .replace(/[^a-z가-힣]/g, "")
+    .replace(/수프/g, "스프").replace(/쉬/g, "시").replace(/컬/g, "콜"); // 표기 흔들림 (수프/스프, 머쉬룸/머시룸, 브로컬리/브로콜리)
   function dice(a, b) {
     a = norm(a); b = norm(b);
     if (!a || !b) return 0;
@@ -688,7 +689,9 @@ svg { display: block; }
   }
 
   // 프랩 레시피는 영어 이름이라 라인 레시피의 한글 재료명과 맞추려고 단어를 한글로 바꿔 둠
-  const KO = {"acai": "아사이", "bacon": "베이컨", "batter": "배터", "beef": "비프", "bell": "", "black": "블랙", "blade": "부채살", "block": "블록", "blueberry": "블루베리", "boiled": "삶은", "bouillon": "브이용", "brioche": "브리오슈", "broccoli": "브로콜리", "brussels": "방울양배추", "butter": "버터", "cake": "", "calamari": "깔라마리", "carrot": "당근", "cheese": "치즈", "cherry": "방울", "chicken": "치킨", "chop": "찹", "chunk": "", "clam": "조개살", "coating": "코팅", "cooked": "구운", "cream": "크림", "crumble": "크럼블", "cut": "", "cutting": "커팅", "deep": "딥", "dice": "다이스", "dressing": "드레싱", "egg": "에그", "eggplant": "가지", "finger": "핑거", "fish": "어묵", "fried": "튀긴", "fritto": "프리또", "frozen": "냉동", "garlic": "갈릭", "gorgonzola": "고르곤졸라", "grain": "그레인", "grana": "그라나", "grape": "포도", "green": "그린", "grilled": "구운", "herb": "허브", "honey": "허니", "jalapeno": "할라피뇨", "juice": "주스", "lasagna": "라자냐", "leek": "대파", "lemon": "레몬", "luxe": "럭스", "mad": "매드", "mandarine": "만다린", "mashed": "매쉬", "meat": "", "mix": "믹스", "mushroom": "머쉬룸", "mushrooms": "버섯", "mustard": "머스타드", "myeongran": "명란", "oil": "오일", "olive": "올리브", "onion": "양파", "oyster": "느타리", "padano": "파다노", "pan": "팬", "panini": "파니니", "paste": "페이스트", "pepper": "파프리카", "pickle": "피클", "pineapple": "파인애플", "pizza": "피자", "portion": "포션", "potato": "포테이토", "prep": "", "ragu": "라구", "rape": "라페", "rapee": "라페", "ready": "", "red": "레드", "ribs": "립", "rice": "떡", "rigatoni": "리가토니", "roasted": "구운", "rosemary": "로즈마리", "rucola": "루꼴라", "sauce": "소스", "saute": "", "scapes": "마늘종", "seafood": "해산물", "seasoning": "시즈닝", "shrimp": "새우", "sizzling": "시즐링", "slice": "슬라이스", "sorbet": "샤베트", "sprout": "", "stock": "스톡", "sweet": "스위트", "thawing": "", "tomato": "토마토", "trimming": "", "tteokbokki": "떡볶이", "white": "화이트", "whole": "홀"};
+  const KO = {"acai": "아사이", "bacon": "베이컨", "batter": "배터", "beef": "비프", "bell": "", "black": "블랙", "blade": "부채살", "block": "블록", "blueberry": "블루베리", "boiled": "삶은", "bouillon": "브이용", "brioche": "브리오슈", "broccoli": "브로콜리", "brussels": "방울양배추", "butter": "버터", "cake": "", "calamari": "깔라마리", "carrot": "당근", "cheese": "치즈", "cherry": "방울", "chicken": "치킨", "chop": "찹", "chunk": "", "clam": "조개살", "coating": "코팅", "cooked": "구운", "cream": "크림", "crumble": "크럼블", "cut": "", "cutting": "커팅", "deep": "딥", "dice": "다이스", "dressing": "드레싱", "egg": "에그", "eggplant": "가지", "finger": "핑거", "fish": "어묵", "fried": "튀긴", "fritto": "프리또", "frozen": "냉동", "garlic": "갈릭", "gorgonzola": "고르곤졸라", "grain": "그레인", "grana": "그라나", "grape": "포도", "green": "그린", "grilled": "구운", "herb": "허브", "honey": "허니", "jalapeno": "할라피뇨", "juice": "주스", "lasagna": "라자냐", "leek": "대파", "lemon": "레몬", "luxe": "럭스", "mad": "매드", "mandarine": "만다린", "mashed": "매쉬", "meat": "", "mix": "믹스", "mushroom": "머쉬룸", "mushrooms": "버섯", "mustard": "머스타드", "myeongran": "명란", "oil": "오일", "olive": "올리브", "onion": "양파", "oyster": "느타리", "padano": "파다노", "pan": "팬", "panini": "파니니", "paste": "페이스트", "pepper": "파프리카", "pickle": "피클", "pineapple": "파인애플", "pizza": "피자", "portion": "포션", "potato": "포테이토", "prep": "", "ragu": "라구", "rape": "라페", "rapee": "라페", "ready": "", "red": "레드", "ribs": "립", "rice": "떡", "rigatoni": "리가토니", "roasted": "로스트", "rosemary": "로즈마리", "rucola": "루꼴라", "sauce": "소스", "saute": "", "scapes": "마늘종", "seafood": "해산물", "seasoning": "시즈닝", "shrimp": "새우", "sizzling": "시즐링", "slice": "슬라이스", "sorbet": "샤베트", "sprout": "", "stock": "스톡", "sweet": "스위트", "thawing": "", "tomato": "토마토", "trimming": "", "tteokbokki": "떡볶이", "white": "화이트", "whole": "홀"};
+  // 레시피에서 한글로 다르게 부르는 프랩 (Line 레시피 표기 기준)
+  const PREP_KO = { "fried garlic": "튀긴 통마늘", "fried oyster mushrooms portion": "튀긴 새송이 포션", "garlic onion crumble": "갈릭 어니언 크럼블", "seafood mix portion thawing": "뉴 해산물 포션", "mushroom mix portion": "버섯 믹스 포션", "grilled leek portion": "그릴드 대파 포션", "boiled garlic": "보일드 갈릭" };
   const toKo = (en) => String(en || "").toLowerCase().replace(/[a-z]+/g, (w) => (w in KO ? KO[w] : w)).replace(/[^가-힣a-z]/g, "");
 
   // ---------- 수량 / 단위 ----------
@@ -703,6 +706,7 @@ svg { display: block; }
     if ((m = /([\d./]+)\s*TB\b/.exec(s))) return { ml: frac(m[1]) * 15 };
     if ((m = /([\d./]+)\s*tsp\b/i.exec(s))) return { ml: frac(m[1]) * 5 };
     if ((m = /([\d./]+)\s*cup\b/i.exec(s))) return { ml: frac(m[1]) * 240 };
+    if ((m = /([\d./]+)\s*oz\b/i.exec(s))) return { g: frac(m[1]) * 28.35 };
     if ((m = /([\d./]+)\s*(ea|pc|pcs|개|slice|장|pk|portion|포션)\b/i.exec(s))) return { ea: frac(m[1]) };
     return null;
   }
@@ -762,7 +766,8 @@ svg { display: block; }
     if (!q) return null;
     if (q.g != null) { if (pk.g) return q.g / pk.g; if (pk.ml) return q.g / pk.ml; return null; }
     if (q.ml != null) { if (pk.ml) return q.ml / pk.ml; if (pk.g) return q.ml / pk.g; return null; }
-    if (q.ea != null) { if (pk.ea) return q.ea / pk.ea; if (!pk.g && !pk.ml) return q.ea; return null; }
+    // "냉동_안심150g"처럼 1EA가 1인분 덩어리인 품목은 레시피 1 ea = 재고 1
+    if (q.ea != null) { if (pk.ea) return q.ea / pk.ea; if ((!pk.g && !pk.ml) || (/^(ea|개)$/i.test(pk.stock || "") && (pk.g || pk.ml) <= 500)) return q.ea; return null; }
     return null;
   }
 
@@ -828,26 +833,20 @@ svg { display: block; }
       });
     });
     if (!out.length) throw new Error("'품목명' 칸이 있는 탭을 찾지 못했어요");
-    // 발주 BOH 파일에 들어 있는 품목환산·레시피BOM·메뉴판매·매출 입력도 함께 읽음
+    // 발주 BOH 파일에 들어 있는 품목환산·메뉴판매(메뉴→레시피명)·매출 입력도 함께 읽음 (레시피BOM 탭은 부정확해서 안 씀)
     const extra = {};
     const conv = findSheet(book, { code: ["품목코드"], q: ["단위당기준량"], u: ["기준단위"] }, ["code", "q", "u"], /환산/);
     if (conv) {
       extra.conv = {};
       conv.rows.slice(conv.r + 1).forEach((row) => { const c = str(cell(row, conv.col, "code")), q = num(cell(row, conv.col, "q")); if (c && q > 0) extra.conv[c] = { q, u: str(cell(row, conv.col, "u")) }; });
     }
-    const bom = findSheet(book, { rc: ["레시피코드"], text: ["원문"], pamt: ["1인분사용량"], punit: ["단위"], kind: ["구분"], prep: ["프렙명", "프랩명"], raw: ["원재료품목코드"], amt: ["1인분원재료량"] }, ["rc", "raw", "amt"], /bom|레시피/i);
-    if (bom) {
-      extra.bom = [];
-      bom.rows.slice(bom.r + 1).forEach((row) => {
-        const rc = str(cell(row, bom.col, "rc")); if (!rc) return;
-        extra.bom.push({ rc, raw: str(cell(row, bom.col, "raw")), amt: num(cell(row, bom.col, "amt")) || 0, kind: str(cell(row, bom.col, "kind")),
-          prep: str(cell(row, bom.col, "prep")), pamt: num(cell(row, bom.col, "pamt")) || 0, punit: str(cell(row, bom.col, "punit")), text: str(cell(row, bom.col, "text")) });
-      });
-    }
-    const mm = findSheet(book, { cat: ["중분류"], menu: ["메뉴명"], rc: ["적용레시피코드", "레시피코드"], mult: ["적용배수", "배수"] }, ["menu", "rc"], /메뉴/);
+    const mm = findSheet(book, { cat: ["중분류"], menu: ["메뉴명"], recipe: ["레시피명"], rc: ["적용레시피코드", "레시피코드"], mult: ["적용배수", "배수"] }, ["menu", "recipe"], /메뉴/);
     if (mm) {
       extra.menuMap = [];
-      mm.rows.slice(mm.r + 1).forEach((row) => { const menu = str(cell(row, mm.col, "menu")), rc = str(cell(row, mm.col, "rc")); if (menu && rc) extra.menuMap.push({ cat: str(cell(row, mm.col, "cat")), menu, rc, mult: num(cell(row, mm.col, "mult")) || 1 }); });
+      mm.rows.slice(mm.r + 1).forEach((row) => {
+        const menu = str(cell(row, mm.col, "menu")), recipe = str(cell(row, mm.col, "recipe"));
+        if (menu && recipe) extra.menuMap.push({ cat: str(cell(row, mm.col, "cat")), menu, recipe, mult: num(cell(row, mm.col, "mult")) || 1 });
+      });
     }
     book.forEach((sh) => sh.rows.forEach((row, r) => (row || []).forEach((c, j) => {
       if (extra.gross == null && /당월매출/.test(clean(c))) { const v = num((sh.rows[r + 1] || [])[j]); if (v > 0) extra.gross = v; }
@@ -1035,7 +1034,7 @@ svg { display: block; }
       ...items.map((i) => ({ kind: "item", id: i.key, label: i.name, keys: [i.name, ...i.members] })),
       ...prep.map((p) => {
         const s = prepSheet.find((x) => x.name === p.name || dice(x.name, p.name) > 0.9);
-        return { kind: "prep", id: p.name, label: "프랩 · " + (s && s.alias ? s.alias : p.name), keys: [p.name, toKo(p.name), p.short, s && s.alias].filter(Boolean) };
+        return { kind: "prep", id: p.name, label: "프랩 · " + (s && s.alias ? s.alias : p.name), keys: [p.name, toKo(p.name), PREP_KO[p.name.toLowerCase()], p.short, s && s.alias].filter(Boolean) };
       }),
     ];
     const ingMap = new Map();
@@ -1055,19 +1054,26 @@ svg { display: block; }
     };
     // 메뉴 → 레시피
     const recipeCands = line.filter((r) => !/griddle|그리들/i.test(r.name + r.short));
+    // 발주 시트 메뉴판매 탭의 메뉴 → LINE 레시피명 (사람이 고른 연결이라 자동 연결보다 먼저 씀)
+    const sheetMenus = (sheet && sheet.menuMap) || [];
+    const lineByName = (n) => { const k = clean(n); return line.find((r) => clean(r.name) === k) || line.find((r) => dice(r.name, n) > 0.9) || null; };
     const menuMap = new Map();
-    const resolveMenu = (menu) => {
-      if (menuMap.has(menu)) return menuMap.get(menu);
+    const resolveMenu = (menu, cat) => {
+      const mk = (cat || "") + "|" + menu;
+      if (menuMap.has(mk)) return menuMap.get(mk);
       const fixed = mapCfg.menu[menu];
+      const fromSheet = !fixed && (sheetMenus.find((x) => x.menu === menu && x.cat === cat) || sheetMenus.find((x) => x.menu === menu));
+      const sheetRecipe = fromSheet && lineByName(fromSheet.recipe);
       let res = null;
       if (fixed === "skip") res = { skip: true };
       else if (fixed) res = line.find((r) => r.name === fixed) ? { recipe: line.find((r) => r.name === fixed) } : null;
+      else if (sheetRecipe) res = { recipe: sheetRecipe, mult: fromSheet.mult, sheet: true };
       else {
         let top = null, sc = 0;
         recipeCands.forEach((r) => [r.short, r.name].forEach((k) => { const v = dice(menu, k); if (v > sc) { sc = v; top = r; } }));
         if (sc >= 0.62) res = { recipe: top, auto: true, sc };
       }
-      menuMap.set(menu, res);
+      menuMap.set(mk, res);
       return res;
     };
     // 레시피 1건이 쓰는 품목별 재고단위 (프랩은 Yield로 원재료까지 풀기)
@@ -1098,24 +1104,6 @@ svg { display: block; }
       const v = { acc, prepAcc }; perMenuCache.set(recipe.name, v); return v;
     }
 
-    // 발주 BOH 파일의 레시피BOM: 레시피코드별 원재료(품목코드)·프렙 1인분 사용량
-    const bomRows = (sheet && sheet.bom) || null;
-    const rawPerRc = new Map(), prepPerRc = new Map(), prepUnit = new Map();
-    if (bomRows) {
-      const seen = new Set();
-      bomRows.forEach((b) => {
-        if (b.raw && b.amt) { if (!rawPerRc.has(b.rc)) rawPerRc.set(b.rc, new Map()); const mm = rawPerRc.get(b.rc); mm.set(b.raw, (mm.get(b.raw) || 0) + b.amt); }
-        const k = b.rc + "|" + b.prep + "|" + b.text;
-        if (b.prep && b.pamt && !seen.has(k)) {
-          seen.add(k);
-          if (!prepPerRc.has(b.rc)) prepPerRc.set(b.rc, new Map());
-          const mm = prepPerRc.get(b.rc); mm.set(b.prep, (mm.get(b.prep) || 0) + b.pamt); prepUnit.set(b.prep, b.punit);
-        }
-      });
-    }
-    const menuMapList = (sheet && sheet.menuMap) || [];
-    const resolveRc = (s) => menuMapList.find((x) => x.menu === s.menu && x.cat === s.cat) || menuMapList.find((x) => x.menu === s.menu) || null;
-
     // 월별 A(실사), B(레시피) 사용량
     const monthRows = allMonths.map((m) => {
       const d = mget(m);
@@ -1123,29 +1111,15 @@ svg { display: block; }
       const actual = new Map();
       if (d.ledger) d.ledger.rows.forEach((r) => { const it = ledgerItem(r); if (it && r.usage > 0) actual.set(it.key, (actual.get(it.key) || 0) + r.usage); });
       let theo = null, prepUse = null, menuQty = 0, menuMapped = 0;
-      if (d.sales && bomRows) {
+      if (d.sales && line.length) {
         theo = new Map(); prepUse = new Map();
         d.sales.rows.forEach((s) => {
           menuQty += s.qty;
-          const e = resolveRc(s); if (!e) return;
+          const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return;
           menuMapped += s.qty;
-          const q = s.qty * (e.mult || 1);
-          (rawPerRc.get(e.rc) || new Map()).forEach((amt, code) => {
-            const it = byCode.get(code), cv = conv[code];
-            if (!it || !cv) return;
-            theo.set(it.key, (theo.get(it.key) || 0) + (amt * q) / cv.q);
-          });
-          (prepPerRc.get(e.rc) || new Map()).forEach((amt, p) => prepUse.set(p, (prepUse.get(p) || 0) + amt * q));
-        });
-      } else if (d.sales && line.length) {
-        theo = new Map(); prepUse = new Map();
-        d.sales.rows.forEach((s) => {
-          menuQty += s.qty;
-          const r = resolveMenu(s.menu); if (!r || r.skip) return;
-          menuMapped += s.qty;
-          const pm = perMenu(r.recipe);
-          pm.acc.forEach((v, k) => theo.set(k, (theo.get(k) || 0) + v * s.qty));
-          pm.prepAcc.forEach((v, k) => prepUse.set(k, (prepUse.get(k) || 0) + v * s.qty));
+          const pm = perMenu(r.recipe), q = s.qty * (r.mult || 1);
+          pm.acc.forEach((v, k) => theo.set(k, (theo.get(k) || 0) + v * q));
+          pm.prepAcc.forEach((v, k) => prepUse.set(k, (prepUse.get(k) || 0) + v * q));
         });
       }
       return { m, gross, days: daysInMonth(m), actual: d.ledger ? actual : null, theo, prepUse, menuQty, menuMapped };
@@ -1188,7 +1162,7 @@ svg { display: block; }
       it.errA = errA; it.errB = errB;
       it.isNew = it.rateA == null && it.rateB != null;
     });
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, resolveMenu, resolveIng, ingCands, perMenu, mapCfg, bomRows, prepUnit, resolveRc };
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, resolveMenu, resolveIng, ingCands, perMenu, mapCfg };
     applyScores(cache);
     return cache;
   }
@@ -1322,10 +1296,9 @@ svg { display: block; }
     $("tileData1").className = "s stl" + (miss.length ? " wait" : "");
     $("tileData1").innerHTML = `<i class="mk${miss.length ? " wait" : ""}"></i><span>${miss.length ? `${lm}월 ${miss[0]} 필요` : `${lm}월 데이터 반영`}</span>`;
     let rv = null; months().forEach((m) => { const x = mget(m).line; if (x && x.at) rv = x.at; });
-    const bom = db["master.order"] && db["master.order"].bom ? db["master.order"].at : null;
-    const label = bom && (!rv || bom >= rv) ? `${mmdd(bom)} 레시피BOM 반영` : rv ? `${mmdd(rv)} 레시피 반영` : "레시피 필요";
-    $("tileData2").className = "s stl" + (rv || bom ? "" : " wait");
-    $("tileData2").innerHTML = `<i class="mk${rv || bom ? "" : " wait"}"></i><span>${label}</span>`;
+    const label = rv ? `${mmdd(rv)} 레시피 반영` : "레시피 필요";
+    $("tileData2").className = "s stl" + (rv ? "" : " wait");
+    $("tileData2").innerHTML = `<i class="mk${rv ? "" : " wait"}"></i><span>${label}</span>`;
   }
 
   // ---------- 발주 ----------
@@ -1370,7 +1343,7 @@ svg { display: block; }
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (!r.packs) need = '<span class="need enough"><b>충분</b></span>';
+        else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${r1(r.need)}${esc(unit)}</span></span>`;
         else need = `<span class="need buy"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>부족 ${r1(r.short)}${esc(unit)}</span></span>`;
       }
       return need;
@@ -1438,19 +1411,11 @@ svg { display: block; }
   function prepExpect(M, name, code, gToday) {
     const lastB = M.withB[M.withB.length - 1];
     if (!lastB || !lastB.prepUse) return null;
-    let key = null;
-    if (M.bomRows) {
-      // 레시피BOM의 프렙명(한글)과 프랩 시트 이름을 맞춤
-      let sc = 0; lastB.prepUse.forEach((v, k) => { const d = dice(name, k); if (d > sc) { sc = d; key = k; } });
-      if (sc < 0.55) key = null;
-    } else {
-      const p = M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
-      if (p) key = p.name;
-    }
+    const p = M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
+    const key = p && p.name;
     const used = key && lastB.prepUse.get(key);
     if (!used) return null;
-    const unit = M.bomRows ? (M.prepUnit.get(key) || "g") : "g";
-    return { e: (used / (lastB.gross / 1e6)) * (gToday / 1e6), unit };
+    return { e: (used / (lastB.gross / 1e6)) * (gToday / 1e6), unit: "g" };
   }
   function renderPrep() {
     const M = model();
@@ -1496,7 +1461,7 @@ svg { display: block; }
       inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all); });
       box.appendChild(d);
     });
-    if (!known.length && !prepAll) box.innerHTML = '<div class="empty"><b>예상량을 계산할 프랩이 아직 없어요</b>메뉴별 매출현황과 레시피(또는 발주 시트의 레시피BOM)를 올리면 계산돼요.</div>';
+    if (!known.length && !prepAll) box.innerHTML = '<div class="empty"><b>예상량을 계산할 프랩이 아직 없어요</b>메뉴별 매출현황과 레시피를 올리면 계산돼요.</div>';
     if (unknown) box.insertAdjacentHTML("beforeend", `<button type="button" class="more" id="prepAllBtn">${prepAll ? "예상 있는 프랩만 보기" : `예상 없는 프랩 ${unknown}개도 보기`}</button>`);
     const pb = $("prepAllBtn"); if (pb) pb.onclick = () => { prepAll = !prepAll; renderPrep(); };
   }
@@ -1578,7 +1543,7 @@ svg { display: block; }
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API;
     // 품목 목록
-    const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개${v.bom ? " · 레시피BOM" : ""}`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
+    const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
       const v = db[key];
       return `<div class="cell file"><span class="doc k-master">${TABLE}<i class="mk ${v ? "" : "wait"}"></i></span>` +
@@ -1621,7 +1586,6 @@ svg { display: block; }
       setKey(key, { file: f.name, at: TODAY, ...r });
       let msg = `${r.rows.length}개 읽었어요`;
       if (r.sheets && r.sheets.length > 1) msg += ` · 업체 탭 ${r.sheets.length}개`;
-      if (r.bom) msg += " · 레시피BOM 포함";
       // 발주 BOH 파일의 '수불부 당월 매출'은 고른 달의 Gross Sales가 비어 있을 때만 채움
       if (r.gross && !num(mget(selMonth).gross)) { mset(selMonth, { gross: r.gross }); msg += ` · ${+selMonth.slice(5)}월 Gross ${won(r.gross)}원`; }
       toast(msg);
@@ -1646,18 +1610,9 @@ svg { display: block; }
     const M = model();
     const lastSales = [...M.monthRows].reverse().find((r) => r.theo);
     const box = $("mapList");
-    if (M.bomRows && lastSales) {
-      const miss = mget(lastSales.m).sales.rows.filter((x) => !M.resolveRc(x)).sort((a, b) => b.qty - a.qty);
-      $("mapCount").textContent = `메뉴 ${Math.round(lastSales.menuMapped / Math.max(1, lastSales.menuQty) * 100)}% 연결`;
-      box.innerHTML = `<div class="cell kv"><span>발주 시트의 레시피BOM으로 계산 중<small>메뉴→레시피 연결은 발주 시트의 메뉴판매 탭을 따라요. 고치려면 그 탭의 적용 레시피코드를 바꿔서 다시 올려 주세요.</small></span></div>` +
-        miss.slice(0, mapMore ? 999 : 8).map((x) => `<div class="cell kv"><span>${esc(x.menu)}<small>${esc(x.cat)} · 연결 안 됨</small></span><b class="mut">${won(x.qty)}개</b></div>`).join("") +
-        (miss.length > 8 ? `<button type="button" class="more" id="mapMore">${mapMore ? "접기" : `연결 안 된 메뉴 ${miss.length}개 모두 보기`}</button>` : "");
-      const mb = $("mapMore"); if (mb) mb.onclick = () => { mapMore = !mapMore; renderMap(); };
-      return;
-    }
     if (!M.line.length || !lastSales) { box.innerHTML = '<div class="empty">Line 레시피와 메뉴별 매출현황을 올리면 여기서 연결을 확인할 수 있어요.</div>'; $("mapCount").textContent = ""; return; }
     const sales = mget(lastSales.m).sales.rows.slice().sort((a, b) => b.qty - a.qty);
-    const menuRows = sales.map((s) => ({ s, r: M.resolveMenu(s.menu) }));
+    const menuRows = sales.map((s) => ({ s, r: M.resolveMenu(s.menu, s.cat) }));
     const ingNames = [...new Set(M.line.concat(M.prep).flatMap((r) => r.ing.map((i) => i.n)))];
     const ingRows = ingNames.map((n) => ({ n, r: M.resolveIng(n) }));
     const badMenu = menuRows.filter((x) => !x.r || x.r.auto);
