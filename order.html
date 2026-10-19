@@ -1497,10 +1497,14 @@ svg { display: block; }
   // 프랩 1일 예상: 최근 판매 달의 프랩 사용량 ÷ 그달 Gross × 오늘 Forecast
   // 프랩 1일 예상을 주방에서 세는 단위로: 레시피 1번 분량(1X), 포션, 또는 원재료 PK/EA
   function prepExpect(M, name, code, gToday, pdf) {
+    const p = pdf || M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
+    const r = p && prepExpectFor(M, p, gToday);
+    if (r && r.shelf == null) r.shelf = p.shelf;
+    return r || null;
+  }
+  function prepExpectFor(M, p, gToday) {
     const lastB = M.withB[M.withB.length - 1];
     if (!lastB || !lastB.prepUse) return null;
-    const p = pdf || M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
-    if (!p) return null;
     const per = (v) => (v / (lastB.gross / 1e6)) * (gToday / 1e6);
     const y = String(p.yield || "");
     const yg = (() => { const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(y); if (!m) return null; const v = num(m[1]); return /^(kg|l)$/i.test(m[2]) ? v * 1000 : v; })();
@@ -1508,6 +1512,24 @@ svg { display: block; }
     let g = lastB.prepUse.get(p.name) || 0, ea = lastB.prepUse.get(p.name + "|ea") || 0;
     if (!g && !ea) return null;
     const cfg = (db.prepCfg || {})[p.name] || {};
+    const shelf = p.shelf;
+    // 매장에서 정한 단위 (prepCfg): X = 레시피 1번 분량, PK = 원재료 팩(item) 또는 1포션 1팩, EA = 개수
+    if (cfg.unit) {
+      const batchG = yg || p.ing.reduce((a, i) => { const q = parseQty(i.w, i.v) || {}; return a + (q.g || q.ml || 0); }, 0) || null;
+      // 라인 레시피에 "25 g | 6 ea"처럼 같이 적힌 걸로 1개 무게를 구함
+      const eaGs = []; M.line.forEach((r) => r.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, ""), c = parseQty("", i.v); if (t && t.kind === "prep" && t.id === p.name && q && q.g && c && c.ea) eaGs.push(q.g / c.ea); }));
+      const eaG = cfg.eaG || (eaGs.length ? eaGs.reduce((a, b) => a + b, 0) / eaGs.length : yg && yn ? yg / yn : null);
+      const base = { batch: cfg.unit !== "EA", step: cfg.step || 1, shelf };
+      const stepNote = cfg.step > 1 ? `${cfg.step}${cfg.unit}씩` : "";
+      const join = (...a) => a.filter(Boolean).join(" · ");
+      if (cfg.unit === "X" && batchG) return { ...base, e: per(g + ea * (eaG || 0)) / batchG, unit: "X", note: join(`1X = ${won(batchG)}g`, stepNote) };
+      if (cfg.unit === "PK" && cfg.item) {
+        const it = M.items.find((i) => i.key === cfg.item), st = it && toStock({ g: per(g + ea * (eaG || 0)) }, it.pk);
+        if (st != null) return { ...base, e: st, unit: it.pk.stock || "PK", note: join(it.name, stepNote) };
+      }
+      if (cfg.unit === "PK" && eaG) return { ...base, e: per(ea + g / eaG), unit: "PK", note: join(`1PK = 1포션 (${won(eaG)}g)`, stepNote) };
+      if (cfg.unit === "EA") return { ...base, e: per(ea + (eaG ? g / eaG : 0)), unit: "EA", note: stepNote };
+    }
     // 원재료가 품목 하나면 그 품목의 발주단위(PK 등)로: 브로콜리, 핑거립처럼 포션 무게만 정해진 프랩
     const ings = p.ing.map((i) => ({ i, t: M.resolveIng(i.n) })).filter((x) => x.t && !x.t.skip && !(x.t.kind === "prep" && x.t.id === p.name));
     const itemOf = (x) => x && x.t.kind === "item" && M.items.find((it) => it.key === x.t.id);
