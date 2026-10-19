@@ -1555,7 +1555,6 @@ svg { display: block; }
     const yg = (() => { const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(y); if (!m) return null; const v = num(m[1]); return /^(kg|l)$/i.test(m[2]) ? v * 1000 : v; })();
     const yn = (() => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(y); return m ? num(m[1]) : null; })();
     let g = lastB.prepUse.get(p.name) || 0, ea = lastB.prepUse.get(p.name + "|ea") || 0;
-    if (!g && !ea) return null;
     const cfg = (db.prepCfg || {})[p.name] || {};
     const shelf = p.shelf;
     // 매장에서 정한 단위 (prepCfg): X = 레시피 1번 분량, PK = 원재료 팩(item) 또는 1포션 1팩, EA = 개수
@@ -1585,8 +1584,25 @@ svg { display: block; }
     const ings = p.ing.map((i) => ({ i, t: M.resolveIng(i.n) })).filter((x) => x.t && !x.t.skip && !(x.t.kind === "prep" && x.t.id === p.name));
     const itemOf = (x) => x && x.t.kind === "item" && M.items.find((it) => it.key === x.t.id);
     const portionG = yg && (/\bor\b/i.test(y) || yn === 1) ? yg : null;
-    if (ings.length === 1 && itemOf(ings[0]) && (portionG || !yg)) {
-      const it = itemOf(ings[0]), G = g + ea * (portionG || 0);
+    // cfg.raw: 프랩 레시피에 원재료가 자기 자신으로 적힌 경우(루꼴라, 할라피뇨 등) 실제 원재료 품목
+    const raw1 = (cfg.raw && M.items.find((i) => i.key === cfg.raw)) || (ings.length === 1 && itemOf(ings[0])) || null;
+    // 레시피로 사용량을 못 구하면 원재료의 수불현황 실제 사용량으로
+    const G100 = gToday / 1e6;
+    const ledgerFallback = () => {
+      if (raw1 && raw1.rateA != null) return { e: raw1.fixedA + raw1.rateA * G100, unit: raw1.pk.stock || raw1.unit || "EA", note: `${raw1.name} 사용량 기준` };
+      const batchG = yg || p.ing.reduce((a, i) => { const q = parseQty(i.w, i.v) || {}; return a + (q.g || q.ml || 0); }, 0);
+      const c = ings.map((x) => ({ it: itemOf(x), q: parseQty(x.i.w, x.i.v) })).filter((x) => x.it && x.it.rateA != null && x.q && (x.q.g || x.q.ml) && (x.it.pk.g || x.it.pk.ml))
+        .sort((a, b) => (b.q.g || b.q.ml) - (a.q.g || a.q.ml))[0];
+      if (c && batchG) {
+        const n = ((c.it.fixedA + c.it.rateA * G100) * (c.it.pk.g || c.it.pk.ml)) / (c.q.g || c.q.ml);
+        // "1 Order"짜리는 1포션씩 만드니 포션으로
+        return yn === 1 && !yg ? { e: n, unit: "포션", note: `1포션 = ${won(batchG)}g · ${c.it.name} 사용량 기준` } : { e: n, unit: "X", batch: true, note: `1X = ${won(batchG)}g · ${c.it.name} 사용량 기준` };
+      }
+      if (g) return { e: per(g) / 1000, unit: "kg" };
+      return null;
+    };
+    if (raw1 && (portionG || !yg)) {
+      const it = raw1, G = g + ea * (portionG || 0);
       const s = G ? toStock({ g: per(G) }, it.pk) : null;
       if (s != null) return { e: s, unit: it.pk.stock || it.unit || "EA", note: it.name };
     }
@@ -1597,15 +1613,16 @@ svg { display: block; }
       const lo = Math.min(...parts.map((x) => x.g));
       return { e: per(G) / 1000, unit: "kg", note: `${parts.map((x) => x.n.replace(/\(.*\)/, "")).join(" + ")} ${parts.map((x) => Math.round(x.g / lo)).join(":")}` };
     }
+    if (!g && !ea) return ledgerFallback();
     if (portionG) return { e: per(ea + g / portionG), unit: "포션", note: `1포션 = ${won(portionG)}g` };
     // "10 Order"처럼 오더 수로 정해진 프랩은 오더로 (cfg.step 단위로 만듦)
     if (yn > 1 && /order/i.test(y) && !yg && !/약/.test(y) && ea) return { e: per(ea), unit: "오더", batch: true, step: cfg.step || 1, shelf: p.shelf, note: cfg.step > 1 ? `${cfg.step}오더씩` : "" };
-    if (/약/.test(y) && !yg) return null; // "약 15 Order"는 기준이 없어 계산 안 함
+    if (/약/.test(y) && !yg) return ledgerFallback(); // "약 15 Order"는 기준이 없어 원재료 사용량으로
     // "850g (약 10 Portion)"처럼 둘 다 있으면 포션을 g으로 바꿔 합침
     if (yg && yn && ea) { g += ea * (yg / yn); ea = 0; }
     if (yg && g && !ea) return { e: per(g) / yg, unit: "X", batch: true, note: `1X = ${won(yg)}${/ml|l\b/i.test(y) ? "ml" : "g"}` };
     if (ea && !g) return yn > 1 ? { e: per(ea) / yn, unit: "X", batch: true, note: `1X = ${yn}포션` } : { e: per(ea), unit: "포션" };
-    return yg ? { e: per(g) / yg, unit: "X", batch: true, note: `1X = ${won(yg)}g` } : null;
+    return yg ? { e: per(g) / yg, unit: "X", batch: true, note: `1X = ${won(yg)}g` } : ledgerFallback();
   }
   function renderPrep() {
     const M = model();
@@ -1620,7 +1637,9 @@ svg { display: block; }
     if (!list.length) { box.innerHTML = '<div class="empty"><b>프랩 목록이 없어요</b>데이터 파일에서 프랩 시트나 Prep 레시피를 올려 주세요.</div>'; return; }
     box.innerHTML = "";
     const entries = list.map((x) => {
-      const pdf = M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75);
+      // prepMap: 프랩 시트 이름 → Prep 레시피 이름 (자동으로 못 맞춘 것)
+      const pm = (db.prepMap || {})[x.name];
+      const pdf = (pm && M.prep.find((p) => p.name === pm)) || M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75);
       const ex = prepExpect(M, x.name, x.code, g.v, pdf);
       const shelf = x.shelf || (pdf && pdf.shelf) || (ex && ex.shelf) || null;
       // 한 번에 만드는 소스·오더류는 쉘프라이프 동안 쓸 양으로
