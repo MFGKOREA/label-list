@@ -1022,7 +1022,7 @@ svg { display: block; }
   // ---------- 레시피 PDF 읽기 (pdf.js) ----------
   async function parseRecipePdf(file) {
     const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-    const recipes = [];
+    const recipes = [], index = new Map();
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
       const tc = await page.getTextContent();
@@ -1040,8 +1040,11 @@ svg { display: block; }
       const pageText = lines.map((l) => l.text).join("\n");
       const shelfM = /Shelf\s*Life\s*:\s*([\d.]+)\s*Day/i.exec(pageText);
       // 쪽 아래 "Mad Oil   1-1   2026-10-06" 에서 레시피 번호를 읽음 (프랩 시트의 "1-1 매드 오일"과 연결)
-      const codeM = /((?:\d+|시즌)\s*-\s*\d+)\s+20\d\d-\d\d-\d\d/.exec(pageText);
+      // 바닥글은 날짜가 "2026-10- 0 6"처럼 쪼개지거나 번호와 다른 줄에 있기도 해서, 쪽 맨 아래 줄들에서 번호만 찾음
+      const footCode = lines.filter((l) => l.y < 60).flatMap((l) => l.items).map((i) => /^((?:\d+|시즌)\s*-\s*\d+)$/.exec(i.str)).find(Boolean);
       const before = recipes.length;
+      // 앞쪽 목차("4-8 Golden Layers Signature Lasagna")의 번호가 바닥글보다 정확해서 따로 모음
+      if (!/Recipe Name/i.test(pageText)) lines.forEach((l) => { const m = /((?:\d+|시즌)\s*-\s*\d+)\s+(.+)$/.exec(l.text); if (m) index.set(clean(m[2].replace(/\s+(Season|Set)$/i, "")), m[1].replace(/\s/g, "")); });
       const yieldM = /Yield\s*:\s*([^\n]+)/i.exec(pageText);
       let cur = null, hdr = null;
       for (const l of lines) {
@@ -1060,15 +1063,20 @@ svg { display: block; }
           continue;
         }
         if (!hdr) continue;
-        if (/^(Plate|Yield|Shelf|Critical|Container|Method|\d+\s*\.)/i.test(l.text)) { hdr = null; continue; }
+        // 조리 순서 "1." 이 나오면 재료 끝 ("0.5 oz"는 재료라 첫 글자가 "숫자."만인 경우만)
+        if (/^(Plate|Yield|Shelf|Critical|Container|Method)/i.test(l.text) || /^\d+\s*\.$/.test(l.items[0].str)) { hdr = null; continue; }
         const b1 = (hdr.v ?? hdr.i) - 10, b2 = hdr.i - 6, b3 = hdr.s != null ? hdr.s - 6 : Infinity;
         let w = "", v = "", n = "";
         l.items.forEach((it) => { if (it.x < b1) w += " " + it.str; else if (it.x < b2) v += " " + it.str; else if (it.x < b3) n += " " + it.str; });
-        n = n.trim(); if (!n) continue;
+        n = n.trim();
+        // PDF에 재료 이름이 빠진 줄(당근 라페 330 g)은 이름 없는 재료로 남겨 두고 레시피 연결에서 고르게 함
+        if (!n && /\d/.test(w + v)) n = `(이름 없음) ${cur.name}`;
+        if (!n) continue;
         cur.ing.push({ w: w.trim(), v: v.trim(), n });
       }
-      if (codeM && recipes.length === before + 1) recipes[before].code = codeM[1].replace(/\s/g, "");
+      if (footCode) recipes.slice(before).forEach((r) => { r.code = footCode[1].replace(/\s/g, ""); });
     }
+    recipes.forEach((r) => { const c = index.get(clean(r.name)); if (c) r.code = c; });
     return recipes.filter((r) => r.name).map(({ seenHdr, ...r }) => r);
   }
 
