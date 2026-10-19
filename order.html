@@ -1322,7 +1322,8 @@ svg { display: block; }
   function grossFromForecast(m) {
     const f = db.forecast || {}; let s = 0, n = 0;
     Object.keys(f).forEach((d) => { if (d.startsWith(m)) { const a = num(f[d].act); if (isFinite(a)) { s += a; n++; } } });
-    return n >= daysInMonth(m) - 1 ? s : 0;
+    // 이번 달은 월말 전이라도 실제 Gross가 7일 넘게 있으면 그 합으로 (월 중간에 올린 메뉴별 매출현황용)
+    return n >= daysInMonth(m) - 1 || (m === TODAY.slice(0, 7) && n >= 7) ? s : 0;
   }
 
   // ---------- Forecast 값 ----------
