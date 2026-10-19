@@ -1583,7 +1583,7 @@ svg { display: block; }
       const days = shelf > 1 ? shelf / 2 : 1;
       if (ex && ex.batch && days > 1 && g.v > 0) {
         const full = Math.floor(days), part = days - full;
-        ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v; ex.note = (ex.note ? ex.note + " · " : "") + `${days}days 반영${shelf > days ? ` (쉘프라이프 ${shelf}days)` : ""}`;
+        ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v;
       }
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
