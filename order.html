@@ -1562,7 +1562,6 @@ svg { display: block; }
     if (ea && !g) return yn > 1 ? { e: per(ea) / yn, unit: "X", batch: true, note: `1X = ${yn}포션` } : { e: per(ea), unit: "포션" };
     return yg ? { e: per(g) / yg, unit: "X", batch: true, note: `1X = ${won(yg)}g` } : null;
   }
-  const PREP_DAYS = 2; // 프랩 예상은 길어도 이틀치까지
   function renderPrep() {
     const M = model();
     const g = dayGross(TODAY, false);
@@ -1580,9 +1579,12 @@ svg { display: block; }
       const ex = prepExpect(M, x.name, x.code, g.v, pdf);
       const shelf = x.shelf || (pdf && pdf.shelf) || (ex && ex.shelf) || null;
       // 한 번에 만드는 소스·오더류는 쉘프라이프 동안 쓸 양으로
-      // 한 번에 만드는 프랩은 쉘프라이프 안에서 최대 PREP_DAYS일치 Forecast 합으로 (긴 쉘프라이프를 꽉 채우지 않음)
-      const days = Math.min(shelf || 1, PREP_DAYS);
-      if (ex && ex.batch && days > 1 && g.v > 0) { ex.e *= sumGross(TODAY, addDays(TODAY, days), false).s / g.v; ex.note = (ex.note ? ex.note + " · " : "") + `${days}days 반영${shelf > days ? ` (쉘프라이프 ${shelf}days)` : ""}`; }
+      // 한 번에 만드는 프랩은 쉘프라이프의 절반 기간 Forecast 합으로 (3days → 1.5days, 1day는 그대로)
+      const days = shelf > 1 ? shelf / 2 : 1;
+      if (ex && ex.batch && days > 1 && g.v > 0) {
+        const full = Math.floor(days), part = days - full;
+        ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v; ex.note = (ex.note ? ex.note + " · " : "") + `${days}days 반영${shelf > days ? ` (쉘프라이프 ${shelf}days)` : ""}`;
+      }
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
     const known = entries.filter((x) => x.ex || store[x.id] != null);
