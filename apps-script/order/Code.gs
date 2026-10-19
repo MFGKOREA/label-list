@@ -14,8 +14,23 @@
 const SHEET = "kv";
 const CHUNK = 45000;
 
+// 시트에서 연 스크립트면 그 시트를, script.google.com에서 따로 만든 스크립트면
+// 처음 실행할 때 "발주프랩 데이터" 시트를 내 드라이브에 만들어 계속 씁니다.
+function spreadsheet_() {
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty("SHEET_ID");
+  if (id) {
+    try { return SpreadsheetApp.openById(id); } catch (e) { /* 지워졌으면 새로 만듦 */ }
+  }
+  const ss = SpreadsheetApp.create("발주프랩 데이터");
+  props.setProperty("SHEET_ID", ss.getId());
+  return ss;
+}
+
 function sheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = spreadsheet_();
   let sh = ss.getSheetByName(SHEET);
   if (!sh) {
     sh = ss.insertSheet(SHEET);
@@ -62,8 +77,12 @@ function json_(obj) {
 }
 
 function doGet(e) {
-  if (!e || !e.parameter || !e.parameter.api) return json_({ ok: true, data: {} });
-  return json_({ ok: true, data: readAll_() });
+  if (!e || !e.parameter || !e.parameter.api) return json_({ ok: true, data: {}, sheet: spreadsheet_().getUrl() });
+  try {
+    return json_({ ok: true, data: readAll_() });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 function doPost(e) {
