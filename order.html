@@ -731,6 +731,32 @@ svg { display: block; }
     }
     return out;
   }
+  // 발주 시트 품목: 품목환산(단위당 기준량)이 있으면 그것, 없으면 제품규격("270g*10ea/box", "1kg/pk")에서 1구매단위 용량을 읽음
+  function packOf(it, cv) {
+    if (!it.spec && !cv && !/구매|EA|PK|BOX/i.test(it.unit || "")) return parsePack(it.unit, it.name);
+    const unit = (it.unit || "").trim();
+    const m10 = /(\d+)\s*개\s*단위/.exec(it.name || "");
+    const pk = { stock: unit, order: unit, mult: m10 ? +m10[1] : 1, g: null, ml: null, ea: null, sameUnit: true };
+    if (cv) {
+      const u = cv.u.toLowerCase();
+      if (u === "g") pk.g = cv.q; else if (u === "kg") pk.g = cv.q * 1000; else if (/^(ml|cc)$/.test(u)) pk.ml = cv.q; else if (u === "l") pk.ml = cv.q * 1000; else pk.ea = cv.q;
+      return pk;
+    }
+    const sp = String(it.spec || ""), U = unit.toLowerCase();
+    const toG = (v, u) => { u = u.toLowerCase(); return u === "kg" ? { g: v * 1000 } : u === "g" ? { g: v } : u === "l" ? { ml: v * 1000 } : { ml: v }; };
+    let m;
+    if (U === "kg") { pk.g = 1000; return pk; }
+    if ((m = /([\d.]+)\s*(kg|g|ml|l)\s*\*\s*([\d.]+)\s*([a-z]+)\s*\/\s*([a-z]+)/i.exec(sp))) {
+      const w = toG(num(m[1]), m[2]);
+      const f = m[4].toLowerCase() === U ? 1 : m[5].toLowerCase() === U ? num(m[3]) : 1;
+      Object.assign(pk, { g: w.g != null ? w.g * f : null, ml: w.ml != null ? w.ml * f : null });
+      return pk;
+    }
+    if ((m = /([\d.]+)\s*(kg|g|ml|l)\s*\/\s*([a-z]+)/i.exec(sp))) { Object.assign(pk, toG(num(m[1]), m[2])); return pk; }
+    if ((m = /([\d.]+)\s*(kg|g|ml|l)\b/i.exec(sp))) { Object.assign(pk, toG(num(m[1]), m[2])); return pk; }
+    pk.ea = 1;
+    return pk;
+  }
   // 레시피 수량을 품목 재고단위로 (환산 못 하면 null)
   function toStock(q, pk) {
     if (!q) return null;
@@ -741,21 +767,20 @@ svg { display: block; }
   }
 
   // ---------- 엑셀 읽기 ----------
-  async function readRows(file) {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+  // 모든 탭을 읽어 둠: 발주 BOH 파일처럼 첫 탭이 설명서인 경우가 있어서 머리글로 탭을 찾음
+  async function readBook(file) {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    return wb.SheetNames.map((name) => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null }) }));
   }
-  // 머리글 줄 찾기: 필드별 후보 단어 중 하나라도 들어 있는 칸
+  const clean = (c) => String(c ?? "").replace(/\s/g, "").toLowerCase();
+  // 머리글 줄 찾기: 필드마다 후보 단어를 앞에서부터 찾음 (예: '사용출고'가 '출고'보다 먼저)
   function findHeader(rows, fields, need) {
-    for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
       const row = rows[r] || [];
       const col = {};
       Object.entries(fields).forEach(([f, words]) => {
-        // 앞에 있는 단어일수록 우선 (예: '실사출고'가 '출고'보다 먼저)
         for (const w of words) {
-          const i = row.findIndex((c, j) => c != null && !Object.values(col).includes(j) && String(c).replace(/\s/g, "").toLowerCase().includes(w));
+          const i = row.findIndex((c, j) => c != null && !Object.values(col).includes(j) && clean(c).includes(w));
           if (i >= 0) { col[f] = i; break; }
         }
       });
@@ -763,72 +788,131 @@ svg { display: block; }
     }
     return null;
   }
+  // 조건에 맞는 머리글이 있는 첫 탭 (prefer에 맞는 탭 이름을 먼저 봄)
+  function findSheet(book, fields, need, prefer) {
+    const order = prefer ? [...book.filter((s) => prefer.test(s.name)), ...book.filter((s) => !prefer.test(s.name))] : book;
+    for (const sh of order) { const h = findHeader(sh.rows, fields, need); if (h) return { ...h, rows: sh.rows, sheet: sh.name }; }
+    return null;
+  }
   const cell = (row, col, f) => (f in col ? row[col[f]] : null);
+  const str = (v) => String(v ?? "").trim();
+  const NOT_ITEM_SHEET = /수불|메뉴|레시피|bom|환산|사용방법|매출|prep|프렙|프랩/i;
 
   async function parseOrderSheet(file) {
-    const rows = await readRows(file);
-    const h = findHeader(rows, {
-      name: ["품목명", "품명", "제품명", "품목"], code: ["품목코드", "코드"], group: ["통합그룹", "그룹"],
-      vendor: ["업체", "거래처", "공급"], unit: ["발주단위", "단위", "규격"], min: ["최소"], loc: ["보관", "위치"],
-      fav: ["즐겨"], active: ["사용여부", "상태"], shelf: ["쉘프", "유통", "shelf"],
-    }, ["name"]);
-    if (!h) throw new Error("'품목명' 칸을 찾지 못했어요");
-    const out = [];
-    rows.slice(h.r + 1).forEach((row) => {
-      const name = String(cell(row, h.col, "name") ?? "").trim();
-      if (!name) return;
-      const active = String(cell(row, h.col, "active") ?? "");
-      out.push({
-        name, code: String(cell(row, h.col, "code") ?? "").trim(), group: String(cell(row, h.col, "group") ?? "").trim(),
-        vendor: String(cell(row, h.col, "vendor") ?? "").trim(), unit: String(cell(row, h.col, "unit") ?? "").trim(),
-        min: num(cell(row, h.col, "min")) || 0, loc: String(cell(row, h.col, "loc") ?? "").trim(),
-        fav: /^(o|y|yes|v|1|true|★|●)$/i.test(String(cell(row, h.col, "fav") ?? "").trim()),
-        off: /중단|미사용|x|n|no/i.test(active), shelf: num(cell(row, h.col, "shelf")) || null,
+    const book = await readBook(file);
+    const fields = {
+      name: ["품목명칭", "품목명", "품명", "제품명"], code: ["품목코드"], spec: ["제품규격", "사양및규격", "규격"], price: ["재고단가", "단가"],
+      unit: ["구매단위", "발주단위", "단위"], group: ["통합그룹"], vendor: ["업체", "거래처", "공급"], min: ["최소"], loc: ["보관", "위치"],
+      fav: ["즐겨"], active: ["사용여부", "상태"], shelf: ["쉘프", "shelf"],
+    };
+    const sheets = book.filter((s) => !NOT_ITEM_SHEET.test(s.name) || book.length === 1);
+    const out = [], used = [];
+    let cols = [];
+    sheets.forEach((sh) => {
+      const h = findHeader(sh.rows, fields, ["name"]);
+      if (!h) return;
+      used.push(sh.name); cols = Object.keys(h.col);
+      // 업체 칸이 없으면 탭 이름이 업체 ("새싹농산,매장사입" → 새싹농산, "세제 발주" → 세제)
+      const tabVendor = sheets.length > 1 ? sh.name.split(",")[0].replace(/\s*발주$/, "").trim() : "";
+      sh.rows.slice(h.r + 1).forEach((row) => {
+        const name = str(cell(row, h.col, "name"));
+        if (!name || /^https?:/i.test(name)) return;
+        const active = str(cell(row, h.col, "active"));
+        out.push({
+          name, code: str(cell(row, h.col, "code")), group: str(cell(row, h.col, "group")),
+          vendor: str(cell(row, h.col, "vendor")) || tabVendor, unit: str(cell(row, h.col, "unit")), spec: str(cell(row, h.col, "spec")),
+          price: num(cell(row, h.col, "price")) || null, min: num(cell(row, h.col, "min")) || 0, loc: str(cell(row, h.col, "loc")),
+          fav: /^(o|y|yes|v|1|true|★|●)$/i.test(str(cell(row, h.col, "fav"))),
+          off: /중단|미사용/.test(active) || /사용중단/.test(name), shelf: num(cell(row, h.col, "shelf")) || null,
+        });
       });
     });
-    return { rows: out, cols: Object.keys(h.col) };
+    if (!out.length) throw new Error("'품목명' 칸이 있는 탭을 찾지 못했어요");
+    // 발주 BOH 파일에 들어 있는 품목환산·레시피BOM·메뉴판매·매출 입력도 함께 읽음
+    const extra = {};
+    const conv = findSheet(book, { code: ["품목코드"], q: ["단위당기준량"], u: ["기준단위"] }, ["code", "q", "u"], /환산/);
+    if (conv) {
+      extra.conv = {};
+      conv.rows.slice(conv.r + 1).forEach((row) => { const c = str(cell(row, conv.col, "code")), q = num(cell(row, conv.col, "q")); if (c && q > 0) extra.conv[c] = { q, u: str(cell(row, conv.col, "u")) }; });
+    }
+    const bom = findSheet(book, { rc: ["레시피코드"], text: ["원문"], pamt: ["1인분사용량"], punit: ["단위"], kind: ["구분"], prep: ["프렙명", "프랩명"], raw: ["원재료품목코드"], amt: ["1인분원재료량"] }, ["rc", "raw", "amt"], /bom|레시피/i);
+    if (bom) {
+      extra.bom = [];
+      bom.rows.slice(bom.r + 1).forEach((row) => {
+        const rc = str(cell(row, bom.col, "rc")); if (!rc) return;
+        extra.bom.push({ rc, raw: str(cell(row, bom.col, "raw")), amt: num(cell(row, bom.col, "amt")) || 0, kind: str(cell(row, bom.col, "kind")),
+          prep: str(cell(row, bom.col, "prep")), pamt: num(cell(row, bom.col, "pamt")) || 0, punit: str(cell(row, bom.col, "punit")), text: str(cell(row, bom.col, "text")) });
+      });
+    }
+    const mm = findSheet(book, { cat: ["중분류"], menu: ["메뉴명"], rc: ["적용레시피코드", "레시피코드"], mult: ["적용배수", "배수"] }, ["menu", "rc"], /메뉴/);
+    if (mm) {
+      extra.menuMap = [];
+      mm.rows.slice(mm.r + 1).forEach((row) => { const menu = str(cell(row, mm.col, "menu")), rc = str(cell(row, mm.col, "rc")); if (menu && rc) extra.menuMap.push({ cat: str(cell(row, mm.col, "cat")), menu, rc, mult: num(cell(row, mm.col, "mult")) || 1 }); });
+    }
+    book.forEach((sh) => sh.rows.forEach((row, r) => (row || []).forEach((c, j) => {
+      if (extra.gross == null && /당월매출/.test(clean(c))) { const v = num((sh.rows[r + 1] || [])[j]); if (v > 0) extra.gross = v; }
+    })));
+    return { rows: out, cols, sheets: used, ...extra };
   }
   async function parsePrepSheet(file) {
-    const rows = await readRows(file);
-    const h = findHeader(rows, {
-      name: ["프랩명", "프랩", "품목명", "이름", "name"], alias: ["한글", "별칭", "short"], unit: ["단위"],
-      yield: ["yield", "생산량", "수율"], shelf: ["쉘프", "유통", "shelf"],
-    }, ["name"]);
-    if (!h) throw new Error("'프랩명' 칸을 찾지 못했어요");
+    const book = await readBook(file);
     const out = [];
-    rows.slice(h.r + 1).forEach((row) => {
-      const name = String(cell(row, h.col, "name") ?? "").trim();
-      if (!name) return;
-      out.push({ name, alias: String(cell(row, h.col, "alias") ?? "").trim(), unit: String(cell(row, h.col, "unit") ?? "").trim() || "g",
-        yield: String(cell(row, h.col, "yield") ?? "").trim(), shelf: num(cell(row, h.col, "shelf")) || null });
+    const codeRe = /^((?:\d+|시즌)\s*-\s*\d+)\s+/;
+    book.forEach((sh) => {
+      const rows = sh.rows;
+      rows.forEach((row, r) => {
+        const c = (row || []).findIndex((x) => /프랩명|프렙명|prep\s*name/i.test(str(x)));
+        if (c < 0) return;
+        // 이름이 머리글 바로 아래 칸이 아니라 옆 칸에 있는 양식이 있어서, 문자가 더 많이 든 칸을 이름 칸으로 씀
+        const strings = (j) => rows.slice(r + 1, r + 40).filter((x) => x && typeof x[j] === "string" && x[j].trim()).length;
+        const nc = strings(c + 1) > strings(c) ? c + 1 : c;
+        const hdr = rows[r].map(clean);
+        const sc = hdr.findIndex((x) => /shelf|쉘프|유통/.test(x)), pc = hdr.findIndex((x) => /보관/.test(x)), uc = hdr.findIndex((x) => x === "단위");
+        let section = "", blank = 0;
+        for (let k = r + 1; k < rows.length; k++) {
+          const row2 = rows[k] || [];
+          if (row2.some((x) => /프랩명|프렙명/.test(str(x)))) break;
+          if (nc !== c && str(row2[c])) section = str(row2[c]);
+          const raw = str(row2[nc]);
+          if (!raw) { if (++blank >= 3) break; continue; }
+          blank = 0;
+          const m = codeRe.exec(raw);
+          out.push({ name: raw.replace(codeRe, "").trim(), code: m ? m[1].replace(/\s/g, "") : "", section,
+            pan: pc >= 0 ? str(row2[pc]) : "", shelf: sc >= 0 ? num(row2[sc]) || null : null, unit: uc >= 0 ? str(row2[uc]) : "" });
+        }
+      });
     });
-    return { rows: out, cols: Object.keys(h.col) };
+    if (!out.length) throw new Error("'프랩명' 칸을 찾지 못했어요");
+    const seen = new Set();
+    return { rows: out.filter((x) => (seen.has(x.code + x.name) ? false : seen.add(x.code + x.name))), cols: ["name", "code", "shelf", "pan"] };
   }
   async function parseLedger(file) {
-    const rows = await readRows(file);
-    const h = findHeader(rows, {
-      name: ["품목명", "품명", "품목"], usage: ["실사출고", "출고수량", "사용량", "출고"], code: ["품목코드", "코드"], group: ["통합그룹", "그룹"],
-    }, ["name", "usage"]);
-    if (!h) throw new Error("'품목명'과 '출고(사용량)' 칸을 찾지 못했어요");
+    const book = await readBook(file);
+    const h = findSheet(book, {
+      name: ["품목명칭", "품목명", "품명"], usage: ["사용출고", "실사출고", "출고수량", "사용량"], code: ["품목코드"], group: ["통합그룹"], unit: ["단위"], spec: ["사양및규격", "규격"],
+    }, ["name", "usage"], /수불/);
+    if (!h) throw new Error("'품목명'과 '사용출고(사용량)' 칸을 찾지 못했어요");
+    // 머리글 아래에 '수량/금액' 줄이 하나 더 있는 양식은 그 줄을 건너뜀
     const out = [];
-    rows.slice(h.r + 1).forEach((row) => {
-      const name = String(cell(row, h.col, "name") ?? "").trim();
+    h.rows.slice(h.r + 1).forEach((row) => {
+      const name = str(cell(row, h.col, "name"));
       const usage = num(cell(row, h.col, "usage"));
       if (!name || !isFinite(usage)) return;
-      out.push({ name, usage, code: String(cell(row, h.col, "code") ?? "").trim(), group: String(cell(row, h.col, "group") ?? "").trim() });
+      out.push({ name, usage, code: str(cell(row, h.col, "code")), group: str(cell(row, h.col, "group")) });
     });
     return out;
   }
   const SKIP_CATS = /주류|음료|upcharge|쿠폰|^기타$|other|pet|미분류/i;
   async function parseSales(file) {
-    const rows = await readRows(file);
-    const h = findHeader(rows, { cat: ["중분류", "분류"], menu: ["소분류", "메뉴"], qty: ["수량", "조회일기준", "판매"] }, ["menu"]);
+    const book = await readBook(file);
+    const h = findSheet(book, { cat: ["중분류"], menu: ["소분류", "메뉴명", "메뉴"], qty: ["판매수량", "조회일기준", "수량"] }, ["menu"], /메뉴|매출/);
+    const rows = h ? h.rows : book[0].rows;
     const start = h ? h.r + 1 : 0, col = h ? h.col : { cat: 0, menu: 1, qty: 2 };
     if (!("qty" in col)) col.qty = (col.menu ?? 1) + 1;
     const byCat = new Map();
     rows.slice(start).forEach((row) => {
       const cat = String(cell(row, col, "cat") ?? "").trim(), menu = String(cell(row, col, "menu") ?? "").trim(), qty = num(cell(row, col, "qty"));
-      if (!menu || !isFinite(qty)) return;
+      if (!menu || !isFinite(qty) || menu === "합계") return;
       if (!byCat.has(cat)) byCat.set(cat, []);
       byCat.get(cat).push({ cat, menu, qty });
     });
@@ -863,6 +947,9 @@ svg { display: block; }
       lines.forEach((l) => { l.items.sort((a, b) => a.x - b.x); l.text = l.items.map((i) => i.str).join(" "); });
       const pageText = lines.map((l) => l.text).join("\n");
       const shelfM = /Shelf\s*Life\s*:\s*([\d.]+)\s*Day/i.exec(pageText);
+      // 쪽 아래 "Mad Oil   1-1   2026-10-06" 에서 레시피 번호를 읽음 (프랩 시트의 "1-1 매드 오일"과 연결)
+      const codeM = /((?:\d+|시즌)\s*-\s*\d+)\s+20\d\d-\d\d-\d\d/.exec(pageText);
+      const before = recipes.length;
       const yieldM = /Yield\s*:\s*([^\n]+)/i.exec(pageText);
       let cur = null, hdr = null;
       for (const l of lines) {
@@ -888,6 +975,7 @@ svg { display: block; }
         n = n.trim(); if (!n) continue;
         cur.ing.push({ w: w.trim(), v: v.trim(), n });
       }
+      if (codeM && recipes.length === before + 1) recipes[before].code = codeM[1].replace(/\s/g, "");
     }
     return recipes.filter((r) => r.name).map(({ seenHdr, ...r }) => r);
   }
@@ -930,11 +1018,13 @@ svg { display: block; }
       else prev.members.push(it.name);
     });
     items = [...byKey.values()];
-    items.forEach((it) => { it.pk = parsePack(it.unit, it.name); });
+    const conv = (sheet && sheet.conv) || {};
+    items.forEach((it) => { it.pk = packOf(it, conv[it.code]); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
+    const byCode = new Map(); items.forEach((it) => { if (it.code) byCode.set(it.code, it); });
 
     // 수불현황 행 → 품목
-    const ledgerItem = (row) => byName.get(row.name) || (row.group && items.find((i) => i.key === row.group)) || (row.code && items.find((i) => i.code && i.code === row.code)) || (() => { const b = best(row.name, items, (i) => i.name); return b.sc >= 0.85 ? b.top : null; })();
+    const ledgerItem = (row) => (row.code && byCode.get(row.code)) || byName.get(row.name) || (row.group && items.find((i) => i.key === row.group)) || (row.code && items.find((i) => i.code && i.code === row.code)) || (() => { const b = best(row.name, items, (i) => i.name); return b.sc >= 0.85 ? b.top : null; })();
 
     // 레시피
     const line = latestRecipes("line"), prep = latestRecipes("prep");
@@ -1008,6 +1098,24 @@ svg { display: block; }
       const v = { acc, prepAcc }; perMenuCache.set(recipe.name, v); return v;
     }
 
+    // 발주 BOH 파일의 레시피BOM: 레시피코드별 원재료(품목코드)·프렙 1인분 사용량
+    const bomRows = (sheet && sheet.bom) || null;
+    const rawPerRc = new Map(), prepPerRc = new Map(), prepUnit = new Map();
+    if (bomRows) {
+      const seen = new Set();
+      bomRows.forEach((b) => {
+        if (b.raw && b.amt) { if (!rawPerRc.has(b.rc)) rawPerRc.set(b.rc, new Map()); const mm = rawPerRc.get(b.rc); mm.set(b.raw, (mm.get(b.raw) || 0) + b.amt); }
+        const k = b.rc + "|" + b.prep + "|" + b.text;
+        if (b.prep && b.pamt && !seen.has(k)) {
+          seen.add(k);
+          if (!prepPerRc.has(b.rc)) prepPerRc.set(b.rc, new Map());
+          const mm = prepPerRc.get(b.rc); mm.set(b.prep, (mm.get(b.prep) || 0) + b.pamt); prepUnit.set(b.prep, b.punit);
+        }
+      });
+    }
+    const menuMapList = (sheet && sheet.menuMap) || [];
+    const resolveRc = (s) => menuMapList.find((x) => x.menu === s.menu && x.cat === s.cat) || menuMapList.find((x) => x.menu === s.menu) || null;
+
     // 월별 A(실사), B(레시피) 사용량
     const monthRows = allMonths.map((m) => {
       const d = mget(m);
@@ -1015,7 +1123,21 @@ svg { display: block; }
       const actual = new Map();
       if (d.ledger) d.ledger.rows.forEach((r) => { const it = ledgerItem(r); if (it && r.usage > 0) actual.set(it.key, (actual.get(it.key) || 0) + r.usage); });
       let theo = null, prepUse = null, menuQty = 0, menuMapped = 0;
-      if (d.sales && line.length) {
+      if (d.sales && bomRows) {
+        theo = new Map(); prepUse = new Map();
+        d.sales.rows.forEach((s) => {
+          menuQty += s.qty;
+          const e = resolveRc(s); if (!e) return;
+          menuMapped += s.qty;
+          const q = s.qty * (e.mult || 1);
+          (rawPerRc.get(e.rc) || new Map()).forEach((amt, code) => {
+            const it = byCode.get(code), cv = conv[code];
+            if (!it || !cv) return;
+            theo.set(it.key, (theo.get(it.key) || 0) + (amt * q) / cv.q);
+          });
+          (prepPerRc.get(e.rc) || new Map()).forEach((amt, p) => prepUse.set(p, (prepUse.get(p) || 0) + amt * q));
+        });
+      } else if (d.sales && line.length) {
         theo = new Map(); prepUse = new Map();
         d.sales.rows.forEach((s) => {
           menuQty += s.qty;
@@ -1066,7 +1188,7 @@ svg { display: block; }
       it.errA = errA; it.errB = errB;
       it.isNew = it.rateA == null && it.rateB != null;
     });
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, resolveMenu, resolveIng, ingCands, perMenu, mapCfg };
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, resolveMenu, resolveIng, ingCands, perMenu, mapCfg, bomRows, prepUnit, resolveRc };
     applyScores(cache);
     return cache;
   }
@@ -1128,7 +1250,9 @@ svg { display: block; }
     const mult = it.pk.mult || 1;
     let packs = short > 0 ? Math.ceil(short / mult - 1e-9) : 0;
     if (packs > 0 && it.min && packs < it.min) packs = it.min;
-    return { use, useA, useB, wA, spread, ss, need, short, packs };
+    // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
+    const orderQty = it.pk.sameUnit ? packs * mult : packs;
+    return { use, useA, useB, wA, spread, ss, need, short, packs, orderQty };
   }
 
   // ---------- G: 재고 채점 ----------
@@ -1186,9 +1310,10 @@ svg { display: block; }
   function renderTop() {
     $("todayPill").innerHTML = `${mmdd(TODAY)}<small>${DOW[dow(TODAY)]}</small>`;
     const mon = mondayOf(TODAY), wk = isoWeek(TODAY);
-    let s = 0; for (let i = 0; i < 7; i++) s += dayGross(addDays(mon, i), false).v;
+    let s = 0, entered = 0;
+    for (let i = 0; i < 7; i++) { const g = dayGross(addDays(mon, i), false); s += g.v; if (g.src === "fc") entered++; }
     $("tileFcWeek").textContent = `${wk.w}주차 · ${mmdd(mon)} ~ ${mmdd(addDays(mon, 6))}`;
-    $("tileFcSum").textContent = s ? won(s) + "원" : "입력 필요";
+    $("tileFcSum").textContent = !entered ? "입력 필요" : won(s) + "원" + (entered < 7 ? " (일부 추정)" : "");
     // 데이터 파일 상태: 지난달 4개 + 최신 레시피
     const last = iso(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)).slice(0, 7);
     const d = mget(last);
@@ -1197,8 +1322,10 @@ svg { display: block; }
     $("tileData1").className = "s stl" + (miss.length ? " wait" : "");
     $("tileData1").innerHTML = `<i class="mk${miss.length ? " wait" : ""}"></i><span>${miss.length ? `${lm}월 ${miss[0]} 필요` : `${lm}월 데이터 반영`}</span>`;
     let rv = null; months().forEach((m) => { const x = mget(m).line; if (x && x.at) rv = x.at; });
-    $("tileData2").className = "s stl" + (rv ? "" : " wait");
-    $("tileData2").innerHTML = `<i class="mk${rv ? "" : " wait"}"></i><span>${rv ? `${mmdd(rv)} 레시피 반영` : "레시피 필요"}</span>`;
+    const bom = db["master.order"] && db["master.order"].bom ? db["master.order"].at : null;
+    const label = bom && (!rv || bom >= rv) ? `${mmdd(bom)} 레시피BOM 반영` : rv ? `${mmdd(rv)} 레시피 반영` : "레시피 필요";
+    $("tileData2").className = "s stl" + (rv || bom ? "" : " wait");
+    $("tileData2").innerHTML = `<i class="mk${rv || bom ? "" : " wait"}"></i><span>${label}</span>`;
   }
 
   // ---------- 발주 ----------
@@ -1244,7 +1371,7 @@ svg { display: block; }
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (!r.packs) need = '<span class="need enough"><b>충분</b></span>';
-        else need = `<span class="need buy"><b>${r.packs}<small>${esc(it.pk.order || unit)}</small></b><span>부족 ${r1(r.short)}${esc(unit)}</span></span>`;
+        else need = `<span class="need buy"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>부족 ${r1(r.short)}${esc(unit)}</span></span>`;
       }
       return need;
     };
@@ -1307,53 +1434,69 @@ svg { display: block; }
 
   // ---------- 프랩 ----------
   let prepAll = false;
+  // 프랩 1일 예상: 최근 판매 달의 프랩 사용량 ÷ 그달 Gross × 오늘 Forecast
+  function prepExpect(M, name, code, gToday) {
+    const lastB = M.withB[M.withB.length - 1];
+    if (!lastB || !lastB.prepUse) return null;
+    let key = null;
+    if (M.bomRows) {
+      // 레시피BOM의 프렙명(한글)과 프랩 시트 이름을 맞춤
+      let sc = 0; lastB.prepUse.forEach((v, k) => { const d = dice(name, k); if (d > sc) { sc = d; key = k; } });
+      if (sc < 0.55) key = null;
+    } else {
+      const p = M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
+      if (p) key = p.name;
+    }
+    const used = key && lastB.prepUse.get(key);
+    if (!used) return null;
+    const unit = M.bomRows ? (M.prepUnit.get(key) || "g") : "g";
+    return { e: (used / (lastB.gross / 1e6)) * (gToday / 1e6), unit };
+  }
   function renderPrep() {
     const M = model();
     const g = dayGross(TODAY, false);
     $("prepBanner").className = "banner" + (g.src === "fc" ? "" : " soft");
     $("prepBanner").innerHTML = `<span>오늘 ${DOW[dow(TODAY)]}요일 Forecast${g.src === "fc" ? "" : " (추정)"}</span><span>${won(g.v)}원</span>`;
-    const lastB = M.withB[M.withB.length - 1];
     const sheet = M.prepSheet;
-    const names = sheet.length ? sheet.map((s) => s.name) : M.prep.map((p) => p.name);
+    const list = sheet.length ? sheet.map((x) => ({ name: x.name, code: x.code || "", shelf: x.shelf, section: x.section || "" }))
+      : M.prep.map((p) => ({ name: p.short || p.name, code: p.code || "", shelf: p.shelf }));
     const store = db["prepOnhand." + TODAY] || {};
     const box = $("prepList");
-    if (!names.length) { box.innerHTML = '<div class="empty"><b>프랩 목록이 없어요</b>데이터 파일에서 프랩 시트나 Prep 레시피를 올려 주세요.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="empty"><b>프랩 목록이 없어요</b>데이터 파일에서 프랩 시트나 Prep 레시피를 올려 주세요.</div>'; return; }
     box.innerHTML = "";
-    const entries = names.map((name) => {
-      const p = M.prep.find((x) => x.name === name || dice(x.name, name) > 0.9);
-      const s = sheet.find((x) => x.name === name);
-      let e = null;
-      if (lastB && p && lastB.prepUse.get(p.name)) e = (lastB.prepUse.get(p.name) / (lastB.gross / 1e6)) * (g.v / 1e6);
-      return { name, p, s, e };
+    const entries = list.map((x) => {
+      const pdf = M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75);
+      const ex = prepExpect(M, x.name, x.code, g.v);
+      return { ...x, shelf: x.shelf || (pdf && pdf.shelf) || null, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
-    const known = entries.filter((x) => x.e != null || store[x.name] != null);
+    const known = entries.filter((x) => x.ex || store[x.id] != null);
     const unknown = entries.length - known.length;
-    (prepAll ? entries : known).forEach(({ name, p, s, e }) => {
-      const label = s && s.alias ? s.alias : (p && p.short) || name;
-      const shelf = (s && s.shelf) || (p && p.shelf) || null;
-      const unit = e != null && e >= 1000 ? "kg" : "g";
-      const show = (x) => (unit === "kg" ? x / 1000 : x);
-      const v = { s: store[name] ?? "" };
+    // g은 1000 넘으면 kg, cc는 L로 보여줌
+    const disp = (unit, e) => unit === "g" && e >= 1000 ? { u: "kg", f: 1000 } : unit === "cc" && e >= 1000 ? { u: "L", f: 1000 } : { u: unit, f: 1 };
+    (prepAll ? entries : known).forEach(({ name, code, shelf, ex, id }) => {
+      const unit = ex ? ex.unit : "";
+      const dd = ex ? disp(unit, ex.e) : { u: "", f: 1 };
+      const v = { s: store[id] ?? "" };
       const d = document.createElement("div");
       d.className = "cell";
       const draw = () => {
-        if (e == null) return '<span class="need none"><b>?</b></span>';
+        if (!ex) return '<span class="need none"><b>?</b></span>';
         if (v.s === "") return '<span class="need none"><b>–</b></span>';
-        const target = shelf && shelf <= 1 ? e : e * 1.1;
-        const r = target - (num(v.s) * (unit === "kg" ? 1000 : 1) || 0);
-        if (r <= e * 0.03) return '<span class="need enough"><b>충분</b></span>';
-        return `<span class="need buy"><b>${r1(show(r))}<small>${unit}</small></b><span>필요량</span></span>`;
+        const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
+        const r = target - (num(v.s) * dd.f || 0);
+        if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
+        return `<span class="need buy"><b>${r1(r / dd.f)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
       };
       d.innerHTML =
-        `<div class="c-top"><span class="c-name">${esc(label)}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">D+${shelf}</span>` : ""}</div>` +
-        `<div class="p-bot"><label class="fld"><span>재고(On Hand) ${unit}</span><input inputmode="decimal" placeholder="–" value="${esc(v.s)}" aria-label="${esc(label)} 재고"></label>` +
-        `<span class="fld ro"><span>예상 ${unit}</span><b>${e == null ? "–" : r1(show(e))}</b></span><span class="needbox">${draw()}</span></div>`;
+        `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">D+${shelf}</span>` : ""}</div>` +
+        `<div class="p-bot"><label class="fld"><span>재고(On Hand)${dd.u ? " " + esc(dd.u) : ""}</span><input inputmode="decimal" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
+        `<span class="fld ro"><span>예상${dd.u ? " " + esc(dd.u) : ""}</span><b>${ex ? r1(ex.e / dd.f) : "–"}</b></span><span class="needbox">${draw()}</span></div>`;
       const inp = d.querySelector("input");
       inp.addEventListener("input", () => { v.s = inp.value.trim(); d.querySelector(".needbox").innerHTML = draw(); });
-      inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[name]; else all[name] = v.s; setKey("prepOnhand." + TODAY, all); });
+      inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all); });
       box.appendChild(d);
     });
-    if (!known.length && !prepAll) box.innerHTML = '<div class="empty"><b>예상량을 계산할 프랩이 아직 없어요</b>데이터 파일의 레시피 연결 확인에서 라인 레시피 재료를 프랩과 연결해 주세요.</div>';
+    if (!known.length && !prepAll) box.innerHTML = '<div class="empty"><b>예상량을 계산할 프랩이 아직 없어요</b>메뉴별 매출현황과 레시피(또는 발주 시트의 레시피BOM)를 올리면 계산돼요.</div>';
     if (unknown) box.insertAdjacentHTML("beforeend", `<button type="button" class="more" id="prepAllBtn">${prepAll ? "예상 있는 프랩만 보기" : `예상 없는 프랩 ${unknown}개도 보기`}</button>`);
     const pb = $("prepAllBtn"); if (pb) pb.onclick = () => { prepAll = !prepAll; renderPrep(); };
   }
@@ -1435,7 +1578,7 @@ svg { display: block; }
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API;
     // 품목 목록
-    const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
+    const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개${v.bom ? " · 레시피BOM" : ""}`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
       const v = db[key];
       return `<div class="cell file"><span class="doc k-master">${TABLE}<i class="mk ${v ? "" : "wait"}"></i></span>` +
@@ -1475,8 +1618,13 @@ svg { display: block; }
     try {
       busy(true);
       const r = key === "master.order" ? await parseOrderSheet(f) : await parsePrepSheet(f);
-      setKey(key, { file: f.name, at: TODAY, rows: r.rows, cols: r.cols });
-      toast(`${r.rows.length}개 읽었어요 · 찾은 칸: ${r.cols.join(", ")}`);
+      setKey(key, { file: f.name, at: TODAY, ...r });
+      let msg = `${r.rows.length}개 읽었어요`;
+      if (r.sheets && r.sheets.length > 1) msg += ` · 업체 탭 ${r.sheets.length}개`;
+      if (r.bom) msg += " · 레시피BOM 포함";
+      // 발주 BOH 파일의 '수불부 당월 매출'은 고른 달의 Gross Sales가 비어 있을 때만 채움
+      if (r.gross && !num(mget(selMonth).gross)) { mset(selMonth, { gross: r.gross }); msg += ` · ${+selMonth.slice(5)}월 Gross ${won(r.gross)}원`; }
+      toast(msg);
     } catch (err) { toast("읽지 못했어요: " + err.message); } finally { busy(false); renderFiles(); }
   });
   $("files").addEventListener("change", async (e) => {
@@ -1498,6 +1646,15 @@ svg { display: block; }
     const M = model();
     const lastSales = [...M.monthRows].reverse().find((r) => r.theo);
     const box = $("mapList");
+    if (M.bomRows && lastSales) {
+      const miss = mget(lastSales.m).sales.rows.filter((x) => !M.resolveRc(x)).sort((a, b) => b.qty - a.qty);
+      $("mapCount").textContent = `메뉴 ${Math.round(lastSales.menuMapped / Math.max(1, lastSales.menuQty) * 100)}% 연결`;
+      box.innerHTML = `<div class="cell kv"><span>발주 시트의 레시피BOM으로 계산 중<small>메뉴→레시피 연결은 발주 시트의 메뉴판매 탭을 따라요. 고치려면 그 탭의 적용 레시피코드를 바꿔서 다시 올려 주세요.</small></span></div>` +
+        miss.slice(0, mapMore ? 999 : 8).map((x) => `<div class="cell kv"><span>${esc(x.menu)}<small>${esc(x.cat)} · 연결 안 됨</small></span><b class="mut">${won(x.qty)}개</b></div>`).join("") +
+        (miss.length > 8 ? `<button type="button" class="more" id="mapMore">${mapMore ? "접기" : `연결 안 된 메뉴 ${miss.length}개 모두 보기`}</button>` : "");
+      const mb = $("mapMore"); if (mb) mb.onclick = () => { mapMore = !mapMore; renderMap(); };
+      return;
+    }
     if (!M.line.length || !lastSales) { box.innerHTML = '<div class="empty">Line 레시피와 메뉴별 매출현황을 올리면 여기서 연결을 확인할 수 있어요.</div>'; $("mapCount").textContent = ""; return; }
     const sales = mget(lastSales.m).sales.rows.slice().sort((a, b) => b.qty - a.qty);
     const menuRows = sales.map((s) => ({ s, r: M.resolveMenu(s.menu) }));
