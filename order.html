@@ -1498,7 +1498,6 @@ svg { display: block; }
   $("q").addEventListener("input", renderList);
 
   // ---------- 프랩 ----------
-  let prepAll = false;
   // 프랩 1일 예상: 최근 판매 달의 프랩 사용량 ÷ 그달 Gross × 오늘 Forecast
   // 프랩 1일 예상을 주방에서 세는 단위로: 레시피 1번 분량(1X), 포션, 또는 원재료 PK/EA
   function prepExpect(M, name, code, gToday, pdf) {
@@ -1587,13 +1586,11 @@ svg { display: block; }
       }
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
-    const known = entries.filter((x) => x.ex || store[x.id] != null);
-    const unknown = entries.length - known.length;
     // 프랩은 모든 단위(X·포션·EA·PK·kg)를 올림한 정수로 보여줌
     const rpu = (v) => String(Math.max(0, Math.ceil(v - 1e-9)));
     // g은 1000 넘으면 kg, cc는 L로 보여줌
     const disp = (unit, e) => unit === "g" && e >= 1000 ? { u: "kg", f: 1000 } : unit === "cc" && e >= 1000 ? { u: "L", f: 1000 } : { u: unit, f: 1 };
-    (prepAll ? entries : known).forEach(({ name, code, shelf, ex, id }) => {
+    entries.forEach(({ name, code, shelf, ex, id }) => {
       const unit = ex ? ex.unit : "";
       const dd = ex ? disp(unit, ex.e) : { u: "", f: 1 };
       const v = { s: store[id] ?? "" };
@@ -1617,9 +1614,6 @@ svg { display: block; }
       inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all); });
       box.appendChild(d);
     });
-    if (!known.length && !prepAll) box.innerHTML = '<div class="empty"><b>예상량을 계산할 프랩이 아직 없어요</b>메뉴별 매출현황과 레시피를 올리면 계산돼요.</div>';
-    if (unknown) box.insertAdjacentHTML("beforeend", `<button type="button" class="more" id="prepAllBtn">${prepAll ? "예상 있는 프랩만 보기" : `예상 없는 프랩 ${unknown}개도 보기`}</button>`);
-    const pb = $("prepAllBtn"); if (pb) pb.onclick = () => { prepAll = !prepAll; renderPrep(); };
   }
 
   // ---------- Forecast ----------
