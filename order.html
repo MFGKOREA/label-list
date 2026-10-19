@@ -1584,9 +1584,8 @@ svg { display: block; }
     });
     const known = entries.filter((x) => x.ex || store[x.id] != null);
     const unknown = entries.length - known.length;
-    // X·포션·EA·오더는 통으로 만드니 올림한 정수, 나머지(PK·kg)는 1 미만이면 둘째 자리까지
-    const WHOLE = /^(X|포션|EA|오더)$/;
-    const rpu = (v, u) => (WHOLE.test(u) ? String(Math.max(0, Math.ceil(v - 1e-9))) : v > 0 && v < 1 ? v.toFixed(2).replace(/0$/, "") : r1(v));
+    // 프랩은 모든 단위(X·포션·EA·PK·kg)를 올림한 정수로 보여줌
+    const rpu = (v) => String(Math.max(0, Math.ceil(v - 1e-9)));
     // g은 1000 넘으면 kg, cc는 L로 보여줌
     const disp = (unit, e) => unit === "g" && e >= 1000 ? { u: "kg", f: 1000 } : unit === "cc" && e >= 1000 ? { u: "L", f: 1000 } : { u: unit, f: 1 };
     (prepAll ? entries : known).forEach(({ name, code, shelf, ex, id }) => {
