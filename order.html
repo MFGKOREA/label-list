@@ -1213,7 +1213,7 @@ svg { display: block; }
         const q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
         // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
-        if (t && t.kind === "prep" && t.id === recipe.name) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
+        if (t && t.kind === "prep" && prepByName.get(t.id) === recipe) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
         if (!t || t.skip || !q) return;
         if (t.kind === "item") {
           const it = items.find((i) => i.key === t.id); if (!it) return;
@@ -1228,6 +1228,8 @@ svg { display: block; }
           // "1 portion"처럼 개수로 쓴 프랩은 프랩 레시피가 N포션/오더 분량이면 그만큼 나눠 원재료까지 풀기 (어묵 포션 = 어묵 100g)
           const yc = /([\d.]+)\s*(portion|order|ea)\b/i.exec(String(p.yield || ""));
           if (amount == null && q.ea != null && yc && !/약/.test(p.yield)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
+          // "1,980g (약 15 Portion)"처럼 무게와 포션 수가 같이 있으면 1포션 = 무게 ÷ 포션 수
+          if (amount == null && q.ea != null && yc && yieldOf(p)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
           // 분량이 "1 Portion"처럼 개수뿐이면 재료 무게 합을 1포션 무게로 (럭스 포션 → 치킨 다이스 50 g)
           const y = yieldOf(p) || (yc ? p.ing.reduce((a2, i) => { const q2 = parseQty(i.w, i.v) || {}; return a2 + (q2.g || q2.ml || 0); }, 0) * num(yc[1]) : 0); if (!y || amount == null) return;
           expand(p, (factor * amount) / y, acc, depth + 1, prepAcc);
