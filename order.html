@@ -1569,7 +1569,7 @@ svg { display: block; }
     const cfg = (db.prepCfg || {})[p.name] || {};
     const shelf = p.shelf;
     // cfg.rate: 매장 기준 "Gross 100만원당 몇 단위" (로즈마리 400만원당 1팩 = 0.25)
-    if (cfg.rate) return { e: cfg.rate * (gToday / 1e6), unit: cfg.unit || "EA", note: `${won(1e6 / cfg.rate)}원당 1${cfg.unit || "EA"}` };
+    if (cfg.rate) return { e: cfg.rate * (gToday / 1e6), unit: cfg.unit || "EA" };
     // 커팅비프: 시즐 스테이크&립 1개마다 채끝 270g에서 100g이 나옴. 스테이크 파스타·샐러드·플래터·피자에 먼저 쓰고 모자라면 부채살 1/2컷
     if (cfg.split || cfg.shortOf) {
       const sp = cfg.split || ((db.prepCfg || {})[cfg.shortOf] || {}).split; if (!sp) return null;
