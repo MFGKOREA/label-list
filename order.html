@@ -1528,7 +1528,8 @@ svg { display: block; }
         if (st != null) return { ...base, e: st, unit: it.pk.stock || "PK", note: join(it.name, stepNote) };
       }
       if (cfg.unit === "PK" && eaG) return { ...base, e: per(ea + g / eaG), unit: "PK", note: join(`1PK = 1포션 (${won(eaG)}g)`, stepNote) };
-      if (cfg.unit === "EA") return { ...base, e: per(ea + (eaG ? g / eaG : 0)), unit: "EA", note: stepNote };
+      // cfg.per: 1EA에 든 개수 (브리오슈 1덩이 = 8조각)
+      if (cfg.unit === "EA") return { ...base, e: per(ea + (eaG ? g / eaG : 0)) / (cfg.per || 1), unit: "EA", note: join(cfg.note, stepNote) };
     }
     // 원재료가 품목 하나면 그 품목의 발주단위(PK 등)로: 브로콜리, 핑거립처럼 포션 무게만 정해진 프랩
     const ings = p.ing.map((i) => ({ i, t: M.resolveIng(i.n) })).filter((x) => x.t && !x.t.skip && !(x.t.kind === "prep" && x.t.id === p.name));
@@ -1593,7 +1594,7 @@ svg { display: block; }
         const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
         let r = target - (num(v.s) * dd.f || 0);
         if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
-        if (ex.step > 1) r = Math.ceil(r / ex.step - 1e-9) * ex.step;
+        if (ex.step > 1 || ex.unit === "EA") r = Math.ceil(r / (ex.step || 1) - 1e-9) * (ex.step || 1); // EA는 통으로
         return `<span class="need buy"><b>${rp(r / dd.f)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
       };
       d.innerHTML =
