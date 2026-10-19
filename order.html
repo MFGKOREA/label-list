@@ -271,6 +271,16 @@ svg { display: block; }
 .rlink .chev { color: var(--muted); }
 
 /* report */
+/* 학습량 게이지 */
+.xp { background: #101a14; border-radius: 18px; padding: 14px 16px 12px; margin-bottom: 14px; box-shadow: var(--shadow); }
+.xp-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
+.xp-top span { font-size: 13px; font-weight: 700; color: #b9d8bf; }
+.xp-top b { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: #8cff3a; text-shadow: 0 0 10px rgba(124, 255, 58, .55); font-variant-numeric: tabular-nums; }
+.xp-top b small { font-size: 14px; margin-left: 1px; }
+.xp-bar { height: 12px; border-radius: 6px; background: #22302a; box-shadow: inset 0 0 0 1px #2e4236; overflow: hidden; }
+.xp-bar i { display: block; height: 100%; min-width: 2px; border-radius: 6px; background: linear-gradient(90deg, #3dff6e, #b6ff2e); box-shadow: 0 0 12px rgba(140, 255, 58, .8); transition: width .6s ease; }
+.xp-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px; font-size: 11.5px; color: #93ad99; }
+.xp-parts b { color: #d8ffd0; font-weight: 700; }
 .hero { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 16px 10px; margin-bottom: 20px; }
 .hero-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .hero-top span { font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -516,6 +526,11 @@ svg { display: block; }
       <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
       <h2>데이터 리포트</h2>
       <span class="right"></span>
+    </div>
+    <div class="xp" aria-label="학습량">
+      <div class="xp-top"><span>학습량</span><b id="xpPct"></b></div>
+      <div class="xp-bar"><i id="xpFill"></i></div>
+      <div class="xp-parts" id="xpParts"></div>
     </div>
     <div class="wkpick">
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
@@ -1672,8 +1687,33 @@ svg { display: block; }
 
   // ---------- 데이터 리포트 ----------
   let rWeek = null;
+  // 학습량: 쌓인 데이터를 0~100%로 (어떤 입력이든 조금씩 오르게 연속값으로 계산)
+  function learnLevel(M) {
+    const ms = months().map(mget);
+    const files = ms.reduce((a, d) => a + ["ledger", "sales", "line", "prep"].filter((k) => d[k]).length / 4 + (num(d.gross) > 0 ? 0.25 : 0), 0) / 1.25;
+    const actDays = Object.values(db.forecast || {}).filter((f) => isFinite(num(f.act))).length;
+    const last = [...M.monthRows].reverse().find((r) => r.menuQty);
+    const mapped = last ? last.menuMapped / last.menuQty : 0;
+    const both = M.items.length ? M.items.filter((i) => i.rateA != null && i.rateB != null).length / M.items.length : 0;
+    const sat = (n, k) => 1 - Math.exp(-n / k); // 처음엔 빨리, 갈수록 천천히 차오름
+    const parts = [
+      { t: "데이터 파일", v: `${Math.round(files * 10) / 10}개월`, p: 30 * sat(files, 6) },
+      { t: "재고 채점", v: `${M.scores.length}건`, p: 30 * sat(M.scores.length, 400) },
+      { t: "실제 Gross Sales", v: `${actDays}일`, p: 20 * sat(actDays, 120) },
+      { t: "메뉴 연결", v: `${Math.round(mapped * 100)}%`, p: 10 * mapped },
+      { t: "레시피 계산 품목", v: `${Math.round(both * 100)}%`, p: 10 * both },
+    ];
+    return { pct: parts.reduce((a, x) => a + x.p, 0), parts };
+  }
+  function renderXp(M) {
+    const L = learnLevel(M);
+    $("xpPct").innerHTML = `${L.pct.toFixed(3)}<small>%</small>`;
+    $("xpFill").style.width = `${Math.min(100, L.pct)}%`;
+    $("xpParts").innerHTML = L.parts.map((x) => `<span>${x.t} <b>${x.v}</b></span>`).join("");
+  }
   function renderReport() {
     const M = model();
+    renderXp(M);
     const byWeek = new Map();
     M.scores.forEach((s) => { const w = mondayOf(s.end); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
     const weeks = [...byWeek.keys()].sort();
