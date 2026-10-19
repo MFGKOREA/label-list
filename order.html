@@ -455,6 +455,9 @@ svg { display: block; }
 /* 데이터 학습량 카드의 하치와레 */
 .xp { position: relative; }
 .xp-pet { position: absolute; right: 16px; top: 46px; width: 68px; height: auto; pointer-events: none; }
+/* 발주일 → 입고일 곡선 화살표 (데이터 리포트 레드) */
+.weekwrap { position: relative; padding-top: 22px; }
+.weekarc { position: absolute; left: 0; top: 0; color: var(--rose-ink); overflow: visible; pointer-events: none; }
 
 </style>
 </head>
@@ -496,7 +499,7 @@ svg { display: block; }
     </div>
 
     <div id="pOrder">
-      <div class="week" id="weekStrip" aria-label="요일별 발주와 입고"></div>
+      <div class="weekwrap"><svg class="weekarc" id="weekArc" aria-hidden="true"></svg><div class="week" id="weekStrip" aria-label="요일별 발주와 입고"></div></div>
       <div class="banner" id="orderBanner"></div>
 
       <label class="search">
@@ -1414,11 +1417,28 @@ svg { display: block; }
 
   // ---------- 발주 ----------
   let cat = null, open = false;
+  // 오늘(발주) → 입고일을 요일 띠 위 곡선 화살표로 잇기. 입고일이 다음 주면 오른쪽 끝으로
+  function drawWeekArc() {
+    const svg = $("weekArc"), strip = $("weekStrip");
+    const from = strip.querySelector(".today");
+    if (!from || dow(TODAY) === 0) { svg.innerHTML = ""; return; }
+    const to = strip.querySelector(".deliv");
+    const box = strip.getBoundingClientRect(), a = from.getBoundingClientRect();
+    const W = box.width, H = 26;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
+    const x1 = a.left - box.left + a.width / 2;
+    const x2 = to ? to.getBoundingClientRect().left - box.left + to.getBoundingClientRect().width / 2 : W - 2;
+    const y = H - 2, top = 3, mx = (x1 + x2) / 2;
+    svg.innerHTML = `<defs><marker id="wkHead" viewBox="0 0 8 8" refX="5" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L6 4L1 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>` +
+      `<path d="M${x1} ${y} C${x1} ${top}, ${x2} ${top}, ${x2} ${to ? y : top + 8}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"${to ? "" : ' stroke-dasharray="3 3"'} marker-end="url(#wkHead)"/>`;
+  }
+  window.addEventListener("resize", () => { if (!$("v-main").hidden) drawWeekArc(); });
   function renderMain() {
     renderTop();
     const M = model(), win = orderWindow(TODAY);
     // 요일 띠
     const mon = mondayOf(TODAY);
+    requestAnimationFrame(drawWeekArc);
     $("weekStrip").innerHTML = [0, 1, 2, 3, 4, 5, 6].map((i) => {
       const d = addDays(mon, i);
       if (dow(d) === 0) return `<div class="off"><b>일</b><span>없음</span></div>`;
