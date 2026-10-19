@@ -1104,7 +1104,10 @@ svg { display: block; }
     });
     items = [...byKey.values()];
     const conv = (sheet && sheet.conv) || {};
-    items.forEach((it) => { it.pk = packOf(it, conv[it.code]); });
+    // itemCfg: 매장에서 알려준 1재고단위 안 개수 (판도우 1BOX = 도우 60개, 하몽 1EA = 8장)
+    const itemCfg = db.itemCfg || {};
+    const withCfg = (it) => { const c = itemCfg[it.key] || itemCfg[it.name]; if (c && c.ea) it.pk = { ...it.pk, ea: c.ea }; };
+    items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
     const byCode = new Map(); items.forEach((it) => { if (it.code) byCode.set(it.code, it); });
 
@@ -1116,7 +1119,7 @@ svg { display: block; }
       allMonths.forEach((m) => (mget(m).ledger ? mget(m).ledger.rows : []).forEach((r) => {
         if (hide.has(r.name) || ledgerItem(r)) return;
         const it = { name: r.name, code: r.code, group: r.group, vendor: "", unit: r.unit || "", spec: r.spec || "", min: 0, loc: "", key: r.group || r.name, members: [r.name], ledgerOnly: true };
-        it.pk = packOf(it, conv[it.code]);
+        it.pk = packOf(it, conv[it.code]); withCfg(it);
         items.push(it); byName.set(r.name, it); if (it.code) byCode.set(it.code, it);
       }));
     }
