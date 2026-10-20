@@ -1114,7 +1114,7 @@ svg { display: block; }
 
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
-  const invalidate = () => { cache = null; fcBiasMemo = null; dataFcMemo = new Map(); };
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -1148,6 +1148,14 @@ svg { display: block; }
     return v;
   }
   // I: Forecast 보정. 지난 28일(Forecast와 실제가 둘 다 있는 날) 실제 ÷ Forecast의 중앙값을 앞으로의 Forecast에 곱함
+  // Forecast 하루 오차(상대값): 실제 Gross와 같이 있는 최근 28일의 RMS. 5일 미만이면 25%로 봄 (9~10월 데이터 예상 오차 약 30%)
+  let fcErrMemo = null;
+  function fcErr() {
+    if (fcErrMemo != null) return fcErrMemo;
+    const f = db.forecast || {}, k = fcBias().k;
+    const r = Object.keys(f).filter((d) => d < TODAY).sort().map((d) => [num(f[d].fc) * k, num(f[d].act)]).filter(([a, b]) => a > 0 && b > 0).slice(-28).map(([a, b]) => (b - a) / a);
+    return (fcErrMemo = r.length >= 5 ? Math.min(0.6, Math.max(0.05, Math.sqrt(r.reduce((x, e) => x + e * e, 0) / r.length))) : 0.25);
+  }
   function fcBias() {
     if (fcBiasMemo) return fcBiasMemo;
     const f = db.forecast || {};
@@ -1474,8 +1482,8 @@ svg { display: block; }
     if (packs > 0 && it.min && packs < it.min) packs = it.min;
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
-    // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차)
-    const sd = sigma * use / Math.sqrt(Math.max(1, win.days));
+    // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
+    const sd = use * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(Math.max(1, win.days));
     return { use, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty };
   }
 
@@ -1673,8 +1681,8 @@ svg { display: block; }
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
-    // 예상 범위: 그 품목 단위로 ±1PK, ±1EA처럼 (g·ml 단위만 소수점). 일치·보정반영 칩 오른쪽에 작게
-    const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|kg|ml|l|cc)$/i.test(unit) ? r1(c0.sd) : Math.max(1, Math.round(c0.sd))}${esc(unit)}</span>` : "";
+    // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
+    const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>` +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}</span>` +
