@@ -97,34 +97,6 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .todaybar .c.hot b { color: var(--rose-ink); }
 .todaybar .c.warm b { color: var(--amber-ink); }
 .todaybar .none { font-size: 14px; color: var(--muted); font-weight: 600; }
-.top .log-open { margin-left: auto; }
-.log-open { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 15px; font-weight: 800; border: 0; border-radius: 999px; padding: 9px 16px; background: var(--rose-ink); color: #fff; cursor: pointer; letter-spacing: -0.02em; }
-.log-open svg { width: 16px; height: 16px; }
-.logpage { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto;
-  padding: env(safe-area-inset-top, 0px) max(18px, env(safe-area-inset-right, 0px)) max(40px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); }
-.logpage-in { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; padding-top: 18px; }
-.log-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
-.log-top h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
-.log-back { justify-self: start; display: inline-flex; align-items: center; gap: 2px; font: inherit; font-size: 17px; font-weight: 700; border: 0; background: none; color: var(--fg); cursor: pointer; padding: 6px 4px; }
-.log-back svg { width: 18px; height: 18px; }
-.log-store { justify-self: end; font-size: 13px; color: var(--muted); font-weight: 600; text-align: right; }
-.log-legend { display: flex; gap: 6px; flex-wrap: wrap; }
-.log-body { display: grid; gap: 14px; }
-.log-day { background: var(--surface); border-radius: 20px; padding: 16px 18px 6px; }
-.log-day h3 { margin: 0 0 6px; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; display: flex; justify-content: space-between; }
-.log-day h3 span { font-size: 13px; font-weight: 600; color: var(--muted); }
-.log-row { display: grid; grid-template-columns: 44px 48px 1fr; gap: 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
-.log-row:first-of-type { border-top: 0; }
-.log-row time { font-size: 13px; color: var(--muted); font-weight: 600; padding-top: 3px; }
-.log-row .what { min-width: 0; }
-.log-row .what b { display: block; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
-.log-row .what span { font-size: 13px; color: var(--muted); }
-.tag { display: inline-block; font-size: 12px; font-weight: 800; border-radius: 6px; padding: 3px 0; width: 44px; text-align: center; }
-.tag.add { background: var(--ok-bg); color: var(--ok); }
-.tag.replace { background: var(--rose); color: var(--rose-ink); }
-.tag.edit { background: var(--fill); color: var(--fg); }
-.tag.delete, .tag.clear { background: var(--fill); color: var(--muted); }
-.log-empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 14px; background: var(--surface); border-radius: 20px; }
 .add-open { font: inherit; font-size: 17px; font-weight: 800; border: 0; border-radius: 16px; padding: 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; letter-spacing: -0.02em; }
 .form-top { display: flex; justify-content: space-between; align-items: center; }
 .form-top b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
@@ -201,7 +173,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <div class="wrap">
   <div class="top">
     <span class="store" id="storeName">MG수원컨벤션점</span>
-    <button type="button" class="log-open" id="logOpen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8h5 M5.5 10.5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>기록</button>
   </div>
   <header class="hdr">
     <h1>한글표시사항 리스트</h1>
@@ -282,18 +253,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   </div>
 </div>
 
-<div class="logpage" id="logPage" hidden role="dialog" aria-modal="true" aria-labelledby="logTitle">
-  <div class="logpage-in">
-    <div class="log-top">
-      <button type="button" class="log-back" id="logClose" aria-label="닫기"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>목록</button>
-      <h2 id="logTitle">기록</h2>
-      <span class="log-store" id="logStore"></span>
-    </div>
-    <div class="log-legend"><span class="tag add">등록</span><span class="tag replace">교체</span><span class="tag edit">수정</span><span class="tag delete">삭제</span></div>
-    <div id="logBody" class="log-body"></div>
-  </div>
-</div>
-
 <div class="overlay" id="resetBox" hidden>
   <div class="popup" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
     <h3 id="resetTitle">품목을 모두 지울까요?</h3>
@@ -364,11 +323,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   function lsLoad() { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } }
   function lsSave() { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} }
   const API = storeKnown ? STORES[STORE].api : "";
-  async function call(fn, arg, log) {
+  async function call(fn, arg) {
     const body = fn === "saveItem" ? { action: "save", item: arg, store: STORE }
       : fn === "deleteItem" ? { action: "delete", id: arg, store: STORE }
       : { action: "clear", store: STORE };
-    if (log) body.log = log;
     const res = fn === "listItems"
       ? await fetch(API + "?api=1&store=" + encodeURIComponent(STORE) + "&t=" + Date.now())
       : await fetch(API, {
@@ -411,29 +369,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("alertClose").onclick = closeAlert;
   $("alertToday").onclick = () => { try { localStorage.setItem(SKIP, toISO(today())); } catch {} closeAlert(); };
   $("alert").addEventListener("click", (e) => { if (e.target.id === "alert") closeAlert(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("resetBox").hidden = true; closeLog(); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("resetBox").hidden = true; } });
 
-  // 기록 문구: 새로 넣으면 '등록', 유통기한이 바뀌면 '교체', 그 밖의 변경은 '수정'
-  function logFor(it, old) {
-    const exp = expiryOf(it);
-    if (!old) return { action: "add", name: it.name, detail: `유통기한 ${fmt(exp)}` };
-    const oldExp = expiryOf(old), parts = [];
-    if (oldExp !== exp) parts.push(`유통기한 ${fmt(oldExp)} → ${fmt(exp)}`);
-    if (old.name !== it.name) parts.push(`이름 ${old.name} → ${it.name}`);
-    if ((old.memo || "") !== (it.memo || "")) parts.push("특이사항 변경");
-    return { action: oldExp !== exp ? "replace" : "edit", name: it.name, detail: parts.join(" · ") || "변경 없음" };
-  }
   async function save(it) {
-    const i = items.findIndex((x) => x.id === it.id);
-    const log = logFor(it, i >= 0 ? items[i] : null);
-    i >= 0 ? items[i] = it : items.push(it); render();
-    apply(await call("saveItem", it, log));
+    const i = items.findIndex((x) => x.id === it.id); i >= 0 ? items[i] = it : items.push(it); render();
+    apply(await call("saveItem", it));
   }
   async function remove(id) {
-    const old = items.find((x) => x.id === id);
-    const log = old ? { action: "delete", name: old.name, detail: `유통기한 ${fmt(expiryOf(old))}` } : null;
     items = items.filter((x) => x.id !== id); render();
-    apply(await call("deleteItem", id, log));
+    apply(await call("deleteItem", id));
   }
   async function refresh() {
     if (document.hidden || editId) return;
@@ -590,35 +534,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("fExpiry").value = ""; setMode("date");
   items = lsLoad(); render();
 
-  // ---- 기록 화면 (패치노트처럼 날짜별) ----
-  const LOG_TAG = { add: "등록", replace: "교체", edit: "수정", delete: "삭제", clear: "초기화" };
-  async function openLog() {
-    $("logPage").hidden = false; document.body.style.overflow = "hidden";
-    $("logStore").textContent = storeKnown ? STORES[STORE].name : "";
-    $("logBody").innerHTML = `<div class="log-empty">불러오는 중…</div>`;
-    try {
-      const res = await fetch(API + "?api=1&log=1&store=" + encodeURIComponent(STORE) + "&t=" + Date.now());
-      const data = await res.json();
-      if (!data || !Array.isArray(data.log)) throw new Error("old");
-      if (!data.log.length) { $("logBody").innerHTML = `<div class="log-empty">아직 기록이 없습니다. 품목을 등록하거나 교체하면 여기에 쌓입니다.</div>`; return; }
-      const days = new Map();
-      data.log.forEach((r) => { const d = new Date(r.at); const k = toISO(d); if (!days.has(k)) days.set(k, []); days.get(k).push({ ...r, d }); });
-      const tKey = toISO(today());
-      $("logBody").innerHTML = [...days].map(([k, rows]) => {
-        const d = parse(k);
-        const label = `${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${"일월화수목금토"[d.getDay()]}${k === tKey ? " · 오늘" : ""}`;
-        return `<section class="log-day"><h3>${label}<span>${rows.length}건</span></h3>` + rows.map((r) =>
-          `<div class="log-row"><time>${pad(r.d.getHours())}:${pad(r.d.getMinutes())}</time><span class="tag ${esc(r.action)}">${LOG_TAG[r.action] || esc(r.action)}</span>`
-          + `<div class="what"><b>${esc(r.name)}</b><span>${esc(r.detail)}</span></div></div>`).join("") + `</section>`;
-      }).join("");
-    } catch {
-      $("logBody").innerHTML = `<div class="log-empty">기록을 불러오지 못했습니다. 구글 시트 코드가 최신인지 확인해 주세요.</div>`;
-    }
-  }
-  function closeLog() { $("logPage").hidden = true; document.body.style.overflow = ""; }
-  $("logOpen").onclick = openLog;
-  $("logClose").onclick = closeLog;
-
   // ---- 매장 품목 전체 초기화 (확인창) ----
   $("resetStore").textContent = storeKnown ? STORES[STORE].name : "";
   const closeReset = () => { $("resetBox").hidden = true; $("resetMsg").textContent = ""; $("resetGo").disabled = false; };
@@ -628,14 +543,14 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("resetGo").onclick = async () => {
     $("resetGo").disabled = true; $("resetMsg").textContent = "";
     $("resetGo").textContent = "지우는 중…";
-    try { apply(await call("clearItems", null, { action: "clear", name: "전체 품목", detail: `${items.length}개 삭제` })); resetForm(); closeReset(); $("note").textContent = "품목을 모두 지웠습니다."; }
+    try { apply(await call("clearItems")); resetForm(); closeReset(); $("note").textContent = "품목을 모두 지웠습니다."; }
     catch { $("resetMsg").textContent = "지우지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요."; $("resetGo").disabled = false; }
     finally { $("resetGo").textContent = "초기화"; }
   };
 
   if (!storeKnown) {
     $("resetZone").hidden = true;
-    $("form").hidden = true; $("list").hidden = true; $("addOpen").hidden = true; $("todayBar").hidden = true; $("logOpen").hidden = true;
+    $("form").hidden = true; $("list").hidden = true; $("addOpen").hidden = true; $("todayBar").hidden = true;
     $("empty").textContent = "등록되지 않은 매장 링크입니다. 받은 링크를 다시 확인해 주세요.";
     return;
   }
