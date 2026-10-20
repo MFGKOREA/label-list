@@ -1633,7 +1633,12 @@ svg { display: block; }
       // 라인 레시피에 "25 g | 6 ea"처럼 같이 적힌 걸로 1개 무게를 구함
       const eaGs = []; M.line.forEach((r) => r.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, ""), c = parseQty("", i.v); if (t && t.kind === "prep" && t.id === p.name && q && q.g && c && c.ea) eaGs.push(q.g / c.ea); }));
       const eaG = cfg.eaG || (eaGs.length ? eaGs.reduce((a, b) => a + b, 0) / eaGs.length : yg && yn ? yg / yn : null);
-      const base = { batch: cfg.unit !== "EA", step: cfg.step || 1, shelf };
+      const base = { batch: cfg.batch ?? !/^(EA|포션|g)$/.test(cfg.unit), step: cfg.step || 1, shelf };
+      // cfg.panG: 매장에서 담는 통 단위 (서드 = 1/3 팬, 식스 = 1/6 팬, 나인 = 1/9 팬) 한 통의 g. 포션으로 쓴 건 portionG로 g 환산
+      if (cfg.panG) {
+        const pG = cfg.portionG || eaG || (yg && yn ? yg / yn : batchG);
+        return { ...base, e: per(g + ea * (pG || 0)) / cfg.panG, unit: cfg.unit, note: cfg.note || "" };
+      }
       const stepNote = cfg.step > 1 ? `${cfg.step}${cfg.unit}씩` : "";
       const join = (...a) => a.filter(Boolean).join(" · ");
       if (cfg.unit === "X" && batchG) return { ...base, e: per(g + ea * (eaG || 0)) / batchG, unit: "X", note: join(`1X = ${won(batchG)}g`, stepNote) };
@@ -1721,8 +1726,8 @@ svg { display: block; }
       }
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
-    // 프랩은 모든 단위(X·포션·EA·PK·kg)를 올림한 정수로 보여줌
-    const rpu = (v) => String(Math.max(0, Math.ceil(v - 1e-9)));
+    // 프랩은 모든 단위(X·포션·EA·PK·kg)를 올림한 정수로 보여줌. 1.05처럼 살짝 넘는 건 올리지 않음 (0보다 크면 최소 1)
+    const rpu = (v) => String(v > 1e-9 ? Math.max(1, Math.ceil(v - 0.1)) : 0);
     // g은 1000 넘으면 kg, cc는 L로 보여줌
     const disp = (unit, e) => unit === "g" && e >= 1000 ? { u: "kg", f: 1000 } : unit === "cc" && e >= 1000 ? { u: "L", f: 1000 } : { u: unit, f: 1 };
     entries.forEach(({ name, code, shelf, ex, id }) => {
@@ -1738,6 +1743,8 @@ svg { display: block; }
         let r = target - (num(v.s) * dd.f || 0);
         if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
         if (ex.step > 1 || ex.unit === "EA") r = Math.ceil(r / (ex.step || 1) - 1e-9) * (ex.step || 1); // EA는 통으로
+        // 10% 여유분 때문에 한 단위를 통째로 더 만들진 않게 (예상 1.0팩이면 2팩이 아니라 1팩)
+        else if (dd.f === 1) r = Math.max(1, Math.ceil(r - (target - ex.e) - 0.1), Math.floor(r + 1e-9));
         return `<span class="need buy"><b>${rpu(r / dd.f, dd.u)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
       };
       d.innerHTML =
