@@ -1075,7 +1075,7 @@
       inp[it.key] = rec;
       // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
       // (포커스가 다음 칸으로 옮겨간 뒤에 다시 그려야 같은 품목의 발주칸을 눌렀을 때도 그 칸에 그대로 있음)
-      if (was !== needsOrder(it, win, inp[it.key]) || was86 !== !!riskOf(it, inp[it.key])) setTimeout(() => {
+      if (was !== needsOrder(it, win, inp[it.key]) || was86 || riskOf(it, inp[it.key])) setTimeout(() => {
         if (!orderFocus) { const a = document.activeElement, c = a && a.closest && a.closest("#orderList .cell[data-key]"); if (c) orderFocus = { key: c.dataset.key, f: [...c.querySelectorAll("input")].indexOf(a) }; }
         renderList();
       }, 0);
@@ -1086,17 +1086,26 @@
   let orderFocus = null;
   // 발주 시트 순서 그대로 업체별로 쭉 (발주 필요한 것만 맨 위로, 검색·업체 버튼은 거르기만)
   // 86 위험: 오늘 넣은 재고 + 그 사이 들어올 입고로 오늘 발주분이 들어오기 전까지 못 버틸 것 같은 품목
+  // 86 가능성 = 입고 전까지 쓸 양이 가진 양보다 많을 확률 (사용량 오차 = ± 범위와 같은 계산 오차 + Forecast 오차)
+  //  재고를 센 시각 이후 남은 오늘 영업분만 셈 (영업 11~22시로 봄) · 60% 넘는 것만 띄움 (다 86 난다고 하지 않게)
+  const OPEN_H = 11, CLOSE_H = 22, SHOW_P = 0.6;
+  const phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
   function riskOf(it, v) {
     if (!v || v.s === "" || !isFinite(num(v.s))) return null;
     const w = orderWindowFor(it, TODAY), until = w.deliv; // 오늘 발주가 들어오는 날 전까지
     const days = Math.round((parseISO(until) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
     let arr = 0; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if (a.d > TODAY && a.d < until && (k > 0 || a.legacy)) arr += a.q; });
-    const r = calc(it, { ...w, end: until, days, gross: sumGross(TODAY, until, false).s }, 0, 0); if (r.none) return null;
+    const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(TODAY)).pop();
+    const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
+    const left = Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H)));
+    const gross = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), until, false).s;
+    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross }, 0, 0); if (r.none || !(r.use > 0)) return null;
     const have = stockOf(it, v) + arr;
-    return have < r.use * 0.98 ? { it, have, use: r.use, out: until } : null;
+    const p = r.sd > 0 ? 1 - phi((have - r.use) / r.sd) : have < r.use ? 1 : 0;
+    return p >= SHOW_P ? { it, have, use: r.use, out: until, p } : null;
   }
   function risk86(M, inp) {
-    return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => a.have / a.use - b.have / b.use);
+    return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => b.p - a.p);
   }
   function renderList() {
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
@@ -1105,7 +1114,7 @@
     const rk = risk86(M, inp);
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b><span>${rk.length}개 · ${DOW[dow(rk[0].out)]}요일 입고 전에 재고가 부족할 수 있어요</span></div>` +
-        rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}</span><small>재고 ${r1(x.have)} · 사용 ${r1(x.use)}${esc(x.it.pk.stock || "")}</small></button>`).join("") + `</div>`);
+        rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)} · 입고 전 사용 ${r1(x.use)}${esc(x.it.pk.stock || "")}</em></span><small>${Math.min(99, Math.round(x.p * 100))}%</small></button>`).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();

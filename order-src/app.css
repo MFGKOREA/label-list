@@ -475,7 +475,9 @@ svg { display: block; }
 .risk86 .r-top { display: flex; align-items: baseline; gap: 8px; color: var(--rose-ink); }
 .risk86 .r-top b { font-size: 16px; font-weight: 800; }
 .risk86 .r-top span { font-size: 12px; font-weight: 600; }
-.risk86 button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
+.risk86 button { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
 .risk86 button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.risk86 button small { flex: none; font-size: 11.5px; font-weight: 600; color: var(--rose-ink); }
+.risk86 button em { display: block; font-style: normal; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+.risk86 button small { flex: none; font-size: 18px; font-weight: 800; color: var(--rose-ink); }
+.risk86 button small::before { content: "86 "; font-size: 10px; font-weight: 700; }
 .cell.flash { box-shadow: inset 0 0 0 2px var(--rose-ink); transition: box-shadow .3s; }
