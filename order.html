@@ -162,6 +162,10 @@ svg { display: block; }
 .chip.new { background: var(--chick); color: var(--chick-ink); }
 .chip.diff { background: var(--rose); color: var(--rose-ink); }
 .c-meta .boxnote { color: var(--rose-ink); font-size: 10.5px; font-weight: 600; line-height: 1.3; }
+.c-meta .incnote { color: var(--ok); font-size: 10.5px; font-weight: 700; line-height: 1.3; }
+.need.done { background: var(--ok-bg); color: var(--ok); box-shadow: inset 0 0 0 1.5px var(--ok); }
+.need.done b { font-size: 14px; }
+.need em.rng { font-style: normal; font-size: 9px; font-weight: 600; opacity: .7; letter-spacing: 0; }
 .chip.d1 { background: var(--rose); color: var(--rose-ink); }
 .chip.d2 { background: var(--chick); color: var(--chick-ink); }
 .chip.d3 { background: var(--ok-bg); color: var(--ok); }
@@ -218,13 +222,16 @@ svg { display: block; }
 .lg-fc::before, .lg-act::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
 .lg-fc::before { background: var(--chick-line); }
 .lg-act::before { background: var(--accent); }
-.f-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr) 40px; gap: 6px; align-items: center; }
+.f-row { display: grid; grid-template-columns: 32px minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1fr) 34px; gap: 5px; align-items: center; }
+.f-row .dfc { text-align: right; font-size: 12.5px; font-weight: 600; color: var(--muted); padding-right: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f-row .day small em { display: block; font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--rose-ink); }
+.lg-de::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; background: var(--muted); }
 .f-row .day { font-size: 14px; font-weight: 700; line-height: 1.2; }
 .f-row .day small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
 .f-row.we .day { color: var(--rose-ink); }
 .f-row.today .day { color: var(--accent); }
 .f-row.today .day small { color: var(--accent); font-weight: 700; }
-.f-row input { width: 100%; min-width: 0; border: 0; border-radius: 10px; padding: 9px 9px; font-size: 15px; font-weight: 600; text-align: right; outline: none; background: var(--fill-2); color: var(--fg); }
+.f-row input { width: 100%; min-width: 0; border: 0; border-radius: 10px; padding: 9px 7px; font-size: 13.5px; font-weight: 600; text-align: right; outline: none; background: var(--fill-2); color: var(--fg); }
 .f-row input::placeholder { opacity: .5; color: inherit; }
 .f-row input.fc { box-shadow: inset 0 -2px 0 var(--chick-line); }
 .f-row input.act { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
@@ -236,10 +243,11 @@ svg { display: block; }
 .diff.d-down { color: var(--rose-ink); }
 .f-foot { background: var(--fill-2); }
 .f-head { padding-block: 10px; font-size: 11px; font-weight: 600; color: var(--muted); }
-.f-head .lg-fc, .f-head .lg-act { justify-self: stretch; text-align: center; white-space: nowrap; }
+.f-head .lg-fc, .f-head .lg-act, .f-head .lg-de { justify-self: stretch; text-align: center; white-space: nowrap; }
 .f-head span:last-child { text-align: right; }
 .f-foot .day { font-size: 13px; }
-.f-foot .t-fc, .f-foot .t-act { text-align: right; font-size: 14px; font-weight: 800; padding-right: 9px; white-space: nowrap; }
+.f-foot .t-fc, .f-foot .t-act, .f-foot .t-de { text-align: right; font-size: 12.5px; font-weight: 800; padding-right: 7px; white-space: nowrap; }
+.f-foot .t-de { color: var(--muted); padding-right: 2px; }
 .f-foot .t-fc { color: var(--fg); }
 .f-foot .t-act { color: var(--accent); }
 
@@ -542,11 +550,11 @@ svg { display: block; }
       <button type="button" id="wNext" aria-label="다음 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
     </div>
     <div class="group">
-      <div class="cell f-row f-head"><span>요일</span><span class="lg-fc">Forecast</span><span class="lg-act">실제 Gross Sales</span><span>오차</span></div>
+      <div class="cell f-row f-head"><span>요일</span><span class="lg-de">데이터 예상</span><span class="lg-fc">Forecast</span><span class="lg-act">실제 Gross</span><span>오차</span></div>
       <div id="fcRows"></div>
       <div class="cell f-row f-foot" id="fcFoot"></div>
     </div>
-    <p class="hint" style="margin-top:-8px">예상은 Forecast로, 학습은 실제 Gross Sales로 합니다. 입력하면 바로 저장돼요.</p>
+    <p class="hint" style="margin-top:-8px">데이터 예상 = 같은 요일 최근 실제 매출(행사처럼 튀는 날 제외)과 공휴일 실적으로 앱이 낸 값이에요. 발주·프랩은 Forecast로 계산하고, Forecast가 비어 있으면 데이터 예상을 써요. 학습은 실제 Gross Sales로 합니다.</p>
   </section>
 
   <!-- 데이터 파일 -->
@@ -641,7 +649,7 @@ svg { display: block; }
     <ol class="steps">
       <li><i>1</i><div><b>품목 검색</b><span>검색창에 이름을 적거나, 업체 버튼을 눌러요.</span></div></li>
       <li><i>2</i><div><b>재고(온핸드) 입력</b><span>지금 매장에 남아 있는 양이에요.</span><span class="ex"><span class="exf"><small>재고</small>3</span></span></div></li>
-      <li><i>3</i><div><b>익일 입고량 입력</b><span>내일 들어오기로 한 양이에요. 없으면 비워 둬요.</span><span class="ex"><span class="exf"><small>익일</small>2</span></span></div></li>
+      <li><i>3</i><div><b>발주수량 입력</b><span>실제로 발주한 수량이에요. 다음 날부터 입고일까지 "입고예정"으로 자동 계산돼요.</span><span class="ex"><span class="exf"><small>발주</small>2</span></span></div></li>
       <li><i>4</i><div><b>필요 사용량</b><span>앱이 계산한 주문할 양이에요. 초록 칸 숫자만큼 주문하면 돼요.</span><span class="ex"><span class="exn"><b>4<small>팩</small></b><small>부족 7.9kg</small></span></span></div></li>
     </ol>
 
@@ -656,7 +664,7 @@ svg { display: block; }
     <div class="group">
       <div class="cell calc"><i class="lt la">A</i><div><b>수불현황</b><span>지난달에 실제로 쓴 양으로 계산해요.</span></div></div>
       <div class="cell calc"><i class="lt lb">B</i><div><b>메뉴별 매출현황</b><span>메뉴가 팔린 개수 × 레시피로 계산해요. 메뉴가 바뀌면 바로 반영돼요.</span></div></div>
-      <div class="cell calc"><i class="lt lc">C</i><div><b>최종 발주량</b><span>A와 B로 구한 필요량에서 재고와 익일 입고량을 빼요. 초록 칸 숫자예요.</span></div></div>
+      <div class="cell calc"><i class="lt lc">C</i><div><b>최종 발주량</b><span>A와 B로 구한 필요량에서 재고와 입고예정(앱에 넣은 발주)을 빼요. 초록 칸 숫자예요.</span></div></div>
     </div>
     <div class="sect"><span>데이터 자동계산</span><small>입력할 것 없음</small></div>
     <div class="group">
@@ -1101,8 +1109,40 @@ svg { display: block; }
   }
 
   let cache = null;
-  let fcBiasMemo = null;
-  const invalidate = () => { cache = null; fcBiasMemo = null; };
+  let fcBiasMemo = null, dataFcMemo = new Map();
+  const invalidate = () => { cache = null; fcBiasMemo = null; dataFcMemo = new Map(); };
+  // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
+  const HOLI = new Set([
+    "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
+    "2026-09-24", "2026-09-25", "2026-09-26", "2026-10-05", "2026-10-09", "2026-12-25",
+    "2027-01-01", "2027-02-08", "2027-02-09", "2027-03-01", "2027-05-05", "2027-05-13", "2027-08-16",
+    "2027-09-14", "2027-09-15", "2027-09-16", "2027-10-04", "2027-10-09", "2027-10-11", "2027-12-27",
+    "2026-10-03", "2026-03-01", "2026-05-24", "2026-06-06", "2026-08-15", "2027-02-06", "2027-02-07", "2027-06-06", "2027-08-15", "2027-10-03", "2027-12-25",
+  ]);
+  const isHoliday = (d) => HOLI.has(d) || (db.holidays || []).includes(d);
+  // 데이터 예상 Forecast: 그날 전까지의 실제 Gross Sales로
+  //  평일·주말 = 같은 요일 최근 6번 (최근일수록 비중, 행사처럼 튀는 날은 뺌)
+  //  공휴일 = 지난 공휴일 실제 매출과 그 요일 평소 매출의 평균 (9~10월 실적으로 맞춰 봄)
+  function dataForecast(d) {
+    if (dataFcMemo.has(d)) return dataFcMemo.get(d);
+    const f = db.forecast || {};
+    const pick = (ok, max, back) => { const out = []; for (let k = 1; k <= back && out.length < max; k++) { const x = addDays(d, -k), v = num((f[x] || {}).act); if (isFinite(v) && v > 0 && ok(x)) out.push(v); } return out; };
+    const wmean = (vals) => {
+      if (!vals.length) return null;
+      const med = vals.slice().sort((a, b) => a - b)[Math.floor(vals.length / 2)];
+      const keep = vals.map((v, i) => [v, vals.length - i]).filter(([v]) => vals.length < 3 || (v >= med * 0.6 && v <= med * 1.6));
+      return keep.reduce((a, [v, w]) => a + v * w, 0) / keep.reduce((a, [, w]) => a + w, 0);
+    };
+    const wd = dow(d);
+    let v = wmean(pick((x) => dow(x) === wd && !isHoliday(x), 6, 120));
+    if (isHoliday(d)) {
+      const h = wmean(pick(isHoliday, 6, 400)) ?? wmean(pick((x) => dow(x) === 0 && !isHoliday(x), 6, 120));
+      v = v && h ? (v + h) / 2 : v || h || null;
+    }
+    if (v == null) { const all = pick(() => true, 28, 60); v = all.length ? all.reduce((a, b) => a + b, 0) / all.length : null; }
+    dataFcMemo.set(d, v);
+    return v;
+  }
   // I: Forecast 보정. 지난 28일(Forecast와 실제가 둘 다 있는 날) 실제 ÷ Forecast의 중앙값을 앞으로의 Forecast에 곱함
   function fcBias() {
     if (fcBiasMemo) return fcBiasMemo;
@@ -1213,6 +1253,15 @@ svg { display: block; }
     // 레시피 1건이 쓰는 품목별 재고단위 (프랩은 Yield로 원재료까지 풀기)
     const yieldOf = (p) => { const s = String(p.yield || ""); const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(s); if (!m) return null; const v = num(m[1]); const u = m[2].toLowerCase(); return u === "kg" || u === "l" ? v * 1000 : v; };
     const perMenuCache = new Map();
+    // 라인 레시피에 "25 g | 6 ea"처럼 무게와 개수가 같이 적힌 프랩 → 1개 무게
+    let eaGMemo = null;
+    const prepEaG = () => {
+      if (eaGMemo) return eaGMemo;
+      const m = new Map(), acc2 = new Map();
+      line.forEach((r) => r.ing.forEach((i) => { const t = resolveIng(i.n), q = parseQty(i.w, ""), c = parseQty("", i.v); if (t && t.kind === "prep" && q && q.g && c && c.ea) { const a = acc2.get(t.id) || []; a.push(q.g / c.ea); acc2.set(t.id, a); } }));
+      acc2.forEach((a, k) => m.set(k, a.reduce((x, y) => x + y, 0) / a.length));
+      return (eaGMemo = m);
+    };
     function expand(recipe, factor, acc, depth, prepAcc) {
       recipe.ing.forEach((ing) => {
         const q = parseQty(ing.w, ing.v);
@@ -1235,9 +1284,13 @@ svg { display: block; }
           if (amount == null && q.ea != null && yc && !/약/.test(p.yield)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
           // "1,980g (약 15 Portion)"처럼 무게와 포션 수가 같이 있으면 1포션 = 무게 ÷ 포션 수
           if (amount == null && q.ea != null && yc && yieldOf(p)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
-          // 분량이 "1 Portion"처럼 개수뿐이면 재료 무게 합을 1포션 무게로 (럭스 포션 → 치킨 다이스 50 g)
-          const y = yieldOf(p) || (yc ? p.ing.reduce((a2, i) => { const q2 = parseQty(i.w, i.v) || {}; return a2 + (q2.g || q2.ml || 0); }, 0) * num(yc[1]) : 0); if (!y || amount == null) return;
-          expand(p, (factor * amount) / y, acc, depth + 1, prepAcc);
+          // 분량이 "1 Portion"·"약 15 Order"처럼 개수뿐이면 재료 무게 합이 그 한 번 분량 (럭스 포션 → 치킨 다이스 50 g, 소테 새우 15오더 = 새우 800g)
+          const y = yieldOf(p) || (yc ? p.ing.reduce((a2, i) => { const q2 = parseQty(i.w, i.v) || {}; return a2 + (q2.g || q2.ml || 0); }, 0) : 0);
+          // "새우 12 ea"처럼 개수로 쓴 건 다른 라인 레시피의 "25 g | 6 ea"로 1개 무게를 구해 g으로
+          const eg = amount == null && q.ea != null ? prepEaG().get(p.name) : null;
+          const amt = amount ?? (eg ? q.ea * eg : null);
+          if (!y || amt == null) return;
+          expand(p, (factor * amt) / y, acc, depth + 1, prepAcc);
         }
       });
     }
@@ -1329,6 +1382,8 @@ svg { display: block; }
       // 최근 달 실제가 레시피의 3배 넘게 차이 나면 레시피 밖 사용(튀김기름 등)이나 단위 문제라 B를 안 씀
       const aLast = lastB && lastB.actual && lastB.actual.get(it.key);
       if (tb && aLast && (aLast / (tb * it.loss) > 3 || aLast / (tb * it.loss) < 1 / 3)) it.rateB = null;
+      // 최근 달 수불현황이 아직 없으면(월 중간) A와 B를 직접 비교해서 3배 넘게 차이 나면 B를 안 씀
+      if (it.rateB != null && it.rateA != null && (it.rateA / it.rateB > 3 || it.rateA / it.rateB < 1 / 3)) it.rateB = null;
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       it.ledgerScores = [];
@@ -1363,9 +1418,9 @@ svg { display: block; }
     const f = (db.forecast || {})[d] || {};
     if (preferActual && isFinite(num(f.act))) return { v: num(f.act), src: "act" };
     if (isFinite(num(f.fc))) return { v: num(f.fc) * fcBias().k, src: "fc" };
-    // 없으면 최근 4주 같은 요일 실제 평균, 그것도 없으면 최근 달 평균
-    const same = [1, 2, 3, 4].map((k) => num(((db.forecast || {})[addDays(d, -7 * k)] || {}).act)).filter(isFinite);
-    if (same.length) return { v: same.reduce((a, b) => a + b, 0) / same.length, src: "est" };
+    // 없으면 데이터 예상 Forecast (같은 요일·공휴일 실적), 그것도 없으면 최근 달 평균
+    const de = dataForecast(d);
+    if (de) return { v: de, src: "est" };
     const ms = months().map((m) => ({ m, g: num(mget(m).gross) })).filter((x) => x.g > 0);
     if (ms.length) { const x = ms[ms.length - 1]; return { v: x.g / daysInMonth(x.m), src: "est" }; }
     return { v: 0, src: "none" };
@@ -1412,7 +1467,9 @@ svg { display: block; }
     if (packs > 0 && it.min && packs < it.min) packs = it.min;
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
-    return { use, useA, useB, wA, spread, ss, need, short, packs, orderQty };
+    // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차)
+    const sd = sigma * use / Math.sqrt(Math.max(1, win.days));
+    return { use, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty };
   }
 
   // ---------- G: 재고채점 ----------
@@ -1429,10 +1486,22 @@ svg { display: block; }
         const a = list[i - 1], b = list[i];
         const d1 = a.t.slice(0, 10), d2 = b.t.slice(0, 10);
         if (d2 <= d1) continue;
-        // 두 입력 사이에 앱이 모르는 입고일(익일 다음 영업일부터 뒤 입력일까지)이 있으면 실제 사용량을 알 수 없어 뺌
-        let gap = 0; for (let x = addDays(d1, 2); x <= d2; x = addDays(x, 1)) if (dow(x) !== 0) gap++;
-        if (gap) continue;
-        const actual = num(a.s) + (num(a.i) || 0) - num(b.s);
+        let actual;
+        if (a.v === 2) {
+          // 두 재고 사이(d1 다음날 ~ d2)에 들어온 입고 = 앱에 넣은 발주의 입고일로 계산. 그 사이 발주한 날 중 앱을 안 쓴 날(일요일 제외)이 있으면 모름 → 뺌
+          let arr = 0, unknown = false;
+          for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
+            if (delivery(x) > d1 && delivery(x) <= d2 && !db["input." + x] && dow(x) !== 0) unknown = true;
+            arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
+          }
+          if (unknown) continue;
+          actual = num(a.s) + arr - num(b.s);
+        } else {
+          // 예전 기록(익일 칸): 두 입력 사이에 앱이 모르는 입고일이 있으면 뺌
+          let gap = 0; for (let x = addDays(d1, 2); x <= d2; x = addDays(x, 1)) if (dow(x) !== 0) gap++;
+          if (gap) continue;
+          actual = num(a.s) + (num(a.i) || 0) - num(b.s);
+        }
         if (!(actual > 0)) continue; // 음수·0은 입력 실수로 보고 뺌
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
         const g = sumGross(d1, d2, true).s / 1e6;
@@ -1551,24 +1620,45 @@ svg { display: block; }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
   // 재고를 넣었고 발주가 필요한 품목 → 목록 맨 위 "발주 필요"로
   const stockOf = (it, v) => num(v.s) * (it.box || 1); // 박스로 넣는 품목은 팩으로 바꿔 계산
-  const needsOrder = (it, win, v) => { if (!v || !isFinite(num(v.s)) || v.s === "") return false; const r = calc(it, win, stockOf(it, v), num(v.i) || 0); return !r.none && r.packs > 0; };
+  // 발주수량(o, 발주단위) → 재고단위. 예전 기록의 익일(i)은 다음 영업일 입고
+  const ordToStock = (it, o) => (it.pk.sameUnit === false ? o * (it.pk.mult || 1) : o);
+  const arrivalsOf = (it, x) => {
+    const r = (db["input." + x] || {})[it.key]; if (!r) return [];
+    const out = [];
+    if (num(r.o) > 0) out.push({ d: delivery(x), q: ordToStock(it, num(r.o)) });
+    if (num(r.i) > 0) out.push({ d: addBiz(x, 1), q: num(r.i), legacy: true });
+    return out;
+  };
+  // d일 재고를 센 뒤에 들어올 입고: 그 전날까지 앱에 넣은 발주 중 아직 안 온 것 (+ 예전 방식 익일 칸)
+  const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
+  const needsOrder = (it, win, v) => {
+    if (!v) return false;
+    if (num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
+    if (!isFinite(num(v.s)) || v.s === "") return false;
+    const r = calc(it, win, stockOf(it, v), incomingOf(it, TODAY)); return !r.none && r.packs > 0;
+  };
   function rowEl(it, win, inp) {
     const d = document.createElement("div");
     d.className = "cell"; d.dataset.key = it.key;
-    const v = inp[it.key] || { s: "", i: "" };
-    const unit = it.pk.stock || "재고단위";
+    const v = { s: "", o: "", ...(inp[it.key] || {}) };
+    const unit = it.pk.stock || "재고단위", ou = it.pk.order || unit;
+    const inc = incomingOf(it, TODAY);
     const draw = () => {
-      const s = stockOf(it, v), i = num(v.i) || 0;
+      const s = stockOf(it, v), i = inc;
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
       const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v));
-      if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle"><b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
+      // 예상 범위: 그 품목 단위로 ±1PK, ±1EA처럼 (g·ml 단위만 소수점)
+      const rng = (r) => (r.sd > 0 ? `<em class="rng">±${/^(g|kg|ml|l|cc)$/i.test(unit) ? r1(r.sd) : Math.max(1, Math.round(r.sd))}${esc(unit)}</em>` : "");
+      if (!isFinite(s) && num(v.o) > 0) return `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+      if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle"><b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span>${rng(r)}</span>`; }
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
-        else need = `<span class="need buy lbl"><b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+        else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span>${rng(r)}</span>`;
+        else need = `<span class="need buy lbl"><b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span>${rng(r)}</span>`;
       }
       return need;
     };
@@ -1580,12 +1670,12 @@ svg { display: block; }
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag}</div>` +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}</span>` +
       `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
-      `<label class="fld"><span>익일</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.i)}" aria-label="${esc(it.name)} 익일 입고량"></label>` +
+      `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
-    const live = () => { v.s = si.value.trim(); v.i = ii.value.trim(); d.querySelector(".needbox").innerHTML = draw(); };
+    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); d.querySelector(".needbox").innerHTML = draw(); };
     si.addEventListener("input", live); ii.addEventListener("input", live);
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
     const jump = (to) => {
@@ -1594,7 +1684,7 @@ svg { display: block; }
       if (el) el.querySelectorAll("input")[to.f].focus(); else document.activeElement.blur();
       if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
     };
-    // 재고·익일 어디서든 엔터 → 다음 품목 재고칸 (익일은 직접 눌러서 입력)
+    // 재고·발주 어디서든 엔터 → 다음 품목 재고칸 (발주는 직접 눌러서 입력)
     [si, ii].forEach((el) => el.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
@@ -1604,16 +1694,20 @@ svg { display: block; }
     d.addEventListener("change", () => {
       const was = needsOrder(it, win, inp[it.key]);
       const all = { ...todayInput() };
-      if (v.s === "" && v.i === "") delete all[it.key]; else all[it.key] = { s: v.s, i: v.i };
+      // r: 그때 앱이 추천한 발주수량 (나중에 실제 발주와 비교해 학습)
+      const rc = isFinite(stockOf(it, v)) ? calc(it, win, stockOf(it, v), inc) : null;
+      const rec = { ...(all[it.key] || {}), s: v.s, o: v.o, r: rc && !rc.none ? rc.orderQty : "" };
+      if (v.s === "" && v.o === "" && !num(rec.i)) delete all[it.key]; else all[it.key] = rec;
       setKey("input." + TODAY, all);
-      // 채점용 기록: 재고가 들어간 경우 (같은 날 다시 고치면 마지막 값이 쓰이도록 시각 포함)
-      if (isFinite(num(v.s))) appendKey("onhand", { t: localStamp(), k: it.key, s: stockOf(it, v), i: num(v.i) || 0 });
-      inp[it.key] = { s: v.s, i: v.i };
+      // 채점용 기록: 재고가 들어간 경우 (같은 날 다시 고치면 마지막 값이 쓰이도록 시각 포함). v:2 = 입고는 발주 기록으로 계산
+      if (isFinite(num(v.s))) appendKey("onhand", { t: localStamp(), k: it.key, s: stockOf(it, v), i: inc, v: 2 });
+      inp[it.key] = rec;
       // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
-      if (was !== needsOrder(it, win, inp[it.key])) {
+      // (포커스가 다음 칸으로 옮겨간 뒤에 다시 그려야 같은 품목의 발주칸을 눌렀을 때도 그 칸에 그대로 있음)
+      if (was !== needsOrder(it, win, inp[it.key])) setTimeout(() => {
         if (!orderFocus) { const a = document.activeElement, c = a && a.closest && a.closest("#orderList .cell[data-key]"); if (c) orderFocus = { key: c.dataset.key, f: [...c.querySelectorAll("input")].indexOf(a) }; }
         renderList();
-      }
+      }, 0);
     });
     return d;
   }
@@ -1763,6 +1857,21 @@ svg { display: block; }
     if (ea && !g) return yn > 1 ? { e: per(ea) / yn, unit: "X", batch: true, note: `1X = ${yn}포션` } : { e: per(ea), unit: "포션" };
     return yg ? { e: per(g) / yg, unit: "X", batch: true, note: `1X = ${won(yg)}g` } : ledgerFallback();
   }
+  // 프랩 재고 학습: 어제 재고 + 어제 만든 양(앱이 보여준 필요량) − 오늘 재고 = 하루 실제 사용량
+  //  실제 ÷ 앱 예상(하루치)의 중앙값을 그 프랩의 보정 배수로 (3번 이상, 0.5~2배)
+  function prepLearn(id, unit) {
+    const byDay = new Map();
+    (db.prepLog || []).filter((l) => l.id === id && l.u === unit).forEach((l) => byDay.set(l.t.slice(0, 10), l));
+    const days = [...byDay.keys()].sort(), r = [];
+    for (let i = 1; i < days.length; i++) {
+      if (addDays(days[i - 1], 1) !== days[i]) continue; // 하루 사이만 (그 사이 만든 양을 모르면 뺌)
+      const a = byDay.get(days[i - 1]), b = byDay.get(days[i]);
+      const actual = num(a.s) + (num(a.need) || 0) - num(b.s);
+      if (actual > 0 && a.e > 0) r.push(Math.min(5, Math.max(0.2, actual / a.e)));
+    }
+    const last = r.slice(-10).sort((x, y) => x - y);
+    return { k: last.length >= 3 ? Math.min(2, Math.max(0.5, last[Math.floor(last.length / 2)])) : 1, n: r.length };
+  }
   function renderPrep() {
     const M = model();
     const g = dayGross(TODAY, false);
@@ -1784,6 +1893,12 @@ svg { display: block; }
       // 한 번에 만드는 소스·오더류는 쉘프라이프 동안 쓸 양으로
       // 한 번에 만드는 프랩은 쉘프라이프의 절반 기간 Forecast 합으로 (3days → 1.5days, 1day는 그대로)
       const days = shelf > 1 ? shelf / 2 : 1;
+      const id0 = (x.code ? x.code + " " : "") + x.name;
+      if (ex) {
+        ex.eRaw = ex.e; // 학습 전 하루 예상 (채점용)
+        const L = prepLearn(id0, ex.unit);
+        if (L.k !== 1) { ex.e *= L.k; if (Math.abs(L.k - 1) >= 0.05) ex.note = [ex.note, `재고 학습 ×${L.k.toFixed(2)}`].filter(Boolean).join(" · "); }
+      }
       if (ex && ex.batch && days > 1 && g.v > 0) {
         const full = Math.floor(days), part = days - full;
         ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v;
@@ -1804,6 +1919,7 @@ svg { display: block; }
       const d = document.createElement("div");
       d.className = "cell";
       const draw = () => {
+        v.need = 0;
         if (!ex) return '<span class="need none"><b>?</b></span>';
         if (v.s === "") return '<span class="need none"><b>–</b></span>';
         const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
@@ -1812,6 +1928,7 @@ svg { display: block; }
         if (ex.step > 1 || ex.unit === "EA") r = Math.ceil(r / (ex.step || 1) - 1e-9) * (ex.step || 1); // EA는 통으로
         // 10% 여유분 때문에 한 단위를 통째로 더 만들진 않게 (예상 1.0팩이면 2팩이 아니라 1팩)
         else if (dd.f === 1) r = Math.max(1, Math.ceil(r - (target - ex.e) - 0.1), Math.floor(r + 1e-9));
+        v.need = +rpu(r / dd.f, dd.u) * dd.f; // 학습용: 이만큼 만든다고 봄
         return `<span class="need buy"><b>${rpu(r / dd.f, dd.u)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
       };
       d.innerHTML =
@@ -1827,7 +1944,11 @@ svg { display: block; }
         if (next) { next.focus(); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else inp.blur();
       });
       inp.addEventListener("input", () => { v.s = inp.value.trim(); d.querySelector(".needbox").innerHTML = draw(); });
-      inp.addEventListener("change", () => { const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all); });
+      inp.addEventListener("change", () => {
+        const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all);
+        // 학습 기록: 재고·만들 양·앱 하루 예상을 같은 단위(ex.unit 기준)로
+        if (ex && v.s !== "" && isFinite(num(v.s))) appendKey("prepLog", { t: localStamp(), id, u: ex.unit, s: num(v.s) * dd.f, need: v.need || 0, e: ex.eRaw });
+      });
       box.appendChild(d);
     });
   }
@@ -1849,8 +1970,10 @@ svg { display: block; }
       const d = addDays(fcWeekStart, i);
       const f = (db.forecast || {})[d] || {};
       const row = document.createElement("div");
-      row.className = "cell f-row" + (i >= 5 ? " we" : "") + (d === TODAY ? " today" : "");
-      row.innerHTML = `<span class="day">${DOW[dow(d)]}<small>${d === TODAY ? "오늘" : mmdd(d)}</small></span>` +
+      const hol = isHoliday(d), de = dataForecast(d);
+      row.className = "cell f-row" + (i >= 5 || hol ? " we" : "") + (d === TODAY ? " today" : "");
+      row.innerHTML = `<span class="day">${DOW[dow(d)]}<small>${d === TODAY ? "오늘" : mmdd(d)}${hol ? "<em>공휴일</em>" : ""}</small></span>` +
+        `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}</span>` +
         `<input class="fc" inputmode="numeric" enterkeyhint="next" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
         `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
       const [fi, ai] = row.querySelectorAll("input");
@@ -1884,13 +2007,13 @@ svg { display: block; }
     return `<span class="diff ${r >= 0 ? "d-up" : "d-down"}">${r >= 0 ? "+" : ""}${r.toFixed(0)}%</span>`;
   }
   function foot() {
-    let f = 0, a = 0, fa = 0, n = 0;
+    let f = 0, a = 0, fa = 0, n = 0, de = 0;
     for (let i = 0; i < 7; i++) {
       const x = (db.forecast || {})[addDays(fcWeekStart, i)] || {};
       const fv = num(x.fc) || 0, av = num(x.act);
-      f += fv; if (isFinite(av)) { a += av; fa += fv; n++; }
+      f += fv; de += dataForecast(addDays(fcWeekStart, i)) || 0; if (isFinite(av)) { a += av; fa += fv; n++; }
     }
-    $("fcFoot").innerHTML = `<span class="day">합계</span><span class="t-fc">${won(f)}</span><span class="t-act">${n ? won(a) : "–"}</span><span class="diff">${n && fa ? (a / fa * 100).toFixed(0) + "%" : ""}</span>`;
+    $("fcFoot").innerHTML = `<span class="day">합계</span><span class="t-de">${de ? won(Math.round(de / 1e4) * 1e4) : "–"}</span><span class="t-fc">${won(f)}</span><span class="t-act">${n ? won(a) : "–"}</span><span class="diff">${n && fa ? (a / fa * 100).toFixed(0) + "%" : ""}</span>`;
   }
   $("wSel").addEventListener("change", () => { fcWeekStart = $("wSel").value; renderForecast(); });
   $("wPrev").onclick = () => { fcWeekStart = addDays(fcWeekStart, -7); renderForecast(); };
@@ -2239,7 +2362,7 @@ svg { display: block; }
   renderMain();
   pull().then(() => { invalidate(); renderMain(); learnTrack(); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(() => { invalidate(); if (!$("v-main").hidden) renderMain(); }); });
-  window.__orderCalc = { model, orderWindow, calc, db: () => db, TODAY };
+  window.__orderCalc = { model, orderWindow, calc, dataForecast, db: () => db, TODAY };
 })();
 
 </script>
