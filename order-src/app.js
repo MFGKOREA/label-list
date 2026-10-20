@@ -758,6 +758,22 @@
     return { today, deliv, nextDeliv, end, days, gross: g.s, est: g.est, covered };
   }
 
+  // 업체별 발주 요일·입고 (시트 vendorCfg): {"세제": {days:[1], lead:2, note:"택배"}} = 월요일만 발주, 2영업일 뒤 택배 도착
+  const vcfg = (it) => ((db.vendorCfg || {})[it && it.vendor] || {});
+  const deliveryOf = (it, x) => addBiz(x, vcfg(it).lead || 2);
+  const isOrderDay = (it, d) => { const ds = vcfg(it).days; return !ds || ds.includes(dow(d)); };
+  const nextOrderDay = (it, d) => { let x = d; for (let k = 0; k < 8 && !isOrderDay(it, x); k++) x = addDays(x, 1); return x; };
+  function orderWindowFor(it, today) {
+    const c = vcfg(it);
+    if (!c.days && !c.lead) return { ...orderWindow(today), orderDay: today, canOrder: true };
+    // 다음 발주일 주문이 다음다음 발주일 주문 입고 전까지 버텨야 함 → [오늘, 다음다음 입고)
+    const o1 = nextOrderDay(it, today), o2 = nextOrderDay(it, addDays(o1, 1));
+    const deliv = deliveryOf(it, o1), nextDeliv = deliveryOf(it, o2);
+    const days = Math.round((parseISO(nextDeliv) - parseISO(today)) / 864e5);
+    const g = sumGross(today, nextDeliv, false);
+    return { today, deliv, nextDeliv, end: nextDeliv, days, gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today };
+  }
+
   // ---------- C: 최종 발주량 ----------
   const Z = 1.65;
   function calc(it, win, s, inc) {
@@ -810,7 +826,7 @@
           // 두 재고 사이(d1 다음날 ~ d2)에 들어온 입고 = 앱에 넣은 발주의 입고일로 계산. 그 사이 발주한 날 중 앱을 안 쓴 날(일요일 제외)이 있으면 모름 → 뺌
           let arr = 0, unknown = false;
           for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
-            if (delivery(x) > d1 && delivery(x) <= d2 && !db["input." + x] && dow(x) !== 0) unknown = true;
+            if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !db["input." + x] && dow(x) !== 0) unknown = true;
             arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
           }
           if (unknown) continue;
@@ -944,7 +960,7 @@
   const arrivalsOf = (it, x) => {
     const r = (db["input." + x] || {})[it.key]; if (!r) return [];
     const out = [];
-    if (num(r.o) > 0) out.push({ d: delivery(x), q: ordToStock(it, num(r.o)) });
+    if (num(r.o) > 0) out.push({ d: deliveryOf(it, x), q: ordToStock(it, num(r.o)) });
     if (num(r.i) > 0) out.push({ d: addBiz(x, 1), q: num(r.i), legacy: true });
     return out;
   };
@@ -954,9 +970,12 @@
     if (!v) return false;
     if (num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
     if (!isFinite(num(v.s)) || v.s === "") return false;
-    const r = calc(it, win, stockOf(it, v), incomingOf(it, TODAY)); return !r.none && r.packs > 0;
+    const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
+    const r = calc(it, w, stockOf(it, v), incomingOf(it, TODAY)); return !r.none && r.packs > 0;
   };
   function rowEl(it, win, inp) {
+    win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
+    const vc = vcfg(it), offDay = !win.canOrder;
     const d = document.createElement("div");
     d.className = "cell"; d.dataset.key = it.key;
     const v = { s: "", o: "", ...(inp[it.key] || {}) };
@@ -975,6 +994,7 @@
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
+        else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
         else need = `<span class="need buy lbl"><b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
       }
       return need;
@@ -989,7 +1009,7 @@
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>` +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}</span>` +
       `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
