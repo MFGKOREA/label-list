@@ -487,4 +487,4 @@ svg { display: block; }
 .dateblk { display: grid; justify-items: end; gap: 3px; }
 .ostate { font-size: 10.5px; font-weight: 700; color: var(--muted); padding-right: 4px; }
 .ostate.open { color: var(--ok-ink); }
-.ostate.closed { color: var(--rose-ink); }
+.ostate.closed { color: var(--c-act); }
