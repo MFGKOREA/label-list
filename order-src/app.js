@@ -507,6 +507,7 @@
     const withCfg = (it) => {
       const c = itemCfg[it.key] || itemCfg[it.name];
       if (c && c.ea) it.pk = { ...it.pk, ea: c.ea };
+      if (c && c.g) it.pk = { ...it.pk, g: c.g }; // 1단위 무게를 바로잡음 (브리오슈 1PK = 380g × 3개)
       if (c && c.label) { it.pk = { ...it.pk, stock: c.label, order: c.label }; it.unit = c.label; }
       it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
     };
@@ -666,8 +667,19 @@
       }
       return { m, gross, days: daysInMonth(m), actual: d.ledger ? actual : null, theo, prepUse, menuQty, menuMapped, recQ, extra };
     });
-    const withA = monthRows.filter((r) => r.actual && r.gross > 0);
-    const withB = monthRows.filter((r) => r.theo && r.gross > 0);
+    // 영업일이 14일 안 되는 달(개점한 8월 4일치)은 첫 재고를 채운 양이 섞여서 사용량·로스 계산에서 뺌 (지금 진행 중인 달은 씀). 채점에는 그대로 씀
+    const lastM = monthRows.length ? monthRows[monthRows.length - 1].m : "";
+    const openDays = (m) => Object.keys(db.forecast || {}).filter((d) => d.startsWith(m) && num(db.forecast[d].act) > 0).length;
+    const full = (r) => r.m === lastM || !(openDays(r.m) > 0 && openDays(r.m) < 14);
+    const withAAll = monthRows.filter((r) => r.actual && r.gross > 0);
+    const withA = withAAll.filter(full);
+    const withB = monthRows.filter((r) => r.theo && r.gross > 0 && full(r));
+    // 로스 계수 = 실제 ÷ 레시피의 중앙값 (짝수 개면 가운데 둘 평균). before를 주면 그 달 전까지만 (채점할 때 그 달 실제를 미리 보지 않게)
+    const lossOf = (key, before) => {
+      const rs = withB.filter((r) => r !== withB[withB.length - 1] && (!before || r.m < before)).map((r) => { const t = r.theo.get(key), a = r.actual && r.actual.get(key); return t && a ? a / t : null; }).filter((x) => x && x > 0.5 && x < 3).sort((x, y) => x - y);
+      if (!rs.length) return 1;
+      const h = rs.length >> 1; return rs.length % 2 ? rs[h] : (rs[h - 1] + rs[h]) / 2;
+    };
     // B를 최근 3개월 메뉴 판매로 (3:2:1). 최근 달에 팔린 메뉴만, 그 메뉴가 팔린 달끼리 평균 → 10월에 새로 생긴 메뉴는 10월만, 라자냐처럼 계속 판 메뉴는 8·9월도 반영
     // blend.theo / blend.prep: Gross 100만원당 사용량
     const blend = { theo: new Map(), prep: new Map() };
@@ -707,8 +719,7 @@
       const lastB = withB[withB.length - 1];
       const tb = lastB && lastB.theo.get(it.key);
       it.rateB = tb ? blend.theo.get(it.key) || tb / (lastB.gross / 1e6) : null;
-      const ratios = withB.slice(0, -1).map((r) => { const t = r.theo.get(it.key), a = r.actual && r.actual.get(it.key); return t && a ? a / t : null; }).filter((x) => x && x > 0.5 && x < 3);
-      it.loss = ratios.length ? ratios.sort((x, y) => x - y)[Math.floor(ratios.length / 2)] : 1;
+      it.loss = lossOf(it.key);
       if (it.rateB != null) it.rateB *= it.loss;
       // 최근 달 실제가 레시피의 3배 넘게 차이 나면 레시피 밖 사용(튀김기름 등)이나 단위 문제라 B를 안 씀
       const aLast = lastB && lastB.actual && lastB.actual.get(it.key);
@@ -718,15 +729,16 @@
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       it.ledgerScores = [];
-      withA.forEach((r, idx) => {
+      withAAll.forEach((r, idx) => {
         const act = r.actual.get(it.key); if (!act) return;
-        const prev = withA.slice(Math.max(0, idx - 3), idx);
+        const prev = withAAll.slice(Math.max(0, idx - 3), idx);
+        const lossB = lossOf(it.key, r.m);
         let pu = 0, pg = 0; prev.forEach((p) => { const u = p.actual.get(it.key); if (u) { pu += u; pg += p.gross / 1e6; } });
         if (pg > 0) errA.push((pu / pg * r.gross / 1e6 - act) / act);
-        const t = r.theo && r.theo.get(it.key); if (t) errB.push((t * it.loss - act) / act);
+        const t = r.theo && r.theo.get(it.key); if (t) errB.push((t * lossB - act) / act);
         // 수불현황 월 채점: 그 달 실제 사용량 vs 그 전 달까지 데이터로 했을 예상 (B는 전 달 메뉴 비율)
-        const qb = withB.filter((x) => x.m < r.m).pop(), tq = qb && qb.theo.get(it.key);
-        const pA = pg > 0 ? pu / pg * r.gross / 1e6 : null, pB = tq ? tq / (qb.gross / 1e6) * (r.gross / 1e6) * it.loss : null;
+        const qb = monthRows.filter((x) => x.theo && x.gross > 0 && x.m < r.m).pop(), tq = qb && qb.theo.get(it.key);
+        const pA = pg > 0 ? pu / pg * r.gross / 1e6 : null, pB = tq ? tq / (qb.gross / 1e6) * (r.gross / 1e6) * lossB : null;
         if (pA != null || pB != null) it.ledgerScores.push({ m: r.m, actual: act, pA, pB });
       });
       it.errA = errA; it.errB = errB;
