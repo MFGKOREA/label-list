@@ -557,25 +557,21 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   // ---- 전달사항: 바로 쓰고, 멈추면 자동 저장 ----
   function fitNotice() { const t = $("noticeInput"); t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
-  function stamp(at) { const d = new Date(at); return `${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function renderNotice() {
     const t = $("noticeInput");
     if (document.activeElement !== t && !noticeDirty) { t.value = (notice && notice.memo) || ""; fitNotice(); }
-    const at = notice && notice.memo && Number(notice.updatedAt);
-    if (!noticeDirty) { $("noticeTime").textContent = at ? `${stamp(at)} 저장됨` : ""; $("noticeTime").classList.remove("err"); }
+    if (!noticeDirty) { $("noticeTime").textContent = ""; $("noticeTime").classList.remove("err"); }
   }
   async function saveNotice() {
     clearTimeout(noticeTimer);
     if (!noticeDirty) return;
     const text = $("noticeInput").value.trim().slice(0, 200);
     const it = { id: NOTICE_ID, name: "전달사항", memo: text, mode: "note", expiry: "2099-12-31", mfg: "", num: 0, unit: "", updatedAt: Date.now() };
-    $("noticeTime").textContent = "저장 중…"; $("noticeTime").classList.remove("err");
     try { const list = await call("saveItem", it); noticeDirty = false; notice = it; apply(list); }
     catch { $("noticeTime").textContent = "저장 안 됨 · 인터넷 확인"; $("noticeTime").classList.add("err"); }
   }
   $("noticeInput").addEventListener("input", () => {
     noticeDirty = true; fitNotice();
-    $("noticeTime").textContent = "입력 중…"; $("noticeTime").classList.remove("err");
     clearTimeout(noticeTimer); noticeTimer = setTimeout(saveNotice, 1500);
   });
   $("noticeInput").addEventListener("blur", saveNotice);
