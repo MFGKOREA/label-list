@@ -1641,7 +1641,7 @@ svg { display: block; }
       }
       const stepNote = cfg.step > 1 ? `${cfg.step}${cfg.unit}씩` : "";
       const join = (...a) => a.filter(Boolean).join(" · ");
-      if (cfg.unit === "X" && batchG) return { ...base, e: per(g + ea * (eaG || 0)) / batchG, unit: "X", note: join(`1X = ${won(batchG)}g`, stepNote) };
+      if (cfg.unit === "X" && batchG) return { ...base, e: per(g + ea * (eaG || 0)) / batchG, unit: "X", note: join(`1X = ${won(batchG)}g`, yn > 1 ? `약 ${yn}포션` : "", stepNote) };
       // from: "ledger" = 그 원재료의 수불현황 실제 사용량으로 (만다린 캔처럼 레시피 개수로는 캔을 셀 수 없을 때)
       if (cfg.item && cfg.from === "ledger") {
         const it = M.items.find((i) => i.key === cfg.item);
