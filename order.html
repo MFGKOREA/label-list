@@ -746,15 +746,21 @@ svg { display: block; }
     if (!API) { online = false; return; }
     try { db = { ...db, ...(await apiCall()) }; online = true; lsSave(); } catch (e) { online = false; toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); }
   }
+  // 재고·발주·프랩 입력은 계산 모델을 통째로 다시 만들지 않고 채점만 다시 (입력할 때마다 느려지지 않게)
+  function light(key) {
+    if (/^(prepOnhand\.|prepLog$)/.test(key)) return;
+    if (/^(input\.|onhand$)/.test(key) && cache) { applyScores(cache); return; }
+    invalidate();
+  }
   function setKey(key, value) {
     if (value === null) delete db[key]; else db[key] = value;
-    lsSave(); invalidate();
+    lsSave(); light(key);
     if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
     if (API) apiCall({ action: "set", key, value }).then(() => { online = true; }).catch(() => { online = false; toast("시트 저장 실패 · 이 기기에는 저장됐어요"); });
   }
   function appendKey(key, item) {
     (db[key] = Array.isArray(db[key]) ? db[key] : []).push(item);
-    lsSave(); invalidate();
+    lsSave(); light(key);
     clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500);
     if (API) apiCall({ action: "append", key, item }).catch(() => toast("시트 저장 실패 · 이 기기에는 저장됐어요"));
   }
@@ -1502,7 +1508,8 @@ svg { display: block; }
     const short = need - s - inc;
     const mult = it.pk.mult || 1;
     // "10개단위 발주"처럼 묶음 단위면 반올림 (반올림해서 0이어도 여유분 빼고 모자라면 1묶음)
-    let packs = short <= 0 ? 0 : mult > 1 ? Math.max(Math.round(short / mult), s + inc < use ? 1 : 0) : Math.ceil(short - 1e-9);
+    // 묶음 단위는 반올림하되, 예상 사용량(안전재고 뺀 것)만큼은 항상 채움
+    let packs = short <= 0 ? 0 : mult > 1 ? Math.max(Math.round(short / mult), Math.ceil((use - s - inc) / mult - 1e-9), 0) : Math.ceil(short - 1e-9);
     if (packs > 0 && it.min && packs < it.min) packs = it.min;
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
@@ -1531,7 +1538,9 @@ svg { display: block; }
           // 두 재고 사이(d1 다음날 ~ d2)에 들어온 입고 = 앱에 넣은 발주의 입고일로 계산. 그 사이 발주한 날 중 앱을 안 쓴 날(일요일 제외)이 있으면 모름 → 뺌
           let arr = 0, unknown = false;
           for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
-            if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !db["input." + x] && dow(x) !== 0) unknown = true;
+            // 발주수량 칸이 생기기 전(10/21 전)에 한 발주는 앱이 몰라서 모름으로
+            const known = db["input." + x] && x >= "2026-10-21";
+            if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !known && dow(x) !== 0) unknown = true;
             arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
           }
           if (unknown) continue;
@@ -1728,6 +1737,8 @@ svg { display: block; }
       orderFocus = to;
       const el = to && document.querySelector(`#v-main .cell[data-key="${CSS.escape(to.key)}"]`);
       if (el) el.querySelectorAll("input")[to.f].focus(); else document.activeElement.blur();
+      // 다시 그리기가 없으면 기억한 칸을 지움 (남아 있으면 나중에 엉뚱한 칸으로 포커스가 감)
+      setTimeout(() => { orderFocus = null; }, 50);
       if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
     };
     // 재고·발주 어디서든 엔터 → 다음 품목 재고칸 (발주는 직접 눌러서 입력)
@@ -1799,7 +1810,7 @@ svg { display: block; }
     const r = p && prepExpectFor(M, p, gToday);
     if (r && r.shelf == null) r.shelf = p.shelf;
     // cfg.label: 단위 이름만 바꿔 보여줌 (냉동마늘쫑 1EA = 1팩 → PK)
-    const lb = p && ((db.prepCfg || {})[p.name] || {}).label; if (r && lb) r.unit = lb;
+    const lb = p && ((db.prepCfg || {})[p.name] || {}).label; if (r && lb) r.label = lb; // 계산·반올림·학습은 원래 단위로
     return r || null;
   }
   function prepExpectFor(M, p, gToday) {
@@ -1970,6 +1981,7 @@ svg { display: block; }
     entries.forEach(({ name, code, shelf, ex, id }) => {
       const unit = ex ? ex.unit : "";
       const dd = ex ? disp(unit, ex.e) : { u: "", f: 1 };
+      if (ex && ex.label && dd.f === 1) dd.u = ex.label;
       const v = { s: store[id] ?? "" };
       const d = document.createElement("div");
       d.className = "cell";
