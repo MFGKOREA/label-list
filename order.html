@@ -147,6 +147,7 @@ svg { display: block; }
 /* grouped list */
 .sect { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 7px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .sect small { font-weight: 500; font-size: 12.5px; }
+.sect.sect-need { color: var(--rose-ink); }
 .sect button { border: 0; background: none; padding: 0; color: var(--accent); font-size: 13px; font-weight: 600; }
 .group { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
 .cell { padding: 12px 14px; position: relative; }
@@ -1528,6 +1529,8 @@ svg { display: block; }
     renderList();
   }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
+  // 재고를 넣었고 발주가 필요한 품목 → 목록 맨 위 "발주 필요"로
+  const needsOrder = (it, win, v) => { if (!v || !isFinite(num(v.s)) || v.s === "") return false; const r = calc(it, win, num(v.s), num(v.i) || 0); return !r.none && r.packs > 0; };
   function rowEl(it, win, inp) {
     const d = document.createElement("div");
     d.className = "cell"; d.dataset.key = it.key;
@@ -1578,22 +1581,29 @@ svg { display: block; }
       jump(nx ? { key: nx.dataset.key, f: 0 } : null);
     }));
     d.addEventListener("change", () => {
+      const was = needsOrder(it, win, inp[it.key]);
       const all = { ...todayInput() };
       if (v.s === "" && v.i === "") delete all[it.key]; else all[it.key] = { s: v.s, i: v.i };
       setKey("input." + TODAY, all);
       // 채점용 기록: 재고가 들어간 경우 (같은 날 다시 고치면 마지막 값이 쓰이도록 시각 포함)
       if (isFinite(num(v.s))) appendKey("onhand", { t: localStamp(), k: it.key, s: num(v.s), i: num(v.i) || 0 });
+      inp[it.key] = { s: v.s, i: v.i };
+      // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
+      if (was !== needsOrder(it, win, inp[it.key])) {
+        if (!orderFocus) { const a = document.activeElement, c = a && a.closest && a.closest("#orderList .cell[data-key]"); if (c) orderFocus = { key: c.dataset.key, f: [...c.querySelectorAll("input")].indexOf(a) }; }
+        renderList();
+      }
     });
     return d;
   }
   const localStamp = () => { const n = new Date(); return `${iso(n)} ${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; };
   let orderFocus = null;
-  // 발주 시트 순서 그대로 업체별로 쭉 (입력해도 자리 고정, 검색·업체 버튼은 거르기만)
+  // 발주 시트 순서 그대로 업체별로 쭉 (발주 필요한 것만 맨 위로, 검색·업체 버튼은 거르기만)
   function renderList() {
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
-    const groups = new Map();
+    let groups = new Map();
     M.items.filter((i) => !i.ledgerOnly).forEach((it) => {
       const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : !cat || it.vendor === cat;
       if (!hit) return;
@@ -1601,9 +1611,13 @@ svg { display: block; }
       if (!groups.has(v)) groups.set(v, []);
       groups.get(v).push(it);
     });
+    // 재고 넣고 발주가 필요한 품목은 맨 위 "발주 필요"에 모음
+    const top = [];
+    groups.forEach((list, v) => { const keep = list.filter((it) => !(needsOrder(it, win, inp[it.key]) && top.push(it))); if (keep.length) groups.set(v, keep); else groups.delete(v); });
+    if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     let n = 0;
     groups.forEach((list, v) => {
-      box.insertAdjacentHTML("beforeend", `<div class="sect"><span>${esc(v)} <small>${list.length}</small></span></div>`);
+      box.insertAdjacentHTML("beforeend", `<div class="sect${v === "발주 필요" && top.length ? " sect-need" : ""}"><span>${esc(v)} <small>${list.length}</small></span></div>`);
       const g = document.createElement("div"); g.className = "group";
       list.forEach((it) => g.appendChild(rowEl(it, win, inp)));
       box.appendChild(g); n += list.length;
