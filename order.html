@@ -161,6 +161,7 @@ svg { display: block; }
 .chip.ok { background: var(--ok-bg); color: var(--ok); }
 .chip.new { background: var(--chick); color: var(--chick-ink); }
 .chip.diff { background: var(--rose); color: var(--rose-ink); }
+.c-meta .boxnote { color: var(--rose-ink); font-size: 10.5px; font-weight: 600; line-height: 1.3; }
 .chip.d1 { background: var(--rose); color: var(--rose-ink); }
 .chip.d2 { background: var(--chick); color: var(--chick-ink); }
 .chip.d3 { background: var(--ok-bg); color: var(--ok); }
@@ -1139,7 +1140,8 @@ svg { display: block; }
     const conv = (sheet && sheet.conv) || {};
     // itemCfg: 매장에서 알려준 1재고단위 안 개수 (판도우 1BOX = 도우 60개, 하몽 1EA = 8장)
     const itemCfg = db.itemCfg || {};
-    const withCfg = (it) => { const c = itemCfg[it.key] || itemCfg[it.name]; if (c && c.ea) it.pk = { ...it.pk, ea: c.ea }; };
+    // itemCfg.box: 재고는 박스로 세고 발주는 팩으로 (냉동감자튀김 1박스 = 6팩)
+    const withCfg = (it) => { const c = itemCfg[it.key] || itemCfg[it.name]; if (c && c.ea) it.pk = { ...it.pk, ea: c.ea }; it.box = (c && c.box) || 0; };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
     const byCode = new Map(); items.forEach((it) => { if (it.code) byCode.set(it.code, it); });
@@ -1532,18 +1534,19 @@ svg { display: block; }
   }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
   // 재고를 넣었고 발주가 필요한 품목 → 목록 맨 위 "발주 필요"로
-  const needsOrder = (it, win, v) => { if (!v || !isFinite(num(v.s)) || v.s === "") return false; const r = calc(it, win, num(v.s), num(v.i) || 0); return !r.none && r.packs > 0; };
+  const stockOf = (it, v) => num(v.s) * (it.box || 1); // 박스로 넣는 품목은 팩으로 바꿔 계산
+  const needsOrder = (it, win, v) => { if (!v || !isFinite(num(v.s)) || v.s === "") return false; const r = calc(it, win, stockOf(it, v), num(v.i) || 0); return !r.none && r.packs > 0; };
   function rowEl(it, win, inp) {
     const d = document.createElement("div");
     d.className = "cell"; d.dataset.key = it.key;
     const v = inp[it.key] || { s: "", i: "" };
     const unit = it.pk.stock || "재고단위";
     const draw = () => {
-      const s = num(v.s), i = num(v.i) || 0;
+      const s = stockOf(it, v), i = num(v.i) || 0;
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
-      const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : r1(v));
+      const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v));
       if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle"><b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
       else {
         const r = calc(it, win, s, i);
@@ -1561,8 +1564,8 @@ svg { display: block; }
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag}</div>` +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span><span>${esc(it.unit || unit)}</span></span>` +
-      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${esc(unit)})"></label>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}</span>` +
+      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
       `<label class="fld"><span>익일</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.i)}" aria-label="${esc(it.name)} 익일 입고량"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -1588,7 +1591,7 @@ svg { display: block; }
       if (v.s === "" && v.i === "") delete all[it.key]; else all[it.key] = { s: v.s, i: v.i };
       setKey("input." + TODAY, all);
       // 채점용 기록: 재고가 들어간 경우 (같은 날 다시 고치면 마지막 값이 쓰이도록 시각 포함)
-      if (isFinite(num(v.s))) appendKey("onhand", { t: localStamp(), k: it.key, s: num(v.s), i: num(v.i) || 0 });
+      if (isFinite(num(v.s))) appendKey("onhand", { t: localStamp(), k: it.key, s: stockOf(it, v), i: num(v.i) || 0 });
       inp[it.key] = { s: v.s, i: v.i };
       // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
       if (was !== needsOrder(it, win, inp[it.key])) {
