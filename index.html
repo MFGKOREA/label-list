@@ -91,15 +91,11 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .need { display: grid; gap: 10px; }
 .notice { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .nt-head { display: flex; align-items: baseline; gap: 8px; }
-.nt-time { font-size: 12px; color: var(--muted); font-weight: 600; }
-.nt-edit { margin-left: auto; font: inherit; font-size: 13px; font-weight: 700; border: 0; border-radius: 8px; padding: 5px 11px; background: var(--fill); color: var(--fg); cursor: pointer; }
-.nt-text { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.nt-text.nt-empty { color: var(--muted); font-weight: 500; font-size: 14px; }
-.nt-form { display: grid; gap: 8px; }
-.nt-form textarea { font: inherit; font-size: 15px; font-weight: 600; color: var(--fg); background: var(--fill); border: 0; border-radius: 11px; padding: 10px 12px; resize: vertical; width: 100%; }
-.nt-form textarea:focus-visible { outline: 2px solid var(--fg); }
-.nt-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
-.nt-count { margin-right: auto; font-size: 12px; color: var(--muted); }
+.nt-time { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 600; }
+.nt-time.err { color: var(--rose-ink); }
+.notice textarea { font: inherit; font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--fg); background: var(--fill); border: 0; border-radius: 11px; padding: 10px 12px; resize: none; width: 100%; min-height: 64px; overflow: hidden; }
+.notice textarea::placeholder { color: var(--muted); font-weight: 500; font-size: 14px; }
+.notice textarea:focus-visible { outline: 2px solid var(--fg); }
 .tb-head { display: flex; align-items: baseline; gap: 6px; }
 .todaybar .t { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
 .todaybar .cnt { font-size: 16px; font-weight: 800; color: var(--rose-ink); }
@@ -198,12 +194,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   <div class="todaybar" id="todayBar">
     <div class="notice" id="notice">
-      <div class="nt-head"><span class="t">전달사항</span><span class="nt-time" id="noticeTime"></span><button type="button" class="nt-edit" id="noticeEdit">작성</button></div>
-      <p class="nt-text" id="noticeText"></p>
-      <div class="nt-form" id="noticeForm" hidden>
-        <textarea id="noticeInput" rows="3" maxlength="200" placeholder="예: 생크림 내일 입고 · 냉동고2 정리 필요"></textarea>
-        <div class="nt-actions"><span class="nt-count" id="noticeCount">0/200</span><button type="button" class="btn small" id="noticeCancel">취소</button><button type="button" class="btn small primary" id="noticeSave">저장</button></div>
-      </div>
+      <div class="nt-head"><span class="t">전달사항</span><span class="nt-time" id="noticeTime"></span></div>
+      <textarea id="noticeInput" rows="2" maxlength="200" placeholder="바로 적으면 자동 저장돼요 (예: 생크림 내일 입고)"></textarea>
     </div>
     <div class="need" id="needBox"></div>
   </div>
@@ -363,11 +355,11 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   // 전달사항은 품목 시트에 id "__notice__" 한 줄로 저장 (구글 코드 수정 없이 공유)
   const NOTICE_ID = "__notice__";
-  let notice = null, noticeEditing = false;
+  let notice = null, noticeTimer = null, noticeDirty = false;
   function setData(list) {
     notice = list.find((x) => x.id === NOTICE_ID) || null;
     items = list.filter((x) => x.id !== NOTICE_ID && x.mode !== "note");
-    if (!noticeEditing) renderNotice();
+    renderNotice();
   }
   function apply(list) { setData(list); try { localStorage.setItem(LS, JSON.stringify(list)); } catch {} render(); $("note").textContent = ""; showAlertOnce(); }
 
@@ -563,33 +555,30 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("fExpiry").value = ""; setMode("date");
   setData(lsLoad()); render();
 
-  // ---- 전달사항 ----
+  // ---- 전달사항: 바로 쓰고, 멈추면 자동 저장 ----
+  function fitNotice() { const t = $("noticeInput"); t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
+  function stamp(at) { const d = new Date(at); return `${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function renderNotice() {
-    const text = (notice && notice.memo) || "";
-    $("noticeText").textContent = text || "남긴 전달사항이 없습니다.";
-    $("noticeText").classList.toggle("nt-empty", !text);
-    $("noticeEdit").textContent = text ? "수정" : "작성";
-    const at = notice && Number(notice.updatedAt);
-    if (text && at) { const d = new Date(at); $("noticeTime").textContent = `${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
-    else $("noticeTime").textContent = "";
+    const t = $("noticeInput");
+    if (document.activeElement !== t && !noticeDirty) { t.value = (notice && notice.memo) || ""; fitNotice(); }
+    const at = notice && notice.memo && Number(notice.updatedAt);
+    if (!noticeDirty) { $("noticeTime").textContent = at ? `${stamp(at)} 저장됨` : ""; $("noticeTime").classList.remove("err"); }
   }
-  function noticeMode(edit) {
-    noticeEditing = edit;
-    $("noticeForm").hidden = !edit; $("noticeText").hidden = edit; $("noticeEdit").hidden = edit;
-    if (edit) { $("noticeInput").value = (notice && notice.memo) || ""; $("noticeCount").textContent = `${$("noticeInput").value.length}/200`; $("noticeInput").focus(); }
-    else renderNotice();
-  }
-  $("noticeEdit").onclick = () => noticeMode(true);
-  $("noticeCancel").onclick = () => noticeMode(false);
-  $("noticeInput").addEventListener("input", () => { $("noticeCount").textContent = `${$("noticeInput").value.length}/200`; });
-  $("noticeSave").onclick = async () => {
+  async function saveNotice() {
+    clearTimeout(noticeTimer);
+    if (!noticeDirty) return;
     const text = $("noticeInput").value.trim().slice(0, 200);
     const it = { id: NOTICE_ID, name: "전달사항", memo: text, mode: "note", expiry: "2099-12-31", mfg: "", num: 0, unit: "", updatedAt: Date.now() };
-    $("noticeSave").disabled = true;
-    try { notice = it; noticeEditing = false; noticeMode(false); apply(await call("saveItem", it)); }
-    catch { noticeMode(true); $("noticeCount").textContent = "저장하지 못했습니다. 다시 시도하세요."; }
-    finally { $("noticeSave").disabled = false; }
-  };
+    $("noticeTime").textContent = "저장 중…"; $("noticeTime").classList.remove("err");
+    try { const list = await call("saveItem", it); noticeDirty = false; notice = it; apply(list); }
+    catch { $("noticeTime").textContent = "저장 안 됨 · 인터넷 확인"; $("noticeTime").classList.add("err"); }
+  }
+  $("noticeInput").addEventListener("input", () => {
+    noticeDirty = true; fitNotice();
+    $("noticeTime").textContent = "입력 중…"; $("noticeTime").classList.remove("err");
+    clearTimeout(noticeTimer); noticeTimer = setTimeout(saveNotice, 1500);
+  });
+  $("noticeInput").addEventListener("blur", saveNotice);
 
   // ---- 매장 품목 전체 초기화 (확인창) ----
   $("resetStore").textContent = storeKnown ? STORES[STORE].name : "";
