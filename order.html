@@ -1817,7 +1817,7 @@ svg { display: block; }
     const box = $("orderList"); box.innerHTML = "";
     const rk = risk86(M, inp);
     if (rk.length) {
-      box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b><span>${rk.length}개 · ${DOW[dow(rk[0].out)]}요일 입고 전에 바닥날 수 있어요</span></div>` +
+      box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b><span>${rk.length}개 · ${DOW[dow(rk[0].out)]}요일 입고 전에 재고가 부족할 수 있어요</span></div>` +
         rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}</span><small>재고 ${r1(x.have)} · 사용 ${r1(x.use)}${esc(x.it.pk.stock || "")}</small></button>`).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
