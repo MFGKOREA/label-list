@@ -506,6 +506,9 @@ svg { display: block; }
 .ostate.open { color: var(--ok-ink); }
 .ostate.closed { color: var(--c-act); }
 
+.need em.por.est { font-size: 9px; opacity: .8; }
+.fld input::placeholder { font-size: 13px; }
+
 </style>
 </head>
 <body>
@@ -1720,12 +1723,26 @@ svg { display: block; }
   };
   // d일 재고를 센 뒤에 들어올 입고: 그 전날까지 앱에 넣은 발주 중 아직 안 온 것 (+ 예전 방식 익일 칸)
   const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
+  // 추정 재고: 오늘 재고를 안 셌으면 최근 7일 안에 마지막으로 센 재고 + 그 뒤 입고(앱에 넣은 발주) − 그 사이 예상 사용량
+  //  (쉬는 날 집에서 발주할 때. 사용량은 실제 Gross가 있으면 그것, 없으면 Forecast. 학습·86 위험에는 안 씀)
+  function estStock(it, d) {
+    for (let k = 1; k <= 7; k++) {
+      const x = addDays(d, -k), r = (db["input." + x] || {})[it.key];
+      if (!r || r.s === "" || r.s == null || !isFinite(num(r.s))) continue;
+      let arr = 0;
+      for (let j = 0; j <= 14; j++) arrivalsOf(it, addDays(d, -j)).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
+      const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, d, true).s }, 0, 0);
+      if (c.none) return null;
+      return { v: Math.max(0, stockOf(it, r) + arr - c.use), from: x, days: k };
+    }
+    return null;
+  }
   const needsOrder = (it, win, v) => {
-    if (!v) return false;
-    if (num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
-    if (!isFinite(num(v.s)) || v.s === "") return false;
+    if (v && num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
+    const counted = v && v.s !== "" && v.s != null && isFinite(num(v.s));
+    const e = counted ? null : estStock(it, TODAY); if (!counted && !e) return false;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
-    const r = calc(it, w, stockOf(it, v), incomingOf(it, TODAY)); return !r.none && r.packs > 0;
+    const r = calc(it, w, counted ? stockOf(it, v) : e.v, incomingOf(it, TODAY)); return !r.none && r.packs > 0;
   };
   function rowEl(it, win, inp) {
     win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
@@ -1735,8 +1752,11 @@ svg { display: block; }
     const v = { s: "", o: "", ...(inp[it.key] || {}) };
     const unit = it.pk.stock || "재고단위", ou = it.pk.order || unit;
     const inc = incomingOf(it, TODAY);
+    const est = v.s === "" ? estStock(it, TODAY) : null;
     const draw = () => {
-      const s = stockOf(it, v), i = inc;
+      const isEst = v.s === "" && !!est;
+      const s = isEst ? est.v : stockOf(it, v), i = inc;
+      const et = isEst ? `<em class="por est">추정 · ${est.days}일 전 재고</em>` : "";
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
@@ -1749,9 +1769,9 @@ svg { display: block; }
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
-        else if (!r.packs) need = `<span class="need enough">${por(+rm(r.need))}<b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
-        else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
-        else need = `<span class="need buy lbl">${por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        else if (!r.packs) need = `<span class="need enough">${et || por(+rm(r.need))}<b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
+        else if (offDay) need = `<span class="need none need-idle lbl">${et}<b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        else need = `<span class="need buy lbl">${et || por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
       }
       return need;
     };
@@ -1766,7 +1786,7 @@ svg { display: block; }
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>` +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}</span>` +
-      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
+      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="${est ? "추정 " + r1(est.v / (it.box || 1)) : "–"}" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
