@@ -620,7 +620,7 @@ svg { display: block; }
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>많이 틀린 품목</span><small>예상 대비 실제 사용</small></div>
     <div class="group" id="rMiss"></div>
-    <p class="hint" style="margin-top:-8px">정확도 = 100 − 품목별 오차(|예상 − 실제| ÷ 실제)의 평균. 같은 품목의 재고를 두 번 이상 입력하면 그 사이 실제 사용량으로 채점해요.</p>
+    <p class="hint" style="margin-top:-8px">정확도 = 100 − 품목별 오차(|예상 − 실제| ÷ 실제)의 평균. 수불현황을 올린 달은 그 달 실제 사용량(전 품목)으로, 아직 없는 달은 재고 입력으로 채점해요. 재고 입력 사이에 입고일이 끼어 있으면(실제 사용량을 알 수 없어서) 채점에서 빼요.</p>
   </section>
 
   <!-- 사용방법 -->
@@ -1331,12 +1331,17 @@ svg { display: block; }
       if (tb && aLast && (aLast / (tb * it.loss) > 3 || aLast / (tb * it.loss) < 1 / 3)) it.rateB = null;
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
+      it.ledgerScores = [];
       withA.forEach((r, idx) => {
         const act = r.actual.get(it.key); if (!act) return;
         const prev = withA.slice(Math.max(0, idx - 3), idx);
         let pu = 0, pg = 0; prev.forEach((p) => { const u = p.actual.get(it.key); if (u) { pu += u; pg += p.gross / 1e6; } });
         if (pg > 0) errA.push((pu / pg * r.gross / 1e6 - act) / act);
         const t = r.theo && r.theo.get(it.key); if (t) errB.push((t * it.loss - act) / act);
+        // 수불현황 월 채점: 그 달 실제 사용량 vs 그 전 달까지 데이터로 했을 예상 (B는 전 달 메뉴 비율)
+        const qb = withB.filter((x) => x.m < r.m).pop(), tq = qb && qb.theo.get(it.key);
+        const pA = pg > 0 ? pu / pg * r.gross / 1e6 : null, pB = tq ? tq / (qb.gross / 1e6) * (r.gross / 1e6) * it.loss : null;
+        if (pA != null || pB != null) it.ledgerScores.push({ m: r.m, actual: act, pA, pB });
       });
       it.errA = errA; it.errB = errB;
       it.isNew = it.rateA == null && it.rateB != null;
@@ -1424,6 +1429,9 @@ svg { display: block; }
         const a = list[i - 1], b = list[i];
         const d1 = a.t.slice(0, 10), d2 = b.t.slice(0, 10);
         if (d2 <= d1) continue;
+        // 두 입력 사이에 앱이 모르는 입고일(익일 다음 영업일부터 뒤 입력일까지)이 있으면 실제 사용량을 알 수 없어 뺌
+        let gap = 0; for (let x = addDays(d1, 2); x <= d2; x = addDays(x, 1)) if (dow(x) !== 0) gap++;
+        if (gap) continue;
         const actual = num(a.s) + (num(a.i) || 0) - num(b.s);
         if (!(actual > 0)) continue; // 음수·0은 입력 실수로 보고 뺌
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
@@ -1440,7 +1448,15 @@ svg { display: block; }
       }
       if (gG > 0) it.rateG = uG / gG;
     });
+    // 수불현황이 있는 달은 그 달 전체 사용량으로도 채점 (월말 날짜로)
+    M.items.forEach((it) => (it.ledgerScores || []).forEach((l) => {
+      const pF = l.pA != null && l.pB != null ? (l.pA + l.pB) / 2 : l.pA ?? l.pB;
+      M.scores.push({ key: it.key, name: it.name, end: monthLast(l.m), actual: l.actual, pA: l.pA, pB: l.pB, pF, src: "ledger" });
+    }));
   }
+  const monthLast = (m) => `${m}-${String(new Date(+m.slice(0, 4), +m.slice(5), 0).getDate()).padStart(2, "0")}`;
+  // 한 달 채점: 수불현황이 있으면 그 달 전체(전 품목), 없으면 재고 입력으로 한 채점
+  const monthScores = (M, m) => { const all = M.scores.filter((s) => s.end.slice(0, 7) === m), led = all.filter((s) => s.src === "ledger"); return led.length ? led : all; };
 
   // =========================================================
   // 화면
@@ -2004,7 +2020,7 @@ svg { display: block; }
       ["A · 수불현황", `수불현황 + Gross Sales가 있는 달 ${a}개`, `${withA}개 품목`, withA ? "ok" : "bad"],
       ["B · 레시피", `메뉴별 판매 + 레시피가 있는 달 ${b}개`, `${withB}개 품목`, withB ? "ok" : "bad"],
       ["D · 고정량 + 비례량", "3개월 이상 쌓이면 계산", `${D}개 품목`, ""],
-      ["G · 재고채점", "같은 품목 재고를 두 번 이상 입력하면 채점", `${M.scores.length}건`, ""],
+      ["G · 재고채점", "같은 품목 재고를 두 번 이상 입력하면 채점", `${M.scores.filter((x) => !x.src).length}건`, ""],
     ].map(([t, s, v, c]) => `<div class="cell kv"><span>${t}<small>${s}</small></span><b class="${c || "mut"}">${v}</b></div>`).join("");
   }
   $("apiSave").onclick = async () => {
@@ -2033,7 +2049,7 @@ svg { display: block; }
     const sat = (n, k) => 1 - Math.exp(-n / k); // 처음엔 빨리, 갈수록 천천히 차오름
     const parts = [
       { t: "데이터 파일", d: "수불현황·매출현황·레시피·Gross Sales", v: `${Math.round(files * 10) / 10}개월`, max: 30, p: 30 * sat(files, 6) },
-      { t: "재고채점", d: "같은 품목 재고를 다른 날 다시 입력", v: `${M.scores.length}건`, max: 30, p: 30 * sat(M.scores.length, 400) },
+      { t: "재고채점", d: "같은 품목 재고를 다른 날 다시 입력", v: `${M.scores.filter((x) => !x.src).length}건`, max: 30, p: 30 * sat(M.scores.filter((x) => !x.src).length, 400) },
       { t: "실제 Gross Sales", d: "Forecast 화면에 적은 날", v: `${actDays}일`, max: 20, p: 20 * sat(actDays, 120) },
       { t: "메뉴 연결", d: "판매 메뉴 중 레시피에 연결된 비율", v: `${Math.round(mapped * 100)}%`, max: 10, p: 10 * mapped },
       { t: "레시피 계산 품목", d: "수불과 레시피 둘 다로 계산되는 품목", v: `${Math.round(both * 100)}%`, max: 10, p: 10 * both },
@@ -2077,12 +2093,12 @@ svg { display: block; }
       if (it.rateG != null) gOn.push(it.key);
     });
     // 정확도는 최근 한 달 (리포트와 같은 기준)
-    const lm = M.scores.reduce((m, s) => (s.end.slice(0, 7) > m ? s.end.slice(0, 7) : m), ""), lms = M.scores.filter((s) => s.end.slice(0, 7) === lm);
+    const lm = M.scores.reduce((m, s) => (s.end.slice(0, 7) > m ? s.end.slice(0, 7) : m), ""), lms = monthScores(M, lm);
     const acc = lms.length ? Math.round(100 - lms.reduce((a, s) => a + Math.min(1, Math.abs(s.pF - s.actual) / s.actual), 0) / lms.length * 100) : null;
     const last = [...M.monthRows].reverse().find((r) => r.menuQty);
     return {
       files, errs, spreads, bOff, gOn, acc,
-      scores: M.scores.length, act: Object.values(db.forecast || {}).filter((f) => isFinite(num(f.act))).length,
+      scores: M.scores.filter((x) => !x.src).length, act: Object.values(db.forecast || {}).filter((f) => isFinite(num(f.act))).length,
       mapped: last ? Math.round(last.menuMapped / last.menuQty * 100) : 0,
       map: db.map || {}, hide: db.hide || [], order: db["master.order"] ? `${db["master.order"].at}|${db["master.order"].rows.length}` : "",
       loss: M.items.filter((i) => i.loss !== 1).length, items: M.items.filter((i) => !i.ledgerOnly).length,
@@ -2179,15 +2195,17 @@ svg { display: block; }
     sel.innerHTML = weeks.map((w) => `<option value="${w}"${w === rWeek ? " selected" : ""}>${w.slice(0, 4)}년 ${monKo(w)}</option>`).join("");
     // 품목별 오차는 100%에서 자름 (한두 품목이 전체 점수를 0으로 만들지 않게)
     const acc = (list, f) => { const e = list.filter((s) => s[f] != null).map((s) => Math.min(1, Math.abs(s[f] - s.actual) / s.actual)); return e.length ? 100 - (e.reduce((a, b) => a + b, 0) / e.length) * 100 : null; };
-    const list = byWeek.get(rWeek), idx = weeks.indexOf(rWeek);
-    const a = acc(list, "pF"), prev = idx > 0 ? acc(byWeek.get(weeks[idx - 1]), "pF") : null;
-    $("rRange").textContent = `${mmdd(rWeek + "-01")} ~ ${mmdd(monEnd(rWeek))}`;
+    const list = monthScores(M, rWeek), idx = weeks.indexOf(rWeek);
+    // 지난달과 비교는 같은 기준(수불현황끼리, 재고 입력끼리)일 때만
+    const pl = idx > 0 ? monthScores(M, weeks[idx - 1]) : null;
+    const a = acc(list, "pF"), prev = pl && pl[0].src === list[0].src ? acc(pl, "pF") : null;
+    $("rRange").textContent = `${mmdd(rWeek + "-01")} ~ ${mmdd(monEnd(rWeek))} · ${list[0].src === "ledger" ? "수불현황 기준" : "재고 입력 기준"}`;
     $("rAcc").innerHTML = `${Math.round(a)}<small>%</small>`;
     const dd = prev != null ? Math.round(a - prev) : null;
     $("rDelta").className = "delta " + (dd >= 0 ? "good" : "bad");
     $("rDelta").textContent = dd == null ? "" : `지난달 대비 ${dd >= 0 ? "▲" : "▼"} ${Math.abs(dd)}%p`;
     // 추이
-    const pts = weeks.slice(-8).map((w) => ({ w, a: acc(byWeek.get(w), "pF") }));
+    const pts = weeks.slice(-8).map((w) => ({ w, a: acc(monthScores(M, w), "pF") }));
     const W = 330, H = 120, L = 26, R = 10, T = 16, B = 22, lo = Math.min(50, ...pts.map((p) => Math.floor(p.a / 10) * 10)), hi = 100;
     const x = (i) => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : 0.5), y = (v) => T + (H - T - B) * (hi - v) / (hi - lo);
     let g = "";
