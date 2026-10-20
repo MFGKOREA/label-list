@@ -916,7 +916,7 @@
   function renderTop() {
     // 날짜 아래 발주 상태: 일요일 발주 없음, 14:30 전 발주 가능, 지나면 발주 마감
     const nowH = new Date().getHours() + new Date().getMinutes() / 60;
-    const st = dow(TODAY) === 0 ? ["off", "발주 없음"] : nowH >= ORDER_CUTOFF_H ? ["closed", "발주 마감"] : ["open", "발주 가능"];
+    const st = dow(TODAY) === 0 ? ["off", "금일 발주 없음"] : nowH >= ORDER_CUTOFF_H ? ["closed", "금일 발주 마감"] : ["open", "금일 발주 가능"];
     $("todayPill").innerHTML = `${mmdd(TODAY)}<small>${DOW[dow(TODAY)]}</small>`;
     $("orderState").className = "ostate " + st[0]; $("orderState").textContent = st[1];
     const mon = mondayOf(TODAY), wk = isoWeek(TODAY);
