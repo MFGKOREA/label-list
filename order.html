@@ -1830,8 +1830,8 @@ svg { display: block; }
       const row = document.createElement("div");
       row.className = "cell f-row" + (i >= 5 ? " we" : "") + (d === TODAY ? " today" : "");
       row.innerHTML = `<span class="day">${DOW[dow(d)]}<small>${d === TODAY ? "오늘" : mmdd(d)}</small></span>` +
-        `<input class="fc" inputmode="numeric" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
-        `<input class="act" inputmode="numeric" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
+        `<input class="fc" inputmode="numeric" enterkeyhint="next" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
+        `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
       const [fi, ai] = row.querySelectorAll("input");
       const upd = () => {
         [fi, ai].forEach((el) => { const v = el.value.replace(/\D/g, ""); const c = v ? Number(v).toLocaleString("ko-KR") : ""; if (el.value !== c) el.value = c; });
@@ -1845,6 +1845,13 @@ svg { display: block; }
       };
       fi.addEventListener("input", upd); ai.addEventListener("input", upd);
       fi.addEventListener("change", save); ai.addEventListener("change", save);
+      // 엔터 → 같은 칸(Forecast / 실제 Gross)의 다음 날로
+      [fi, ai].forEach((el, col) => el.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const nx = row.nextElementSibling && row.nextElementSibling.querySelectorAll("input")[col];
+        if (nx) nx.focus(); else el.blur();
+      }));
       box.appendChild(row);
     }
     foot();
