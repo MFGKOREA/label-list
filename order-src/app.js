@@ -816,8 +816,9 @@
   // ---------- G: 재고채점 ----------
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
+    // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
     const byKey = new Map();
-    logs.forEach((l) => { if (!byKey.has(l.k)) byKey.set(l.k, []); byKey.get(l.k).push(l); });
+    logs.forEach((l) => { if (!byKey.has(l.k)) byKey.set(l.k, []); const a = byKey.get(l.k); if (a.length && a[a.length - 1].t.slice(0, 10) === l.t.slice(0, 10)) a[a.length - 1] = l; else a.push(l); });
     M.scores = [];
     M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; it.rateG = null; });
     byKey.forEach((list, key) => {
@@ -1165,7 +1166,10 @@
     // 원재료가 품목 하나면 그 품목의 발주단위(PK 등)로: 브로콜리, 핑거립처럼 포션 무게만 정해진 프랩
     const ings = p.ing.map((i) => ({ i, t: M.resolveIng(i.n) })).filter((x) => x.t && !x.t.skip && !(x.t.kind === "prep" && x.t.id === p.name));
     const itemOf = (x) => x && x.t.kind === "item" && M.items.find((it) => it.key === x.t.id);
+    // 1포션 무게: Yield에 g이 있으면 그것, "1 Portion"·빈 Yield처럼 개수만 있으면 재료 무게 합 ÷ 개수 (치킨 다이스 포션 = 닭가슴살 50g)
+    const ingG = p.ing.reduce((a, i) => { const q = parseQty(i.w, i.v) || {}; return a + (q.g || 0); }, 0);
     const portionG = yg && (/\bor\b/i.test(y) || yn === 1) ? yg : null;
+    const ingPortionG = !yg && ingG && (yn || !y.trim()) ? ingG / (yn || 1) : 0;
     // cfg.raw: 프랩 레시피에 원재료가 자기 자신으로 적힌 경우(루꼴라, 할라피뇨 등) 실제 원재료 품목
     const raw1 = (cfg.raw && M.items.find((i) => i.key === cfg.raw)) || (ings.length === 1 && itemOf(ings[0])) || null;
     // 레시피로 사용량을 못 구하면 원재료의 수불현황 실제 사용량으로
@@ -1184,7 +1188,8 @@
       return null;
     };
     if (raw1 && (portionG || !yg)) {
-      const it = raw1, G = g + ea * (portionG || 0);
+      // g과 포션이 섞여 쓰이면 포션도 g으로 (포션만 쓰는 건 아래에서 포션 단위로 보여줌)
+      const it = raw1, G = g + ea * (portionG || (g ? ingPortionG : 0));
       const s = G ? toStock({ g: per(G) }, it.pk) : null;
       if (s != null) return { e: s, unit: it.pk.stock || it.unit || "EA", note: it.name };
     }
@@ -1698,7 +1703,9 @@
     $("kLogs").innerHTML = `${(db.onhand || []).filter((l) => l.t.slice(0, 7) === rWeek).length}<small>건</small>`;
     const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 메뉴별 매출현황", "메뉴 판매 × 레시피", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +(100 - v).toFixed(1)]);
     const max = Math.max(...ms.map((m) => m[2]), 1);
-    $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${n === "C 최종" ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${v / max * 100}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
+    // 가장 짧은(오차가 작은) 방식을 강조, 막대는 0~100% 그대로
+    const bestV = Math.min(...ms.map((m) => m[2]));
+    $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     const miss = list.map((s) => ({ ...s, e: (s.actual - s.pF) / s.actual })).sort((p, q) => Math.abs(q.e) - Math.abs(p.e)).slice(0, 5);
     $("rMiss").innerHTML = miss.map((m) => `<div class="cell miss"><span class="nm">${esc(m.name)}<small>예상 ${r1(m.pF)} · 실제 ${r1(m.actual)}</small></span><span class="chip ${m.e > 0 ? "under" : "over"}">${m.e > 0 ? "적게 예상" : "많게 예상"}</span><span class="pc">${Math.round(Math.abs(m.e) * 100)}%</span></div>`).join("");
   }
