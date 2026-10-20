@@ -327,6 +327,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const STORES = {
     suwon: { name: "MG수원컨벤션점", api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
     lwt: { name: "MG롯데시네마월드타워점", api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
+    ys: { name: "MG용산아이파크몰점", api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
   };
   const STORE = new URLSearchParams(location.search).get("store") || "suwon";
   const storeKnown = Object.prototype.hasOwnProperty.call(STORES, STORE);
