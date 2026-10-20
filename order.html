@@ -534,9 +534,9 @@ svg { display: block; }
       <span class="right"><span class="gs">Gross Sales · 원</span></span>
     </div>
     <div class="wkpick">
-      <button type="button" id="wPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
-      <select id="wSel" aria-label="주차 선택"></select>
-      <button type="button" id="wNext" aria-label="다음 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
+      <button type="button" id="wPrev" aria-label="이전 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
+      <select id="wSel" aria-label="달 선택"></select>
+      <button type="button" id="wNext" aria-label="다음 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
     </div>
     <div class="group">
       <div class="cell f-row f-head"><span>요일</span><span class="lg-fc">Forecast</span><span class="lg-act">실제 Gross Sales</span><span>오차</span></div>
@@ -599,14 +599,14 @@ svg { display: block; }
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
     <div class="wkpick">
-      <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
-      <select id="rSel" aria-label="주차 선택"></select>
-      <button type="button" id="rNext" aria-label="다음 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
+      <button type="button" id="rPrev" aria-label="이전 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
+      <select id="rSel" aria-label="달 선택"></select>
+      <button type="button" id="rNext" aria-label="다음 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
     </div>
     <div class="hero">
       <div class="hero-top"><span>발주 예측 정확도</span><span id="rRange"></span></div>
       <div class="hero-num"><b id="rAcc"></b><span class="delta" id="rDelta"></span></div>
-      <div class="trendbox"><svg class="trend" id="rTrend" viewBox="0 0 330 120" role="img" aria-label="주차별 예측 정확도 추이"></svg><div class="tip" id="rTip" hidden></div></div>
+      <div class="trendbox"><svg class="trend" id="rTrend" viewBox="0 0 330 120" role="img" aria-label="월별 예측 정확도 추이"></svg><div class="tip" id="rTip" hidden></div></div>
     </div>
     <div class="kpis">
       <div class="kpi"><span>Gross Sales 예측</span><b id="kSales"></b></div>
@@ -668,7 +668,7 @@ svg { display: block; }
     <div class="sect"><span>다른 화면</span></div>
     <div class="group">
       <div class="cell guide"><span class="gi c1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span><div><b>프랩</b><span>오늘 프랩량이 나와요. 2days는 "2일 안에 다 써야 해요"라는 뜻이에요.</span></div></div>
-      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>데이터 리포트</b><span>앱이 지난주에 얼마나 잘 맞혔는지 점수로 보여줘요.</span></div></div>
+      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>데이터 리포트</b><span>앱이 한 달 동안 얼마나 잘 맞혔는지 점수로 보여줘요.</span></div></div>
     </div>
 
     <div class="tipcard">
@@ -2064,7 +2064,9 @@ svg { display: block; }
       if (it.rateA != null && it.rateB == null && M.withB.some((r) => r.theo.get(it.key))) bOff.push(it.key);
       if (it.rateG != null) gOn.push(it.key);
     });
-    const acc = M.scores.length ? Math.round(100 - M.scores.reduce((a, s) => a + Math.min(1, Math.abs(s.pF - s.actual) / s.actual), 0) / M.scores.length * 100) : null;
+    // 정확도는 최근 한 달 (리포트와 같은 기준)
+    const lm = M.scores.reduce((m, s) => (s.end.slice(0, 7) > m ? s.end.slice(0, 7) : m), ""), lms = M.scores.filter((s) => s.end.slice(0, 7) === lm);
+    const acc = lms.length ? Math.round(100 - lms.reduce((a, s) => a + Math.min(1, Math.abs(s.pF - s.actual) / s.actual), 0) / lms.length * 100) : null;
     const last = [...M.monthRows].reverse().find((r) => r.menuQty);
     return {
       files, errs, spreads, bOff, gOn, acc,
@@ -2147,9 +2149,11 @@ svg { display: block; }
   function renderReport() {
     const M = model();
     renderXp(M);
+    // 한 달 단위로 채점 (재고 입력 사이 사용량이 끝난 날의 달)
     const byWeek = new Map();
-    M.scores.forEach((s) => { const w = mondayOf(s.end); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
+    M.scores.forEach((s) => { const w = s.end.slice(0, 7); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
     const weeks = [...byWeek.keys()].sort();
+    const monKo = (m) => `${+m.slice(5)}월`, monEnd = (m) => `${m}-${String(new Date(+m.slice(0, 4), +m.slice(5), 0).getDate()).padStart(2, "0")}`;
     const sel = $("rSel");
     if (!weeks.length) {
       sel.innerHTML = "<option>채점 기록 없음</option>";
@@ -2160,16 +2164,16 @@ svg { display: block; }
       return;
     }
     if (!rWeek || !byWeek.has(rWeek)) rWeek = weeks[weeks.length - 1];
-    sel.innerHTML = weeks.map((w) => `<option value="${w}"${w === rWeek ? " selected" : ""}>${isoWeek(w).w}주차  ${mmdd(w)} ~ ${mmdd(addDays(w, 6))}</option>`).join("");
+    sel.innerHTML = weeks.map((w) => `<option value="${w}"${w === rWeek ? " selected" : ""}>${w.slice(0, 4)}년 ${monKo(w)}</option>`).join("");
     // 품목별 오차는 100%에서 자름 (한두 품목이 전체 점수를 0으로 만들지 않게)
     const acc = (list, f) => { const e = list.filter((s) => s[f] != null).map((s) => Math.min(1, Math.abs(s[f] - s.actual) / s.actual)); return e.length ? 100 - (e.reduce((a, b) => a + b, 0) / e.length) * 100 : null; };
     const list = byWeek.get(rWeek), idx = weeks.indexOf(rWeek);
     const a = acc(list, "pF"), prev = idx > 0 ? acc(byWeek.get(weeks[idx - 1]), "pF") : null;
-    $("rRange").textContent = `${mmdd(rWeek)} ~ ${mmdd(addDays(rWeek, 6))}`;
+    $("rRange").textContent = `${mmdd(rWeek + "-01")} ~ ${mmdd(monEnd(rWeek))}`;
     $("rAcc").innerHTML = `${Math.round(a)}<small>%</small>`;
     const dd = prev != null ? Math.round(a - prev) : null;
     $("rDelta").className = "delta " + (dd >= 0 ? "good" : "bad");
-    $("rDelta").textContent = dd == null ? "" : `지난주 대비 ${dd >= 0 ? "▲" : "▼"} ${Math.abs(dd)}%p`;
+    $("rDelta").textContent = dd == null ? "" : `지난달 대비 ${dd >= 0 ? "▲" : "▼"} ${Math.abs(dd)}%p`;
     // 추이
     const pts = weeks.slice(-8).map((w) => ({ w, a: acc(byWeek.get(w), "pF") }));
     const W = 330, H = 120, L = 26, R = 10, T = 16, B = 22, lo = Math.min(50, ...pts.map((p) => Math.floor(p.a / 10) * 10)), hi = 100;
@@ -2179,16 +2183,16 @@ svg { display: block; }
     if (pts.length > 1) g += `<polyline class="ln" points="${pts.map((p, i) => `${x(i)},${y(p.a)}`).join(" ")}"/>`;
     pts.forEach((p, i) => {
       const on = p.w === rWeek;
-      g += `<circle class="dot${on ? " on" : ""}" cx="${x(i)}" cy="${y(p.a)}" r="${on ? 5 : 4}"/><text class="wk${on ? " on" : ""}" x="${x(i)}" y="${H - 6}">${isoWeek(p.w).w}</text>`;
+      g += `<circle class="dot${on ? " on" : ""}" cx="${x(i)}" cy="${y(p.a)}" r="${on ? 5 : 4}"/><text class="wk${on ? " on" : ""}" x="${x(i)}" y="${H - 6}">${monKo(p.w)}</text>`;
       if (on) g += `<text class="val" x="${x(i)}" y="${y(p.a) - 10}">${Math.round(p.a)}%</text>`;
-      g += `<rect class="hit" x="${x(i) - 18}" y="${T - 8}" width="36" height="${H - T - B + 16}" data-w="${p.w}"><title>${isoWeek(p.w).w}주차 ${Math.round(p.a)}%</title></rect>`;
+      g += `<rect class="hit" x="${x(i) - 18}" y="${T - 8}" width="36" height="${H - T - B + 16}" data-w="${p.w}"><title>${monKo(p.w)} ${Math.round(p.a)}%</title></rect>`;
     });
     $("rTrend").innerHTML = g;
     // Gross Sales 예측
-    let f = 0, act = 0; for (let i = 0; i < 7; i++) { const z = (db.forecast || {})[addDays(rWeek, i)] || {}; if (isFinite(num(z.fc)) && isFinite(num(z.act))) { f += num(z.fc); act += num(z.act); } }
+    let f = 0, act = 0; for (let d = rWeek + "-01"; d <= monEnd(rWeek); d = addDays(d, 1)) { const z = (db.forecast || {})[d] || {}; if (isFinite(num(z.fc)) && isFinite(num(z.act))) { f += num(z.fc); act += num(z.act); } }
     $("kSales").innerHTML = act ? `${Math.round(100 - Math.abs(act - f) / act * 100)}<small>%</small>` : "–";
     $("kItems").innerHTML = `${new Set(list.map((s) => s.key)).size}<small>개</small>`;
-    $("kLogs").innerHTML = `${(db.onhand || []).filter((l) => mondayOf(l.t.slice(0, 10)) === rWeek).length}<small>건</small>`;
+    $("kLogs").innerHTML = `${(db.onhand || []).filter((l) => l.t.slice(0, 7) === rWeek).length}<small>건</small>`;
     const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 메뉴별 매출현황", "메뉴 판매 × 레시피", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +(100 - v).toFixed(1)]);
     const max = Math.max(...ms.map((m) => m[2]), 1);
     $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${n === "C 최종" ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${v / max * 100}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
