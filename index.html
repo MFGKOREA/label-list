@@ -87,11 +87,15 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .quick button { font: inherit; font-size: 14px; font-weight: 700; border: 0; border-radius: 10px; padding: 9px 0; background: var(--fill); color: var(--fg); cursor: pointer; }
 .quick button.on { background: var(--accent); color: var(--accent-ink); }
-.todaybar { background: var(--surface); border-radius: 18px; padding: 14px 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.todaybar .t { font-size: 15px; font-weight: 800; margin-right: 4px; }
-.todaybar .c { font-size: 14px; font-weight: 700; border-radius: 8px; padding: 4px 10px; background: var(--fill); color: var(--muted); }
-.todaybar .c.hot { background: var(--rose); color: var(--rose-ink); }
-.todaybar .c.warm { background: var(--amber); color: var(--amber-ink); }
+.todaybar { background: var(--surface); border-radius: 18px; padding: 14px 16px; display: grid; gap: 10px; }
+.tb-head { display: flex; align-items: baseline; gap: 6px; }
+.todaybar .t { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
+.todaybar .cnt { font-size: 16px; font-weight: 800; color: var(--rose-ink); }
+.tb-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.todaybar .c { font-size: 13px; font-weight: 700; border-radius: 8px; padding: 5px 9px; background: var(--fill); color: var(--fg); }
+.todaybar .c b { font-weight: 800; margin-left: 2px; }
+.todaybar .c.hot b { color: var(--rose-ink); }
+.todaybar .c.warm b { color: var(--amber-ink); }
 .todaybar .none { font-size: 14px; color: var(--muted); font-weight: 600; }
 .add-open { font: inherit; font-size: 17px; font-weight: 800; border: 0; border-radius: 16px; padding: 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; letter-spacing: -0.02em; }
 .form-top { display: flex; justify-content: space-between; align-items: center; }
@@ -99,7 +103,6 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .form-close { font: inherit; font-size: 14px; font-weight: 700; border: 0; background: var(--fill); color: var(--muted); border-radius: 9px; padding: 6px 12px; cursor: pointer; }
 .name-hint { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 600; color: var(--muted); }
 .name-hint .dup { color: var(--rose-ink); }
-.name-hint button { font: inherit; font-size: 13px; font-weight: 700; border: 0; border-radius: 8px; padding: 5px 10px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
 .preview { font-size: 13px; color: var(--muted); min-height: 1.5em; }
 .preview b { color: var(--fg); font-weight: 700; }
 .form-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -449,34 +452,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("addOpen").onclick = () => { openForm(true); $("fName").focus(); };
   $("formClose").onclick = () => { resetForm(); openForm(false); };
 
-  // ---- 품목명 자동완성 + 기본값 기억 + 중복 경고 ----
+  // ---- 품목명 자동완성 + 중복 경고 ----
   const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
-  let lastDays = 0;
   function nameHint() {
     const key = norm($("fName").value);
     const same = key ? items.filter((x) => norm(x.name) === key && x.id !== editId) : [];
     if (!same.length) { $("nameHint").hidden = true; return; }
-    const prev = same.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
     const near = same.map((x) => ({ x, n: daysLeft(expiryOf(x)) })).sort((a, b) => a.n - b.n)[0];
-    // 지난번 입력 기간: 제조일 방식이면 그 기간, 직접 입력이면 등록일→유통기한 일수
-    let tip = "";
-    lastDays = 0;
-    if (prev.mode === "period") tip = `지난번: 제조일 + ${prev.num}${UNIT[prev.unit]}`;
-    else if (prev.updatedAt) {
-      const d0 = new Date(prev.updatedAt); const reg = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate());
-      lastDays = Math.round((parse(prev.expiry) - reg) / DAY);
-      if (lastDays > 0) tip = `지난번: 등록일 + ${lastDays}일`;
-    }
-    $("nameHint").innerHTML = `<span class="dup">이미 ${same.length}개 있음 · ${ddayText(near.n)} (${fmt(expiryOf(near.x)).slice(5)})</span>`
-      + (tip && !editId ? `<span>${tip}</span><button type="button" id="applyLast">같게 채우기</button>` : "");
+    $("nameHint").innerHTML = `<span class="dup">이미 ${same.length}개 있음 · ${ddayText(near.n)} (${fmt(expiryOf(near.x)).slice(5)})</span>`;
     $("nameHint").hidden = false;
-    const btn = $("applyLast");
-    if (btn) btn.onclick = () => {
-      if (!$("fMemo").value.trim() && prev.memo) $("fMemo").value = prev.memo;
-      if (prev.mode === "period") { setMode("period"); $("fNum").value = prev.num; $("fUnit").value = prev.unit; $("fMfg").focus(); }
-      else { setMode("date"); $("fExpiry").value = addPeriod(toISO(today()), lastDays, "d"); }
-      updatePreview();
-    };
   }
   $("fName").addEventListener("input", nameHint);
   $("form").addEventListener("input", updatePreview);
@@ -506,11 +490,11 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("cExp").textContent = c.exp; $("cSoon").textContent = c.soon; $("cOk").textContent = c.ok;
     $("total").textContent = rows.length ? `· ${rows.length}개` : "";
 
-    // 오늘 요약 한 줄
-    const past = rows.filter((r) => r.n < 0).length, d0 = rows.filter((r) => r.n === 0).length, d1 = rows.filter((r) => r.n === 1).length;
-    $("todayBar").innerHTML = `<span class="t">오늘 확인</span>` + (past + d0 + d1
-      ? `<span class="c ${past ? "hot" : ""}">지남 ${past}</span><span class="c ${d0 ? "hot" : ""}">오늘까지 ${d0}</span><span class="c ${d1 ? "warm" : ""}">내일 ${d1}</span>`
-      : `<span class="none">오늘·내일 처리할 품목이 없습니다</span>`);
+    // 교체 필요: 유통기한 30일 미만 (지난 품목 포함), 급한 순
+    const need = rows.filter((r) => r.n < 30);
+    $("todayBar").innerHTML = `<div class="tb-head"><span class="t">교체 필요</span><span class="cnt">${need.length}개</span></div>` + (need.length
+      ? `<div class="tb-list">${need.map((r) => `<span class="c ${r.n <= 7 ? "hot" : "warm"}">${esc(r.it.name)} <b>${ddayText(r.n)}</b></span>`).join("")}</div>`
+      : `<span class="none">교체가 필요한 품목이 없습니다</span>`);
     // 자동완성 목록
     const names = [...new Set(items.map((x) => x.name))].sort((a, b) => a.localeCompare(b, "ko"));
     $("nameList").innerHTML = names.map((n) => `<option value="${esc(n).replace(/"/g, "&quot;")}"></option>`).join("");
