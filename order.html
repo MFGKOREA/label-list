@@ -179,6 +179,8 @@ svg { display: block; }
 .need.buy { background: var(--accent); color: var(--accent-ink); }
 .need.enough { background: var(--ok-bg); color: var(--ok); }
 .need.enough b { font-size: 14px; }
+.need.buy.lbl b { font-size: 14px; }
+.need.buy.lbl span { opacity: .9; }
 .need.none { box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
 .need.none b { font-size: 15px; font-weight: 500; }
 
@@ -1547,7 +1549,7 @@ svg { display: block; }
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
-        else need = `<span class="need buy"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>부족 ${r1(r.short)}${esc(unit)}</span></span>`;
+        else need = `<span class="need buy lbl"><b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
       }
       return need;
     };
