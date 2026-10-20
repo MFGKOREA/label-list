@@ -1031,7 +1031,7 @@
     const draw = () => {
       const isEst = v.s === "" && !!est;
       const s = isEst ? est.v : stockOf(it, v), i = inc;
-      const et = isEst ? `<em class="por est">추정 · ${est.days}일 전 재고</em>` : "";
+      const et = ""; // 추정은 맨 위 안내 한 줄 + 점선 칸으로만 표시 (칸마다 글자 X)
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
@@ -1044,9 +1044,9 @@
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
-        else if (!r.packs) need = `<span class="need enough">${et || por(+rm(r.need))}<b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
+        else if (!r.packs) need = `<span class="need enough${isEst ? " est" : ""}">${et || por(+rm(r.need))}<b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
         else if (offDay) need = `<span class="need none need-idle lbl">${et}<b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
-        else need = `<span class="need buy lbl">${et || por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        else need = `<span class="need buy lbl${isEst ? " est" : ""}">${et || por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
       }
       return need;
     };
@@ -1061,7 +1061,7 @@
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>` +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}</span>` +
-      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="${est ? "추정 " + r1(est.v / (it.box || 1)) : "–"}" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
+      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="${est ? r1(est.v / (it.box || 1)) : "–"}" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -1134,6 +1134,10 @@
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
     const rk = risk86(M, inp);
+    // 오늘 재고를 안 센 품목이 추정으로 계산될 때: 맨 위에 한 줄만
+    const estFrom = (() => { for (let k = 1; k <= 7; k++) { const x = addDays(TODAY, -k), r = db["input." + x]; if (r && Object.values(r).some((v) => v && v.s !== "" && v.s != null)) return x; } return null; })();
+    const nEst = estFrom ? M.items.filter((i) => !i.ledgerOnly && !(inp[i.key] && inp[i.key].s !== "" && inp[i.key].s != null)).length : 0;
+    if (estFrom && nEst) box.insertAdjacentHTML("beforeend", `<div class="estnote"><b>추정 재고</b><span>${+estFrom.slice(5, 7)}/${+estFrom.slice(8)}(${DOW[dow(estFrom)]}) 재고에서 그 뒤 입고·사용량을 계산했어요. 회색 숫자 · 점선 칸이 추정이고, 세서 넣으면 바로 바뀌어요.</span></div>`);
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b><span>${rk.length}개 · ${DOW[dow(rk[0].out)]}요일 입고 전에 재고가 부족할 수 있어요</span></div>` +
         rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)} · 입고 전 사용 ${r1(x.use)}${esc(x.it.pk.stock || "")}</em></span><small>${Math.min(99, Math.round(x.p * 100))}%</small></button>`).join("") + `</div>`);
