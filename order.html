@@ -487,6 +487,16 @@ svg { display: block; }
 .tb, .chips button { position: relative; }
 .tb::after, .chips button::after { content: ""; position: absolute; inset: -6px 0; }
 
+/* 86 위험 (입고 전에 바닥날 품목) */
+.risk86 { background: var(--rose); border: 1.5px solid var(--rose-line); border-radius: 16px; padding: 12px 14px; margin-bottom: 14px; display: grid; gap: 6px; }
+.risk86 .r-top { display: flex; align-items: baseline; gap: 8px; color: var(--rose-ink); }
+.risk86 .r-top b { font-size: 16px; font-weight: 800; }
+.risk86 .r-top span { font-size: 12px; font-weight: 600; }
+.risk86 button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
+.risk86 button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk86 button small { flex: none; font-size: 11.5px; font-weight: 600; color: var(--rose-ink); }
+.cell.flash { box-shadow: inset 0 0 0 2px var(--rose-ink); transition: box-shadow .3s; }
+
 </style>
 </head>
 <body>
@@ -1766,7 +1776,7 @@ svg { display: block; }
       jump(nx ? { key: nx.dataset.key, f: 0 } : null);
     }));
     d.addEventListener("change", () => {
-      const was = needsOrder(it, win, inp[it.key]);
+      const was = needsOrder(it, win, inp[it.key]), was86 = !!riskOf(it, inp[it.key]);
       const all = { ...todayInput() };
       // r: 그때 앱이 추천한 발주수량 (나중에 실제 발주와 비교해 학습)
       const rc = isFinite(stockOf(it, v)) ? calc(it, win, stockOf(it, v), inc) : null;
@@ -1778,7 +1788,7 @@ svg { display: block; }
       inp[it.key] = rec;
       // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
       // (포커스가 다음 칸으로 옮겨간 뒤에 다시 그려야 같은 품목의 발주칸을 눌렀을 때도 그 칸에 그대로 있음)
-      if (was !== needsOrder(it, win, inp[it.key])) setTimeout(() => {
+      if (was !== needsOrder(it, win, inp[it.key]) || was86 !== !!riskOf(it, inp[it.key])) setTimeout(() => {
         if (!orderFocus) { const a = document.activeElement, c = a && a.closest && a.closest("#orderList .cell[data-key]"); if (c) orderFocus = { key: c.dataset.key, f: [...c.querySelectorAll("input")].indexOf(a) }; }
         renderList();
       }, 0);
@@ -1788,10 +1798,29 @@ svg { display: block; }
   const localStamp = () => { const n = new Date(); return `${iso(n)} ${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; };
   let orderFocus = null;
   // 발주 시트 순서 그대로 업체별로 쭉 (발주 필요한 것만 맨 위로, 검색·업체 버튼은 거르기만)
+  // 86 위험: 오늘 넣은 재고 + 그 사이 들어올 입고로 오늘 발주분이 들어오기 전까지 못 버틸 것 같은 품목
+  function riskOf(it, v) {
+    if (!v || v.s === "" || !isFinite(num(v.s))) return null;
+    const w = orderWindowFor(it, TODAY), until = w.deliv; // 오늘 발주가 들어오는 날 전까지
+    const days = Math.round((parseISO(until) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
+    let arr = 0; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if (a.d > TODAY && a.d < until && (k > 0 || a.legacy)) arr += a.q; });
+    const r = calc(it, { ...w, end: until, days, gross: sumGross(TODAY, until, false).s }, 0, 0); if (r.none) return null;
+    const have = stockOf(it, v) + arr;
+    return have < r.use * 0.98 ? { it, have, use: r.use, out: until } : null;
+  }
+  function risk86(M, inp) {
+    return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => a.have / a.use - b.have / b.use);
+  }
   function renderList() {
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
+    const rk = risk86(M, inp);
+    if (rk.length) {
+      box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b><span>${rk.length}개 · ${DOW[dow(rk[0].out)]}요일 입고 전에 바닥날 수 있어요</span></div>` +
+        rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}</span><small>재고 ${r1(x.have)} · 사용 ${r1(x.use)}${esc(x.it.pk.stock || "")}</small></button>`).join("") + `</div>`);
+      box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
+    }
     let groups = new Map();
     M.items.filter((i) => !i.ledgerOnly).forEach((it) => {
       const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : !cat || it.vendor === cat;
