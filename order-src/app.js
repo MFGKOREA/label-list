@@ -914,7 +914,11 @@
 
   // ---------- 메인 상단 ----------
   function renderTop() {
+    // 날짜 아래 발주 상태: 일요일 발주 없음, 14:30 전 발주 가능, 지나면 발주 마감
+    const nowH = new Date().getHours() + new Date().getMinutes() / 60;
+    const st = dow(TODAY) === 0 ? ["off", "발주 없음"] : nowH >= ORDER_CUTOFF_H ? ["closed", "발주 마감"] : ["open", "발주 가능"];
     $("todayPill").innerHTML = `${mmdd(TODAY)}<small>${DOW[dow(TODAY)]}</small>`;
+    $("orderState").className = "ostate " + st[0]; $("orderState").textContent = st[1];
     const mon = mondayOf(TODAY), wk = isoWeek(TODAY);
     let s = 0, entered = 0;
     for (let i = 0; i < 7; i++) { const g = dayGross(addDays(mon, i), false); s += g.v; if (g.src === "fc") entered++; }
@@ -971,9 +975,7 @@
     else if (dow(TODAY) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      // 14:30 발주 마감이 지나면 아주 작게만 표시
-      const closed = new Date().getHours() + new Date().getMinutes() / 60 >= ORDER_CUTOFF_H;
-      b.innerHTML = `<span>오늘 발주${closed ? '<small class="cut">마감 지남</small>' : ""} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(TODAY)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(TODAY)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>오늘 발주 → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(TODAY)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(TODAY)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
