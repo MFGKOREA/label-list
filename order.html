@@ -823,7 +823,7 @@ svg { display: block; }
   function packOf(it, cv) {
     if (!it.spec && !cv && !/구매|EA|PK|BOX/i.test(it.unit || "")) return parsePack(it.unit, it.name);
     const unit = (it.unit || "").trim();
-    const m10 = /(\d+)\s*개\s*단위/.exec(it.name || "");
+    const m10 = /(\d+)\s*(?:개|pk|ea|병)?\s*단위/i.exec(it.name || "");
     const pk = { stock: unit, order: unit, mult: m10 ? +m10[1] : 1, g: null, ml: null, ea: null, sameUnit: true };
     if (cv) {
       const u = cv.u.toLowerCase();
@@ -1397,7 +1397,8 @@ svg { display: block; }
     if (it.shelf) need = Math.min(need, (use / win.days) * it.shelf);
     const short = need - s - inc;
     const mult = it.pk.mult || 1;
-    let packs = short > 0 ? Math.ceil(short / mult - 1e-9) : 0;
+    // "10개단위 발주"처럼 묶음 단위면 반올림 (반올림해서 0이어도 여유분 빼고 모자라면 1묶음)
+    let packs = short <= 0 ? 0 : mult > 1 ? Math.max(Math.round(short / mult), s + inc < use ? 1 : 0) : Math.ceil(short - 1e-9);
     if (packs > 0 && it.min && packs < it.min) packs = it.min;
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
@@ -1536,11 +1537,13 @@ svg { display: block; }
       const s = num(v.s), i = num(v.i) || 0;
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
-      if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle"><b>${r1(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
+      // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
+      const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : r1(v));
+      if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle"><b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${r1(r.need)}${esc(unit)}</span></span>`;
+        else if (!r.packs) need = `<span class="need enough"><b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
         else need = `<span class="need buy"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>부족 ${r1(r.short)}${esc(unit)}</span></span>`;
       }
       return need;
