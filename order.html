@@ -1631,7 +1631,9 @@ svg { display: block; }
     const y = String(p.yield || "");
     const yg = (() => { const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(y); if (!m) return null; const v = num(m[1]); return /^(kg|l)$/i.test(m[2]) ? v * 1000 : v; })();
     const yn = (() => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(y); return m ? num(m[1]) : null; })();
-    let g = M.blend.prep.get(p.name) || 0, ea = M.blend.prep.get(p.name + "|ea") || 0;
+    // 최근 3개월 평균과 최근 달 중 큰 쪽 (라자냐처럼 요즘 더 나가는 건 최근 달, 반짝 줄어든 건 평균으로 모자라지 않게)
+    const lastR = (k) => (lastB.prepUse.get(k) || 0) / (lastB.gross / 1e6);
+    let g = Math.max(M.blend.prep.get(p.name) || 0, lastR(p.name)), ea = Math.max(M.blend.prep.get(p.name + "|ea") || 0, lastR(p.name + "|ea"));
     const cfg = (db.prepCfg || {})[p.name] || {};
     const shelf = p.shelf;
     // cfg.rate: 매장 기준 "Gross 100만원당 몇 단위" (로즈마리 400만원당 1팩 = 0.25)
@@ -1663,11 +1665,13 @@ svg { display: block; }
       }
       const stepNote = cfg.step > 1 ? `${cfg.step}${cfg.unit}씩` : "";
       const join = (...a) => a.filter(Boolean).join(" · ");
-      if (cfg.unit === "X" && batchG) return { ...base, e: per(g + ea * (eaG || 0)) / batchG, unit: "X", note: join(`1X = ${won(batchG)}g`, yn > 1 ? `약 ${yn}포션` : "", stepNote) };
+      if (cfg.unit === "X" && batchG) return { ...base, e: per(g + ea * (eaG || 0)) / batchG, unit: "X", note: join(`1X = ${won(batchG)}g`, cfg.note, stepNote) };
       // from: "ledger" = 그 원재료의 수불현황 실제 사용량으로 (만다린 캔처럼 레시피 개수로는 캔을 셀 수 없을 때)
       if (cfg.item && cfg.from === "ledger") {
         const it = M.items.find((i) => i.key === cfg.item);
-        if (it && it.rateA != null) return { ...base, e: it.fixedA + it.rateA * (gToday / 1e6), unit: cfg.unit || it.pk.stock || "EA", note: join(it.name, stepNote) };
+        // 단위를 g으로 정하면 품목 1단위 g으로 환산 (깐마늘 1EA = 1kg)
+        const f = it && cfg.unit === "g" && it.pk.g ? it.pk.g : 1;
+        if (it && it.rateA != null) return { ...base, e: (it.fixedA + it.rateA * (gToday / 1e6)) * f, unit: cfg.unit || it.pk.stock || "EA", note: join(cfg.note || it.name, stepNote) };
       }
       if (cfg.unit === "PK" && cfg.item) {
         const it = M.items.find((i) => i.key === cfg.item), st = it && toStock({ g: per(g + ea * (eaG || 0)) }, it.pk);
@@ -1746,6 +1750,9 @@ svg { display: block; }
         const full = Math.floor(days), part = days - full;
         ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v;
       }
+      // 이름 아래: Prep 레시피의 Yield (있으면 "1X = 650g"은 겹치니 뺌)
+      const yl = pdf && pdf.yield && !/as needed/i.test(pdf.yield) ? `Yield : ${pdf.yield}` : "";
+      if (ex) ex.note = [yl, ...String(ex.note || "").split(" · ").filter((t) => t && !(yl && /^1X = [\d,.]+\s*(g|ml)$/i.test(t)))].filter(Boolean).join(" · ");
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
     // 프랩은 모든 단위(X·포션·EA·PK·kg)를 올림한 정수로 보여줌. 1.05처럼 살짝 넘는 건 올리지 않음 (0보다 크면 최소 1)
