@@ -226,7 +226,7 @@ svg { display: block; }
 .lg-fc::before { background: var(--c-fc); box-shadow: 0 0 6px var(--c-fc); }
 .lg-act::before { background: var(--c-act); box-shadow: 0 0 6px var(--c-act); }
 .f-row { display: grid; grid-template-columns: 32px minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1fr) 34px; gap: 5px; align-items: center; }
-.f-row .dfc { text-align: right; font-size: 12.5px; font-weight: 700; color: var(--c-de); padding-right: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f-row .dfc { text-align: right; font-size: 12.5px; font-weight: 600; color: var(--fg); padding-right: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .f-row .day small em { display: block; font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--rose-ink); }
 .lg-de::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; background: var(--c-de); box-shadow: 0 0 6px var(--c-de); }
 .f-row .day { font-size: 14px; font-weight: 700; line-height: 1.2; }
@@ -237,7 +237,7 @@ svg { display: block; }
 .f-row input { width: 100%; min-width: 0; border: 0; border-radius: 10px; padding: 9px 7px; font-size: 13.5px; font-weight: 600; text-align: right; outline: none; background: var(--fill-2); color: var(--fg); }
 .f-row input::placeholder { opacity: .5; color: inherit; }
 .f-row input.fc { box-shadow: none; }
-.f-row input.act { color: var(--c-act); box-shadow: none; }
+.f-row input.act { box-shadow: none; }
 .f-row input:focus { box-shadow: 0 0 0 2px var(--accent); background: var(--surface); }
 .f-row.today { background: var(--accent-soft); }
 .f-row.today input { background: var(--surface); }
@@ -251,7 +251,7 @@ svg { display: block; }
 .f-foot .day { font-size: 13px; }
 .f-foot .t-fc, .f-foot .t-act, .f-foot .t-de { text-align: right; font-size: 12.5px; font-weight: 800; padding-right: 7px; white-space: nowrap; }
 .f-foot .t-de { color: var(--c-de); padding-right: 2px; }
-.f-foot .t-fc { color: var(--fg); }
+.f-foot .t-fc { color: var(--c-fc); }
 .f-foot .t-act { color: var(--c-act); }
 
 /* data files */
