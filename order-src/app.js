@@ -502,7 +502,7 @@
       const c = itemCfg[it.key] || itemCfg[it.name];
       if (c && c.ea) it.pk = { ...it.pk, ea: c.ea };
       if (c && c.label) { it.pk = { ...it.pk, stock: c.label, order: c.label }; it.unit = c.label; }
-      it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0;
+      it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
     };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
@@ -994,7 +994,7 @@
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
       const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v));
       // 몇 포션인지 (itemCfg.portionG): 보이는 필요량 × 1단위 g ÷ 1포션 g
-      const por = (q) => (it.portionG && it.pk.g && q > 0 ? `<em class="por">${Math.ceil(q * it.pk.g / it.portionG - 1e-9)}포션</em>` : "");
+      const por = (q) => (it.portionG && it.pk.g && q > 0 ? `<em class="por">${Math.ceil(q * it.pk.g / it.portionG - 1e-9)}${esc(it.portionLabel)}</em>` : "");
       if (!isFinite(s) && num(v.o) > 0) return `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
       if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle">${por(+rm(r.need))}<b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
       else {
