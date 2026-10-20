@@ -971,9 +971,7 @@
     else if (dow(TODAY) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      // 발주 마감 14:30 (재고는 런치 전 아침에 셈)
-      const nowH = new Date().getHours() + new Date().getMinutes() / 60, closed = nowH >= ORDER_CUTOFF_H;
-      b.innerHTML = `<span>오늘 발주 <b class="${closed ? "cut over" : "cut"}">${closed ? "마감 지남" : "14:30 마감"}</b> → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(TODAY)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(TODAY)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>오늘 발주 → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(TODAY)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(TODAY)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
