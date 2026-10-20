@@ -83,6 +83,10 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .seg button { font: inherit; font-size: 14px; font-weight: 700; border: 0; background: transparent; color: var(--muted); padding: 9px 10px; border-radius: 9px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
 .period { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
+.by-date { display: grid; gap: 8px; }
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.quick button { font: inherit; font-size: 14px; font-weight: 700; border: 0; border-radius: 10px; padding: 9px 0; background: var(--fill); color: var(--fg); cursor: pointer; }
+.quick button.on { background: var(--accent); color: var(--accent-ink); }
 .preview { font-size: 13px; color: var(--muted); min-height: 1.5em; }
 .preview b { color: var(--fg); font-weight: 700; }
 .form-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -178,10 +182,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       <button type="button" id="mDate" aria-pressed="true">유통기한 직접 입력</button>
       <button type="button" id="mPeriod" aria-pressed="false">제조일로부터 기간</button>
     </div>
-    <div class="row" id="byDate">
+    <div class="by-date" id="byDate">
       <label>유통기한
         <input type="date" id="fExpiry">
       </label>
+      <div class="quick" role="group" aria-label="오늘부터 빠른 입력">
+        <button type="button" data-add="3d">+3일</button>
+        <button type="button" data-add="7d">+7일</button>
+        <button type="button" data-add="1m">+1개월</button>
+        <button type="button" data-add="3m">+3개월</button>
+      </div>
     </div>
     <div class="row" id="byPeriod" hidden>
       <label>제조일자
@@ -381,6 +391,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     editId = null;
     $("form").reset();
     $("fNum").value = 3;
+    document.querySelectorAll(".quick button").forEach((x) => x.classList.remove("on"));
     $("submit").textContent = "추가";
     $("cancel").hidden = true;
     setMode(mode);
@@ -398,6 +409,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
 
   $("mDate").onclick = () => setMode("date");
+  // 빠른 날짜: 오늘부터 +3일 / +7일 / +1개월 / +3개월
+  document.querySelector(".quick").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-add]"); if (!b) return;
+    const n = parseInt(b.dataset.add, 10), unit = b.dataset.add.slice(-1);
+    $("fExpiry").value = addPeriod(toISO(today()), n, unit);
+    document.querySelectorAll(".quick button").forEach((x) => x.classList.toggle("on", x === b));
+    updatePreview();
+  });
+  $("fExpiry").addEventListener("input", () => document.querySelectorAll(".quick button").forEach((x) => x.classList.remove("on")));
   $("mPeriod").onclick = () => setMode("period");
   $("form").addEventListener("input", updatePreview);
   $("cancel").onclick = resetForm;
