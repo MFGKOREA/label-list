@@ -797,12 +797,13 @@ svg { display: block; }
     if ((m = /([\d.,]+)\s*(kg|g)\b/i.exec(s))) return { g: num(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1) };
     if ((m = /([\d./]+)\s*(cc|ml)\b/i.exec(s))) return { ml: frac(m[1]) };
     if ((m = /([\d./]+)\s*l\b/i.exec(s))) return { ml: frac(m[1]) * 1000 };
-    if ((m = /([\d./]+)\s*TB\b/.exec(s))) return { ml: frac(m[1]) * 15 };
-    if ((m = /([\d./]+)\s*tsp\b/i.exec(s))) return { ml: frac(m[1]) * 5 };
-    if ((m = /([\d./]+)\s*cup\b/i.exec(s))) return { ml: frac(m[1]) * 240 };
+    // 계량스푼·컵·스쿱은 부피(vol)라 가루·슬라이스처럼 가벼운 건 tbG(1TB 무게)로 g 환산
+    if ((m = /([\d./]+)\s*TB\b/.exec(s))) return { ml: frac(m[1]) * 15, vol: true };
+    if ((m = /([\d./]+)\s*tsp\b/i.exec(s))) return { ml: frac(m[1]) * 5, vol: true };
+    if ((m = /([\d./]+)\s*cup\b/i.exec(s))) return { ml: frac(m[1]) * 240, vol: true };
     if ((m = /([\d./]+)\s*oz\b/i.exec(s))) return { g: frac(m[1]) * 28.35 };
     // 스쿱 번호: #N은 1쿼트(946ml)를 N번 뜨는 크기
-    if ((m = /([\d./]+)\s*scoop\s*\(?\s*#\s*(\d+)/i.exec(s))) return { ml: frac(m[1]) * 946 / num(m[2]) };
+    if ((m = /([\d./]+)\s*scoop\s*\(?\s*#\s*(\d+)/i.exec(s))) return { ml: frac(m[1]) * 946 / num(m[2]), vol: true };
     if ((m = /([\d./]+)\s*(ea|pc|pcs|개|slice|장|pk|portion|포션)\b/i.exec(s))) return { ea: frac(m[1]) };
     return null;
   }
@@ -1264,11 +1265,14 @@ svg { display: block; }
     };
     function expand(recipe, factor, acc, depth, prepAcc) {
       recipe.ing.forEach((ing) => {
-        const q = parseQty(ing.w, ing.v);
+        let q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
         // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
         if (t && t.kind === "prep" && prepByName.get(t.id) === recipe) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
         if (!t || t.skip || !q) return;
+        // 매장에서 잰 1TB 무게 (itemCfg / prepCfg의 tbG): 1 TB = 15ml 기준으로 tsp·cup·스쿱도 같이 환산
+        const tbG = (t.kind === "item" ? itemCfg[t.id] : (db.prepCfg || {})[t.id] || {}) || {};
+        if (q.vol && tbG.tbG) q = { g: (q.ml / 15) * tbG.tbG };
         if (t.kind === "item") {
           const it = items.find((i) => i.key === t.id); if (!it) return;
           const s = toStock(q, it.pk); if (s == null) return;
@@ -1752,6 +1756,8 @@ svg { display: block; }
     const p = pdf || M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
     const r = p && prepExpectFor(M, p, gToday);
     if (r && r.shelf == null) r.shelf = p.shelf;
+    // cfg.label: 단위 이름만 바꿔 보여줌 (냉동마늘쫑 1EA = 1팩 → PK)
+    const lb = p && ((db.prepCfg || {})[p.name] || {}).label; if (r && lb) r.unit = lb;
     return r || null;
   }
   function prepExpectFor(M, p, gToday) {
