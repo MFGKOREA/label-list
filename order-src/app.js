@@ -1898,11 +1898,11 @@
   function renderReport() {
     const M = model();
     renderXp(M);
-    // 한 달 단위로 채점 (재고 입력 사이 사용량이 끝난 날의 달)
+    // 한 주(월~일) 단위로 채점: 재고 입력 사이 사용량이 끝난 날의 주 (수불현황은 한 달 단위라 주 채점에서는 뺌)
     const byWeek = new Map();
-    M.scores.forEach((s) => { const w = s.end.slice(0, 7); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
+    M.scores.forEach((s) => { if (s.src === "ledger") return; const w = mondayOf(s.end); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
     const weeks = [...byWeek.keys()].sort();
-    const monKo = (m) => `${+m.slice(5)}월`, monEnd = (m) => `${m}-${String(new Date(+m.slice(0, 4), +m.slice(5), 0).getDate()).padStart(2, "0")}`;
+    const monKo = (w) => `${isoWeek(w).w}주`, monEnd = (w) => addDays(w, 6);
     const sel = $("rSel");
     if (!weeks.length) {
       sel.innerHTML = "<option>채점 기록 없음</option>";
@@ -1913,20 +1913,19 @@
       return;
     }
     if (!rWeek || !byWeek.has(rWeek)) rWeek = weeks[weeks.length - 1];
-    sel.innerHTML = weeks.map((w) => `<option value="${w}"${w === rWeek ? " selected" : ""}>${w.slice(0, 4)}년 ${monKo(w)}</option>`).join("");
+    sel.innerHTML = weeks.map((w) => `<option value="${w}"${w === rWeek ? " selected" : ""}>${isoWeek(w).w}주차 ${mmdd(w)} ~ ${mmdd(monEnd(w))}</option>`).join("");
     // 품목별 오차는 100%에서 자름 (한두 품목이 전체 점수를 0으로 만들지 않게)
     const acc = (list, f) => { const e = list.filter((s) => s[f] != null).map((s) => Math.min(1, Math.abs(s[f] - s.actual) / s.actual)); return e.length ? 100 - (e.reduce((a, b) => a + b, 0) / e.length) * 100 : null; };
-    const list = monthScores(M, rWeek), idx = weeks.indexOf(rWeek);
-    // 지난달과 비교는 같은 기준(수불현황끼리, 재고 입력끼리)일 때만
-    const pl = idx > 0 ? monthScores(M, weeks[idx - 1]) : null;
-    const a = acc(list, "pF"), prev = pl && pl[0].src === list[0].src ? acc(pl, "pF") : null;
-    $("rRange").textContent = `${mmdd(rWeek + "-01")} ~ ${mmdd(monEnd(rWeek))} · ${list[0].src === "ledger" ? "수불현황 기준" : "재고 입력 기준"}`;
+    const list = byWeek.get(rWeek), idx = weeks.indexOf(rWeek);
+    const pl = idx > 0 ? byWeek.get(weeks[idx - 1]) : null;
+    const a = acc(list, "pF"), prev = pl ? acc(pl, "pF") : null;
+    $("rRange").textContent = `${mmdd(rWeek)} ~ ${mmdd(monEnd(rWeek))} · 재고 입력 기준`;
     $("rAcc").innerHTML = `${Math.round(a)}<small>%</small>`;
     const dd = prev != null ? Math.round(a - prev) : null;
     $("rDelta").className = "delta " + (dd >= 0 ? "good" : "bad");
-    $("rDelta").textContent = dd == null ? "" : `지난달 대비 ${dd >= 0 ? "▲" : "▼"} ${Math.abs(dd)}%p`;
+    $("rDelta").textContent = dd == null ? "" : `지난주 대비 ${dd >= 0 ? "▲" : "▼"} ${Math.abs(dd)}%p`;
     // 추이
-    const pts = weeks.slice(-8).map((w) => ({ w, a: acc(monthScores(M, w), "pF") }));
+    const pts = weeks.slice(-8).map((w) => ({ w, a: acc(byWeek.get(w), "pF") }));
     const W = 330, H = 120, L = 26, R = 10, T = 16, B = 22, lo = Math.min(50, ...pts.map((p) => Math.floor(p.a / 10) * 10)), hi = 100;
     const x = (i) => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : 0.5), y = (v) => T + (H - T - B) * (hi - v) / (hi - lo);
     let g = "";
@@ -1940,14 +1939,13 @@
     });
     $("rTrend").innerHTML = g;
     // Gross Sales 예측
-    let f = 0, act = 0; for (let d = rWeek + "-01"; d <= monEnd(rWeek); d = addDays(d, 1)) { const z = (db.forecast || {})[d] || {}; if (isFinite(num(z.fc)) && isFinite(num(z.act))) { f += num(z.fc); act += num(z.act); } }
+    let f = 0, act = 0; for (let d = rWeek; d <= monEnd(rWeek); d = addDays(d, 1)) { const z = (db.forecast || {})[d] || {}; if (isFinite(num(z.fc)) && isFinite(num(z.act))) { f += num(z.fc); act += num(z.act); } }
     $("kSales").innerHTML = act ? `${Math.round(100 - Math.abs(act - f) / act * 100)}<small>%</small>` : "–";
     $("kItems").innerHTML = `${new Set(list.map((s) => s.key)).size}<small>개</small>`;
-    $("kLogs").innerHTML = `${(db.onhand || []).filter((l) => l.t.slice(0, 7) === rWeek).length}<small>건</small>`;
-    const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 메뉴별 매출현황", "메뉴 판매 × 레시피", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +(100 - v).toFixed(1)]);
-    const max = Math.max(...ms.map((m) => m[2]), 1);
-    // 가장 짧은(오차가 작은) 방식을 강조, 막대는 0~100% 그대로
-    const bestV = Math.min(...ms.map((m) => m[2]));
+    $("kLogs").innerHTML = `${(db.onhand || []).filter((l) => l.t.slice(0, 10) >= rWeek && l.t.slice(0, 10) <= monEnd(rWeek)).length}<small>건</small>`;
+    const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 메뉴별 매출현황", "메뉴 판매 × 레시피", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +v.toFixed(1)]);
+    // 정확도 막대: 0%부터, 길수록 정확. 가장 긴 방식을 강조
+    const bestV = Math.max(...ms.map((m) => m[2]));
     $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     const miss = list.map((s) => ({ ...s, e: (s.actual - s.pF) / s.actual })).sort((p, q) => Math.abs(q.e) - Math.abs(p.e)).slice(0, 5);
     $("rMiss").innerHTML = miss.map((m) => `<div class="cell miss"><span class="nm">${esc(m.name)}<small>예상 ${r1(m.pF)} · 실제 ${r1(m.actual)}</small></span><span class="chip ${m.e > 0 ? "under" : "over"}">${m.e > 0 ? "적게 예상" : "많게 예상"}</span><span class="pc">${Math.round(Math.abs(m.e) * 100)}%</span></div>`).join("");
