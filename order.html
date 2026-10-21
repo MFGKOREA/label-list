@@ -1326,6 +1326,7 @@ svg { display: block; }
       if (c && c.g) it.pk = { ...it.pk, g: c.g }; // 1단위 무게를 바로잡음 (브리오슈 1PK = 380g × 3개)
       if (c && c.label) { it.pk = { ...it.pk, stock: c.label, order: c.label }; it.unit = c.label; }
       it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
+      it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
     };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
@@ -1610,7 +1611,14 @@ svg { display: block; }
   const deliveryOf = (it, x) => addBiz(x, vcfg(it).lead || 2);
   const isOrderDay = (it, d) => { const ds = vcfg(it).days; return !ds || ds.includes(dow(d)); };
   const nextOrderDay = (it, d) => { let x = d; for (let k = 0; k < 8 && !isOrderDay(it, x); k++) x = addDays(x, 1); return x; };
+  // 해동이 필요한 품목은 다음 발주분도 입고 다음 날부터 쓸 수 있으니 기간을 해동 일수만큼 늘림
   function orderWindowFor(it, today) {
+    const w = orderWindowBase(it, today), t = it.thaw || 0;
+    if (!t) return w;
+    const end = addDays(w.end, t), g = sumGross(today, end, false);
+    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end) };
+  }
+  function orderWindowBase(it, today) {
     const c = vcfg(it);
     if (!c.days && !c.lead) return { ...orderWindow(today), orderDay: today, canOrder: true };
     // 다음 발주일 주문이 다음다음 발주일 주문 입고 전까지 버텨야 함 → [오늘, 다음다음 입고)
@@ -1979,7 +1987,7 @@ svg { display: block; }
       return d;
     }
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}</span>` +
       // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
       (() => { const e0 = estStock(it, TODAY), et = e0 ? r1(e0.v / (it.box || 1)) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
@@ -2051,7 +2059,7 @@ svg { display: block; }
   const phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
   function riskOf(it, v) {
     if (!v || v.s === "" || !isFinite(num(v.s))) return null;
-    const w = orderWindowFor(it, TODAY), until = w.deliv; // 오늘 발주가 들어오는 날 전까지
+    const w = orderWindowFor(it, TODAY), until = addDays(w.deliv, it.thaw || 0); // 오늘 발주가 들어와서 쓸 수 있는 날 전까지 (해동 품목은 입고 다음 날)
     const days = Math.round((parseISO(until) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
     let arr = 0; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if (a.d > TODAY && a.d < until && (k > 0 || a.legacy)) arr += a.q; });
     const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(TODAY)).pop();
