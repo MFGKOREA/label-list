@@ -680,6 +680,8 @@
           // "1,980g (약 15 Portion)"처럼 무게와 포션 수가 같이 있으면 1포션 = 무게 ÷ 포션 수
           if (amount == null && q.ea != null && yc && yieldOf(p)) { go((factor * q.ea) / num(yc[1])); return; }
           // 분량이 "1 Portion"·"약 15 Order"처럼 개수뿐이면 재료 무게 합이 그 한 번 분량 (럭스 포션 → 치킨 다이스 50 g, 소테 새우 15오더 = 새우 800g)
+          // 분량이 "As needed"인데 재료 무게가 적힌 포션(버섯 믹스 포션 = 새송이 30g + 느타리 30g)은 레시피 한 번이 1포션
+          if (amount == null && q.ea != null && !yc && !yieldOf(p) && p.ing.some((i) => { const q2 = parseQty(i.w, i.v); return q2 && (q2.g || q2.ml); })) { go(factor * q.ea); return; }
           const y = yieldOf(p) || (yc ? p.ing.reduce((a2, i) => { const q2 = parseQty(i.w, i.v) || {}; return a2 + (q2.g || q2.ml || 0); }, 0) : 0);
           // "새우 12 ea"처럼 개수로 쓴 건 다른 라인 레시피의 "25 g | 6 ea"로 1개 무게를 구해 g으로
           const eg = amount == null && q.ea != null ? prepEaG().get(p.name) : null;
