@@ -1638,7 +1638,9 @@ svg { display: block; }
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
     //  상대오차 = 사용량 계산 오차와 Forecast 오차를 같이 (86 위험 범위와 같은 기준). 일수는 매출이 몰린 만큼 줄여 셈
     const errs = it.scoreF.length >= 5 ? it.scoreF : null; // 채점 5번부터 (적으면 한두 번 튄 값에 끌려감)
-    const sigma = errs ? Math.sqrt(errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8)) : Math.max(0.1, (spread ?? 0.2) / 2, useA == null && useB == null ? 0.25 : 0);
+    // 재고는 통 단위로 세고 뜯은 건 안 세기도 해서(3개 → 2개), 채점 오차에는 셈 단위 잡음이 섞임 → 그만큼(scoreQ) 빼고 σ로
+    const qs = (it.scoreQ || []).slice(-8), q = qs.length ? qs.reduce((a, b) => a + b, 0) / qs.length : 0;
+    const sigma = errs ? Math.sqrt(Math.max(0.01, errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8) - q)) : Math.max(0.1, (spread ?? 0.2) / 2, useA == null && useB == null ? 0.25 : 0);
     const nd = Math.max(1, Math.min(win.days, win.nEff || win.days));
     let ss = Z * Math.sqrt(sigma * sigma + fcErr() ** 2) * use / Math.sqrt(nd);
     let need = use + ss;
@@ -1663,7 +1665,7 @@ svg { display: block; }
     const byKey = new Map();
     logs.forEach((l) => { if (!byKey.has(l.k)) byKey.set(l.k, []); const a = byKey.get(l.k); if (a.length && a[a.length - 1].t.slice(0, 10) === l.t.slice(0, 10)) a[a.length - 1] = l; else a.push(l); });
     M.scores = [];
-    M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; it.rateG = null; });
+    M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; it.scoreQ = []; it.rateG = null; });
     byKey.forEach((list, key) => {
       const it = M.items.find((i) => i.key === key); if (!it) return;
       // 그날 재고는 발주 탭에 마지막으로 남은 값으로 (44로 잘못 쳤다가 4로 고친 경우 등)
@@ -1705,6 +1707,7 @@ svg { display: block; }
         if (pA != null) it.scoreA.push(err(pA, actual));
         if (pB != null) it.scoreB.push(err(pB, actual));
         it.scoreF.push(err(pF, actual));
+        it.scoreQ.push(1 / (6 * pF * pF)); // 양 끝 재고가 각각 0~1단위 덜 세어질 수 있는 잡음의 분산 (상대값)
         M.scores.push({ key, name: it.name, start: d1, end: d2, actual, pA, pB, pF });
       };
       pairs.forEach(({ d1, d2, actual }, j) => {
