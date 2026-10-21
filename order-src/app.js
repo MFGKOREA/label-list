@@ -1338,13 +1338,10 @@
         v.need = 0;
         if (!ex) return '<span class="need none"><b>?</b></span>';
         if (v.s === "") return '<span class="need none"><b>–</b></span>';
-        const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
+        // 2days 이상 프랩은 오늘 쓸 양 + 내일 아침(반나절)치까지 있어야 충분 → 아슬아슬하면 오늘 미리 만들도록 필요량으로
+        const target = shelf && shelf <= 1 ? ex.e : Math.max(ex.e * 1.1, ex.eDay + ex.eTomorrow * 0.5);
         let r = target - (num(v.s) * dd.f || 0);
-        if (r <= ex.e * 0.03) {
-          // 충분하지만 오늘 쓰고 남는 양이 내일 반나절치도 안 되면 내일 아침 첫 프랩 (매일 만드는 1day 프랩은 제외)
-          const left = (num(v.s) * dd.f || 0) - ex.eDay, tight = !(shelf && shelf <= 1) && ex.eTomorrow > 0 && left < ex.eTomorrow * 0.5;
-          return tight ? '<span class="need asap"><b>ASAP</b><span>내일 아침 프랩</span></span>' : '<span class="need enough"><b>충분</b></span>';
-        }
+        if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
         if (ex.step > 1 || ex.unit === "EA") r = Math.ceil(r / (ex.step || 1) - 1e-9) * (ex.step || 1); // EA는 통으로
         v.need = +rpu(r / dd.f, dd.u, true) * dd.f; // 학습용: 이만큼 만든다고 봄
         return `<span class="need buy"><b>${rpu(r / dd.f, dd.u, true)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
