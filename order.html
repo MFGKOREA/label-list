@@ -809,7 +809,7 @@ svg { display: block; }
   async function flush() {
     if (!API || flushing) return; flushing = true;
     try {
-      for (const k of Object.keys(pend.set)) { await apiCall({ action: "set", key: k, value: db[k] ?? null }); delete pend.set[k]; savePend(); }
+      for (const k of Object.keys(pend.set)) { if (inflight[k]) continue; await apiCall({ action: "set", key: k, value: db[k] ?? null }); delete pend.set[k]; savePend(); }
       for (const k of Object.keys(pend.add)) { while (pend.add[k] && pend.add[k].length) { await apiCall({ action: "append", key: k, item: pend.add[k][0] }); pend.add[k].shift(); savePend(); } delete pend.add[k]; savePend(); }
       online = true;
     } catch { online = false; setTimeout(flush, 30000); } finally { flushing = false; }
@@ -839,7 +839,18 @@ svg { display: block; }
     if (value === null) delete db[key]; else db[key] = value;
     lsSave(); light(key);
     if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
-    if (API) { pend.set[key] = 1; savePend(); apiCall({ action: "set", key, value }).then(() => { if (db[key] === value) { delete pend.set[key]; savePend(); } online = true; }).catch(() => { online = false; toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); }); }
+    if (API) { pend.set[key] = 1; savePend(); send(key); }
+  }
+  // 같은 키는 한 번에 하나씩 보냄 (먼저 보낸 옛 값이 늦게 도착해 새 값을 덮는 일 방지)
+  const inflight = {};
+  function send(key) {
+    if (inflight[key]) { inflight[key] = 2; return; }
+    inflight[key] = 1;
+    const value = db[key] ?? null;
+    apiCall({ action: "set", key, value })
+      .then(() => { if ((db[key] ?? null) === value) { delete pend.set[key]; savePend(); } online = true; })
+      .catch(() => { online = false; toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); })
+      .finally(() => { const again = inflight[key] === 2; delete inflight[key]; if (again) send(key); });
   }
   function appendKey(key, item) {
     (db[key] = Array.isArray(db[key]) ? db[key] : []).push(item);
@@ -2249,14 +2260,9 @@ svg { display: block; }
       const upd = () => {
         [fi, ai].forEach((el) => { const v = el.value.replace(/\D/g, ""); const c = v ? Number(v).toLocaleString("ko-KR") : ""; if (el.value !== c) el.value = c; });
         row.lastElementChild.outerHTML = diffHTML(fi.value.replace(/\D/g, ""), ai.value.replace(/\D/g, ""));
-        foot();
+        foot(); clearTimeout(fcSaveT); fcSaveT = setTimeout(fcSave, 1200);
       };
-      const save = () => {
-        const all = { ...(db.forecast || {}) };
-        const fc = fi.value.replace(/\D/g, ""), act = ai.value.replace(/\D/g, "");
-        if (!fc && !act) delete all[d]; else all[d] = { fc, act };
-        setKey("forecast", all); foot();
-      };
+      const save = () => { clearTimeout(fcSaveT); fcSave(); };
       fi.addEventListener("input", upd); ai.addEventListener("input", upd);
       fi.addEventListener("change", save); ai.addEventListener("change", save);
       // 엔터 → 같은 칸(Forecast / 실제 Gross)의 다음 날로
@@ -2268,6 +2274,21 @@ svg { display: block; }
       }));
       box.appendChild(row);
     }
+    foot();
+  }
+  // 저장은 화면에 보이는 한 주 7칸 전부를 그대로 (입력 멈추고 1.2초 뒤, 또는 칸을 벗어날 때)
+  let fcSaveT;
+  function fcSave() {
+    const rows = [...$("fcRows").querySelectorAll(".f-row")];
+    if (rows.length !== 7) return;
+    const all = { ...(db.forecast || {}) }; let changed = false;
+    rows.forEach((row, i) => {
+      const d = addDays(fcWeekStart, i), [fi, ai] = row.querySelectorAll("input");
+      const fc = fi.value.replace(/\D/g, ""), act = ai.value.replace(/\D/g, ""), o = all[d] || {};
+      if ((o.fc || "") === fc && (o.act || "") === act) return;
+      changed = true; if (!fc && !act) delete all[d]; else all[d] = { fc, act };
+    });
+    if (changed) setKey("forecast", all);
     foot();
   }
   function diffHTML(fc, act) {
@@ -2635,7 +2656,8 @@ svg { display: block; }
   if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   renderMain();
   pull().then(() => { invalidate(); renderMain(); learnTrack(); });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(() => { invalidate(); if (!$("v-main").hidden) renderMain(); }); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && !$("v-forecast").hidden) fcSave(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(() => { invalidate(); if (!$("v-main").hidden) renderMain(); if (!$("v-forecast").hidden && !$("fcRows").contains(document.activeElement)) renderForecast(); }); });
   window.__orderCalc = { model, orderWindow, calc, dataForecast, db: () => db, TODAY };
 })();
 
