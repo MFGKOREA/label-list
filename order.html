@@ -713,6 +713,8 @@ html, body { overflow-x: hidden; }
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>오차 범위 큰 품목</span><small>오늘 발주 기준 ±</small></div>
     <div class="group" id="rMiss"></div>
+    <div class="sect" id="rSharesH" hidden><span>옵션 비율</span><small>매달 수불로 계산</small></div>
+    <div class="group" id="rShares" hidden></div>
     
   </section>
 
@@ -1429,8 +1431,10 @@ html, body { overflow-x: hidden; }
       acc2.forEach((a, k) => m.set(k, a.reduce((x, y) => x + y, 0) / a.length));
       return (eaGMemo = m);
     };
-    function expand(recipe, factor, acc, depth, prepAcc, batchAcc, m) {
+    function expand(recipe, factor0, acc, depth, prepAcc, batchAcc, m) {
       recipe.ing.forEach((ing) => {
+        // 옵션 비율(ing.share): 안맵게처럼 주문 중 일부만 다른 재료로 나가면 그 비율만큼 (inv면 나머지)
+        const sv = ing.share ? shareOf(ing.share, m) : null, factor = sv == null ? factor0 : factor0 * (ing.inv ? 1 - sv : sv);
         let q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
         // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
@@ -1469,7 +1473,7 @@ html, body { overflow-x: hidden; }
       });
     }
     function perMenu(recipe, m) {
-      const mm = hasVariant(m) ? m : null, ck = recipe.name + (mm ? "|" + mm : "");
+      const mm = hasVariant(m) || (m && shareCfg.length) ? m : null, ck = recipe.name + (mm ? "|" + mm : "");
       if (perMenuCache.has(ck)) return perMenuCache.get(ck);
       const acc = new Map(), prepAcc = new Map(), batchAcc = new Map();
       expand(variantOf("line", recipe.name, mm) || recipe, 1, acc, 0, prepAcc, batchAcc, mm);
@@ -1488,6 +1492,44 @@ html, body { overflow-x: hidden; }
       });
       return m;
     };
+
+    const asOfUsage = (d, it) => { let u = 0; (d.ledger.rows || []).forEach((r) => { const c = itemCfg[r.name]; const to = c && c.as ? items.find((i) => i.key === c.as) : ledgerItem(r); if (to === it && r.usage > 0) u += r.usage; }); return u; };
+    // ---------- 옵션 비율 (db.shares) ----------
+    // 메뉴별 매출에 안 나오는 선택(안맵게 → 버터라이스, 사이드 중 라이스·매쉬)을 그 달 수불현황으로 거꾸로 구함.
+    //  레시피 재료에 share: id(inv: true면 나머지)를 달아 둠. 수불현황이 있는 달마다 따로 맞추고, 앞으로는 최근 3달 가중평균(3:2:1)
+    const shareCfg = Array.isArray(db.shares) ? db.shares : [];
+    const shareFit = new Map(); let shareOverride = null;
+    const futureShare = (id) => {
+      const fs = allMonths.filter((m) => shareFit.has(id + "|" + m)).filter((m) => { const n = Object.keys(db.forecast || {}).filter((d) => d.startsWith(m) && num(db.forecast[d].act) > 0).length; return !(n > 0 && n < 14); }).slice(-3);
+      if (!fs.length) return null;
+      let a = 0, w = 0; fs.forEach((m, i) => { const wi = i + 1 + (3 - fs.length); a += wi * shareFit.get(id + "|" + m); w += wi; });
+      return a / w;
+    };
+    function shareOf(id, m) {
+      if (shareOverride && id in shareOverride) return shareOverride[id];
+      if (m && shareFit.has(id + "|" + m)) return shareFit.get(id + "|" + m);
+      const f = futureShare(id); if (f != null) return f;
+      const c = shareCfg.find((x) => x.id === id); return c && c.def != null ? c.def : 0.5;
+    }
+    // 그 달 메뉴 판매로 한 품목의 레시피 사용량 (캐시 없이, 비율을 바꿔 가며 계산)
+    const theoItem = (m, key) => {
+      const d = mget(m); if (!d.sales) return 0; const acc = new Map();
+      d.sales.rows.forEach((s) => { if (COUPON.test(s.cat) && !mapCfg.menu[s.menu]) return; const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return; expand(variantOf("line", r.recipe.name, m) || r.recipe, s.qty * (r.mult || 1), acc, 0, null, null, m); });
+      return acc.get(key) || 0;
+    };
+    shareCfg.forEach((c) => {
+      const it = items.find((i) => i.key === c.item); if (!it) return;
+      allMonths.forEach((m) => {
+        const d = mget(m); if (!d.ledger || !d.sales) return;
+        const a = asOfUsage(d, it); if (!(a > 0)) return;
+        shareOverride = { [c.id]: 0 }; const t0 = theoItem(m, it.key);
+        shareOverride = { [c.id]: 1 }; const t1 = theoItem(m, it.key);
+        shareOverride = null;
+        if (Math.abs(t1 - t0) < 1e-6) return;
+        shareFit.set(c.id + "|" + m, Math.min(1, Math.max(0, (a - t0) / (t1 - t0))));
+      });
+    });
+    perMenuCache.clear();
 
     // 월별 A(실사), B(레시피) 사용량
     const monthRows = allMonths.map((m) => {
@@ -1602,7 +1644,8 @@ html, body { overflow-x: hidden; }
       it.errA = errA; it.errB = errB;
       it.isNew = it.rateA == null && it.rateB != null;
     });
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg };
+    const shares = shareCfg.map((c) => ({ ...c, now: shareOf(c.id, null), byMonth: allMonths.filter((m) => shareFit.has(c.id + "|" + m)).map((m) => ({ m, v: shareFit.get(c.id + "|" + m) })) }));
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares };
     applyScores(cache);
     return cache;
   }
@@ -2891,6 +2934,10 @@ html, body { overflow-x: hidden; }
     const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));
     const wide = M.items.filter((it) => !it.ledgerOnly).map((it) => { const c = calc(it, orderWindowFor(it, TODAY), 0, 0), u0 = c.useAvg ?? c.use; return c.none || !(u0 > 0) || !(c.sd > 0) ? null : { it, sd: c.sd, use: u0, rel: c.sd / u0, u: it.pk.stock || "" }; })
       .filter(Boolean).sort((p, q) => q.rel - p.rel || q.sd - p.sd).slice(0, 10);
+    // 옵션 비율: 메뉴별 매출에 안 나오는 선택(안맵게 등)을 달마다 수불현황으로 구한 값. 앞으로 계산에 쓰는 값 = 최근 달 평균
+    const sh = (M.shares || []).filter((x) => x.byMonth.length);
+    $("rSharesH").hidden = $("rShares").hidden = !sh.length;
+    $("rShares").innerHTML = sh.map((x) => `<div class="cell miss"><span class="nm">${esc(x.label)}<small>${x.byMonth.filter((b) => b.m >= "2026-09").map((b) => `${+b.m.slice(5)}월 ${Math.round(b.v * 100)}%`).join(" · ")}</small></span><span class="pc">${Math.round(x.now * 100)}%</span></div>`).join("");
     $("rMiss").innerHTML = wide.map((m) => `<div class="cell miss"><span class="nm">${esc(m.it.name)}<small>±${fmtQ(Math.max(0.1, m.sd), m.u)}${esc(m.u)} · 예상 사용 ${fmtQ(m.use, m.u)}${esc(m.u)}</small></span><span class="pc">±${Math.round(m.rel * 100)}%</span></div>`).join("");
   }
   $("rSel").addEventListener("change", () => { rWeek = $("rSel").value; renderReport(); });
