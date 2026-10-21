@@ -999,7 +999,8 @@
   // d일 재고를 센 뒤에 들어올 입고: 그 전날까지 앱에 넣은 발주 중 아직 안 온 것 (+ 예전 방식 익일 칸)
   const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
   // 재고 단계: 충분(필요량 이상) · 여유(다음 입고까지는 되고 여유분만 모자람) · 부족(예상 사용량의 70~100%) · 발주필요(70% 미만)
-  const tierOf = (r, have) => (!r.packs ? "ok" : have >= r.use ? "spare" : have >= r.use * 0.7 ? "short" : "buy");
+  // 재고 단계: 필요량보다 적으면 무조건 발주필요. 필요량 이상이면 얼마나 넉넉한지로 충분(1.5배↑) · 여유(1.2~1.5배) · 부족(1.2배 미만)
+  const tierOf = (r, have) => (r.packs ? "buy" : have >= r.need * 1.5 ? "ok" : have >= r.need * 1.2 ? "spare" : "short");
   // 사전발주 MODE (쉬는 날 집에서 발주): 오늘 재고를 안 센 품목은 예상 재고로 계산
   //  예상 재고 = 최근 7일 안 마지막으로 센 재고 + 그 뒤 입고(앱 발주) − 그 사이 사용량 − 여유(1단위 + 그 사이 사용량 한 번 더)
   //  저녁(14:30 이후)에 센 재고는 그날 남은 영업분만 뺌. 86 위험·학습에는 안 씀. 켠 날만 유지 (다음 날 자동 꺼짐)
@@ -1030,7 +1031,7 @@
     const e = estFor(it, v); if (!counted(v) && !e) return false;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = e ? e.v : stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
-    return !r.none && r.packs > 0 && tierOf(r, s + inc) !== "spare"; // 여유는 제자리, 부족·발주필요만 위로
+    return !r.none && r.packs > 0; // 발주필요만 위로
   };
   function rowEl(it, win, inp) {
     win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
@@ -1055,11 +1056,13 @@
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
-        else if (!r.packs) need = `<span class="need enough">${por(+rm(r.need))}<b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
+        else if (!r.packs) {
+          const t = tierOf(r, s + i), lb = { ok: "충분", spare: "여유", short: "부족" }[t];
+          need = `<span class="need ${t === "ok" ? "enough" : "buy lbl t-" + t}">${por(+rm(r.need))}<b>${lb}</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
+        }
         else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
         else {
-          const t = tierOf(r, s + i), lb = { spare: "여유", short: "부족", buy: "발주필요" }[t];
-          need = `<span class="need buy lbl t-${t}">${por(ordToStock(it, r.orderQty))}<b>${lb}</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+          need = `<span class="need buy lbl">${por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
         }
       }
       return need;
@@ -1168,11 +1171,7 @@
     groups.forEach((list, v) => { const keep = list.filter((it) => !(needsOrder(it, win, inp[it.key]) && top.push(it))); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 MODE 버튼)
-    const all = M.items.filter((i) => !i.ledgerOnly);
-    const ests = preMode ? all.filter((i) => !counted(inp[i.key])).map((i) => estStock(i, TODAY)).filter(Boolean) : [];
-    const from = ests.length ? ests.map((e) => e.from).sort().pop() : null;
-    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 MODE</button></div>` +
-      (preMode ? `<div class="prenote">${from ? `<b>${+from.slice(5, 7)}/${+from.slice(8)}(${DOW[dow(from)]}) 재고 기준 예상 재고</b><span>${ests.length}개 · 센 품목은 그대로</span>` : "<b>최근 7일 안에 센 재고가 없어요</b>"}</div>` : ""));
+    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 MODE</button></div>`);
     box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderList(); });
     let n = 0;
     groups.forEach((list, v) => {
