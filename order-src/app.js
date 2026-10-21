@@ -940,10 +940,10 @@
   // ---------- 발주 ----------
   let cat = null;
   // 오늘(발주) → 입고일을 요일 띠 위 곡선 화살표로 잇기. 입고일이 다음 주면 오른쪽 끝으로
-  function drawWeekArc() {
-    const svg = $("weekArc"), strip = $("weekStrip");
+  function drawWeekArc(svg = $("weekArc"), strip = $("weekStrip")) {
+    if (!svg || !strip) return;
     const from = strip.querySelector(".today");
-    if (!from || dow(TODAY) === 0) { svg.innerHTML = ""; return; }
+    if (!from) { svg.innerHTML = ""; return; }
     const to = strip.querySelector(".deliv");
     const box = strip.getBoundingClientRect(), a = from.getBoundingClientRect();
     const W = box.width, H = 18;
@@ -958,24 +958,26 @@
       `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".9"${to ? "" : ' stroke-dasharray="2 3"'} marker-end="url(#wkHead)"/>` +
       `<circle cx="${x1}" cy="${y}" r="2.2" fill="currentColor"/>`;
   }
-  window.addEventListener("resize", () => { if (!$("v-main").hidden) drawWeekArc(); });
+  window.addEventListener("resize", () => { if (!$("v-main").hidden) { drawWeekArc(); drawWeekArc($("preArc"), $("preStrip")); } });
   function renderMain() {
     renderTop();
-    const M = model(), win = orderWindow(TODAY);
+    // 사전발주 MODE면 고른 발주일 기준으로 요일 띠·안내를 보여줌
+    const od = preMode ? pDay() : TODAY;
+    const M = model(), win = orderWindow(od);
     // 요일 띠
-    const mon = mondayOf(TODAY);
-    requestAnimationFrame(drawWeekArc);
+    const mon = mondayOf(od);
+    requestAnimationFrame(() => drawWeekArc());
     $("weekStrip").innerHTML = [0, 1, 2, 3, 4, 5, 6].map((i) => {
       const d = addDays(mon, i);
       if (dow(d) === 0) return `<div class="off"><b>일</b><span>없음</span></div>`;
-      return `<div class="${d === TODAY ? "today" : d === win.deliv ? "deliv" : ""}"><b>${DOW[dow(d)]}</b><span>→${DOW[dow(delivery(d))]}</span></div>`;
+      return `<div class="${d === od ? "today" : d === win.deliv ? "deliv" : ""}"><b>${DOW[dow(d)]}</b><span>→${DOW[dow(delivery(d))]}</span></div>`;
     }).join("");
     const b = $("orderBanner");
     if (!M.items.length) { b.className = "banner warn"; b.innerHTML = "<span>데이터 파일에서 발주 시트나 수불현황을 먼저 올려 주세요.</span>"; }
-    else if (dow(TODAY) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
+    else if (dow(od) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      b.innerHTML = `<span>오늘 발주 → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(TODAY)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(TODAY)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
@@ -1194,12 +1196,14 @@
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 MODE 버튼)
     box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 MODE</button></div>`);
-    box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderList(); });
-    // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고)
+    box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderMain(); });
+    // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고) + 그날 발주분 입고일로 화살표
     if (preMode) {
       const days = []; for (let k = 0; k < 8 && days.length < 7; k++) { const x = addDays(TODAY, k); if (dow(x) !== 0) days.push(x); }
-      box.insertAdjacentHTML("beforeend", `<div class="predays">${days.map((x) => `<button type="button" data-d="${x}" class="${x === pDay() ? "on" : ""}"><b>${DOW[dow(x)]}</b>${mmdd(x)}</button>`).join("")}</div>`);
-      box.querySelector(".predays").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; preDay = b.dataset.d; renderList(); });
+      const pd = pDay(), dl = delivery(pd);
+      box.insertAdjacentHTML("beforeend", `<div class="weekwrap prewrap"><svg class="weekarc" id="preArc" aria-hidden="true"></svg><div class="week predays" id="preStrip">${days.map((x) => `<button type="button" data-d="${x}" class="${x === pd ? "today" : x === dl ? "deliv" : ""}"><b>${DOW[dow(x)]}</b><span>${mmdd(x)}</span></button>`).join("")}</div></div>`);
+      box.querySelector(".predays").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; preDay = b.dataset.d; renderMain(); });
+      requestAnimationFrame(() => drawWeekArc($("preArc"), $("preStrip")));
     }
     let n = 0;
     groups.forEach((list, v) => {
