@@ -1075,8 +1075,18 @@
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
-    d.innerHTML =
-      `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>` +
+    const top = `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>`;
+    // 사전발주 MODE: 예상 재고와 사전발주 필요량 두 칸만
+    if (preMode) {
+      const e = estFor(it, v), sv = e ? e.v : stockOf(it, v), r = isFinite(sv) && !c0.none ? calc(it, win, sv, inc) : null;
+      const sShow = isFinite(sv) ? r1(sv / (it.box || 1)) + (it.box ? "BOX" : esc(unit)) : "–";
+      const q = r && !r.none ? r.orderQty : null;
+      d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}</span>` +
+        `<span class="fld ro${e ? " est" : ""}"><span>${e || !isFinite(sv) ? "예상 재고" : "재고"}</span><b>${sShow}</b></span>` +
+        `<span class="need ${q ? "buy lbl" : "none"} prebox"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
+      return d;
+    }
+    d.innerHTML = top +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}</span>` +
       (() => { const e0 = estFor(it, v); return `<label class="fld${e0 ? " est" : ""}"><span>${e0 ? "예상 재고" : "재고"}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="${e0 ? r1(e0.v / (it.box || 1)) : "–"}" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
