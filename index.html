@@ -55,6 +55,15 @@ body {
 
 /* header */
 .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.howto-open { font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.popup .seg { margin: 0; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 10px; }
+.popup .steps li { counter-increment: st; display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.5; padding: 0; border: 0; }
+.steps li::before { content: counter(st); flex: none; width: 24px; height: 24px; margin-top: 1px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 800; display: grid; place-items: center; }
+.steps .tx { min-width: 0; }
+.steps .tx small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.steps .ico { display: inline-block; font-size: 13px; font-weight: 700; background: var(--fill); border-radius: 6px; padding: 0 6px; }
+.howto-tip { margin: 0; font-size: 13px; color: var(--muted); background: var(--fill); border-radius: 10px; padding: 9px 12px; }
 .store { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 .hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin: 2px 2px 4px; flex-wrap: wrap; }
 h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.15; }
@@ -181,6 +190,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <div class="wrap">
   <div class="top">
     <span class="store" id="storeName">MG수원컨벤션점</span>
+    <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
   </div>
   <header class="hdr">
     <h1>한글표시사항 리스트</h1>
@@ -264,6 +274,28 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   <div class="reset" id="resetZone">
     <button type="button" class="reset-open" id="resetOpen">초기화</button>
+  </div>
+</div>
+
+<div class="overlay" id="howto" hidden>
+  <div class="popup" role="dialog" aria-modal="true" aria-labelledby="howtoTitle">
+    <h3 id="howtoTitle">홈 화면에 추가하기</h3>
+    <div class="seg" role="tablist">
+      <button type="button" id="tabIos" aria-pressed="true">아이폰</button>
+      <button type="button" id="tabAnd" aria-pressed="false">갤럭시</button>
+    </div>
+    <ol class="steps" id="stepsIos">
+      <li><span class="tx"><b>Safari</b>로 이 페이지를 엽니다</span></li>
+      <li><span class="tx">아래 <b>공유 버튼</b> <span class="ico">□↑</span> 을 누릅니다<small>안 보이면 오른쪽 아래 <b>⋯</b> → 공유</small></span></li>
+      <li><span class="tx"><b>홈 화면에 추가</b> → 오른쪽 위 <b>추가</b></span></li>
+    </ol>
+    <ol class="steps" id="stepsAnd" hidden>
+      <li><span class="tx"><b>Chrome</b>으로 이 페이지를 엽니다</span></li>
+      <li><span class="tx">오른쪽 위 <b>⋮</b> 을 누릅니다<small>삼성 인터넷은 아래 <b>≡</b> → 현재 페이지 추가</small></span></li>
+      <li><span class="tx"><b>홈 화면에 추가</b> → <b>추가</b></span></li>
+    </ol>
+    <p class="howto-tip">카카오톡에서 열었다면 먼저 <b>다른 브라우저로 열기</b>를 눌러 주세요.</p>
+    <div class="actions"><button type="button" class="btn primary" id="howtoClose">확인</button></div>
   </div>
 </div>
 
@@ -391,7 +423,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("alertClose").onclick = closeAlert;
   $("alertToday").onclick = () => { try { localStorage.setItem(SKIP, toISO(today())); } catch {} closeAlert(); };
   $("alert").addEventListener("click", (e) => { if (e.target.id === "alert") closeAlert(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("resetBox").hidden = true; } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("resetBox").hidden = true; $("howto").hidden = true; } });
 
   async function save(it) {
     const i = items.findIndex((x) => x.id === it.id); i >= 0 ? items[i] = it : items.push(it); render();
@@ -576,6 +608,17 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     clearTimeout(noticeTimer); noticeTimer = setTimeout(saveNotice, 1500);
   });
   $("noticeInput").addEventListener("blur", saveNotice);
+
+  // ---- 홈 화면 추가 방법 (기기에 맞는 탭을 먼저 보여 줌) ----
+  function howtoTab(ios) {
+    $("tabIos").setAttribute("aria-pressed", ios); $("tabAnd").setAttribute("aria-pressed", !ios);
+    $("stepsIos").hidden = !ios; $("stepsAnd").hidden = ios;
+  }
+  $("howtoOpen").onclick = () => { howtoTab(!/android/i.test(navigator.userAgent)); $("howto").hidden = false; };
+  $("tabIos").onclick = () => howtoTab(true);
+  $("tabAnd").onclick = () => howtoTab(false);
+  $("howtoClose").onclick = () => { $("howto").hidden = true; };
+  $("howto").addEventListener("click", (e) => { if (e.target.id === "howto") $("howto").hidden = true; });
 
   // ---- 매장 품목 전체 초기화 (확인창) ----
   $("resetStore").textContent = storeKnown ? STORES[STORE].name : "";
