@@ -44,9 +44,34 @@
     if (!j.ok) throw new Error(j.error || "응답 오류");
     return j.data;
   }
+  // 시트 저장이 실패한 값은 기억해 두고(이 기기 localStorage), 다음에 시트에서 받아올 때 덮어쓰지 않고 다시 보냄
+  const LS_PEND = "order-calc-pending";
+  let pend = { set: {}, add: {} };
+  try { pend = { set: {}, add: {}, ...(JSON.parse(localStorage.getItem(LS_PEND)) || {}) }; } catch {}
+  const savePend = () => { try { localStorage.setItem(LS_PEND, JSON.stringify(pend)); } catch {} };
+  let flushing = false;
+  async function flush() {
+    if (!API || flushing) return; flushing = true;
+    try {
+      for (const k of Object.keys(pend.set)) { await apiCall({ action: "set", key: k, value: db[k] ?? null }); delete pend.set[k]; savePend(); }
+      for (const k of Object.keys(pend.add)) { while (pend.add[k] && pend.add[k].length) { await apiCall({ action: "append", key: k, item: pend.add[k][0] }); pend.add[k].shift(); savePend(); } delete pend.add[k]; savePend(); }
+      online = true;
+    } catch { online = false; setTimeout(flush, 30000); } finally { flushing = false; }
+  }
   async function pull() {
     if (!API) { online = false; return; }
-    try { db = { ...db, ...(await apiCall()) }; online = true; lsSave(); } catch (e) { online = false; toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); }
+    try {
+      const remote = await apiCall();
+      // 아직 시트에 못 보낸 값은 이 기기 값을 지킴 (날짜별 객체는 합침: 시트 값 위에 이 기기 값)
+      Object.keys(pend.set).forEach((k) => {
+        const loc = db[k], rem = remote[k];
+        remote[k] = loc && rem && typeof loc === "object" && typeof rem === "object" && !Array.isArray(loc) ? { ...rem, ...loc } : loc;
+        db[k] = remote[k];
+      });
+      Object.keys(pend.add).forEach((k) => { const arr = Array.isArray(remote[k]) ? remote[k].slice() : []; pend.add[k].forEach((it) => { if (!arr.some((x) => JSON.stringify(x) === JSON.stringify(it))) arr.push(it); }); remote[k] = arr; });
+      db = { ...db, ...remote }; online = true; lsSave();
+      if (Object.keys(pend.set).length || Object.keys(pend.add).length) flush();
+    } catch (e) { online = false; toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); }
   }
   // 재고·발주·프랩 입력은 계산 모델을 통째로 다시 만들지 않고 채점만 다시 (입력할 때마다 느려지지 않게)
   function light(key) {
@@ -58,13 +83,13 @@
     if (value === null) delete db[key]; else db[key] = value;
     lsSave(); light(key);
     if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
-    if (API) apiCall({ action: "set", key, value }).then(() => { online = true; }).catch(() => { online = false; toast("시트 저장 실패 · 이 기기에는 저장됐어요"); });
+    if (API) { pend.set[key] = 1; savePend(); apiCall({ action: "set", key, value }).then(() => { if (db[key] === value) { delete pend.set[key]; savePend(); } online = true; }).catch(() => { online = false; toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); }); }
   }
   function appendKey(key, item) {
     (db[key] = Array.isArray(db[key]) ? db[key] : []).push(item);
     lsSave(); light(key);
     clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500);
-    if (API) apiCall({ action: "append", key, item }).catch(() => toast("시트 저장 실패 · 이 기기에는 저장됐어요"));
+    if (API) apiCall({ action: "append", key, item }).catch(() => { (pend.add[key] = pend.add[key] || []).push(item); savePend(); toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); });
   }
   let toastT;
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600); }
@@ -435,7 +460,7 @@
   ]);
   const isHoliday = (d) => HOLI.has(d) || (db.holidays || []).includes(d);
   // 데이터 예상 Forecast: 그날 전까지의 실제 Gross Sales로
-  //  평일·주말 = 같은 요일 최근 6번 (최근일수록 비중, 행사처럼 튀는 날은 뺌)
+  //  평일·주말 = 같은 요일 최근 6번 (최근일수록 비중, 행사처럼 튀는 날(중앙값의 1.25배 넘음)은 뺌)
   //  공휴일 = 지난 공휴일 실제 매출과 그 요일 평소 매출의 평균 (9~10월 실적으로 맞춰 봄)
   function dataForecast(d) {
     if (dataFcMemo.has(d)) return dataFcMemo.get(d);
@@ -444,7 +469,7 @@
     const wmean = (vals) => {
       if (!vals.length) return null;
       const med = vals.slice().sort((a, b) => a - b)[Math.floor(vals.length / 2)];
-      const keep = vals.map((v, i) => [v, vals.length - i]).filter(([v]) => vals.length < 3 || (v >= med * 0.6 && v <= med * 1.6));
+      const keep = vals.map((v, i) => [v, vals.length - i]).filter(([v]) => vals.length < 3 || (v >= med * 0.6 && v <= med * 1.25));
       return keep.reduce((a, [v, w]) => a + v * w, 0) / keep.reduce((a, [, w]) => a + w, 0);
     };
     const wd = dow(d);
@@ -1468,6 +1493,7 @@
       const upd = () => {
         [fi, ai].forEach((el) => { const v = el.value.replace(/\D/g, ""); const c = v ? Number(v).toLocaleString("ko-KR") : ""; if (el.value !== c) el.value = c; });
         row.lastElementChild.outerHTML = diffHTML(fi.value.replace(/\D/g, ""), ai.value.replace(/\D/g, ""));
+        foot();
       };
       const save = () => {
         const all = { ...(db.forecast || {}) };
@@ -1494,11 +1520,13 @@
     const r = (act - fc) / fc * 100;
     return `<span class="diff ${r >= 0 ? "d-up" : "d-down"}">${r >= 0 ? "+" : ""}${r.toFixed(0)}%</span>`;
   }
+  // 합계: 칸에 쓰는 중인 값으로 바로 (저장 전에도 반응)
   function foot() {
     let f = 0, a = 0, fa = 0, n = 0, de = 0;
+    const rows = [...$("fcRows").querySelectorAll(".f-row")];
     for (let i = 0; i < 7; i++) {
-      const x = (db.forecast || {})[addDays(fcWeekStart, i)] || {};
-      const fv = num(x.fc) || 0, av = num(x.act);
+      const ins = rows[i] ? rows[i].querySelectorAll("input") : null, x = (db.forecast || {})[addDays(fcWeekStart, i)] || {};
+      const fv = num(ins ? ins[0].value.replace(/\D/g, "") : x.fc) || 0, av = num(ins ? ins[1].value.replace(/\D/g, "") : x.act);
       f += fv; de += dataForecast(addDays(fcWeekStart, i)) || 0; if (isFinite(av)) { a += av; fa += fv; n++; }
     }
     $("fcFoot").innerHTML = `<span class="day">합계</span><span class="t-de">${de ? won(Math.round(de / 1e4) * 1e4) : "–"}</span><span class="t-fc">${won(f)}</span><span class="t-act">${n ? won(a) : "–"}</span><span class="diff">${n && fa ? (a / fa * 100).toFixed(0) + "%" : ""}</span>`;
