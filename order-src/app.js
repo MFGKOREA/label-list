@@ -1071,17 +1071,19 @@
   const counted = (v) => !!v && v.s !== "" && v.s != null && isFinite(num(v.s));
   // 사전발주: 고른 날이 앞날이면 오늘 센 품목도 그날까지 예상, 오늘이면 안 센 품목만 예상
   const estFor = (it, v) => (!preMode ? null : pDay() === TODAY && counted(v) ? null : estStock(it, pDay()));
-  const needsOrder = (it, win, v) => {
+  // 맨 위 "발주 필요" 칸 순서: 0 발주필요 → 1 부족 → 2 여유 → 3 발주완료(맨 아래), -1 = 위로 안 올림
+  const pinRank = (it, win, v) => {
     if (preMode) {
-      const d0 = pDay(), e = estFor(it, v), s0 = e ? e.v : counted(v) ? stockOf(it, v) : NaN; if (!isFinite(s0)) return false;
-      const w0 = orderWindowFor(it, d0); if (!w0.canOrder) return false;
-      const r0 = calc(it, w0, s0, incomingOf(it, d0)); return !r0.none && r0.packs > 0;
+      const d0 = pDay(), e = estFor(it, v), s0 = e ? e.v : counted(v) ? stockOf(it, v) : NaN; if (!isFinite(s0)) return -1;
+      const w0 = orderWindowFor(it, d0); if (!w0.canOrder) return -1;
+      const r0 = calc(it, w0, s0, incomingOf(it, d0)); return !r0.none && r0.packs > 0 ? 0 : -1;
     }
-    if (v && num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
-    if (!counted(v)) return false;
-    const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
+    if (v && num(v.o) > 0) return 3; // 오늘 발주 넣은 품목은 칸 맨 아래로
+    if (!counted(v)) return -1;
+    const w = orderWindowFor(it, TODAY); if (!w.canOrder) return -1; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
-    return !r.none && r.packs > 0; // 발주필요만 위로
+    if (r.none) return -1;
+    return { buy: 0, short: 1, spare: 2 }[tierOf(r, s + inc)] ?? -1; // 충분은 제자리
   };
   function rowEl(it, win, inp) {
     win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
@@ -1162,7 +1164,7 @@
       jump(nx ? { key: nx.dataset.key, f: 0 } : null);
     }));
     d.addEventListener("change", () => {
-      const was = needsOrder(it, win, inp[it.key]), was86 = !!riskOf(it, inp[it.key]);
+      const was = pinRank(it, win, inp[it.key]), was86 = !!riskOf(it, inp[it.key]);
       const all = { ...todayInput() };
       // r: 그때 앱이 추천한 발주수량 (나중에 실제 발주와 비교해 학습)
       const e2 = estFor(it, v), s2 = e2 ? e2.v : stockOf(it, v);
@@ -1176,7 +1178,7 @@
       inp[it.key] = rec;
       // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
       // (포커스가 다음 칸으로 옮겨간 뒤에 다시 그려야 같은 품목의 발주칸을 눌렀을 때도 그 칸에 그대로 있음)
-      if (was !== needsOrder(it, win, inp[it.key]) || was86 || riskOf(it, inp[it.key])) setTimeout(() => {
+      if (was !== pinRank(it, win, inp[it.key]) || was86 || riskOf(it, inp[it.key])) setTimeout(() => {
         if (!orderFocus) { const a = document.activeElement, c = a && a.closest && a.closest("#orderList .cell[data-key]"); if (c) orderFocus = { key: c.dataset.key, f: [...c.querySelectorAll("input")].indexOf(a) }; }
         renderList();
       }, 0);
@@ -1227,12 +1229,14 @@
       if (!groups.has(v)) groups.set(v, []);
       groups.get(v).push(it);
     });
-    // 재고 넣고 발주가 필요한 품목은 맨 위 "발주 필요"에 모음
-    const top = [];
-    groups.forEach((list, v) => { const keep = list.filter((it) => !(needsOrder(it, win, inp[it.key]) && top.push(it))); if (keep.length) groups.set(v, keep); else groups.delete(v); });
+    // 재고 넣은 품목 중 발주필요·부족·여유·발주완료는 맨 위 "발주 필요"에 모음 (그 순서로)
+    let top = [];
+    groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
+    const nBuy = top.filter(([k]) => k === 0).length;
+    top = top.sort((a, b) => a[0] - b[0]).map(([, it]) => it); // 같은 순위 안에서는 원래 순서 유지
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 ON 버튼)
-    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
+    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${nBuy}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
     box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderMain(); });
     // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고) + 그날 발주분 입고일로 화살표
     if (preMode) {
