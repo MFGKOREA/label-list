@@ -76,6 +76,9 @@ svg { display: block; }
 .app { max-width: 480px; margin: 0 auto; }
 .view { padding-block: 14px 56px; }
 .view[hidden] { display: none; }
+/* 화면 넘어갈 때 옆으로 밀리는 동안 페이지가 넓어지면 휴대폰이 축소했다 다시 확대함 → 가로로 넘치는 부분은 잘라냄 */
+html, body { overflow-x: hidden; }
+@supports (overflow: clip) { html, body { overflow-x: clip; } }
 .view.push { animation: push .28s cubic-bezier(.2, .8, .2, 1); }
 .view.pop { animation: pop .28s cubic-bezier(.2, .8, .2, 1); }
 @keyframes push { from { transform: translateX(32%); opacity: .4; } }
