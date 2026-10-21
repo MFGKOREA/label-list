@@ -58,10 +58,13 @@
       online = true;
     } catch { online = false; setTimeout(flush, 30000); } finally { flushing = false; }
   }
-  async function pull() {
-    if (!API) { online = false; return; }
+  // 시트에서 받아옴. 바뀐 게 있으면 true (1분마다 자동으로 받을 때는 실패 알림 없이)
+  let lastSig = "";
+  async function pull(quiet) {
+    if (!API) { online = false; return false; }
     try {
       const remote = await apiCall();
+      const sig = JSON.stringify(remote), changed = sig !== lastSig; lastSig = sig;
       // 아직 시트에 못 보낸 값은 이 기기 값을 지킴 (날짜별 객체는 합침: 시트 값 위에 이 기기 값)
       Object.keys(pend.set).forEach((k) => {
         const loc = db[k], rem = remote[k];
@@ -71,7 +74,8 @@
       Object.keys(pend.add).forEach((k) => { const arr = Array.isArray(remote[k]) ? remote[k].slice() : []; pend.add[k].forEach((it) => { if (!arr.some((x) => JSON.stringify(x) === JSON.stringify(it))) arr.push(it); }); remote[k] = arr; });
       db = { ...db, ...remote }; online = true; lsSave();
       if (Object.keys(pend.set).length || Object.keys(pend.add).length) flush();
-    } catch (e) { online = false; toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); }
+      return changed;
+    } catch (e) { online = false; if (!quiet) toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); return false; }
   }
   // 재고·발주·프랩 입력은 계산 모델을 통째로 다시 만들지 않고 채점만 다시 (입력할 때마다 느려지지 않게)
   function light(key) {
@@ -2018,6 +2022,17 @@
   renderMain();
   pull().then(() => { invalidate(); renderMain(); learnTrack(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden && !$("v-forecast").hidden) fcSave(); });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(() => { invalidate(); if (!$("v-main").hidden) renderMain(); if (!$("v-forecast").hidden && !$("fcRows").contains(document.activeElement)) renderForecast(); }); });
+  // 지금 보이는 화면을 새 데이터로 다시 그림 (입력 중인 칸이 있으면 그 화면은 건드리지 않음)
+  function refreshVisible() {
+    invalidate();
+    const typing = (id) => { const a = document.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && $(id).contains(a); };
+    if (!$("v-main").hidden && !typing("v-main")) renderMain();
+    if (!$("v-forecast").hidden && !typing("v-forecast")) renderForecast();
+    if (!$("v-report").hidden) renderReport();
+    if (!$("v-files").hidden && !typing("v-files")) renderFiles();
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(refreshVisible); });
+  // 다른 기기에서 넣은 재고·Forecast도 1분 안에 반영 (리포트의 오차 범위 큰 품목 등)
+  setInterval(() => { if (!document.hidden) pull(true).then((ch) => { if (ch) refreshVisible(); }); }, 60000);
   window.__orderCalc = { model, orderWindow, calc, dataForecast, db: () => db, TODAY };
 })();
