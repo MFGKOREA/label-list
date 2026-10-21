@@ -488,6 +488,3 @@ svg { display: block; }
 .ostate { font-size: 10.5px; font-weight: 700; color: var(--muted); text-align: center; white-space: nowrap; }
 .ostate.open { color: var(--ok-ink); }
 .ostate.closed { color: var(--c-act); }
-
-.need em.por.est { font-size: 9px; opacity: .8; }
-.fld input::placeholder { font-size: 13px; }
