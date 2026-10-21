@@ -900,6 +900,9 @@
     M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; it.rateG = null; });
     byKey.forEach((list, key) => {
       const it = M.items.find((i) => i.key === key); if (!it) return;
+      // 그날 재고는 발주 탭에 마지막으로 남은 값으로 (44로 잘못 쳤다가 4로 고친 경우 등)
+      //  박스로 세는 품목은 예전에 팩으로 넣은 날이 있어 기록 그대로 씀
+      if (!it.box) list = list.map((l) => { const r = (db["input." + l.t.slice(0, 10)] || {})[key]; return r && counted(r) ? { ...l, s: num(r.s) } : l; });
       let uG = 0, gG = 0;
       for (let i = 1; i < list.length; i++) {
         const a = list[i - 1], b = list[i];
@@ -1951,7 +1954,9 @@
     // 정확도 막대: 0%부터, 길수록 정확. 가장 긴 방식을 강조
     const bestV = Math.max(...ms.map((m) => m[2]));
     $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
-    const miss = list.map((s) => ({ ...s, e: (s.actual - s.pF) / s.actual })).sort((p, q) => Math.abs(q.e) - Math.abs(p.e)).slice(0, 5);
+    // 오차 범위 큰 품목 10개: 그 주 품목별로 예상 합 vs 실제 합
+    const byIt = new Map(); list.forEach((x) => { const o = byIt.get(x.key) || { name: x.name, pF: 0, actual: 0 }; o.pF += x.pF; o.actual += x.actual; byIt.set(x.key, o); });
+    const miss = [...byIt.values()].map((o) => ({ ...o, e: (o.actual - o.pF) / o.actual })).sort((p, q) => Math.abs(q.e) - Math.abs(p.e)).slice(0, 10);
     $("rMiss").innerHTML = miss.map((m) => `<div class="cell miss"><span class="nm">${esc(m.name)}<small>예상 ${r1(m.pF)} · 실제 ${r1(m.actual)}</small></span><span class="chip ${m.e > 0 ? "under" : "over"}">${m.e > 0 ? "적게 예상" : "많게 예상"}</span><span class="pc">${Math.round(Math.abs(m.e) * 100)}%</span></div>`).join("");
   }
   $("rSel").addEventListener("change", () => { rWeek = $("rSel").value; renderReport(); });
