@@ -1028,7 +1028,7 @@
     else if (dow(od) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
@@ -1064,7 +1064,7 @@
   let preDay = null; // 사전발주로 고른 날 (없으면 다음 발주일)
   const nextOrderDay0 = () => { let d = addDays(TODAY, 1); while (dow(d) === 0) d = addDays(d, 1); return d; };
   const pDay = () => preDay || nextOrderDay0();
-  function estStock(it, d) {
+  function estStock(it, d, plan) {
     const start = d > TODAY ? TODAY : addDays(d, -1);
     for (let x = start; x >= addDays(TODAY, -7); x = addDays(x, -1)) {
       const k = Math.round((parseISO(d) - parseISO(x)) / 864e5);
@@ -1072,6 +1072,7 @@
       if (!r || r.s === "" || r.s == null || !isFinite(num(r.s))) continue;
       let arr = 0;
       for (let j = 0; j <= 14; j++) arrivalsOf(it, addDays(d, -j)).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
+      (plan || []).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
       const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(x)).pop();
       const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
       const left = hh <= ORDER_CUTOFF_H ? 1 : Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H)));
@@ -1083,14 +1084,38 @@
     return null;
   }
   const counted = (v) => !!v && v.s !== "" && v.s != null && isFinite(num(v.s));
+  // 사전발주 계산: 오늘부터 고른 날(P) 전까지 발주일에 아직 발주 기록이 없으면 그날 앱 추천량대로 넣는다고 보고 이어서 계산
+  //  (토요일 사전발주를 수요일에 보면 목·금 발주분이 주말을 맡으니, 토요일 발주는 화요일 입고 뒤 몫만)
+  let preMemo = new Map();
+  function preCalc(it, v, P) {
+    const mk = it.key + "|" + P; if (preMemo.has(mk)) return preMemo.get(mk);
+    const plan = [], incP = (d) => incomingOf(it, d) + plan.reduce((a, p) => a + (p.d > d ? p.q : 0), 0);
+    const now = new Date(), nowH = now.getHours() + now.getMinutes() / 60;
+    for (let y = TODAY; y < P; y = addDays(y, 1)) {
+      if (dow(y) === 0 || !isOrderDay(it, y)) continue;
+      const ry = (db["input." + y] || {})[it.key];
+      if (ry && num(ry.o) > 0) continue; // 넣은 발주는 입고로 이미 셈
+      if (y === TODAY && nowH > ORDER_CUTOFF_H) continue; // 오늘 발주 마감 지남
+      const ey = y === TODAY && counted(v) ? null : estStock(it, y, plan), sy = ey ? ey.v : counted(v) ? stockOf(it, v) : NaN;
+      if (!isFinite(sy)) continue;
+      const ry2 = calc(it, orderWindowFor(it, y), sy, incP(y));
+      if (!ry2.none && ry2.packs > 0) plan.push({ d: deliveryOf(it, y), q: ordToStock(it, ry2.orderQty), y });
+    }
+    const e = P === TODAY && counted(v) ? null : estStock(it, P, plan), sv = e ? e.v : counted(v) ? stockOf(it, v) : NaN;
+    const w = orderWindowFor(it, P), inc = incP(P);
+    const r = isFinite(sv) && w.canOrder ? calc(it, w, sv, inc) : null;
+    // 보여줄 예상 재고: 이번 발주가 들어오는 날 아침(이번 발주분 빼고). 필요량 = 그날부터 쓸 양 − 이 값
+    const own = (db["input." + P] || {})[it.key], ownQ = own && num(own.o) > 0 && deliveryOf(it, P) === w.deliv ? ordToStock(it, num(own.o)) : 0;
+    const eD = estStock(it, w.deliv, plan), sD = eD ? Math.max(0, eD.v - ownQ) : NaN;
+    const out = { e, sv, sD, w, inc, r: r && !r.none ? r : null, plan };
+    preMemo.set(mk, out); return out;
+  }
   // 사전발주: 고른 날이 앞날이면 오늘 센 품목도 그날까지 예상, 오늘이면 안 센 품목만 예상
   const estFor = (it, v) => (!preMode ? null : pDay() === TODAY && counted(v) ? null : estStock(it, pDay()));
   // 맨 위 "발주 필요" 칸 순서: 0 발주필요 → 1 부족·여유(한 묶음) → 3 발주완료(맨 아래), -1 = 위로 안 올림
   const pinRank = (it, win, v) => {
     if (preMode) {
-      const d0 = pDay(), e = estFor(it, v), s0 = e ? e.v : counted(v) ? stockOf(it, v) : NaN; if (!isFinite(s0)) return -1;
-      const w0 = orderWindowFor(it, d0); if (!w0.canOrder) return -1;
-      const r0 = calc(it, w0, s0, incomingOf(it, d0)); return !r0.none && r0.packs > 0 ? 0 : -1;
+      const pc = preCalc(it, v, pDay()); return pc.r && pc.r.packs > 0 ? 0 : -1;
     }
     if (v && num(v.o) > 0) return 3; // 오늘 발주 넣은 품목은 칸 맨 아래로
     if (!counted(v)) return -1;
@@ -1144,12 +1169,12 @@
     const top = `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>`;
     // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
-      const d0 = pDay(), w0 = orderWindowFor(it, d0), inc0 = incomingOf(it, d0);
-      const e = estFor(it, v), sv = e ? e.v : stockOf(it, v), r = isFinite(sv) && !c0.none && w0.canOrder ? calc(it, w0, sv, inc0) : null;
-      const sShow = isFinite(sv) ? r1(sv / (it.box || 1)) + (it.box ? "BOX" : esc(unit)) : "–";
+      const d0 = pDay(), pc = preCalc(it, v, d0), w0 = pc.w, inc0 = incomingOf(it, d0); // 입고예정은 실제로 넣은 발주만
+      const e = pc.e, sv = pc.sv, r = c0.none ? null : pc.r;
+      const sShow = isFinite(pc.sD) ? r1(pc.sD / (it.box || 1)) + (it.box ? "BOX" : esc(unit)) : "–";
       const q = r && !r.none ? r.orderQty : null;
       d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${inc0 ? `<span class="incnote">입고예정 ${r1(inc0)}${esc(unit)}</span>` : ""}${!w0.canOrder ? `<span class="boxnote">${DOW[dow(d0)]}요일 발주 없음</span>` : ""}</span>` +
-        `<span class="fld ro${e ? " est" : ""}"><span>${e || !isFinite(sv) ? "예상 재고" : "재고"}</span><b>${sShow}</b></span>` +
+        `<span class="fld ro${e ? " est" : ""}"><span>${DOW[dow(w0.deliv)]} 예상 재고</span><b>${sShow}</b></span>` +
         `<span class="need prebox${q ? " has" : ""}"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
       return d;
     }
@@ -1226,6 +1251,7 @@
     return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => b.p - a.p);
   }
   function renderList() {
+    preMemo = new Map();
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
