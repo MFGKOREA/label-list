@@ -1309,6 +1309,8 @@
         const L = prepLearn(id0, ex.unit);
         if (L.k !== 1) { ex.e *= L.k; if (Math.abs(L.k - 1) >= 0.05) ex.note = [ex.note, `재고 학습 ×${L.k.toFixed(2)}`].filter(Boolean).join(" · "); }
       }
+      // 하루 예상(학습 반영)과 내일 예상: 오늘은 충분해도 내일 아침에 바로 만들어야 하는지(ASAP) 판단용
+      if (ex) { ex.eDay = ex.e; ex.eTomorrow = g.v > 0 ? ex.e * dayGross(addDays(TODAY, 1), false).v / g.v : ex.e; }
       if (ex && ex.batch && days > 1 && g.v > 0) {
         const full = Math.floor(days), part = days - full;
         ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v;
@@ -1338,7 +1340,11 @@
         if (v.s === "") return '<span class="need none"><b>–</b></span>';
         const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
         let r = target - (num(v.s) * dd.f || 0);
-        if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
+        if (r <= ex.e * 0.03) {
+          // 충분하지만 오늘 쓰고 남는 양이 내일 반나절치도 안 되면 내일 아침 첫 프랩 (매일 만드는 1day 프랩은 제외)
+          const left = (num(v.s) * dd.f || 0) - ex.eDay, tight = !(shelf && shelf <= 1) && ex.eTomorrow > 0 && left < ex.eTomorrow * 0.5;
+          return tight ? '<span class="need asap"><b>ASAP</b><span>내일 아침 프랩</span></span>' : '<span class="need enough"><b>충분</b></span>';
+        }
         if (ex.step > 1 || ex.unit === "EA") r = Math.ceil(r / (ex.step || 1) - 1e-9) * (ex.step || 1); // EA는 통으로
         v.need = +rpu(r / dd.f, dd.u, true) * dd.f; // 학습용: 이만큼 만든다고 봄
         return `<span class="need buy"><b>${rpu(r / dd.f, dd.u, true)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;

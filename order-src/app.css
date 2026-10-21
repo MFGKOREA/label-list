@@ -11,7 +11,7 @@
   --accent: #222222;
   --accent-ink: #ffffff;
   --accent-soft: #f4f4f4;
-  --ok: #41b979; --ok-bg: #ebf7f0; --ok-ink: #16804a;
+  --ok: #41b979; --ok-bg: #ebf7f0; --ok-ink: #16804a; --warn-bg: #fff3c4; --warn-ink: #8a6400;
   --chick: #f4f4f4; --chick-line: #d3d3d3; --chick-ink: #555555;
   /* Forecast 탭: 데이터 예상(학습량 네온 초록) · Forecast(노랑) · 실제 Gross(레드) */
   --c-de: #259a00; --c-fc: #b88600; --c-act: #e0244a;
@@ -24,7 +24,7 @@
     --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
     --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
     --accent: #f2f2f2; --accent-ink: #000000; --accent-soft: #1f1f1f;
-    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a;
+    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a; --warn-bg: #2a2410; --warn-ink: #ffd60a;
     --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd; --c-de: #3ddc00; --c-fc: #ffd60a; --c-act: #ff375f;
     --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
     --shadow: 0 0 0 0 transparent;
@@ -35,7 +35,7 @@
   --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
     --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
     --accent: #f2f2f2; --accent-ink: #000000; --accent-soft: #1f1f1f;
-    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a;
+    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a; --warn-bg: #2a2410; --warn-ink: #ffd60a;
     --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd; --c-de: #3ddc00; --c-fc: #ffd60a; --c-act: #ff375f;
     --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
     --shadow: 0 0 0 0 transparent;
@@ -173,6 +173,8 @@ svg { display: block; }
 .need.buy { background: var(--accent); color: var(--accent-ink); }
 .need.enough { background: var(--ok-bg); color: var(--ok-ink); }
 .need.enough b { font-size: 14px; }
+.need.asap { background: var(--warn-bg); color: var(--warn-ink); }
+.need.asap b { font-size: 14px; letter-spacing: .02em; }
 .need.buy.lbl b { font-size: 14px; }
 .need.buy.lbl span { opacity: .9; }
 .need.none { box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
