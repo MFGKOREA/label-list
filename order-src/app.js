@@ -79,7 +79,7 @@
   }
   // 재고·발주·프랩 입력은 계산 모델을 통째로 다시 만들지 않고 채점만 다시 (입력할 때마다 느려지지 않게)
   function light(key) {
-    if (/^(prepOnhand\.|prepLog$)/.test(key)) return;
+    if (/^(prepOnhand\.|prepLog$)/.test(key)) { if (cache) cache.plan = null; return; }
     if (/^(input\.|onhand$)/.test(key) && cache) { applyScores(cache); return; }
     invalidate();
   }
@@ -649,7 +649,7 @@
       acc2.forEach((a, k) => m.set(k, a.reduce((x, y) => x + y, 0) / a.length));
       return (eaGMemo = m);
     };
-    function expand(recipe, factor, acc, depth, prepAcc) {
+    function expand(recipe, factor, acc, depth, prepAcc, batchAcc) {
       recipe.ing.forEach((ing) => {
         let q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
@@ -665,31 +665,46 @@
           acc.set(it.key, (acc.get(it.key) || 0) + s * factor);
         } else if (t.kind === "prep" && depth < 2) {
           const p = prepByName.get(t.id); if (!p) return;
+          // go: 이 프랩을 f회(1회 = 1X) 만큼 쓴다고 보고 원재료까지 풀기. batchAcc에 프랩별 X를 모음 (배치 계획용)
+          const go = (f) => { if (batchAcc) batchAcc.set(p.name, (batchAcc.get(p.name) || 0) + f); expand(p, f, acc, depth + 1, prepAcc, batchAcc); };
           const amount = q.g ?? q.ml ?? null;
           // 프랩 사용량: g/ml은 이름 그대로, 포션·개수는 "이름|ea"로 따로 셈 (프랩 안의 프랩도 셈)
           if (prepAcc && amount != null) prepAcc.set(p.name, (prepAcc.get(p.name) || 0) + amount * factor);
           else if (prepAcc && q.ea != null) prepAcc.set(p.name + "|ea", (prepAcc.get(p.name + "|ea") || 0) + q.ea * factor);
           // "1 portion"처럼 개수로 쓴 프랩은 프랩 레시피가 N포션/오더 분량이면 그만큼 나눠 원재료까지 풀기 (어묵 포션 = 어묵 100g)
           const yc = /([\d.]+)\s*(portion|order|ea)\b/i.exec(String(p.yield || ""));
-          if (amount == null && q.ea != null && yc && !/약/.test(p.yield)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
+          if (amount == null && q.ea != null && yc && !/약/.test(p.yield)) { go((factor * q.ea) / num(yc[1])); return; }
           // "1,980g (약 15 Portion)"처럼 무게와 포션 수가 같이 있으면 1포션 = 무게 ÷ 포션 수
-          if (amount == null && q.ea != null && yc && yieldOf(p)) { expand(p, (factor * q.ea) / num(yc[1]), acc, depth + 1, prepAcc); return; }
+          if (amount == null && q.ea != null && yc && yieldOf(p)) { go((factor * q.ea) / num(yc[1])); return; }
           // 분량이 "1 Portion"·"약 15 Order"처럼 개수뿐이면 재료 무게 합이 그 한 번 분량 (럭스 포션 → 치킨 다이스 50 g, 소테 새우 15오더 = 새우 800g)
           const y = yieldOf(p) || (yc ? p.ing.reduce((a2, i) => { const q2 = parseQty(i.w, i.v) || {}; return a2 + (q2.g || q2.ml || 0); }, 0) : 0);
           // "새우 12 ea"처럼 개수로 쓴 건 다른 라인 레시피의 "25 g | 6 ea"로 1개 무게를 구해 g으로
           const eg = amount == null && q.ea != null ? prepEaG().get(p.name) : null;
           const amt = amount ?? (eg ? q.ea * eg : null);
           if (!y || amt == null) return;
-          expand(p, (factor * amt) / y, acc, depth + 1, prepAcc);
+          go((factor * amt) / y);
         }
       });
     }
     function perMenu(recipe) {
       if (perMenuCache.has(recipe.name)) return perMenuCache.get(recipe.name);
-      const acc = new Map(), prepAcc = new Map();
-      expand(recipe, 1, acc, 0, prepAcc);
-      const v = { acc, prepAcc }; perMenuCache.set(recipe.name, v); return v;
+      const acc = new Map(), prepAcc = new Map(), batchAcc = new Map();
+      expand(recipe, 1, acc, 0, prepAcc, batchAcc);
+      const v = { acc, prepAcc, batchAcc }; perMenuCache.set(recipe.name, v); return v;
     }
+    // 레시피 자기 재료 중 품목만 (프랩 안의 프랩은 그 프랩 배치에서 셈): 1회(1X)당 재고단위
+    const directRaw = (recipe) => {
+      const m = new Map();
+      recipe.ing.forEach((ing) => {
+        let q = parseQty(ing.w, ing.v), t = resolveIng(ing.n);
+        if (t && t.kind === "prep" && prepByName.get(t.id) === recipe) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
+        if (!t || t.skip || !q || t.kind !== "item") return;
+        const tbG = itemCfg[t.id] || {}; if (q.vol && tbG.tbG) q = { g: (q.ml / 15) * tbG.tbG };
+        const it = items.find((i) => i.key === t.id); if (!it) return;
+        const st = toStock(q, it.pk); if (st != null) m.set(it.key, (m.get(it.key) || 0) + st);
+      });
+      return m;
+    };
 
     // 월별 A(실사), B(레시피) 사용량
     const monthRows = allMonths.map((m) => {
@@ -740,7 +755,7 @@
     };
     // B를 최근 3개월 메뉴 판매로 (3:2:1). 최근 달에 팔린 메뉴만, 그 메뉴가 팔린 달끼리 평균 → 10월에 새로 생긴 메뉴는 10월만, 라자냐처럼 계속 판 메뉴는 8·9월도 반영
     // blend.theo / blend.prep: Gross 100만원당 사용량
-    const blend = { theo: new Map(), prep: new Map() };
+    const blend = { theo: new Map(), prep: new Map(), batchX: new Map(), recipeRate: [] };
     if (withB.length) {
       const recent = withB.slice(-3), wOf = (i) => i + 1 + (3 - recent.length);
       const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
@@ -751,6 +766,8 @@
         const pm = perMenu(recipe), rate = wq / wg;
         pm.acc.forEach((v, k) => add(blend.theo, k, v * rate));
         pm.prepAcc.forEach((v, k) => add(blend.prep, k, v * rate));
+        pm.batchAcc.forEach((v, k) => add(blend.batchX, k, v * rate)); // 프랩별 Gross 100만원당 X
+        blend.recipeRate.push({ recipe, rate });
       });
       // 커팅비프 부족분(부채살)은 달 단위라 달별 Gross 비율로
       const wsum = recent.reduce((a, r, i) => a + wOf(i) * r.gross / 1e6, 0);
@@ -802,7 +819,7 @@
       it.errA = errA; it.errB = errB;
       it.isNew = it.rateA == null && it.rateB != null;
     });
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, mapCfg };
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg };
     applyScores(cache);
     return cache;
   }
@@ -892,9 +909,12 @@
     const qs = (it.scoreQ || []).slice(-8), q = qs.length ? qs.reduce((a, b) => a + b, 0) / qs.length : 0;
     const sigma = errs ? Math.sqrt(Math.max(0.01, errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8) - q)) : Math.max(0.1, (spread ?? 0.2) / 2, useA == null && useB == null ? 0.25 : 0);
     const nd = Math.max(1, Math.min(win.days, win.nEff || win.days));
-    let ss = Z * Math.sqrt(sigma * sigma + fcErr() ** 2) * use / Math.sqrt(nd);
+    // 프랩 배치: 소스·드레싱 원재료는 프랩하는 날 통째로 나가니, 이 기간에 돌아오는 배치만큼 평균 사용량을 고쳐 잡고, 배치 시점 불확실성은 여유분에 더함
+    const ba = batchAdj(it, win), useAvg = use;
+    if (ba) use = Math.max(0, use + ba.delta);
+    let ss = Z * Math.sqrt((Math.sqrt(sigma * sigma + fcErr() ** 2) * useAvg / Math.sqrt(nd)) ** 2 + (ba ? ba.varS : 0));
     let need = use + ss;
-    if (it.shelf) need = Math.min(need, (use / win.days) * it.shelf);
+    if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
     const short = need - s - inc;
     const mult = it.pk.mult || 1;
     // "10개단위 발주"처럼 묶음 단위면 반올림 (반올림해서 0이어도 여유분 빼고 모자라면 1묶음)
@@ -904,9 +924,84 @@
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
-    const sd = use * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd);
-    return { use, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty };
+    const sd = Math.sqrt((useAvg * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd)) ** 2 + (ba ? ba.varS : 0));
+    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba };
   }
+
+  // ---------- 프랩 배치 계획 ----------
+  // 소스·드레싱·오일처럼 한 번에 만드는 프랩의 원재료는 매출에 비례해 조금씩 나가지 않고 프랩하는 날 2X·4X가 통째로 나감.
+  // 프랩마다 Gross 100만원당 X(레시피 1회 분량), 배치 크기(쉘프라이프 절반 동안 쓸 양, 0.5X 단위, 최소 1X), 마지막 프랩 재고(프랩 탭 기록)로
+  // 앞으로 14일 중 어느 날 몇 X 만드는지 추정 → 발주 기간에 드는 배치만큼 원재료 필요량을 고침. 프랩 재고 기록이 없으면 주기로만 봄
+  const PLAN_DAYS = 14;
+  function prepPlan(M) {
+    if (M.plan) return M.plan;
+    const yieldG = (p) => { const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(String(p.yield || "")); if (!m) return null; const v = num(m[1]); return /^(kg|l)$/i.test(m[2]) ? v * 1000 : v; };
+    const yn = (p) => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(String(p.yield || "")); return m ? num(m[1]) : null; };
+    // 프랩 탭 기록(prepLog·prepOnhand)의 id ↔ PDF 레시피: 프랩 탭과 같은 연결
+    const pm = db.prepMap || {}, fwd = new Map();
+    M.prepSheet.forEach((x) => { const mp = pm[x.name]; const pdf = (mp && M.prep.find((p) => p.name === mp)) || M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75); if (pdf && !fwd.has(pdf.name)) fwd.set(pdf.name, { id: (x.code ? x.code + " " : "") + x.name, ko: x.name }); });
+    const plan = [];
+    M.prep.forEach((p) => {
+      const cfg = (db.prepCfg || {})[p.name] || {};
+      const raw = M.directRaw(p); if (!raw.size) return;
+      if (/thawing|portion/i.test(p.name) || cfg.rate || cfg.from || /^(EA|포션|g|PK|kg|CAN|단)$/.test(cfg.unit || "")) return;
+      const yg = yieldG(p), n = yn(p), y = String(p.yield || "");
+      if (!(cfg.unit === "X" || cfg.batch || yg || (n > 1 && /order/i.test(y)))) return;
+      const xPerM = M.blend.batchX.get(p.name) || 0; if (!(xPerM > 0)) return;
+      // 주기: 쉘프라이프 절반 (prepCfg.cycle 일수로 바꿀 수 있음). 배치 크기: 주기 동안 쓸 양 (prepCfg.batchX로 "항상 2X"처럼 고정 가능)
+      const shelf = p.shelf || 2, cyc = cfg.cycle > 0 ? cfg.cycle : shelf > 1 ? Math.min(3.5, shelf / 2) : 1;
+      const xOf = (d) => xPerM * dayGross(d, true).v / 1e6;
+      const sumX = (from, days) => { let t = 0; for (let k = 0; k < Math.ceil(days); k++) t += xOf(addDays(from, k)) * Math.min(1, days - k); return t; };
+      const stepX = cfg.step && n && /order/i.test(y) ? cfg.step / n : 0.5; // 라자냐 5오더 = 0.5X, 그 밖엔 0.5X 단위
+      const roundUp = (v) => Math.max(stepX, Math.ceil(v / stepX - 1e-9) * stepX);
+      const batchAt = (d) => (cfg.batchX > 0 ? cfg.batchX : roundUp(Math.max(sumX(d, cyc), Math.min(1, sumX(d, shelf)))));
+      // "오늘 만들어야 하는지": 오늘 쓸 양 + 내일 반나절치(내일 런치까지)가 안 되면 한 배치. 떨어지기 하루쯤 전에 미리 만드는 실제 습관에 맞춤
+      const target = (d) => xOf(d) + (shelf > 1 ? 0.5 * xOf(addDays(d, 1)) : 0);
+      const ordUnit = n && /order/i.test(y) && cfg.unit !== "X", unit = ordUnit ? "오더" : "X", f = ordUnit ? 1 / n : 1; // 프랩 탭이 오더로 세는 프랩은 X로
+      const m = fwd.get(p.name), id = m ? m.id : p.short || p.name, ko = m ? m.ko : p.short || p.name;
+      // 프랩 탭 기록(prepLog: 그날 재고 s + 만든 양 need, 단위 u): 지난 14일 것, 단위가 지금과 같은 것만 (식스·나인으로 세던 날은 뺌). 날마다 마지막 기록
+      const byDay = new Map();
+      (db.prepLog || []).filter((l) => l.id === id && l.u === unit && l.t.slice(0, 10) <= TODAY && l.t.slice(0, 10) >= addDays(TODAY, -PLAN_DAYS)).sort((a, b) => (a.t < b.t ? -1 : 1)).forEach((l) => byDay.set(l.t.slice(0, 10), l));
+      const days = [...byDay.keys()], d0 = days[0] || null, dLast = days[days.length - 1] || null;
+      // 첫 기록부터 앞으로 14일까지 하루씩: 기록이 있는 날은 그 재고(+만든 양)로 맞추고, 없는 날은 아침에 오늘 쓸 양이 모자라면 배치
+      let events = null;
+      if (d0) {
+        events = []; let st = 0;
+        for (let d = d0; d < addDays(TODAY, PLAN_DAYS); d = addDays(d, 1)) {
+          const l = byDay.get(d);
+          if (l) { st = num(l.s) * f; const made = (num(l.need) || 0) * f; if (made > 0) { st += made; events.push({ d, x: made }); } }
+          if (st < target(d)) { const bx = batchAt(d); st += bx; events.push({ d, x: bx }); } // 모자라면 한 배치 (기록한 날도 만든 양이 모자라면)
+          st = Math.max(0, st - xOf(d));
+        }
+      }
+      const batchX = batchAt(TODAY), xd = sumX(TODAY, 7) / 7, cycEff = xd > 0 ? Math.max(1, Math.min(shelf, batchX / xd)) : cyc;
+      plan.push({ p, id, ko, raw, xPerM, shelf, batchX, cycEff, events, d0, knownUntil: dLast ? addDays(dLast, shelf) : null });
+    });
+    return (M.plan = plan);
+  }
+  // 품목의 발주 기간 배치 보정: Σ (기간에 드는 배치 X − 평균 X) × 1X당 원재료
+  //  프랩 재고를 아는 동안(마지막 기록 + 쉘프라이프)은 추정한 배치 날짜로, 모르면 평균대로 두고 "배치가 하나 더 들 수 있는" 만큼을 여유분 분산(varS)에 넣음
+  //  배치가 기간 밖이면 사용량이 줄지만 평균의 30%는 남김 (프랩 재고 기록이 틀렸을 때 대비)
+  function batchAdj(it, win) {
+    const M = cache; if (!M || !win.today) return null;
+    let delta = 0, varS = 0, any = false; const notes = [];
+    const W = Math.max(0, win.days), end = addDays(win.today, Math.ceil(W));
+    prepPlan(M).forEach((pl) => {
+      const per = pl.raw.get(it.key); if (!per) return;
+      any = true;
+      const avgX = pl.xPerM * win.gross / 1e6, bRaw = pl.batchX * per;
+      if (pl.events && pl.d0 && win.today >= pl.d0 && win.today <= pl.knownUntil) {
+        let bx = 0, d = null; pl.events.forEach((e) => { if (e.d >= win.today && e.d < end) { bx += e.x; if (!d) d = e.d; } });
+        delta += Math.max(-0.7 * avgX, bx - avgX) * per * (it.loss || 1); varS += (0.25 * bRaw) ** 2;
+        if (bx > 0) notes.push({ ko: pl.ko, x: bx, d });
+      } else { const r = W / pl.cycEff, fr = r - Math.floor(r); varS += fr * (1 - fr) * bRaw * bRaw; }
+    });
+    if (!any) return null;
+    notes.sort((a, b) => b.x - a.x);
+    return { delta, varS, notes };
+  }
+  // 품목이 프랩 배치로 쓰이면 한 배치 원재료 양 (채점 묶음 기준)
+  const batchRawOf = (M, it) => prepPlan(M).reduce((a, pl) => Math.max(a, (pl.raw.get(it.key) || 0) * pl.batchX), 0);
 
   // ---------- G: 재고채점 ----------
   function applyScores(M) {
@@ -949,11 +1044,12 @@
       // 채점 구간: 이어진 구간을 예상 사용량이 2단위 넘을 때까지 묶음 (시즈닝·고춧가루처럼 가끔 프랩에 쓰는 품목은 하루 단위로는 0 아니면 통째)
       //  재고가 그대로인 날(사용 0)도 넣고, 음수(입고 없이 늘어남)나 입고를 모르는 구간에서 끊음
       const err = (p, a) => Math.max(-1, Math.min(1, (p - a) / Math.max(a, 1e-9))); // ±100%에서 자름
+      const thr = Math.max(2, batchRawOf(M, it)); // 프랩 배치로 쓰는 품목은 한 배치 양이 될 때까지 묶음
       let acc = null;
       const flushAcc = () => {
         if (!acc) return; const { d1, d2, actual, pA, pB, pF, g } = acc; acc = null;
         if (pF == null) { if (g > 0) { uG += actual; gG += g; } return; } // 수불·레시피가 없는 품목(세제 등)은 재고로 100만원당 사용량을 배움
-        if (!(pF >= 2)) return; // 예상 사용량이 2단위가 안 되면 아직 판단 못 함
+        if (!(pF >= thr)) return; // 예상 사용량이 기준(2단위 또는 한 배치)이 안 되면 아직 판단 못 함
         if (pA != null) it.scoreA.push(err(pA, actual));
         if (pB != null) it.scoreB.push(err(pB, actual));
         it.scoreF.push(err(pF, actual));
@@ -967,14 +1063,15 @@
         if (acc && acc.d2 !== d1) { flushAcc(); }
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
         const g = sumGross(d1, d2, true).s / 1e6;
-        const pA = it.rateA != null ? it.fixedA * days + it.rateA * g : null;
-        const pB = it.rateB != null ? it.rateB * g : null;
+        const bdj = (() => { const ba = batchAdj(it, { today: d1, days, gross: g * 1e6 }); return ba ? ba.delta : 0; })(); // 프랩 배치(그 사이 만든 날)
+        const pA = it.rateA != null ? Math.max(0, it.fixedA * days + it.rateA * g + bdj) : null;
+        const pB = it.rateB != null ? Math.max(0, it.rateB * g + bdj) : null;
         const pF = pA != null && pB != null ? (pA + pB) / 2 : pA ?? pB;
         // 재고가 그대로여도 뜯은 건 안 세는 경우가 있어 1단위까지는 뜯은 걸 쓴 것으로 봄. 2단위 넘게 쓸 만큼 예상인데 그대로면 다시 안 센 값으로 보고 뺌
-        if (actual === 0 && pF != null && pF >= 2) { flushAcc(); return; }
+        if (actual === 0 && pF != null && pF >= thr) { flushAcc(); return; }
         const add = (x, y) => (x == null || y == null ? null : x + y);
         acc = acc ? { ...acc, d2, actual: acc.actual + actual, pA: add(acc.pA, pA), pB: add(acc.pB, pB), pF: add(acc.pF, pF), g: acc.g + g } : { d1, d2, actual, pA, pB, pF, g };
-        if (acc.pF != null && acc.pF >= 2) flushAcc();
+        if (acc.pF != null && acc.pF >= thr) flushAcc();
       });
       if (gG > 0) it.rateG = uG / gG;
     });
@@ -1227,7 +1324,7 @@
       return d;
     }
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${c0.batch && c0.batch.notes.length ? `<span class="boxnote">프랩 ${esc(c0.batch.notes[0].ko)} ${r1(c0.batch.notes[0].x)}X${c0.batch.notes[0].d ? " " + DOW[dow(c0.batch.notes[0].d)] : ""}</span>` : ""}</span>` +
       // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
       (() => { const e0 = estStock(it, TODAY), et = e0 ? r1(e0.v / (it.box || 1)) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
@@ -2034,5 +2131,5 @@
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(refreshVisible); });
   // 다른 기기에서 넣은 재고·Forecast도 1분 안에 반영 (리포트의 오차 범위 큰 품목 등)
   setInterval(() => { if (!document.hidden) pull(true).then((ch) => { if (ch) refreshVisible(); }); }, 60000);
-  window.__orderCalc = { model, orderWindow, calc, dataForecast, db: () => db, TODAY };
+  window.__orderCalc = { model, orderWindow, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY };
 })();
