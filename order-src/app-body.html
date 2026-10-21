@@ -159,50 +159,74 @@
 
     <div class="sect"><span>먼저 해 둘 일</span><small>1순위</small></div>
     <div class="group">
-      <div class="cell guide"><span class="gi c2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span><div><b>Forecast</b><span>일주일에 한 번, 이번 주와 다음 주의 하루하루 예상 매출을 적어요. 지난 날에는 실제 매출(실제 Gross Sales)도 적어요. 이 숫자로 주문할 양을 계산해요.</span></div></div>
+      <div class="cell guide"><span class="gi c2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span><div><b>Forecast</b><span>일주일에 한 번, 이번 주와 다음 주의 하루하루 예상 매출을 적어요. 지난 날에는 실제 Gross Sales도 적어요. 엔터를 누르면 아래 칸으로 넘어가고, 입력을 멈추면 바로 저장돼요. 왼쪽 "데이터 예상"은 같은 요일 실제 매출로 앱이 낸 참고값이에요.</span></div></div>
       <div class="cell guide"><span class="gi c3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><div><b>데이터 파일</b><span>한 달에 한 번 레시피, 메뉴별 매출, 수불현황 파일을 올리고 그달 실제 Gross Sales를 적어요. 앱은 이 파일로 재료를 얼마나 쓰는지 배워요. 빨간 <b class="bang">!</b> 표시는 아직 안 올린 파일이에요.</span></div></div>
     </div>
 
-    <div class="sect"><span>발주 계산기 쓰는 법</span><small>발주 탭</small></div>
+    <div class="sect"><span>발주 탭 쓰는 법</span><small>매일 아침</small></div>
     <ol class="steps">
-      <li><i>1</i><div><b>품목 검색</b><span>검색창에 이름을 적거나, 업체 버튼을 눌러요.</span></div></li>
-      <li><i>2</i><div><b>재고(온핸드) 입력</b><span>지금 매장에 남아 있는 양이에요.</span><span class="ex"><span class="exf"><small>재고</small>3</span></span></div></li>
-      <li><i>3</i><div><b>발주수량 입력</b><span>실제로 발주한 수량이에요. 다음 날부터 입고일까지 "입고예정"으로 자동 계산돼요.</span><span class="ex"><span class="exf"><small>발주</small>2</span></span></div></li>
-      <li><i>4</i><div><b>필요 사용량</b><span>앱이 계산한 주문할 양이에요. 초록 칸 숫자만큼 주문하면 돼요.</span><span class="ex"><span class="exn"><b>4<small>팩</small></b><small>부족 7.9kg</small></span></span></div></li>
+      <li><i>1</i><div><b>재고 입력</b><span>런치 전에 센 재고를 적어요(발주 마감 14:30). 재고칸 위 회색 "예상 5.8EA"는 앱이 추정한 재고라 참고만 해요. 엔터를 누르면 다음 품목 재고칸으로 가요. 숫자가 전날보다 3배 넘게 튀면 빨간 테두리로 알려 줘요.</span><span class="ex"><span class="exf"><small>재고</small>3</span></span></div></li>
+      <li><i>2</i><div><b>필요량 확인</b><span>재고를 넣으면 오른쪽 칸이 4단계로 바뀌어요. 필요량보다 적으면 무조건 발주필요이고, 그 위로 넉넉한 정도에 따라 부족 · 여유 · 충분이에요. 발주필요 숫자만큼 주문하면 돼요. "10개단위" 품목은 그 단위로 반올림돼요.</span><span class="ex"><span class="chip t-buy">발주필요</span> <span class="chip t-short">부족</span> <span class="chip t-spare">여유</span> <span class="chip t-ok">충분</span></span></div></li>
+      <li><i>3</i><div><b>발주수량 입력</b><span>실제로 발주한 수량이에요. 입고일까지 "입고예정"으로 자동 계산되고, 칸은 "발주완료"로 바뀌어요. 이 기록으로 앱이 실제 사용량을 배워요.</span><span class="ex"><span class="exf"><small>발주 PK</small>2</span></span></div></li>
+      <li><i>4</i><div><b>맨 위 "발주 필요" 칸</b><span>재고를 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 모여요. 각 묶음 안에서는 발주 시트 순서예요. 충분한 품목과 오늘 발주일이 아닌 업체 품목은 아래 업체별 목록에 그대로 있어요.</span></div></li>
+    </ol>
+
+    <div class="sect"><span>발주 상태와 86 위험</span></div>
+    <div class="group">
+      <div class="cell guide"><span class="gi c3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div><b>날짜 아래 표시</b><span>14:30 전이면 <b class="ok-ink">금일 발주 가능</b>, 지나면 <b class="bang">금일 발주 마감</b>, 일요일은 발주 없음이에요. 마감 뒤에 넣은 재고는 저녁 재고로 보고 계산해요.</span></div></div>
+      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2l.9-5.5-4-3.9L9.5 8z"/></svg></span><div><b>86 위험</b><span>오늘 재고를 넣은 품목 중 다음 입고 전에 모자랄 가능성이 60% 넘으면 맨 위에 빨간 카드로 알려 줘요. 품목을 누르면 그 칸으로 이동해요. 사전발주 ON에서는 안 나와요.</span></div></div>
+    </div>
+
+    <div class="sect"><span>사전발주 ON</span><small>쉬는 날 집에서</small></div>
+    <ol class="steps">
+      <li><i>1</i><div><b>켜기</b><span>"발주 필요 N" 줄 오른쪽의 <span class="chip t-est">사전발주 OFF</span> 버튼을 눌러요. 앱을 껐다 켜면 항상 OFF로 돌아가요.</span></div></li>
+      <li><i>2</i><div><b>발주할 날 고르기</b><span>버튼 아래 요일 띠에서 사전발주할 날을 누르면, 위의 화살표가 그날 발주 → 입고일로 바뀌어요. 일요일은 빠져요.</span></div></li>
+      <li><i>3</i><div><b>두 칸만 봐요</b><span>입고일 아침 "예상 재고"와 "사전발주 필요량"이에요. 그 사이 발주일은 앱 추천량대로 넣는다고 보고 계산해요. 오늘 센 재고가 있으면 그걸로, 없으면 마지막으로 센 재고에서 사용량을 빼서 추정해요.</span><span class="ex"><span class="chip t-est">예상 재고 2.8PK</span> <span class="chip t-pre">1PK 사전발주 필요량</span></span></div></li>
     </ol>
 
     <div class="sect"><span>작은 표시의 뜻</span></div>
     <div class="group">
-      <div class="cell legend-row"><span class="chip ok">일치</span><span>두 가지 계산이 비슷해요. 믿고 주문해도 돼요.</span></div>
-      <div class="cell legend-row"><span class="chip diff">오차 17% 보정반영</span><span>두 계산이 서로 달라서, 그만큼 필요량에 이미 보정해 뒀어요. 더하거나 뺄 필요 없어요.</span></div>
+      <div class="cell legend-row"><span class="chip ok">일치</span><span>수불현황 계산과 레시피 계산이 비슷해요. 믿고 주문해도 돼요.</span></div>
+      <div class="cell legend-row"><span class="chip diff">오차 17% 보정반영</span><span>두 계산이 서로 달라서, 그만큼 여유분에 이미 넣어 뒀어요. 더하거나 뺄 필요 없어요.</span></div>
       <div class="cell legend-row"><span class="chip new">신규 품목</span><span>새로 나온 재료라 아직 배우는 중이에요.</span></div>
+      <div class="cell legend-row"><span class="chip t-rng">±0.4PK</span><span>이번 기간 사용량이 이만큼 오르내릴 수 있어요. 재고 채점이 쌓일수록 좁아져요.</span></div>
+      <div class="cell legend-row"><span class="chip t-inc">입고예정 6PK</span><span>앱에 넣은 발주 중 아직 안 들어온 양이에요. 필요량에서 미리 빼요.</span></div>
+      <div class="cell legend-row"><span class="chip t-est">해동 1일</span><span>냉동이라 입고 다음 날부터 써요. 하루 더 버틸 양으로 계산해요.</span></div>
+      <div class="cell legend-row"><span class="chip t-est">재고는 박스로</span><span>감자튀김처럼 박스로 세는 품목이에요. 재고는 박스, 발주는 팩이에요.</span></div>
+      <div class="cell legend-row"><span class="chip t-est">월요일 발주</span><span>그 업체는 정해진 요일에만 발주해요. 다른 날에는 "월요일 발주"로 필요량만 보여요.</span></div>
+    </div>
+
+    <div class="sect"><span>프랩 탭</span><small>매일 아침</small></div>
+    <div class="group">
+      <div class="cell guide"><span class="gi c1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span><div><b>프랩량 계산</b><span>재고(On Hand)를 적으면 오늘 만들 양이 나와요. 단위는 빨간 글씨예요. X는 레시피 1번 분량, 그 밖에 PK · 포션 · kg · CAN이에요. 이름 아래에 Yield와 팬 환산(2X = 1/6 팬 1개)이 있어요.</span></div></div>
+      <div class="cell guide"><span class="gi c2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v14H3z"/><path d="M8 5v14M3 10h18"/></svg></span><div><b>2days 표시</b><span>쉘프라이프예요. 한 번에 만드는 프랩은 그 절반 기간에 쓸 양까지만 만들어요. 내일 아침 쓸 양이 아슬아슬하면 오늘 필요량에 미리 넣어요. 재고가 쌓이면 프랩마다 실제 사용량으로 보정해요.</span></div></div>
     </div>
 
     <div class="sect"><span>계산 방법</span><small>A + B → C</small></div>
     <div class="group">
-      <div class="cell calc"><i class="lt la">A</i><div><b>수불현황</b><span>지난달에 실제로 쓴 양으로 계산해요.</span></div></div>
-      <div class="cell calc"><i class="lt lb">B</i><div><b>메뉴별 매출현황</b><span>메뉴가 팔린 개수 × 레시피로 계산해요. 메뉴가 바뀌면 바로 반영돼요.</span></div></div>
-      <div class="cell calc"><i class="lt lc">C</i><div><b>최종 발주량</b><span>A와 B로 구한 필요량에서 재고와 입고예정(앱에 넣은 발주)을 빼요. 초록 칸 숫자예요.</span></div></div>
+      <div class="cell calc"><i class="lt la">A</i><div><b>수불현황</b><span>최근 3달 실제 사용량(최근 달 비중 높게)으로 매출 100만원당 사용량을 구해요.</span></div></div>
+      <div class="cell calc"><i class="lt lb">B</i><div><b>메뉴별 매출현황</b><span>메뉴가 팔린 개수 × 레시피로 계산해요. 수불현황과 비교해 로스(버려지는 양)도 반영해요. 메뉴가 바뀌면 바로 따라와요.</span></div></div>
+      <div class="cell calc"><i class="lt lc">C</i><div><b>최종 발주량</b><span>더 잘 맞은 쪽을 더 믿어 A와 B를 섞고, 여유분을 더한 뒤 재고와 입고예정을 빼요. 발주 기간은 오늘부터 다음 발주분이 들어오기 전날까지예요.</span></div></div>
     </div>
     <div class="sect"><span>데이터 자동계산</span><small>입력할 것 없음</small></div>
     <div class="group">
-      <div class="cell calc"><i class="lt lx">D</i><div><b>고정량 + 비례량</b></div></div>
-      <div class="cell calc"><i class="lt lx">E</i><div><b>A·B 비중</b><span>최근에 더 잘 맞은 계산을 더 믿어요.</span></div></div>
-      <div class="cell calc"><i class="lt lx">F</i><div><b>안전재고</b><span>100번 중 95번은 모자라지 않게 여유분을 잡아요.</span></div></div>
-      <div class="cell calc"><i class="lt lx">G</i><div><b>재고채점</b><span>적어 준 재고로 계산이 맞았는지 채점하고 스스로 고쳐요.</span></div></div>
-      <div class="cell calc"><i class="lt lx">H</i><div><b>프랩량</b><span>오늘 예상 매출로 사용량을 구해요. 쉘프라이프 안에서만요.</span></div></div>
-      <div class="cell calc"><i class="lt lx">I</i><div><b>Forecast 보정</b><span>지난 4주 동안 실제 Gross Sales가 Forecast의 몇 %였는지(91%, 106% 등) 가운데 값을 구해서, 앞으로의 Forecast에 곱해요. 발주 필요량과 프랩 예상이 같이 맞춰져요. Forecast와 실제가 둘 다 적힌 날이 5일 넘으면 시작해요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">D</i><div><b>고정량 + 비례량</b><span>매출과 상관없이 매일 쓰는 양과 매출에 비례해 쓰는 양을 나눠서 봐요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">E</i><div><b>A·B 비중</b><span>최근 채점에서 더 잘 맞은 계산을 더 믿어요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">F</i><div><b>안전재고</b><span>100번 중 95번은 모자라지 않게 여유분을 잡아요. 사용량 오차와 Forecast 오차를 같이 보고, 주말에 매출이 몰리면 더 넉넉히 잡아요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">G</i><div><b>재고 채점</b><span>재고와 발주 기록으로 실제 사용량을 계산해 채점하고 스스로 고쳐요. 가끔 쓰는 품목은 여러 날을 묶어서 보고, 입고를 모르는 구간은 빼요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">H</i><div><b>프랩량</b><span>오늘 Forecast로 프랩 사용량을 구해요. 쉘프라이프 안에서만요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">I</i><div><b>Forecast 보정</b><span>지난 4주 동안 실제 매출이 Forecast보다 10% 넘게 계속 많거나 적을 때만, 그 비율을 Forecast에 곱해요. 그 안이면 적은 그대로 써요.</span></div></div>
+      <div class="cell calc"><i class="lt lx">J</i><div><b>데이터 예상</b><span>Forecast가 빈 날은 같은 요일 최근 매출(행사처럼 튀는 날 제외)과 공휴일 실적, 그 주에 적은 Forecast 흐름으로 추정해요.</span></div></div>
     </div>
 
-    <div class="sect"><span>다른 화면</span></div>
+    <div class="sect"><span>데이터 리포트</span></div>
     <div class="group">
-      <div class="cell guide"><span class="gi c1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span><div><b>프랩</b><span>오늘 프랩량이 나와요. 2days는 "2일 안에 다 써야 해요"라는 뜻이에요.</span></div></div>
-      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>데이터 리포트</b><span>앱이 한 달 동안 얼마나 잘 맞혔는지 점수로 보여줘요.</span></div></div>
+      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>주 단위 정확도</b><span>발주 예측 정확도를 한 주씩 보고 12주 추이를 그려요. Forecast 정확도, 방식별(A·B·C) 정확도, 오차 범위 큰 품목 10개도 있어요. 재고와 발주수량이 쌓일수록 제대로 된 숫자가 나와요.</span></div></div>
     </div>
 
     <div class="tipcard">
       <b>꿀팁</b>
-      <span>같은 재료의 재고를 자주 적을수록 앱이 점점 더 정확해져요. 매일이 아니어도 괜찮아요.</span>
+      <span>재고와 발주수량을 매일 넣을수록 앱이 점점 더 정확해져요. 시트 저장이 실패해도 이 기기에 남겨 뒀다가 다시 보내니, 그냥 이어서 쓰면 돼요.</span>
     </div>
   </section>
 </div>
