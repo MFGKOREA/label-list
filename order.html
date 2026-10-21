@@ -695,7 +695,7 @@ svg { display: block; }
     </div>
     <div class="sect"><span>방식별 정확도</span></div>
     <div class="group" id="rMethods"></div>
-    <div class="sect"><span>오차 범위 큰 품목</span><small>예상 대비 실제 사용</small></div>
+    <div class="sect"><span>오차 범위 큰 품목</span><small>오늘 발주 기준 ±</small></div>
     <div class="group" id="rMiss"></div>
     
   </section>
@@ -2716,10 +2716,11 @@ svg { display: block; }
     // 정확도 막대: 0%부터, 길수록 정확. 가장 긴 방식을 강조
     const bestV = Math.max(...ms.map((m) => m[2]));
     $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
-    // 오차 범위 큰 품목 10개: 그 주 품목별로 예상 합 vs 실제 합
-    const byIt = new Map(); list.forEach((x) => { const o = byIt.get(x.key) || { name: x.name, pF: 0, actual: 0 }; o.pF += x.pF; o.actual += x.actual; byIt.set(x.key, o); });
-    const miss = [...byIt.values()].map((o) => ({ ...o, e: (o.actual - o.pF) / o.actual })).sort((p, q) => Math.abs(q.e) - Math.abs(p.e)).slice(0, 10);
-    $("rMiss").innerHTML = miss.map((m) => `<div class="cell miss"><span class="nm">${esc(m.name)}<small>예상 ${r1(m.pF)} · 실제 ${r1(m.actual)}</small></span><span class="chip ${m.e > 0 ? "under" : "over"}">${m.e > 0 ? "적게 예상" : "많게 예상"}</span><span class="pc">${Math.round(Math.abs(m.e) * 100)}%</span></div>`).join("");
+    // 오차 범위 큰 품목 10개: 발주 카드의 ± 범위(예상 사용량의 몇 %)가 큰 순서. 범위 = 사용량 계산 오차 + Forecast 오차
+    const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));
+    const wide = M.items.filter((it) => !it.ledgerOnly).map((it) => { const c = calc(it, orderWindowFor(it, TODAY), 0, 0); return c.none || !(c.use > 0) || !(c.sd > 0) ? null : { it, sd: c.sd, use: c.use, rel: c.sd / c.use, u: it.pk.stock || "" }; })
+      .filter(Boolean).sort((p, q) => q.rel - p.rel || q.sd - p.sd).slice(0, 10);
+    $("rMiss").innerHTML = wide.map((m) => `<div class="cell miss"><span class="nm">${esc(m.it.name)}<small>±${fmtQ(Math.max(0.1, m.sd), m.u)}${esc(m.u)} · 예상 사용 ${fmtQ(m.use, m.u)}${esc(m.u)}</small></span><span class="pc">±${Math.round(m.rel * 100)}%</span></div>`).join("");
   }
   $("rSel").addEventListener("change", () => { rWeek = $("rSel").value; renderReport(); });
   $("rPrev").onclick = () => { const o = [...$("rSel").options].map((x) => x.value); const i = o.indexOf(rWeek); if (i > 0) { rWeek = o[i - 1]; renderReport(); } };
