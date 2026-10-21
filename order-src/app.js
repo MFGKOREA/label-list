@@ -826,10 +826,16 @@
     const nextDeliv = delivery(addBiz(today, 1));
     const end = addDays(nextDeliv, 0); // 다음 입고 전날까지 → [today, nextDeliv)
     const days = Math.round((parseISO(end) - parseISO(today)) / 864e5);
-    const g = sumGross(today, end, false);
+    const g = sumGross(today, end, false), nEff = effDays(today, end);
     const covered = [];
     for (let d = deliv; d < nextDeliv; d = addDays(d, 1)) covered.push(DOW[dow(d)]);
-    return { today, deliv, nextDeliv, end, days, gross: g.s, est: g.est, covered };
+    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered };
+  }
+  // 매출이 며칠에 몰려 있는지 반영한 "실제 일수": (합)² ÷ 제곱합. 목~일(300·900·1700·1400만)이면 4일이 아니라 3.2일
+  //  주말 하루하루 오차가 크니 안전재고가 덜 깎이게
+  function effDays(from, toExcl) {
+    let a = 0, b = 0; for (let d = from; d < toExcl; d = addDays(d, 1)) { const v = dayGross(d, false).v; a += v; b += v * v; }
+    return b > 0 ? (a * a) / b : 1;
   }
 
   // 업체별 발주 요일·입고 (시트 vendorCfg): {"세제": {days:[1], lead:2, note:"택배"}} = 월요일만 발주, 2영업일 뒤 택배 도착
@@ -845,7 +851,7 @@
     const deliv = deliveryOf(it, o1), nextDeliv = deliveryOf(it, o2);
     const days = Math.round((parseISO(nextDeliv) - parseISO(today)) / 864e5);
     const g = sumGross(today, nextDeliv, false);
-    return { today, deliv, nextDeliv, end: nextDeliv, days, gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today };
+    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today };
   }
 
   // ---------- C: 최종 발주량 ----------
@@ -864,9 +870,11 @@
     if (use == null) return { none: true };
     const spread = useA != null && useB != null ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
+    //  상대오차 = 사용량 계산 오차와 Forecast 오차를 같이 (86 위험 범위와 같은 기준). 일수는 매출이 몰린 만큼 줄여 셈
     const errs = it.scoreF.length >= 3 ? it.scoreF : null;
     const sigma = errs ? Math.sqrt(errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8)) : Math.max(0.1, (spread ?? 0.2) / 2, useA == null && useB == null ? 0.25 : 0);
-    let ss = Z * sigma * use / Math.sqrt(Math.max(1, win.days));
+    const nd = Math.max(1, Math.min(win.days, win.nEff || win.days));
+    let ss = Z * Math.sqrt(sigma * sigma + fcErr() ** 2) * use / Math.sqrt(nd);
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (use / win.days) * it.shelf);
     const short = need - s - inc;
@@ -878,7 +886,7 @@
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
-    const sd = use * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(Math.max(1, win.days));
+    const sd = use * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd);
     return { use, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty };
   }
 
