@@ -1311,7 +1311,11 @@
     const r = p && prepExpectFor(M, p, gToday);
     if (r && r.shelf == null) r.shelf = p.shelf;
     // cfg.label: 단위 이름만 바꿔 보여줌 (냉동마늘쫑 1EA = 1팩 → PK)
-    const lb = p && ((db.prepCfg || {})[p.name] || {}).label; if (r && lb) r.label = lb; // 계산·반올림·학습은 원래 단위로
+    const cf = (p && (db.prepCfg || {})[p.name]) || {};
+    if (r && cf.label) r.label = cf.label; // 계산·반올림·학습은 원래 단위로
+    // cfg.memo: 이름 아래 설명 (2X = 1/6 팬 1개), cfg.hot: 빨간 글씨로 (1kg = 라자냐 7오더)
+    if (r && cf.memo) r.memo = cf.memo;
+    if (r && cf.hot) r.hot = cf.hot;
     return r || null;
   }
   function prepExpectFor(M, p, gToday) {
@@ -1471,7 +1475,7 @@
       }
       // 이름 아래: Prep 레시피의 Yield (있으면 "1X = 650g"은 겹치니 뺌)
       const yl = pdf && pdf.yield && !/as needed/i.test(pdf.yield) ? `Yield : ${pdf.yield}` : "";
-      if (ex) ex.note = [yl, ...String(ex.note || "").split(" · ").filter((t) => t && !(yl && /^1X = [\d,.]+\s*(g|ml)$/i.test(t)))].filter(Boolean).join(" · ");
+      if (ex) ex.note = [yl, ex.memo, ...String(ex.note || "").split(" · ").filter((t) => t && !(yl && /^1X = [\d,.]+\s*(g|ml)$/i.test(t)))].filter(Boolean).join(" · ");
       return { ...x, shelf, ex, id: (x.code ? x.code + " " : "") + x.name };
     });
     // 프랩은 소수 첫째 자리까지 (2.0, 1.5). 예상은 반올림, 필요량은 올림, 0보다 크면 최소 0.1. g·cc는 정수
@@ -1481,11 +1485,21 @@
     };
     // g은 1000 넘으면 kg, cc는 L로 보여줌
     const disp = (unit, e) => unit === "g" && e >= 1000 ? { u: "kg", f: 1000 } : unit === "cc" && e >= 1000 ? { u: "L", f: 1000 } : { u: unit, f: 1 };
+    // 예상 재고: 마지막으로 센 날(3일 안) 재고 + 그날 필요량(만들었다고 봄) − 그 뒤 날마다 쓸 양
+    const prepEst = (id, ex) => {
+      if (!ex || !(g.v > 0)) return null;
+      const logs = (db.prepLog || []).filter((l) => l.id === id && l.u === ex.unit && l.t.slice(0, 10) < TODAY).sort((a, b) => (a.t < b.t ? -1 : 1));
+      const last = logs[logs.length - 1]; if (!last) return null;
+      const p0 = last.t.slice(0, 10); if (p0 < addDays(TODAY, -3)) return null;
+      let use = 0; for (let x = p0; x < TODAY; x = addDays(x, 1)) use += ex.eDay * dayGross(x, true).v / g.v;
+      return Math.max(0, num(last.s) + (num(last.need) || 0) - use);
+    };
     entries.forEach(({ name, code, shelf, ex, id }) => {
       const unit = ex ? ex.unit : "";
       const dd = ex ? disp(unit, ex.e) : { u: "", f: 1 };
       if (ex && ex.label && dd.f === 1) dd.u = ex.label;
       const v = { s: store[id] ?? "" };
+      const est = prepEst(id, ex), estTxt = est != null ? rpu(est / dd.f, dd.u) + dd.u : "";
       const d = document.createElement("div");
       d.className = "cell";
       const draw = () => {
@@ -1501,8 +1515,8 @@
         return `<span class="need buy"><b>${rpu(r / dd.f, dd.u, true)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
       };
       d.innerHTML =
-        `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}${ex && ex.note ? `<small class="pnote">${esc(ex.note)}</small>` : ""}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">${shelf}${shelf > 1 ? "days" : "day"}</span>` : ""}</div>` +
-        `<div class="p-bot"><label class="fld"><span>재고(On Hand)${dd.u ? " " + esc(dd.u) : ""}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
+        `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}${ex && (ex.note || ex.hot) ? `<small class="pnote">${esc(ex.note || "")}${ex.hot ? `${ex.note ? " · " : ""}<em class="hot">${esc(ex.hot)}</em>` : ""}</small>` : ""}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">${shelf}${shelf > 1 ? "days" : "day"}</span>` : ""}</div>` +
+        `<div class="p-bot"><div class="stk">${est != null ? `<span class="estchip">예상 재고 ${estTxt}</span>` : ""}<label class="fld"><span>재고(On Hand)${dd.u ? ` <em class="u">${esc(dd.u)}</em>` : ""}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="${est != null ? estTxt.replace(/[^\d.]/g, "") : "–"}" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label></div>` +
         `<span class="fld ro"${ex && ex.note ? ` title="${esc(ex.note)}"` : ""}><span>예상${dd.u ? " " + esc(dd.u) : ""}</span><b>${ex ? rpu(ex.e / dd.f, dd.u) : "–"}</b></span><span class="needbox">${draw()}</span></div>`;
       const inp = d.querySelector("input");
       // 엔터(다음)를 누르면 바로 아래 프랩 재고칸으로 (iOS도 리턴 키가 나오게 type=number)
