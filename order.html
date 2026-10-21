@@ -1989,7 +1989,8 @@ svg { display: block; }
     let top = [];
     groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     const nBuy = top.filter(([k]) => k === 0).length;
-    top = top.sort((a, b) => a[0] - b[0]).map(([, it]) => it); // 같은 순위 안에서는 원래 순서 유지
+    const ord = new Map(M.items.map((it, i) => [it, i])); // 같은 순위 안에서는 발주 시트 순서
+    top = top.sort((a, b) => a[0] - b[0] || ord.get(a[1]) - ord.get(b[1])).map(([, it]) => it);
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 ON 버튼)
     box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${nBuy}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
