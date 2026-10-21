@@ -28,7 +28,7 @@
   --accent: #222222;
   --accent-ink: #ffffff;
   --accent-soft: #f4f4f4;
-  --ok: #41b979; --ok-bg: #ebf7f0; --ok-ink: #16804a;
+  --ok: #41b979; --ok-bg: #ebf7f0; --ok-ink: #16804a; --warn-bg: #fff3c4; --warn-ink: #8a6400;
   --chick: #f4f4f4; --chick-line: #d3d3d3; --chick-ink: #555555;
   /* Forecast 탭: 데이터 예상(학습량 네온 초록) · Forecast(노랑) · 실제 Gross(레드) */
   --c-de: #259a00; --c-fc: #b88600; --c-act: #e0244a;
@@ -41,7 +41,7 @@
     --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
     --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
     --accent: #f2f2f2; --accent-ink: #000000; --accent-soft: #1f1f1f;
-    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a;
+    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a; --warn-bg: #2a2410; --warn-ink: #ffd60a;
     --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd; --c-de: #3ddc00; --c-fc: #ffd60a; --c-act: #ff375f;
     --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
     --shadow: 0 0 0 0 transparent;
@@ -52,7 +52,7 @@
   --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
     --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
     --accent: #f2f2f2; --accent-ink: #000000; --accent-soft: #1f1f1f;
-    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a;
+    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a; --warn-bg: #2a2410; --warn-ink: #ffd60a;
     --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd; --c-de: #3ddc00; --c-fc: #ffd60a; --c-act: #ff375f;
     --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
     --shadow: 0 0 0 0 transparent;
@@ -190,6 +190,8 @@ svg { display: block; }
 .need.buy { background: var(--accent); color: var(--accent-ink); }
 .need.enough { background: var(--ok-bg); color: var(--ok-ink); }
 .need.enough b { font-size: 14px; }
+.need.asap { background: var(--warn-bg); color: var(--warn-ink); }
+.need.asap b { font-size: 14px; letter-spacing: .02em; }
 .need.buy.lbl b { font-size: 14px; }
 .need.buy.lbl span { opacity: .9; }
 .need.none { box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
@@ -2031,6 +2033,8 @@ svg { display: block; }
         const L = prepLearn(id0, ex.unit);
         if (L.k !== 1) { ex.e *= L.k; if (Math.abs(L.k - 1) >= 0.05) ex.note = [ex.note, `재고 학습 ×${L.k.toFixed(2)}`].filter(Boolean).join(" · "); }
       }
+      // 하루 예상(학습 반영)과 내일 예상: 오늘은 충분해도 내일 아침에 바로 만들어야 하는지(ASAP) 판단용
+      if (ex) { ex.eDay = ex.e; ex.eTomorrow = g.v > 0 ? ex.e * dayGross(addDays(TODAY, 1), false).v / g.v : ex.e; }
       if (ex && ex.batch && days > 1 && g.v > 0) {
         const full = Math.floor(days), part = days - full;
         ex.e *= (sumGross(TODAY, addDays(TODAY, full), false).s + part * dayGross(addDays(TODAY, full), false).v) / g.v;
@@ -2060,7 +2064,11 @@ svg { display: block; }
         if (v.s === "") return '<span class="need none"><b>–</b></span>';
         const target = shelf && shelf <= 1 ? ex.e : ex.e * 1.1;
         let r = target - (num(v.s) * dd.f || 0);
-        if (r <= ex.e * 0.03) return '<span class="need enough"><b>충분</b></span>';
+        if (r <= ex.e * 0.03) {
+          // 충분하지만 오늘 쓰고 남는 양이 내일 반나절치도 안 되면 내일 아침 첫 프랩 (매일 만드는 1day 프랩은 제외)
+          const left = (num(v.s) * dd.f || 0) - ex.eDay, tight = !(shelf && shelf <= 1) && ex.eTomorrow > 0 && left < ex.eTomorrow * 0.5;
+          return tight ? '<span class="need asap"><b>ASAP</b><span>내일 아침 프랩</span></span>' : '<span class="need enough"><b>충분</b></span>';
+        }
         if (ex.step > 1 || ex.unit === "EA") r = Math.ceil(r / (ex.step || 1) - 1e-9) * (ex.step || 1); // EA는 통으로
         v.need = +rpu(r / dd.f, dd.u, true) * dd.f; // 학습용: 이만큼 만든다고 봄
         return `<span class="need buy"><b>${rpu(r / dd.f, dd.u, true)}<small>${esc(dd.u)}</small></b><span>필요량</span></span>`;
