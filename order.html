@@ -1326,6 +1326,7 @@ svg { display: block; }
       if (c && c.g) it.pk = { ...it.pk, g: c.g }; // 1단위 무게를 바로잡음 (브리오슈 1PK = 380g × 3개)
       if (c && c.label) { it.pk = { ...it.pk, stock: c.label, order: c.label }; it.unit = c.label; }
       it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
+      it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
     };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
@@ -1627,14 +1628,15 @@ svg { display: block; }
     const useA = it.rateA != null ? it.fixedA * win.days + it.rateA * g100 : null;
     const useB = it.rateB != null ? it.rateB * g100 : null;
     let use, wA = 0.5;
-    if (useA != null && useB != null) {
+    if (it.recipeOnly && useB != null) { use = useB; wA = 0; }
+    else if (useA != null && useB != null) {
       const mse = (arr) => arr.length >= 2 ? arr.slice(-6).reduce((a, e) => a + e * e, 0) / Math.min(arr.length, 6) : null;
       const ea = mse(it.scoreA.length ? it.scoreA : it.errA), eb = mse(it.scoreB.length ? it.scoreB : it.errB);
       if (ea != null && eb != null && ea + eb > 0) wA = Math.min(0.85, Math.max(0.15, (1 / Math.max(ea, 1e-4)) / (1 / Math.max(ea, 1e-4) + 1 / Math.max(eb, 1e-4))));
       use = wA * useA + (1 - wA) * useB;
     } else use = useA ?? useB ?? (it.rateG != null ? it.rateG * g100 : null);
     if (use == null) return { none: true };
-    const spread = useA != null && useB != null ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
+    const spread = useA != null && useB != null && !it.recipeOnly ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
     //  상대오차 = 사용량 계산 오차와 Forecast 오차를 같이 (86 위험 범위와 같은 기준). 일수는 매출이 몰린 만큼 줄여 셈
     const errs = it.scoreF.length >= 5 ? it.scoreF : null; // 채점 5번부터 (적으면 한두 번 튄 값에 끌려감)
