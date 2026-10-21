@@ -1071,7 +1071,7 @@
   const counted = (v) => !!v && v.s !== "" && v.s != null && isFinite(num(v.s));
   // 사전발주: 고른 날이 앞날이면 오늘 센 품목도 그날까지 예상, 오늘이면 안 센 품목만 예상
   const estFor = (it, v) => (!preMode ? null : pDay() === TODAY && counted(v) ? null : estStock(it, pDay()));
-  // 맨 위 "발주 필요" 칸 순서: 0 발주필요 → 1 부족 → 2 여유 → 3 발주완료(맨 아래), -1 = 위로 안 올림
+  // 맨 위 "발주 필요" 칸 순서: 0 발주필요 → 1 부족·여유(한 묶음) → 3 발주완료(맨 아래), -1 = 위로 안 올림
   const pinRank = (it, win, v) => {
     if (preMode) {
       const d0 = pDay(), e = estFor(it, v), s0 = e ? e.v : counted(v) ? stockOf(it, v) : NaN; if (!isFinite(s0)) return -1;
@@ -1083,7 +1083,7 @@
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return -1; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
     if (r.none) return -1;
-    return { buy: 0, short: 1, spare: 2 }[tierOf(r, s + inc)] ?? -1; // 충분은 제자리
+    return { buy: 0, short: 1, spare: 1 }[tierOf(r, s + inc)] ?? -1; // 충분은 제자리
   };
   function rowEl(it, win, inp) {
     win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
@@ -1229,7 +1229,7 @@
       if (!groups.has(v)) groups.set(v, []);
       groups.get(v).push(it);
     });
-    // 재고 넣은 품목 중 발주필요·부족·여유·발주완료는 맨 위 "발주 필요"에 모음 (그 순서로)
+    // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
     groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     const nBuy = top.filter(([k]) => k === 0).length;
