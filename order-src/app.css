@@ -489,10 +489,5 @@ svg { display: block; }
 .ostate.open { color: var(--ok-ink); }
 .ostate.closed { color: var(--c-act); }
 
+.need em.por.est { font-size: 9px; opacity: .8; }
 .fld input::placeholder { font-size: 13px; }
-
-/* 추정 재고: 칸마다 글자 대신 점선 테두리, 맨 위 한 줄 안내 */
-.need.est { box-shadow: none; outline: 1.5px dashed currentColor; outline-offset: -3px; }
-.need.buy.est { background: var(--fill-2); color: var(--fg); }
-.estnote { display: grid; gap: 2px; background: var(--surface); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
-.estnote b { font-size: 13px; color: var(--fg); }
