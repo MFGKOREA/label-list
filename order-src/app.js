@@ -458,9 +458,12 @@
     const map = new Map();
     months().forEach((m) => { const f = mget(m)[kind]; if (f && f.recipes) f.recipes.forEach((r) => map.set(r.name, r)); });
     // PDF에 없는 메뉴(시저 샐러드 등)는 매장에서 알려준 레시피로
-    ((db.customRecipes || {})[kind] || []).forEach((r) => map.set(r.name, r));
+    ((db.customRecipes || {})[kind] || []).forEach((r) => { if (!r.months) map.set(r.name, r); });
     return [...map.values()];
   }
+  // 그 달에만 쓰던 레시피 (customRecipes 항목에 months: ["2026-09"]): 브리오슈 9월 6컷 → 10월 8컷처럼 레시피가 바뀐 달의 계산·로스 비교용
+  const variantOf = (kind, name, m) => (m && ((db.customRecipes || {})[kind] || []).find((r) => r.months && r.name === name && r.months.includes(m))) || null;
+  const hasVariant = (m) => !!m && ["line", "prep"].some((k) => ((db.customRecipes || {})[k] || []).some((r) => r.months && r.months.includes(m)));
 
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
@@ -649,12 +652,12 @@
       acc2.forEach((a, k) => m.set(k, a.reduce((x, y) => x + y, 0) / a.length));
       return (eaGMemo = m);
     };
-    function expand(recipe, factor, acc, depth, prepAcc, batchAcc) {
+    function expand(recipe, factor, acc, depth, prepAcc, batchAcc, m) {
       recipe.ing.forEach((ing) => {
         let q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
         // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
-        if (t && t.kind === "prep" && prepByName.get(t.id) === recipe) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
+        if (t && t.kind === "prep" && t.id === recipe.name) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
         if (!t || t.skip || !q) return;
         // 매장에서 잰 1TB 무게 (itemCfg / prepCfg의 tbG): 1 TB = 15ml 기준으로 tsp·cup·스쿱도 같이 환산
         const tbG = (t.kind === "item" ? itemCfg[t.id] : (db.prepCfg || {})[t.id] || {}) || {};
@@ -664,9 +667,9 @@
           const s = toStock(q, it.pk); if (s == null) return;
           acc.set(it.key, (acc.get(it.key) || 0) + s * factor);
         } else if (t.kind === "prep" && depth < 2) {
-          const p = prepByName.get(t.id); if (!p) return;
+          const p = variantOf("prep", t.id, m) || prepByName.get(t.id); if (!p) return;
           // go: 이 프랩을 f회(1회 = 1X) 만큼 쓴다고 보고 원재료까지 풀기. batchAcc에 프랩별 X를 모음 (배치 계획용)
-          const go = (f) => { if (batchAcc) batchAcc.set(p.name, (batchAcc.get(p.name) || 0) + f); expand(p, f, acc, depth + 1, prepAcc, batchAcc); };
+          const go = (f) => { if (batchAcc) batchAcc.set(p.name, (batchAcc.get(p.name) || 0) + f); expand(p, f, acc, depth + 1, prepAcc, batchAcc, m); };
           const amount = q.g ?? q.ml ?? null;
           // 프랩 사용량: g/ml은 이름 그대로, 포션·개수는 "이름|ea"로 따로 셈 (프랩 안의 프랩도 셈)
           if (prepAcc && amount != null) prepAcc.set(p.name, (prepAcc.get(p.name) || 0) + amount * factor);
@@ -686,11 +689,12 @@
         }
       });
     }
-    function perMenu(recipe) {
-      if (perMenuCache.has(recipe.name)) return perMenuCache.get(recipe.name);
+    function perMenu(recipe, m) {
+      const mm = hasVariant(m) ? m : null, ck = recipe.name + (mm ? "|" + mm : "");
+      if (perMenuCache.has(ck)) return perMenuCache.get(ck);
       const acc = new Map(), prepAcc = new Map(), batchAcc = new Map();
-      expand(recipe, 1, acc, 0, prepAcc, batchAcc);
-      const v = { acc, prepAcc, batchAcc }; perMenuCache.set(recipe.name, v); return v;
+      expand(variantOf("line", recipe.name, mm) || recipe, 1, acc, 0, prepAcc, batchAcc, mm);
+      const v = { acc, prepAcc, batchAcc }; perMenuCache.set(ck, v); return v;
     }
     // 레시피 자기 재료 중 품목만 (프랩 안의 프랩은 그 프랩 배치에서 셈): 1회(1X)당 재고단위
     const directRaw = (recipe) => {
@@ -723,7 +727,7 @@
           menuQty += s.qty;
           const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return;
           menuMapped += s.qty;
-          const pm = perMenu(r.recipe), q = s.qty * (r.mult || 1);
+          const pm = perMenu(r.recipe, m), q = s.qty * (r.mult || 1);
           pm.acc.forEach((v, k) => theo.set(k, (theo.get(k) || 0) + v * q));
           pm.prepAcc.forEach((v, k) => prepUse.set(k, (prepUse.get(k) || 0) + v * q));
           const rq = recQ.get(r.recipe.name); recQ.set(r.recipe.name, { recipe: r.recipe, q: (rq ? rq.q : 0) + q });
