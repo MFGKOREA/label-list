@@ -313,9 +313,9 @@ svg { display: block; }
 .delta.good { color: var(--accent); }
 .delta.bad { color: var(--rose-ink); }
 .trend { width: 100%; height: auto; overflow: visible; }
-.trend .grid { stroke: var(--line); stroke-width: 1; }
+.trend .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
 .trend .ax { fill: var(--muted); font-size: 10px; }
-.trend .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trend .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; stroke-linejoin: round; stroke-linecap: round; }
 .trend .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .trend .dot.on { fill: var(--accent); }
 .trend .hit { fill: transparent; cursor: pointer; }

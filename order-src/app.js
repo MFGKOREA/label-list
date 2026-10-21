@@ -1925,17 +1925,21 @@
     $("rDelta").className = "delta " + (dd >= 0 ? "good" : "bad");
     $("rDelta").textContent = dd == null ? "" : `지난주 대비 ${dd >= 0 ? "▲" : "▼"} ${Math.abs(dd)}%p`;
     // 추이
-    const pts = weeks.slice(-8).map((w) => ({ w, a: acc(byWeek.get(w), "pF") }));
+    // 추이: 이번 주부터 과거 12주 칸을 고정으로, 채점한 주만 점 (점선으로 이음)
+    const cur = mondayOf(TODAY), last = rWeek > cur ? rWeek : cur;
+    const slots = Array.from({ length: 12 }, (_, i) => addDays(last, -7 * (11 - i)));
+    const pts = slots.map((w, i) => ({ w, i, a: byWeek.has(w) ? acc(byWeek.get(w), "pF") : null })).filter((p) => p.a != null);
     const W = 330, H = 120, L = 26, R = 10, T = 16, B = 22, lo = Math.min(50, ...pts.map((p) => Math.floor(p.a / 10) * 10)), hi = 100;
-    const x = (i) => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : 0.5), y = (v) => T + (H - T - B) * (hi - v) / (hi - lo);
+    const x = (i) => L + (W - L - R) * i / 11, y = (v) => T + (H - T - B) * (hi - v) / (hi - lo);
     let g = "";
     for (let v = lo; v <= hi; v += (hi - lo) / 2) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${Math.round(v)}</text>`;
-    if (pts.length > 1) g += `<polyline class="ln" points="${pts.map((p, i) => `${x(i)},${y(p.a)}`).join(" ")}"/>`;
-    pts.forEach((p, i) => {
-      const on = p.w === rWeek;
-      g += `<circle class="dot${on ? " on" : ""}" cx="${x(i)}" cy="${y(p.a)}" r="${on ? 5 : 4}"/><text class="wk${on ? " on" : ""}" x="${x(i)}" y="${H - 6}">${monKo(p.w)}</text>`;
+    slots.forEach((w, i) => { if (i % 2 === 11 % 2 || w === rWeek) g += `<text class="wk${w === rWeek ? " on" : ""}" x="${x(i)}" y="${H - 6}">${isoWeek(w).w}주</text>`; }); // 주차는 한 칸 건너 (고른 주는 항상)
+    if (pts.length > 1) g += `<polyline class="ln" points="${pts.map((p) => `${x(p.i)},${y(p.a)}`).join(" ")}"/>`;
+    pts.forEach((p) => {
+      const on = p.w === rWeek, i = p.i;
+      g += `<circle class="dot${on ? " on" : ""}" cx="${x(i)}" cy="${y(p.a)}" r="${on ? 5 : 4}"/>`;
       if (on) g += `<text class="val" x="${x(i)}" y="${y(p.a) - 10}">${Math.round(p.a)}%</text>`;
-      g += `<rect class="hit" x="${x(i) - 18}" y="${T - 8}" width="36" height="${H - T - B + 16}" data-w="${p.w}"><title>${monKo(p.w)} ${Math.round(p.a)}%</title></rect>`;
+      g += `<rect class="hit" x="${x(i) - 12}" y="${T - 8}" width="24" height="${H - T - B + 16}" data-w="${p.w}"><title>${monKo(p.w)} ${Math.round(p.a)}%</title></rect>`;
     });
     $("rTrend").innerHTML = g;
     // Gross Sales 예측
