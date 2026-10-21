@@ -473,7 +473,21 @@
   // 데이터 예상 Forecast: 그날 전까지의 실제 Gross Sales로
   //  평일·주말 = 같은 요일 최근 6번 (최근일수록 비중, 행사처럼 튀는 날(중앙값의 1.25배 넘음)은 뺌)
   //  공휴일 = 지난 공휴일 실제 매출과 그 요일 평소 매출의 평균 (9~10월 실적으로 맞춰 봄)
+  //  트렌드 = 그 주(월~일)에 점장님이 넣은 Forecast(보정 반영) ÷ 같은 날들 데이터 예상의 절반만 반영 (0.7~1.4배로 자름)
+  //   9/14~10/20 실적으로 맞춰 보면 하루 오차 30.7% → 28.2%
   function dataForecast(d) {
+    const b = dataBase(d); if (b == null) return null;
+    const f = db.forecast || {}, k = fcBias().k, mon = mondayOf(d);
+    let a = 0, z = 0, all = 0;
+    for (let i = 0; i < 7; i++) {
+      const x = addDays(mon, i), fv = num((f[x] || {}).fc) * k, bx = dataBase(x); if (!bx) continue; all += bx;
+      if (fv >= 0.3 * bx) { a += Math.min(2 * bx, Math.max(0.5 * bx, fv)); z += bx; } // 0.3배 아래는 오타로 보고 뺌, 하루 값은 0.5~2배로 자름
+    }
+    // 그 주에 Forecast를 넣은 만큼만 (하루만 넣으면 조금, 한 주 다 넣으면 다)
+    const R = z ? 1 + (Math.min(1.4, Math.max(0.7, a / z)) - 1) * (z / all) : 1;
+    return b * (1 + 0.5 * (R - 1));
+  }
+  function dataBase(d) {
     if (dataFcMemo.has(d)) return dataFcMemo.get(d);
     const f = db.forecast || {};
     const pick = (ok, max, back) => { const out = []; for (let k = 1; k <= back && out.length < max; k++) { const x = addDays(d, -k), v = num((f[x] || {}).act); if (isFinite(v) && v > 0 && ok(x)) out.push(v); } return out; };
@@ -1502,7 +1516,7 @@
       const hol = isHoliday(d), de = dataForecast(d);
       row.className = "cell f-row" + (i >= 5 || hol ? " we" : "") + (d === TODAY ? " today" : "");
       row.innerHTML = `<span class="day">${DOW[dow(d)]}<small>${d === TODAY ? "오늘" : mmdd(d)}${hol ? "<em>공휴일</em>" : ""}</small></span>` +
-        `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}</span>` +
+        `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}</span>` +
         `<input class="fc" inputmode="numeric" enterkeyhint="next" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
         `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
       const [fi, ai] = row.querySelectorAll("input");
@@ -1537,7 +1551,10 @@
       if ((o.fc || "") === fc && (o.act || "") === act) return;
       changed = true; if (!fc && !act) delete all[d]; else all[d] = { fc, act };
     });
-    if (changed) setKey("forecast", all);
+    if (changed) {
+      setKey("forecast", all);
+      rows.forEach((row, i) => { const de = dataForecast(addDays(fcWeekStart, i)); row.querySelector(".dfc").textContent = de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"; }); // 트렌드 반영된 데이터 예상
+    }
     foot();
   }
   function diffHTML(fc, act) {
