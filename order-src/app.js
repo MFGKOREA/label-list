@@ -953,8 +953,8 @@
         const pA = it.rateA != null ? it.fixedA * days + it.rateA * g : null;
         const pB = it.rateB != null ? it.rateB * g : null;
         const pF = pA != null && pB != null ? (pA + pB) / 2 : pA ?? pB;
-        // 하루 이상 쓸 만큼 예상되는데 재고가 그대로면 다시 안 센 값(전날 값 그대로)으로 보고 뺌
-        if (actual === 0 && pF != null && pF >= 1) { flushAcc(); return; }
+        // 재고가 그대로여도 뜯은 건 안 세는 경우가 있어 1단위까지는 뜯은 걸 쓴 것으로 봄. 2단위 넘게 쓸 만큼 예상인데 그대로면 다시 안 센 값으로 보고 뺌
+        if (actual === 0 && pF != null && pF >= 2) { flushAcc(); return; }
         const add = (x, y) => (x == null || y == null ? null : x + y);
         acc = acc ? { ...acc, d2, actual: acc.actual + actual, pA: add(acc.pA, pA), pB: add(acc.pB, pB), pF: add(acc.pF, pF), g: acc.g + g } : { d1, d2, actual, pA, pB, pF, g };
         if (acc.pF != null && acc.pF >= 2) flushAcc();
