@@ -450,6 +450,8 @@ svg { display: block; }
 .pnote { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); margin-top: 1px; }
 .pnote .hot { font-style: normal; font-weight: 700; color: var(--rose-ink); }
 .fld > span em.u { font-style: normal; color: var(--rose-ink); }
+/* 재고 급변 경고 */
+.fld.warn { box-shadow: 0 0 0 2px var(--rose-ink) !important; }
 /* 발주 예상 재고: 재고칸 위에 작은 회색 박스 */
 .cell:has(.estchip) .c-bot { margin-top: 18px; }
 .c-bot .stk { position: relative; display: grid; min-width: 0; }
