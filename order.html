@@ -1701,7 +1701,8 @@ html, body { overflow-x: hidden; }
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
-    const sd = Math.sqrt((useAvg * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd)) ** 2 + (ba ? ba.varS : 0));
+    // ± 범위(카드·리포트·86 위험)는 평균 사용량 기준 예측 오차만. 프랩 배치가 이번 기간에 드는지 아닌지는 오차가 아니라 덩어리라 여유분(ss)에만 넣음
+    const sd = useAvg * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd);
     return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba };
   }
 
@@ -2882,7 +2883,7 @@ html, body { overflow-x: hidden; }
     $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     // 오차 범위 큰 품목 10개: 발주 카드의 ± 범위(예상 사용량의 몇 %)가 큰 순서. 범위 = 사용량 계산 오차 + Forecast 오차
     const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));
-    const wide = M.items.filter((it) => !it.ledgerOnly).map((it) => { const c = calc(it, orderWindowFor(it, TODAY), 0, 0); return c.none || !(c.use > 0) || !(c.sd > 0) ? null : { it, sd: c.sd, use: c.use, rel: c.sd / c.use, u: it.pk.stock || "" }; })
+    const wide = M.items.filter((it) => !it.ledgerOnly).map((it) => { const c = calc(it, orderWindowFor(it, TODAY), 0, 0), u0 = c.useAvg ?? c.use; return c.none || !(u0 > 0) || !(c.sd > 0) ? null : { it, sd: c.sd, use: u0, rel: c.sd / u0, u: it.pk.stock || "" }; })
       .filter(Boolean).sort((p, q) => q.rel - p.rel || q.sd - p.sd).slice(0, 10);
     $("rMiss").innerHTML = wide.map((m) => `<div class="cell miss"><span class="nm">${esc(m.it.name)}<small>±${fmtQ(Math.max(0.1, m.sd), m.u)}${esc(m.u)} · 예상 사용 ${fmtQ(m.use, m.u)}${esc(m.u)}</small></span><span class="pc">±${Math.round(m.rel * 100)}%</span></div>`).join("");
   }
