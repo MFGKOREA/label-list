@@ -74,18 +74,6 @@
     { id: "G", tag: "G", name: "사용량 계산 튜닝", role: "± 범위 줄이기·백테스트", screen: "band", desk: [244, 82], lab: true },
     { id: "H", tag: "H", name: "매출 Forecast 오차", role: "요일·주말·공휴일 보정", screen: "cal", desk: [222, 120], lab: true },
   ];
-  const ORANGE = "#d97757", DARK = "#a4553b";
-  const BODY = [
-    "..OOOOOOOO..",
-    "..OOOOOOOO..",
-    "..OKOOOOKO..",
-    "OOOOOOOOOOOO",
-    "OOOOOOOOOOOO",
-    "..OOOOOOOO..",
-    "..O.O..O.O..",
-    "..O.O..O.O..",
-  ];
-  const BLINK = BODY.map((r, j) => (j === 2 ? "..OOOOOOOO.." : r));
   const HATS = {
     crown: { rows: ["..Y.Y..Y.Y..", "..YYYYYYYY.."], pal: { Y: "#ffd60a" }, dy: -2 },
     cap: { rows: ["..GGGGGGGG..", "..GGGGGGGGGG"], pal: { G: "#3ddc00" }, dy: -2 },
@@ -175,21 +163,28 @@
   // ---------- 캐릭터 ----------
   const pos = {};
   function member(m, i, t) {
-    const [dx, dy] = m.desk, K = 2, DW = 44;               // 캐릭터는 2배 픽셀
+    const [dx, dy] = m.desk, DW = 44;
     const bob = Math.floor((t / 450 + i * 0.7) % 2);       // 숨 쉬듯 위아래
     const blink = (t / 100 + i * 17) % 38 < 1.5;             // 가끔 눈 깜빡
-    const x = dx + 2, y = dy - 16 + bob;
-    pos[m.id] = { x: x + 12, y: y - 5 };
-    sprite(blink ? BLINK : BODY, x, y, { O: ORANGE, K: "#1b1d2e" }, K);
-    px(x + 6, y + 9, 12, 4, "#fffdf6"); // 앞치마
-    // 검정 마스크 (눈 아래)
-    px(x + 5, y + 6, 14, 3, "#15161c"); px(x + 3, y + 6, 2, 1, "#15161c"); px(x + 19, y + 6, 2, 1, "#15161c");
-    // 검정 모자 + MFG
-    px(x + 4, y - 4, 16, 2, "#15161c"); px(x + 2, y - 2, 20, 4, "#15161c"); px(x + 18, y + 1, 7, 1, "#15161c");
-    letter("M", x + 6, y - 3, "#fffdf6"); letter("F", x + 12, y - 3, "#fffdf6"); letter("G", x + 16, y - 3, "#fffdf6");
-    if (m.id === "boss") { px(x + 10, y + 9, 4, 4, "#ff375f"); px(x + 21, y - 6, 2, 2, "#ffd60a"); }     // 팀장: 빨간 스카프, 모자 위 별
-    if (m.id === "E") { px(x + 23, y + 1, 1, 10, "#c3cad1"); px(x + 22, y + 9, 3, 3, "#ff375f"); } // 온도계
-    if (m.id === "C") { px(x - 6, y + 4, 6, 9, "#f4f1ea"); px(x - 4, y + 3, 2, 2, "#8a939c"); [6, 8, 10].forEach((yy) => px(x - 5, y + yy, 4, 1, "#a9a3b8")); } // 클립보드
+    // 큰 동그란 머리 + 작은 몸 (점 눈, 볼터치). 테두리 먼저 칠하고 안을 채움
+    const cx = dx + 14, cy = dy - 13 + bob, x = cx - 14, y = cy - 10;
+    pos[m.id] = { x: cx, y: cy - 13 };
+    const oval = (ox, oy, rx, ry, c) => { for (let k = -ry; k <= ry; k++) { const w = Math.round(rx * Math.sqrt(1 - (k / ry) ** 2)); px(ox - w, oy + k, w * 2 + 1, 1, c); } };
+    oval(cx, cy + 11, 10, 6, "#4a4150"); oval(cx, cy + 11, 9, 5, "#fffdf8");          // 몸
+    oval(cx, cy, 13, 10, "#4a4150"); oval(cx, cy, 12, 9, "#fffdf8");                // 큰 머리
+    // 검정 모자 + MFG (머리 꼭대기에 얕게)
+    oval(cx, cy - 6, 10, 4, "#15161c"); px(cx - 11, cy - 6, 23, 2, "#15161c"); px(cx + 9, cy - 5, 6, 1, "#15161c");
+    letter("M", cx - 7, cy - 9, "#fffdf6"); letter("F", cx - 1, cy - 9, "#fffdf6"); letter("G", cx + 3, cy - 9, "#fffdf6");
+    // 점 눈 + 하이라이트 (깜빡이면 한 줄), 볼터치
+    [-7, 5].forEach((ex) => { if (blink) px(cx + ex, cy, 3, 1, "#1b1d2e"); else { px(cx + ex, cy - 1, 3, 3, "#1b1d2e"); px(cx + ex, cy - 1, 1, 1, "#ffffff"); } });
+    px(cx - 11, cy + 2, 3, 2, "#ffb3c7"); px(cx + 9, cy + 2, 3, 2, "#ffb3c7");
+    // 작은 검정 마스크 + 귀 끈
+    px(cx - 4, cy + 3, 9, 3, "#15161c"); px(cx - 9, cy + 2, 5, 1, "#15161c"); px(cx + 5, cy + 2, 5, 1, "#15161c");
+    // 앞치마 (팀장은 빨간 스카프)
+    px(cx - 4, cy + 10, 9, 3, m.id === "boss" ? "#ff375f" : "#d6dde4");
+    if (m.id === "boss") px(cx + 8, cy - 12, 2, 2, "#ffd60a"); // 팀장: 모자 위 별
+    if (m.id === "E") { px(cx + 14, cy + 1, 1, 9, "#c3cad1"); px(cx + 13, cy + 8, 3, 3, "#ff375f"); } // 온도계
+    if (m.id === "C") { px(cx - 19, cy + 2, 6, 9, "#f4f1ea"); px(cx - 17, cy + 1, 2, 2, "#8a939c"); [4, 6, 8].forEach((yy) => px(cx - 18, cy + yy, 4, 1, "#a9a3b8")); } // 클립보드
     // 스테인리스 조리대 (다리를 가림). 옆방은 파란 책상
     if (m.lab) { px(dx, dy, DW, 3, "#c9d8ea"); px(dx, dy + 3, DW, 10, "#5c7ea6"); px(dx, dy + 3, DW, 1, "#4a6a90"); px(dx + 2, dy + 13, 3, 4, "#3a4f6b"); px(dx + DW - 5, dy + 13, 3, 4, "#3a4f6b"); }
     else { px(dx, dy, DW, 3, "#dfe4e9"); px(dx, dy + 3, DW, 10, "#b9c1c9"); }
@@ -269,7 +264,7 @@
   const next = () => { const i = TEAM.findIndex((m) => m.id === cur); say(TEAM[(i + 1) % TEAM.length].id, true); };
   cv.addEventListener("click", (e) => {
     const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
-    const hit = TEAM.find((m) => { const [dx, dy] = m.desk; return x >= dx && x <= dx + 44 && y >= dy - 24 && y <= dy + 16; });
+    const hit = TEAM.find((m) => { const [dx, dy] = m.desk; return x >= dx && x <= dx + 44 && y >= dy - 26 && y <= dy + 16; });
     if (hit) say(hit.id);
   });
   const card = (m) => `<div class="card${m.id === "boss" ? " boss" : ""}${m.lab ? " lab" : ""}" data-id="${m.id}"><span class="tag">${m.tag}</span><b>${m.name}</b><span>${m.role}</span></div>`;
