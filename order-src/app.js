@@ -998,12 +998,15 @@
   };
   // d일 재고를 센 뒤에 들어올 입고: 그 전날까지 앱에 넣은 발주 중 아직 안 온 것 (+ 예전 방식 익일 칸)
   const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
+  // 재고 단계: 충분(필요량 이상) · 여유(다음 입고까지는 되고 여유분만 모자람) · 부족(예상 사용량의 70~100%) · 발주필요(70% 미만)
+  const tierOf = (r, have) => (!r.packs ? "ok" : have >= r.use ? "spare" : have >= r.use * 0.7 ? "short" : "buy");
   const needsOrder = (it, win, v) => {
     if (!v) return false;
     if (num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
     if (!isFinite(num(v.s)) || v.s === "") return false;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
-    const r = calc(it, w, stockOf(it, v), incomingOf(it, TODAY)); return !r.none && r.packs > 0;
+    const s = stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
+    return !r.none && r.packs > 0 && tierOf(r, s + inc) !== "spare"; // 여유는 제자리, 부족·발주필요만 위로
   };
   function rowEl(it, win, inp) {
     win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
@@ -1029,7 +1032,10 @@
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         else if (!r.packs) need = `<span class="need enough">${por(+rm(r.need))}<b>충분</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
         else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
-        else need = `<span class="need buy lbl">${por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        else {
+          const t = tierOf(r, s + i), lb = { spare: "여유", short: "부족", buy: "발주필요" }[t];
+          need = `<span class="need buy lbl t-${t}">${por(ordToStock(it, r.orderQty))}<b>${lb}</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        }
       }
       return need;
     };
