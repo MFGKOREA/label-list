@@ -520,7 +520,9 @@
     if (fcBiasMemo) return fcBiasMemo;
     const f = db.forecast || {};
     const r = Object.keys(f).filter((d) => d < TODAY).sort().map((d) => [num(f[d].fc), num(f[d].act)]).filter(([a, b]) => a > 0 && b > 0).slice(-28).map(([a, b]) => b / a).sort((x, y) => x - y);
-    const k = r.length >= 5 ? Math.min(1.3, Math.max(0.7, r[Math.floor(r.length / 2)])) : 1;
+    const k0 = r.length >= 5 ? Math.min(1.3, Math.max(0.7, r[Math.floor(r.length / 2)])) : 1;
+    // ±10% 안은 우연한 들쭉날쭉이라 보정하지 않음 (9/14~10/20 되돌려 보니 보정하면 하루 오차 16.5% → 17.4%로 오히려 나빠짐)
+    const k = Math.abs(k0 - 1) <= 0.1 ? 1 : k0;
     return (fcBiasMemo = { k, n: r.length });
   }
 
@@ -915,8 +917,8 @@
           // 두 재고 사이(d1 다음날 ~ d2)에 들어온 입고 = 앱에 넣은 발주의 입고일로 계산. 그 사이 발주한 날 중 앱을 안 쓴 날(일요일 제외)이 있으면 모름 → 뺌
           let arr = 0, unknown = false;
           for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
-            // 발주수량 칸이 생기기 전(10/21 전)에 한 발주는 앱이 몰라서 모름으로
-            const known = db["input." + x] && x >= "2026-10-21";
+            // 발주수량 칸이 생기기 전(10/20 전)에 한 발주는 앱이 몰라서 모름으로 (10/20 발주는 샐러드믹스 2·크림치즈 3이 전부라고 확인)
+            const known = db["input." + x] && x >= "2026-10-20";
             if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !known && dow(x) !== 0) unknown = true;
             arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
           }
