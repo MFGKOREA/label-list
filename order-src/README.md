@@ -18,7 +18,7 @@
   - `month.YYYY-MM` {gross, ledger(수불현황), sales(메뉴별 매출현황), line/prep(레시피 PDF 파싱)}
   - `forecast` {날짜: {fc, act}} · `input.날짜` {품목: {s 재고, o 발주수량, r 추천, i 예전 익일}} · `onhand` 재고 기록(채점용)
   - `prepOnhand.날짜`, `prepLog`(프랩 재고 학습) · `master.order`(발주 시트) · `master.prep`(프랩 시트)
-  - 설정: `map` {menu, ing}(메뉴→레시피, 재료→품목/프랩, "skip"), `hide`(목록에서 숨김), `itemCfg` {품목: {ea, g, as, box, tbG, label, portionG, portionLabel, recipeOnly 레시피로만 계산, thaw 해동 일수(발주 기간·86 위험을 그만큼 늘림)}}, `prepCfg` {프랩: {unit, panG, portionG, step, raw, item, from, rate, split/shortOf, per, label, note, tbG, batch}}, `prepMap`, `customRecipes`, `holidays`, `vendorCfg` {업체: {days 발주 요일(0=일), lead 입고까지 영업일, note}}
+  - 설정: `map` {menu, ing}(메뉴→레시피, 재료→품목/프랩, "skip"), `hide`(목록에서 숨김), `itemCfg` {품목: {ea, g, as, box, tbG, label, portionG, portionLabel, recipeOnly 레시피로만 계산, thaw 해동 일수(발주 기간·86 위험을 그만큼 늘림)}}, `prepCfg` {프랩: {unit, panG, portionG, step, raw, item, from, rate, split/shortOf, per, label, note, tbG, batch}}, `prepMap`, `customRecipes` (항목에 months: ["2026-09"]면 그 달 계산에만 쓰는 옛 레시피), `holidays`, `vendorCfg` {업체: {days 발주 요일(0=일), lead 입고까지 영업일, note}}
   - 학습 기록: `learnlog`, `learnsnap`
 
 ## 계산 요약
