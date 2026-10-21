@@ -528,7 +528,14 @@ svg { display: block; }
 
 .c-bot.pre { grid-template-columns: minmax(0, 1fr) 96px 96px; }
 .c-bot.pre .fld.ro b { font-size: 17px; }
+.need.prebox { background: var(--fill-2); color: var(--muted); }
+.need.prebox.has { background: var(--rose); color: var(--rose-ink); box-shadow: inset 0 0 0 1px var(--rose-line); }
 .need.prebox span { font-size: 9.5px; }
+.predays { display: flex; gap: 4px; margin: -2px 0 10px; overflow-x: auto; scrollbar-width: none; }
+.predays button { flex: 1 0 auto; display: grid; justify-items: center; gap: 0; border: 0; border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 10px; font-weight: 600; padding: 5px 6px; min-height: 36px; line-height: 1.15; }
+.predays button b { font-size: 12px; font-weight: 800; color: var(--fg); }
+.predays button.on { background: var(--rose-ink); color: #fff; }
+.predays button.on b { color: #fff; }
 
 </style>
 </head>
@@ -1753,9 +1760,15 @@ svg { display: block; }
   const LS_PRE = "order-calc-pre";
   let preMode = false; try { preMode = localStorage.getItem(LS_PRE) === TODAY; } catch {}
   const setPre = (on) => { preMode = on; try { on ? localStorage.setItem(LS_PRE, TODAY) : localStorage.removeItem(LS_PRE); } catch {} };
+  // 고른 날(d) 아침 예상 재고: 오늘까지 마지막으로 센 재고에서 그날까지 영업일 사용량(지난날은 실제 Gross, 앞날은 Forecast)을 빼고 입고를 더함
+  let preDay = null; // 사전발주로 고른 날 (없으면 다음 발주일)
+  const nextOrderDay0 = () => { let d = addDays(TODAY, 1); while (dow(d) === 0) d = addDays(d, 1); return d; };
+  const pDay = () => preDay || nextOrderDay0();
   function estStock(it, d) {
-    for (let k = 1; k <= 7; k++) {
-      const x = addDays(d, -k), r = (db["input." + x] || {})[it.key];
+    const start = d > TODAY ? TODAY : addDays(d, -1);
+    for (let x = start; x >= addDays(TODAY, -7); x = addDays(x, -1)) {
+      const k = Math.round((parseISO(d) - parseISO(x)) / 864e5);
+      const r = (db["input." + x] || {})[it.key];
       if (!r || r.s === "" || r.s == null || !isFinite(num(r.s))) continue;
       let arr = 0;
       for (let j = 0; j <= 14; j++) arrivalsOf(it, addDays(d, -j)).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
@@ -1765,18 +1778,23 @@ svg { display: block; }
       const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
       const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross }, 0, 0);
       if (c.none) return null;
-      const raw = stockOf(it, r) + arr - c.use;
-      return { v: Math.max(0, raw - 1 - c.use), raw, from: x, days: k };
+      return { v: Math.max(0, stockOf(it, r) + arr - c.use), from: x, days: k };
     }
     return null;
   }
   const counted = (v) => !!v && v.s !== "" && v.s != null && isFinite(num(v.s));
-  const estFor = (it, v) => (preMode && !counted(v) ? estStock(it, TODAY) : null);
+  // 사전발주: 고른 날이 앞날이면 오늘 센 품목도 그날까지 예상, 오늘이면 안 센 품목만 예상
+  const estFor = (it, v) => (!preMode ? null : pDay() === TODAY && counted(v) ? null : estStock(it, pDay()));
   const needsOrder = (it, win, v) => {
+    if (preMode) {
+      const d0 = pDay(), e = estFor(it, v), s0 = e ? e.v : counted(v) ? stockOf(it, v) : NaN; if (!isFinite(s0)) return false;
+      const w0 = orderWindowFor(it, d0); if (!w0.canOrder) return false;
+      const r0 = calc(it, w0, s0, incomingOf(it, d0)); return !r0.none && r0.packs > 0;
+    }
     if (v && num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
-    const e = estFor(it, v); if (!counted(v) && !e) return false;
+    if (!counted(v)) return false;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
-    const s = e ? e.v : stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
+    const s = stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
     return !r.none && r.packs > 0; // 발주필요만 위로
   };
   function rowEl(it, win, inp) {
@@ -1824,12 +1842,13 @@ svg { display: block; }
     const top = `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>`;
     // 사전발주 MODE: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
-      const e = estFor(it, v), sv = e ? e.v : stockOf(it, v), r = isFinite(sv) && !c0.none ? calc(it, win, sv, inc) : null;
+      const d0 = pDay(), w0 = orderWindowFor(it, d0), inc0 = incomingOf(it, d0);
+      const e = estFor(it, v), sv = e ? e.v : stockOf(it, v), r = isFinite(sv) && !c0.none && w0.canOrder ? calc(it, w0, sv, inc0) : null;
       const sShow = isFinite(sv) ? r1(sv / (it.box || 1)) + (it.box ? "BOX" : esc(unit)) : "–";
       const q = r && !r.none ? r.orderQty : null;
-      d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}</span>` +
+      d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${inc0 ? `<span class="incnote">입고예정 ${r1(inc0)}${esc(unit)}</span>` : ""}${!w0.canOrder ? `<span class="boxnote">${DOW[dow(d0)]}요일 발주 없음</span>` : ""}</span>` +
         `<span class="fld ro${e ? " est" : ""}"><span>${e || !isFinite(sv) ? "예상 재고" : "재고"}</span><b>${sShow}</b></span>` +
-        `<span class="need ${q ? "buy lbl" : "none"} prebox"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
+        `<span class="need prebox${q ? " has" : ""}"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
       return d;
     }
     d.innerHTML = top +
@@ -1929,6 +1948,12 @@ svg { display: block; }
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 MODE 버튼)
     box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 MODE</button></div>`);
     box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderList(); });
+    // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고)
+    if (preMode) {
+      const days = []; for (let k = 0; k < 8 && days.length < 7; k++) { const x = addDays(TODAY, k); if (dow(x) !== 0) days.push(x); }
+      box.insertAdjacentHTML("beforeend", `<div class="predays">${days.map((x) => `<button type="button" data-d="${x}" class="${x === pDay() ? "on" : ""}"><b>${DOW[dow(x)]}</b>${mmdd(x)}</button>`).join("")}</div>`);
+      box.querySelector(".predays").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; preDay = b.dataset.d; renderList(); });
+    }
     let n = 0;
     groups.forEach((list, v) => {
       if (v !== "발주 필요") box.insertAdjacentHTML("beforeend", `<div class="sect"><span>${esc(v)} <small>${list.length}</small></span></div>`);
