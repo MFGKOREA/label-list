@@ -63,9 +63,9 @@
       <span class="right"><span class="gs">Gross Sales · 원</span></span>
     </div>
     <div class="wkpick">
-      <button type="button" id="wPrev" aria-label="이전 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
-      <select id="wSel" aria-label="달 선택"></select>
-      <button type="button" id="wNext" aria-label="다음 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
+      <button type="button" id="wPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
+      <select id="wSel" aria-label="주 선택"></select>
+      <button type="button" id="wNext" aria-label="다음 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
     </div>
     <div class="group">
       <div class="cell f-row f-head"><span>요일</span><span class="lg-de">데이터 예상</span><span class="lg-fc">Forecast</span><span class="lg-act">실제 Gross</span><span>오차</span></div>
@@ -128,25 +128,25 @@
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
     <div class="wkpick">
-      <button type="button" id="rPrev" aria-label="이전 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
-      <select id="rSel" aria-label="달 선택"></select>
-      <button type="button" id="rNext" aria-label="다음 달"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
+      <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
+      <select id="rSel" aria-label="주 선택"></select>
+      <button type="button" id="rNext" aria-label="다음 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></button>
     </div>
     <div class="hero">
       <div class="hero-top"><span>발주 예측 정확도</span><span id="rRange"></span></div>
       <div class="hero-num"><b id="rAcc"></b><span class="delta" id="rDelta"></span></div>
-      <div class="trendbox"><svg class="trend" id="rTrend" viewBox="0 0 330 120" role="img" aria-label="월별 예측 정확도 추이"></svg><div class="tip" id="rTip" hidden></div></div>
+      <div class="trendbox"><svg class="trend" id="rTrend" viewBox="0 0 330 120" role="img" aria-label="주별 예측 정확도 추이"></svg><div class="tip" id="rTip" hidden></div></div>
     </div>
     <div class="kpis">
       <div class="kpi"><span>Gross Sales 예측</span><b id="kSales"></b></div>
       <div class="kpi"><span>채점한 품목</span><b id="kItems"></b></div>
       <div class="kpi"><span>재고 입력</span><b id="kLogs"></b></div>
     </div>
-    <div class="sect"><span>방식별 평균 오차</span><small>짧을수록 정확</small></div>
+    <div class="sect"><span>방식별 정확도</span><small>길수록 정확</small></div>
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>많이 틀린 품목</span><small>예상 대비 실제 사용</small></div>
     <div class="group" id="rMiss"></div>
-    <p class="hint" style="margin-top:-8px">정확도 = 100 − 품목별 오차(|예상 − 실제| ÷ 실제)의 평균. 수불현황을 올린 달은 그 달 실제 사용량(전 품목)으로, 아직 없는 달은 재고 입력으로 채점해요. 재고 입력 사이에 입고일이 끼어 있으면(실제 사용량을 알 수 없어서) 채점에서 빼요.</p>
+    
   </section>
 
   <!-- 사용방법 -->
