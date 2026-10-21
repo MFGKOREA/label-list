@@ -871,7 +871,7 @@
     const spread = useA != null && useB != null ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
     //  상대오차 = 사용량 계산 오차와 Forecast 오차를 같이 (86 위험 범위와 같은 기준). 일수는 매출이 몰린 만큼 줄여 셈
-    const errs = it.scoreF.length >= 3 ? it.scoreF : null;
+    const errs = it.scoreF.length >= 5 ? it.scoreF : null; // 채점 5번부터 (적으면 한두 번 튄 값에 끌려감)
     const sigma = errs ? Math.sqrt(errs.slice(-8).reduce((a, e) => a + e * e, 0) / Math.min(errs.length, 8)) : Math.max(0.1, (spread ?? 0.2) / 2, useA == null && useB == null ? 0.25 : 0);
     const nd = Math.max(1, Math.min(win.days, win.nEff || win.days));
     let ss = Z * Math.sqrt(sigma * sigma + fcErr() ** 2) * use / Math.sqrt(nd);
@@ -928,21 +928,34 @@
         }
         pairs.push({ d1, d2, actual });
       }
+      // 채점 구간: 이어진 구간을 예상 사용량이 2단위 넘을 때까지 묶음 (시즈닝·고춧가루처럼 가끔 프랩에 쓰는 품목은 하루 단위로는 0 아니면 통째)
+      //  재고가 그대로인 날(사용 0)도 넣고, 음수(입고 없이 늘어남)나 입고를 모르는 구간에서 끊음
+      const err = (p, a) => Math.max(-1, Math.min(1, (p - a) / Math.max(a, 1e-9))); // ±100%에서 자름
+      let acc = null;
+      const flushAcc = () => {
+        if (!acc) return; const { d1, d2, actual, pA, pB, pF, g } = acc; acc = null;
+        if (pF == null) { if (g > 0) { uG += actual; gG += g; } return; } // 수불·레시피가 없는 품목(세제 등)은 재고로 100만원당 사용량을 배움
+        if (!(pF >= 2)) return; // 예상 사용량이 2단위가 안 되면 아직 판단 못 함
+        if (pA != null) it.scoreA.push(err(pA, actual));
+        if (pB != null) it.scoreB.push(err(pB, actual));
+        it.scoreF.push(err(pF, actual));
+        M.scores.push({ key, name: it.name, start: d1, end: d2, actual, pA, pB, pF });
+      };
       pairs.forEach(({ d1, d2, actual }, j) => {
-        if (!(actual > 0)) return; // 음수·0은 입력 실수로 보고 뺌
-        // 다음 날 입고 없이 재고가 늘었으면 이 날(d2)은 덜 센 재고 → 이 구간도 사용량이 부풀어서 뺌
-        const nx = pairs[j + 1]; if (nx && nx.d1 === d2 && nx.actual != null && nx.actual < -0.5) return;
+        const nx = pairs[j + 1];
+        // 입고를 모름 / 음수 / 다음 날 입고 없이 늘어남(이 날 덜 셈) → 여기서 끊고 이 구간은 뺌
+        if (actual == null || actual < 0 || (nx && nx.d1 === d2 && nx.actual != null && nx.actual < -0.5)) { flushAcc(); return; }
+        if (acc && acc.d2 !== d1) { flushAcc(); }
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
         const g = sumGross(d1, d2, true).s / 1e6;
         const pA = it.rateA != null ? it.fixedA * days + it.rateA * g : null;
         const pB = it.rateB != null ? it.rateB * g : null;
         const pF = pA != null && pB != null ? (pA + pB) / 2 : pA ?? pB;
-        // 수불·레시피 데이터가 없는 품목(세제 등)은 재고 입력만으로 100만원당 사용량을 배움
-        if (pF == null) { if (g > 0) { uG += actual; gG += g; } return; }
-        if (pA != null) it.scoreA.push((pA - actual) / actual);
-        if (pB != null) it.scoreB.push((pB - actual) / actual);
-        it.scoreF.push((pF - actual) / actual);
-        M.scores.push({ key, name: it.name, end: d2, actual, pA, pB, pF });
+        // 하루 이상 쓸 만큼 예상되는데 재고가 그대로면 다시 안 센 값(전날 값 그대로)으로 보고 뺌
+        if (actual === 0 && pF != null && pF >= 1) { flushAcc(); return; }
+        const add = (x, y) => (x == null || y == null ? null : x + y);
+        acc = acc ? { ...acc, d2, actual: acc.actual + actual, pA: add(acc.pA, pA), pB: add(acc.pB, pB), pF: add(acc.pF, pF), g: acc.g + g } : { d1, d2, actual, pA, pB, pF, g };
+        if (acc.pF != null && acc.pF >= 2) flushAcc();
       });
       if (gG > 0) it.rateG = uG / gG;
     });
