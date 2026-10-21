@@ -986,7 +986,7 @@
   window.addEventListener("resize", () => { if (!$("v-main").hidden) { drawWeekArc(); drawWeekArc($("preArc"), $("preStrip")); } });
   function renderMain() {
     renderTop();
-    // 사전발주 MODE면 고른 발주일 기준으로 요일 띠·안내를 보여줌
+    // 사전발주 ON면 고른 발주일 기준으로 요일 띠·안내를 보여줌
     const od = preMode ? pDay() : TODAY;
     const M = model(), win = orderWindow(od);
     // 요일 띠
@@ -1029,12 +1029,12 @@
   // 재고 단계: 충분(필요량 이상) · 여유(다음 입고까지는 되고 여유분만 모자람) · 부족(예상 사용량의 70~100%) · 발주필요(70% 미만)
   // 재고 단계: 필요량보다 적으면 무조건 발주필요. 필요량 이상이면 얼마나 넉넉한지로 충분(1.5배↑) · 여유(1.2~1.5배) · 부족(1.2배 미만)
   const tierOf = (r, have) => (r.packs ? "buy" : have >= r.need * 1.5 ? "ok" : have >= r.need * 1.2 ? "spare" : "short");
-  // 사전발주 MODE (쉬는 날 집에서 발주): 오늘 재고를 안 센 품목은 예상 재고로 계산
+  // 사전발주 ON (쉬는 날 집에서 발주): 오늘 재고를 안 센 품목은 예상 재고로 계산
   //  예상 재고 = 최근 7일 안 마지막으로 센 재고 + 그 뒤 입고(앱 발주) − 그 사이 사용량 − 여유(1단위 + 그 사이 사용량 한 번 더)
   //  저녁(14:30 이후)에 센 재고는 그날 남은 영업분만 뺌. 86 위험·학습에는 안 씀. 켠 날만 유지 (다음 날 자동 꺼짐)
-  const LS_PRE = "order-calc-pre";
-  let preMode = false; try { preMode = localStorage.getItem(LS_PRE) === TODAY; } catch {}
-  const setPre = (on) => { preMode = on; try { on ? localStorage.setItem(LS_PRE, TODAY) : localStorage.removeItem(LS_PRE); } catch {} };
+  // 껐다 켜면 항상 OFF (기억하지 않음)
+  let preMode = false;
+  const setPre = (on) => { preMode = on; };
   // 고른 날(d) 아침 예상 재고: 오늘까지 마지막으로 센 재고에서 그날까지 영업일 사용량(지난날은 실제 Gross, 앞날은 Forecast)을 빼고 입고를 더함
   let preDay = null; // 사전발주로 고른 날 (없으면 다음 발주일)
   const nextOrderDay0 = () => { let d = addDays(TODAY, 1); while (dow(d) === 0) d = addDays(d, 1); return d; };
@@ -1115,7 +1115,7 @@
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     const top = `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>`;
-    // 사전발주 MODE: 예상 재고와 사전발주 필요량 두 칸만
+    // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
       const d0 = pDay(), w0 = orderWindowFor(it, d0), inc0 = incomingOf(it, d0);
       const e = estFor(it, v), sv = e ? e.v : stockOf(it, v), r = isFinite(sv) && !c0.none && w0.canOrder ? calc(it, w0, sv, inc0) : null;
@@ -1220,8 +1220,8 @@
     const top = [];
     groups.forEach((list, v) => { const keep = list.filter((it) => !(needsOrder(it, win, inp[it.key]) && top.push(it))); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
-    // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 MODE 버튼)
-    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 MODE</button></div>`);
+    // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 ON 버튼)
+    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
     box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderMain(); });
     // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고) + 그날 발주분 입고일로 화살표
     if (preMode) {
