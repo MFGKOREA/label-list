@@ -514,6 +514,18 @@ svg { display: block; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .need.buy.t-short { background: #3a3a3a; } }
 :root[data-theme="dark"] .need.buy.t-short { background: #3a3a3a; }
 
+/* 사전발주 MODE */
+.sect.sect-need { align-items: center; min-height: 26px; }
+.sect.sect-need.zero { color: var(--muted); }
+.sect .pre { position: relative; display: inline-flex; align-items: center; border: 1.5px solid var(--chick-line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 0 9px; min-height: 24px; font-size: 10.5px; font-weight: 800; letter-spacing: .01em; }
+.sect .pre::after { content: ""; position: absolute; inset: -10px -4px; }
+.sect .pre.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.prenote { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: -3px 4px 8px; font-size: 11.5px; color: var(--muted); }
+.prenote b { color: var(--fg); font-weight: 700; }
+.fld.est { outline: 1.5px dashed var(--chick-line); outline-offset: -1.5px; background: transparent; }
+.fld.est input::placeholder { color: var(--fg); opacity: .5; }
+.fld.est:focus-within { outline: none; background: var(--surface); }
+
 </style>
 </head>
 <body>
@@ -1730,12 +1742,36 @@ svg { display: block; }
   const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
   // 재고 단계: 충분(필요량 이상) · 여유(다음 입고까지는 되고 여유분만 모자람) · 부족(예상 사용량의 70~100%) · 발주필요(70% 미만)
   const tierOf = (r, have) => (!r.packs ? "ok" : have >= r.use ? "spare" : have >= r.use * 0.7 ? "short" : "buy");
+  // 사전발주 MODE (쉬는 날 집에서 발주): 오늘 재고를 안 센 품목은 예상 재고로 계산
+  //  예상 재고 = 최근 7일 안 마지막으로 센 재고 + 그 뒤 입고(앱 발주) − 그 사이 사용량 − 여유(1단위 + 그 사이 사용량 한 번 더)
+  //  저녁(14:30 이후)에 센 재고는 그날 남은 영업분만 뺌. 86 위험·학습에는 안 씀. 켠 날만 유지 (다음 날 자동 꺼짐)
+  const LS_PRE = "order-calc-pre";
+  let preMode = false; try { preMode = localStorage.getItem(LS_PRE) === TODAY; } catch {}
+  const setPre = (on) => { preMode = on; try { on ? localStorage.setItem(LS_PRE, TODAY) : localStorage.removeItem(LS_PRE); } catch {} };
+  function estStock(it, d) {
+    for (let k = 1; k <= 7; k++) {
+      const x = addDays(d, -k), r = (db["input." + x] || {})[it.key];
+      if (!r || r.s === "" || r.s == null || !isFinite(num(r.s))) continue;
+      let arr = 0;
+      for (let j = 0; j <= 14; j++) arrivalsOf(it, addDays(d, -j)).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
+      const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(x)).pop();
+      const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
+      const left = hh <= ORDER_CUTOFF_H ? 1 : Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H)));
+      const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
+      const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross }, 0, 0);
+      if (c.none) return null;
+      const raw = stockOf(it, r) + arr - c.use;
+      return { v: Math.max(0, raw - 1 - c.use), raw, from: x, days: k };
+    }
+    return null;
+  }
+  const counted = (v) => !!v && v.s !== "" && v.s != null && isFinite(num(v.s));
+  const estFor = (it, v) => (preMode && !counted(v) ? estStock(it, TODAY) : null);
   const needsOrder = (it, win, v) => {
-    if (!v) return false;
-    if (num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
-    if (!isFinite(num(v.s)) || v.s === "") return false;
+    if (v && num(v.o) > 0) return true; // 오늘 발주 넣은 품목도 위에 모아 둠
+    const e = estFor(it, v); if (!counted(v) && !e) return false;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return false; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
-    const s = stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
+    const s = e ? e.v : stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
     return !r.none && r.packs > 0 && tierOf(r, s + inc) !== "spare"; // 여유는 제자리, 부족·발주필요만 위로
   };
   function rowEl(it, win, inp) {
@@ -1747,7 +1783,8 @@ svg { display: block; }
     const unit = it.pk.stock || "재고단위", ou = it.pk.order || unit;
     const inc = incomingOf(it, TODAY);
     const draw = () => {
-      const s = stockOf(it, v), i = inc;
+      const est = estFor(it, v);
+      const s = est ? est.v : stockOf(it, v), i = inc;
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
@@ -1780,11 +1817,11 @@ svg { display: block; }
     d.innerHTML =
       `<div class="c-top"><span class="c-name">${esc(it.name)}</span>${tag || rng ? `<span class="c-tags">${tag}${rng}</span>` : ""}</div>` +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}</span>` +
-      `<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>` +
+      (() => { const e0 = estFor(it, v); return `<label class="fld${e0 ? " est" : ""}"><span>${e0 ? "예상 재고" : "재고"}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="${e0 ? r1(e0.v / (it.box || 1)) : "–"}" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
-    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); d.querySelector(".needbox").innerHTML = draw(); };
+    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); d.querySelector(".needbox").innerHTML = draw(); const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
     const jump = (to) => {
@@ -1806,8 +1843,10 @@ svg { display: block; }
       const was = needsOrder(it, win, inp[it.key]), was86 = !!riskOf(it, inp[it.key]);
       const all = { ...todayInput() };
       // r: 그때 앱이 추천한 발주수량 (나중에 실제 발주와 비교해 학습)
-      const rc = isFinite(stockOf(it, v)) ? calc(it, win, stockOf(it, v), inc) : null;
+      const e2 = estFor(it, v), s2 = e2 ? e2.v : stockOf(it, v);
+      const rc = isFinite(s2) ? calc(it, win, s2, inc) : null;
       const rec = { ...(all[it.key] || {}), s: v.s, o: v.o, r: rc && !rc.none ? rc.orderQty : "" };
+      if (e2) { rec.pre = e2.from; rec.es = +e2.v.toFixed(2); } else { delete rec.pre; delete rec.es; } // 사전발주 기록
       if (v.s === "" && v.o === "" && !num(rec.i)) delete all[it.key]; else all[it.key] = rec;
       setKey("input." + TODAY, all);
       // 채점용 기록: 재고가 들어간 경우 (같은 날 다시 고치면 마지막 값이 쓰이도록 시각 포함). v:2 = 입고는 발주 기록으로 계산
@@ -1852,7 +1891,7 @@ svg { display: block; }
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
-    const rk = risk86(M, inp);
+    const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b><span>${rk.length}개 · ${DOW[dow(rk[0].out)]}요일 입고 전에 재고가 부족할 수 있어요</span></div>` +
         rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)} · 입고 전 사용 ${r1(x.use)}${esc(x.it.pk.stock || "")}</em></span><small>${Math.min(99, Math.round(x.p * 100))}%</small></button>`).join("") + `</div>`);
@@ -1870,9 +1909,16 @@ svg { display: block; }
     const top = [];
     groups.forEach((list, v) => { const keep = list.filter((it) => !(needsOrder(it, win, inp[it.key]) && top.push(it))); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
+    // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 MODE 버튼)
+    const all = M.items.filter((i) => !i.ledgerOnly);
+    const ests = preMode ? all.filter((i) => !counted(inp[i.key])).map((i) => estStock(i, TODAY)).filter(Boolean) : [];
+    const from = ests.length ? ests.map((e) => e.from).sort().pop() : null;
+    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${top.length}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 MODE</button></div>` +
+      (preMode ? `<div class="prenote">${from ? `<b>${+from.slice(5, 7)}/${+from.slice(8)}(${DOW[dow(from)]}) 재고 기준 예상 재고</b><span>${ests.length}개 · 센 품목은 그대로</span>` : "<b>최근 7일 안에 센 재고가 없어요</b>"}</div>` : ""));
+    box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderList(); });
     let n = 0;
     groups.forEach((list, v) => {
-      box.insertAdjacentHTML("beforeend", `<div class="sect${v === "발주 필요" && top.length ? " sect-need" : ""}"><span>${esc(v)} <small>${list.length}</small></span></div>`);
+      if (v !== "발주 필요") box.insertAdjacentHTML("beforeend", `<div class="sect"><span>${esc(v)} <small>${list.length}</small></span></div>`);
       const g = document.createElement("div"); g.className = "group";
       list.forEach((it) => g.appendChild(rowEl(it, win, inp)));
       box.appendChild(g); n += list.length;
