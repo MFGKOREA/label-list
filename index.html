@@ -72,7 +72,7 @@ body {
 .pick.off em { font-style: normal; font-size: 13px; font-weight: 700; background: var(--fill); border-radius: 8px; padding: 4px 9px; }
 .pick-empty { padding: 30px 16px; text-align: center; color: var(--muted); background: var(--surface); border-radius: 18px; }
 .picker #pickCancel { justify-self: center; margin-top: 6px; }
-.top-right { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
+.top-right { display: grid; justify-items: end; gap: 6px; flex: none; margin-left: auto; }
 .online { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ok); }
 .online i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
 .online b { font-weight: 800; }
@@ -228,7 +228,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   <div class="todaybar" id="todayBar">
     <div class="notice" id="notice">
       <div class="nt-head"><span class="t">전달사항</span><span class="nt-time" id="noticeTime"></span></div>
-      <textarea id="noticeInput" rows="2" maxlength="200" placeholder="바로 적으면 자동 저장돼요 (예: 생크림 내일 입고)"></textarea>
+      <textarea id="noticeInput" rows="2" maxlength="200" placeholder="바로 적으면 자동 저장돼요 (예: 화이트소스 개봉 중, 소진 후 교체)"></textarea>
     </div>
     <div class="need" id="needBox"></div>
   </div>
