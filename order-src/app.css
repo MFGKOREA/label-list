@@ -477,7 +477,6 @@ html, body { overflow-x: hidden; }
 .p-bot .fld.ro { background: var(--fill-2); box-shadow: none; }
 /* 데이터 학습량 카드의 하치와레 */
 .xp { position: relative; }
-.xp-pet { position: absolute; right: 16px; top: 46px; width: 68px; height: auto; pointer-events: none; }
 /* 발주일 → 입고일 곡선 화살표 (데이터 리포트 레드) */
 .weekwrap { position: relative; padding-top: 16px; }
 .weekarc { position: absolute; left: 0; top: 0; color: var(--rose-ink); overflow: visible; pointer-events: none; }
