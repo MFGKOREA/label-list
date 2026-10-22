@@ -57,6 +57,18 @@ body {
 
 /* header */
 .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.store-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.store-change { font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--fill); border: 0; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+.picker { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto;
+  padding: max(28px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) max(28px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); }
+.picker-in { max-width: 480px; margin: 0 auto; display: grid; gap: 14px; }
+.picker h2 { margin: 18px 2px 0; font-size: 30px; font-weight: 800; letter-spacing: -0.035em; }
+.pick-sub { margin: 0 2px 6px; font-size: 15px; color: var(--muted); line-height: 1.5; }
+.pick-list { display: grid; gap: 10px; }
+.pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: inherit; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-align: left; border: 0; border-radius: 18px; padding: 20px 18px; background: var(--surface); color: var(--fg); cursor: pointer; }
+.pick svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.pick.on { box-shadow: inset 0 0 0 2px var(--fg); }
+.picker #pickCancel { justify-self: center; margin-top: 6px; }
 .howto-open { font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .popup .seg { margin: 0; }
 .steps { margin: 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 10px; }
@@ -190,7 +202,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <body>
 <div class="wrap">
   <div class="top">
-    <span class="store" id="storeName">MG수원컨벤션점</span>
+    <span class="store-wrap"><span class="store" id="storeName">MG수원컨벤션점</span><button type="button" class="store-change" id="storeChange">매장 변경</button></span>
     <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
   </div>
   <header class="hdr">
@@ -278,6 +290,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   </div>
 </div>
 
+<div class="picker" id="picker" hidden role="dialog" aria-modal="true" aria-labelledby="pickTitle">
+  <div class="picker-in">
+    <h2 id="pickTitle">매장 선택</h2>
+    <p class="pick-sub">이 기기에서 쓸 매장을 골라 주세요.<br>한 번 고르면 다음부터 바로 열려요.</p>
+    <div class="pick-list" id="pickList"></div>
+    <button type="button" class="btn" id="pickCancel" hidden>취소</button>
+  </div>
+</div>
+
 <div class="overlay" id="howto" hidden>
   <div class="popup" role="dialog" aria-modal="true" aria-labelledby="howtoTitle">
     <h3 id="howtoTitle">홈 화면에 추가하기</h3>
@@ -361,8 +382,14 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     lwt: { name: "MG롯데시네마월드타워점", api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
     ys: { name: "MG용산아이파크몰점", api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
   };
-  const STORE = new URLSearchParams(location.search).get("store") || "suwon";
-  const storeKnown = Object.prototype.hasOwnProperty.call(STORES, STORE);
+  // 링크의 ?store= 가 있으면 그 매장, 없으면 이 기기에 기억된 매장, 둘 다 없으면 매장 선택 화면
+  const SAVED_STORE = "label-list-store";
+  const isStore = (k) => !!k && Object.prototype.hasOwnProperty.call(STORES, k);
+  const qStore = new URLSearchParams(location.search).get("store");
+  let savedStore = null; try { savedStore = localStorage.getItem(SAVED_STORE); } catch {}
+  const STORE = isStore(qStore) ? qStore : isStore(savedStore) ? savedStore : "";
+  const storeKnown = !!STORE;
+  if (storeKnown) { try { localStorage.setItem(SAVED_STORE, STORE); } catch {} }
   $("storeName").textContent = storeKnown ? STORES[STORE].name : "등록되지 않은 매장";
   document.title = (storeKnown ? STORES[STORE].name + " · " : "") + "한글표시사항 리스트";
 
@@ -634,10 +661,25 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     finally { $("resetGo").textContent = "초기화"; }
   };
 
+  // ---- 매장 선택 ----
+  function openPicker(canCancel) {
+    $("pickList").innerHTML = Object.entries(STORES).map(([k, v]) =>
+      `<button type="button" class="pick${k === STORE ? " on" : ""}" data-store="${k}"><span>${esc(v.name)}</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`).join("");
+    $("pickCancel").hidden = !canCancel;
+    $("picker").hidden = false; document.body.style.overflow = "hidden";
+  }
+  $("pickList").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-store]"); if (!b) return;
+    try { localStorage.setItem(SAVED_STORE, b.dataset.store); } catch {}
+    location.replace(location.pathname + "?store=" + b.dataset.store);
+  });
+  $("pickCancel").onclick = () => { $("picker").hidden = true; document.body.style.overflow = ""; };
+  $("storeChange").onclick = () => openPicker(true);
+
   if (!storeKnown) {
-    $("resetZone").hidden = true;
-    $("form").hidden = true; $("list").hidden = true; $("addOpen").hidden = true; $("todayBar").hidden = true;
-    $("empty").textContent = "등록되지 않은 매장 링크입니다. 받은 링크를 다시 확인해 주세요.";
+    $("storeName").textContent = "매장 선택";
+    $("storeChange").hidden = true;
+    openPicker(false);
     return;
   }
   refresh();
