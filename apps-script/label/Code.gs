@@ -19,9 +19,10 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.api) {
     try {
       const store = store_(e.parameter.store);
-      // sid가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
-      if (e.parameter.sid) {
-        const online = ping_(store, String(e.parameter.sid).slice(0, 40));
+      // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
+      // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
+      if (e.parameter.who) {
+        const online = ping_(store, String(e.parameter.who).slice(0, 40));
         const ver = ver_(store);
         if (e.parameter.v && e.parameter.v === ver) return json_({ same: true, ver: ver, online: online });
         return json_({ items: listItems(store), ver: ver, online: online });

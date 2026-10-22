@@ -389,10 +389,12 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // 매장마다 구글 프로젝트(웹 앱 /exec 주소)가 따로 있습니다. 매장을 늘릴 때는 아래에 한 줄 추가.
   // hidden: 전용 주소로만 들어오는 매장 (매장 선택 화면에는 안 보임)
   // 새 매장은 아래에 추가: 코드: { name: "매장 이름", api: "매장모음 웹 앱 주소" } — api가 비어 있으면 '준비 중'
+  const HUB = "https://script.google.com/macros/s/AKfycbzdSaiet-UqZFzplIBRrea9dzStZu5GE5jqGT3d0Vq0j_X8L9MdobwakIZmw1xwXS4G/exec"; // 매장모음 프로젝트 (매장별 탭)
   const STORES = {
     suwon: { name: "MG수원컨벤션점", hidden: true, api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
     lwt: { name: "MG롯데시네마월드타워점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
     ys: { name: "MG용산아이파크몰점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
+    lsw: { name: "MG롯데시네마수원역점", api: HUB },
   };
   // 링크의 ?store= 가 있으면 그 매장, 없으면 이 기기에 기억된 매장, 둘 다 없으면 매장 선택 화면
   const SAVED_STORE = "label-list-store";
@@ -415,7 +417,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       : fn === "deleteItem" ? { action: "delete", id: arg, store: STORE }
       : { action: "clear", store: STORE };
     const res = fn === "listItems"
-      ? await fetch(API + "?api=1&store=" + encodeURIComponent(STORE) + "&sid=" + SID + (listVer ? "&v=" + encodeURIComponent(listVer) : "") + "&t=" + Date.now())
+      ? await fetch(API + "?api=1&store=" + encodeURIComponent(STORE) + "&who=" + SID + (listVer ? "&v=" + encodeURIComponent(listVer) : "") + "&t=" + Date.now())
       : await fetch(API, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
