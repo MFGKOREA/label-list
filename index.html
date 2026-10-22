@@ -56,8 +56,8 @@ body {
 .wrap { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
 
 /* header */
-.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.store-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+.store-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; }
 .store-change { font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--fill); border: 0; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
 .picker { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto;
   padding: max(28px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) max(28px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); }
@@ -72,7 +72,7 @@ body {
 .pick.off em { font-style: normal; font-size: 13px; font-weight: 700; background: var(--fill); border-radius: 8px; padding: 4px 9px; }
 .pick-empty { padding: 30px 16px; text-align: center; color: var(--muted); background: var(--surface); border-radius: 18px; }
 .picker #pickCancel { justify-self: center; margin-top: 6px; }
-.top-right { display: grid; justify-items: end; gap: 6px; flex: none; }
+.top-right { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
 .online { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ok); }
 .online i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
 .online b { font-weight: 800; }
