@@ -7,7 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="한글표시사항">
 <meta name="theme-color" content="#f4f4f4">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f5a46'/%3E%3Crect x='16' y='18' width='32' height='5' rx='2.5' fill='white'/%3E%3Crect x='16' y='30' width='24' height='5' rx='2.5' fill='white'/%3E%3Crect x='16' y='42' width='16' height='5' rx='2.5' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/label-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/label-192.png">
 <link rel="apple-touch-icon" href="icons/label-180.png">
 <title>한글표시사항 리스트</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -358,6 +359,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const STORES = {
     suwon: { name: "MG수원컨벤션점", api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
     lwt: { name: "MG롯데시네마월드타워점", api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
+    lsw: { name: "MG롯데시네마수원역점", api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" }, // 수원컨벤션 프로젝트의 '목록_lsw' 탭
     ys: { name: "MG용산아이파크몰점", api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
   };
   const STORE = new URLSearchParams(location.search).get("store") || "suwon";
