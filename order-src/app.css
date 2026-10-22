@@ -205,6 +205,7 @@ html, body { overflow-x: hidden; }
 .basis { display: flex; justify-content: space-between; align-items: center; margin: 4px 2px 12px; }
 .basis b { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
 .basis span { font-size: 12px; font-weight: 600; color: var(--chick-ink); background: var(--chick); border-radius: 6px; padding: 3px 8px; }
+.wkpick[hidden] { display: none; }
 .wkpick { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 6px; margin-bottom: 14px; }
 .wkpick button, .wkpick select { border: 0; background: var(--surface); box-shadow: var(--shadow); border-radius: 12px; padding: 9px 6px; min-height: 44px; font-size: 14px; font-weight: 700; min-width: 0; }
 .wkpick button { display: grid; place-items: center; color: var(--accent); }
