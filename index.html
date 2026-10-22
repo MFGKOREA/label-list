@@ -68,7 +68,14 @@ body {
 .pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: inherit; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-align: left; border: 0; border-radius: 18px; padding: 20px 18px; background: var(--surface); color: var(--fg); cursor: pointer; }
 .pick svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
 .pick.on { box-shadow: inset 0 0 0 2px var(--fg); }
+.pick.off { cursor: default; color: var(--muted); }
+.pick.off em { font-style: normal; font-size: 13px; font-weight: 700; background: var(--fill); border-radius: 8px; padding: 4px 9px; }
+.pick-empty { padding: 30px 16px; text-align: center; color: var(--muted); background: var(--surface); border-radius: 18px; }
 .picker #pickCancel { justify-self: center; margin-top: 6px; }
+.top-right { display: grid; justify-items: end; gap: 6px; flex: none; }
+.online { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ok); }
+.online i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.online b { font-weight: 800; }
 .howto-open { font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .popup .seg { margin: 0; }
 .steps { margin: 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 10px; }
@@ -203,7 +210,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 <div class="wrap">
   <div class="top">
     <span class="store-wrap"><span class="store" id="storeName">MG수원컨벤션점</span><button type="button" class="store-change" id="storeChange">매장 변경</button></span>
-    <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
+    <span class="top-right">
+      <span class="online" id="online" hidden><i></i><span>접속중 <b id="onlineN">0</b>명</span></span>
+      <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
+    </span>
   </div>
   <header class="hdr">
     <h1>한글표시사항 리스트</h1>
@@ -377,16 +387,20 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // ---- storage: Google Sheet via Apps Script API, localStorage as a fast first paint ----
   // ---- 매장: 링크 끝 ?store=코드 로 구분. 코드 없이 열면 수원컨벤션점 ----
   // 매장마다 구글 프로젝트(웹 앱 /exec 주소)가 따로 있습니다. 매장을 늘릴 때는 아래에 한 줄 추가.
+  // hidden: 전용 주소로만 들어오는 매장 (매장 선택 화면에는 안 보임)
+  // 새 매장은 아래에 추가: 코드: { name: "매장 이름", api: "매장모음 웹 앱 주소" } — api가 비어 있으면 '준비 중'
   const STORES = {
-    suwon: { name: "MG수원컨벤션점", api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
-    lwt: { name: "MG롯데시네마월드타워점", api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
-    ys: { name: "MG용산아이파크몰점", api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
+    suwon: { name: "MG수원컨벤션점", hidden: true, api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
+    lwt: { name: "MG롯데시네마월드타워점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
+    ys: { name: "MG용산아이파크몰점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
   };
   // 링크의 ?store= 가 있으면 그 매장, 없으면 이 기기에 기억된 매장, 둘 다 없으면 매장 선택 화면
   const SAVED_STORE = "label-list-store";
-  const isStore = (k) => !!k && Object.prototype.hasOwnProperty.call(STORES, k);
+  const isStore = (k) => !!k && Object.prototype.hasOwnProperty.call(STORES, k) && !!STORES[k].api;
   const qStore = new URLSearchParams(location.search).get("store");
   let savedStore = null; try { savedStore = localStorage.getItem(SAVED_STORE); } catch {}
+  // 예전부터 컨벤션점을 쓰던 기기(기본 주소로 컨벤션 목록을 열어 둔 흔적)는 그대로 컨벤션점으로
+  if (!savedStore && !qStore) { try { if (localStorage.getItem("label-list-items-v2-suwon") || localStorage.getItem("label-list-items")) savedStore = "suwon"; } catch {} }
   const STORE = isStore(qStore) ? qStore : isStore(savedStore) ? savedStore : "";
   const storeKnown = !!STORE;
   if (storeKnown) { try { localStorage.setItem(SAVED_STORE, STORE); } catch {} }
@@ -401,7 +415,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       : fn === "deleteItem" ? { action: "delete", id: arg, store: STORE }
       : { action: "clear", store: STORE };
     const res = fn === "listItems"
-      ? await fetch(API + "?api=1&store=" + encodeURIComponent(STORE) + "&t=" + Date.now())
+      ? await fetch(API + "?api=1&store=" + encodeURIComponent(STORE) + "&sid=" + SID + (listVer ? "&v=" + encodeURIComponent(listVer) : "") + "&t=" + Date.now())
       : await fetch(API, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -409,8 +423,23 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    if (!data || data.error || !Array.isArray(data)) throw new Error(data && data.error || "응답 오류");
+    if (!data || data.error) throw new Error(data && data.error || "응답 오류");
+    // 새 구글 코드: { items | same, ver, online } / 예전 코드: 목록 배열
+    if (fn === "listItems" && !Array.isArray(data)) {
+      showOnline(data.online);
+      listVer = data.ver || "";
+      return data.same ? null : data.items;
+    }
+    if (!Array.isArray(data)) throw new Error("응답 오류");
+    if (fn !== "listItems") listVer = ""; // 저장 후에는 다음 확인 때 목록 전체를 다시 받음
     return data;
+  }
+  // 접속 중 인원: 이 화면을 연 기기마다 임시 번호
+  const SID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  let listVer = "";
+  function showOnline(n) {
+    if (!(n > 0)) { $("online").hidden = true; return; }
+    $("onlineN").textContent = n; $("online").hidden = false;
   }
 
   // 전달사항은 품목 시트에 id "__notice__" 한 줄로 저장 (구글 코드 수정 없이 공유)
@@ -462,7 +491,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   async function refresh() {
     if (document.hidden || editId) return;
-    try { apply(await call("listItems")); }
+    try { const list = await call("listItems"); if (list) apply(list); else $("note").textContent = ""; }
     catch { $("note").textContent = "목록을 불러오지 못했습니다. 인터넷 연결을 확인하세요."; }
   }
 
@@ -663,8 +692,11 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   // ---- 매장 선택 ----
   function openPicker(canCancel) {
-    $("pickList").innerHTML = Object.entries(STORES).map(([k, v]) =>
-      `<button type="button" class="pick${k === STORE ? " on" : ""}" data-store="${k}"><span>${esc(v.name)}</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`).join("");
+    const list = Object.entries(STORES).filter(([, v]) => !v.hidden);
+    $("pickList").innerHTML = list.length ? list.map(([k, v]) => v.api
+      ? `<button type="button" class="pick${k === STORE ? " on" : ""}" data-store="${k}"><span>${esc(v.name)}</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
+      : `<div class="pick off"><span>${esc(v.name)}</span><em>준비 중</em></div>`).join("")
+      : `<div class="pick-empty">매장 목록을 준비하고 있습니다.</div>`;
     $("pickCancel").hidden = !canCancel;
     $("picker").hidden = false; document.body.style.overflow = "hidden";
   }
@@ -675,6 +707,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   });
   $("pickCancel").onclick = () => { $("picker").hidden = true; document.body.style.overflow = ""; };
   $("storeChange").onclick = () => openPicker(true);
+  if (storeKnown && STORES[STORE].hidden) $("storeChange").hidden = true; // 전용 주소 매장은 매장 변경 없음
 
   if (!storeKnown) {
     $("storeName").textContent = "매장 선택";
