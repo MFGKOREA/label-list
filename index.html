@@ -641,7 +641,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     return;
   }
   refresh();
-  setInterval(refresh, 20000);
+  setInterval(refresh, 5000); // 5초마다 새 내용 확인 (화면이 켜져 있을 때만)
   document.addEventListener("visibilitychange", refresh);
 })();
 </script>
