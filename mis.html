@@ -21,7 +21,7 @@
 <body>
 <div class="wrap">
   <h1>MIS 발주 버튼</h1>
-  <p class="sub">발주앱에 넣은 오늘 발주수량을 MIS 주문등록 화면에 채워 줍니다. 저장은 직접 누르세요.</p>
+  <p class="sub">발주앱에 넣은 오늘 발주수량을 MIS 주문등록에 넣고 주문그룹별로 저장까지 해 줍니다.</p>
 
   <div class="card">
     <b>1. 버튼 설치 (PC 크롬, 처음 한 번)</b>
@@ -38,13 +38,13 @@
     <b>2. 쓰는 법</b>
     <ol>
       <li>발주앱에서 오늘 발주수량을 넣습니다.</li>
-      <li>MIS → 주문등록 → 주문그룹(온세물류 등)을 엽니다.</li>
-      <li>즐겨찾기 막대의 <b>앱 발주 넣기</b>를 누릅니다 → 넣을 목록 확인 → 확인.</li>
-      <li>노란 줄을 확인하고 MIS <b>[저장]</b>을 누릅니다.</li>
-      <li>"이 화면에 없는 품목"이 나오면 다른 주문그룹(새싹농산 등)을 열고 버튼을 다시 누릅니다.</li>
+      <li>MIS → 주문등록 화면을 엽니다 (주문 마감 14:30 전).</li>
+      <li>즐겨찾기 막대의 <b>앱 발주 넣기</b>를 누릅니다 → 넣을 목록 확인 → <b>확인</b>.</li>
+      <li>온세물류 → 새싹농산 … 그룹을 차례로 열어 수량을 넣고 저장합니다. 끝날 때까지 기다려 주세요 (10~30초).</li>
+      <li>끝나면 결과가 뜹니다: 그룹별 저장 개수, 못 찾은 품목, MIS 안내.</li>
     </ol>
   </div>
-  <small>앱 발주는 구글 시트에서 읽기만 합니다. MIS에는 주문수량 칸만 채우고, 저장·전송은 하지 않습니다.</small>
+  <small>앱 발주는 구글 시트에서 읽기만 합니다. MIS에는 주문수량만 넣고 저장하며, 저장 뒤 그룹을 다시 불러와 수량이 맞는지 대조합니다.</small>
 </div>
 <script>
   const code = "javascript:(()=>{const s=document.createElement('script');s.charset='utf-8';s.src='https://mfgkorea.github.io/label-list/mis.js?t='+Date.now();document.body.appendChild(s)})()";
