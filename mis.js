@@ -72,6 +72,13 @@
     return g.datagrid("getRows") || [];
   };
 
+  // KM 요청: 폰에서 확정하면 구글이 대신 넣는 기능을 만들려고, 주문 관련 요청(주소·보낸 값)만 기록해 끝에 파일로 저장
+  //  응답 내용은 기록하지 않음. 파일은 KM이 직접 채팅에 보냄. 처음 몇 번만 쓰고 RECORD = false로 끔
+  const RECORD = true, rec = [], origAjax = $.ajax;
+  if (RECORD) $.ajax = function (o) {
+    if (o && /\/Odmn\//.test(String(o.url))) rec.push({ url: o.url, type: o.type, data: String(typeof o.data === "string" ? o.data : JSON.stringify(o.data)).slice(0, 4000) });
+    return origAjax.apply(this, arguments);
+  };
   W.__appFillRunning = true;
   const left = new Map(want), report = [], bad = [];
   quiet();
@@ -104,15 +111,21 @@
   } catch (e) {
     bad.push("중간에 멈춤: " + (e && e.message ? e.message : e));
   } finally {
-    loud(); W.__appFillRunning = false;
+    loud(); W.__appFillRunning = false; $.ajax = origAjax;
   }
 
+  if (RECORD && rec.length) {
+    const a = W.document.createElement("a");
+    a.href = W.URL.createObjectURL(new W.Blob([JSON.stringify({ groups, report, bad, rec }, null, 1)], { type: "text/plain" }));
+    a.download = `mis_기록_${TODAY}.txt`; W.document.body.appendChild(a); a.click(); a.remove();
+  }
   // "최근 15일동안 주문한 수량보다 많습니다"는 무시 (KM 요청). 저장 실패·시간·품목 확인 같은 안내만 보여줌
   const warn = [...new Set(notes.filter((m) => !/최근 15일/.test(m) && /확인하세요|없습니다|아닙니다|실패|오류/.test(m)))];
   W.alert(
     (bad.length ? "⚠ 확인 필요\n" + bad.join("\n") + "\n\n" : "✓ 모두 저장됐어요\n\n") +
     report.join("\n") +
     (left.size ? `\n\nMIS 주문그룹에서 못 찾은 품목 ${left.size}개:\n${[...left.values()].map((w) => `${w.name} ${w.q}`).join("\n")}` : "") +
-    (warn.length ? `\n\nMIS 안내:\n${warn.slice(0, 6).join("\n")}` : "")
+    (warn.length ? `\n\nMIS 안내:\n${warn.slice(0, 6).join("\n")}` : "") +
+    (RECORD && rec.length ? `\n\n다운로드 폴더의 mis_기록_${TODAY}.txt 파일을 채팅에 보내 주세요 (폰 자동 입력 만들 때 씀).` : "")
   );
 })();
