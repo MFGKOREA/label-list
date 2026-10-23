@@ -7,6 +7,54 @@
       "skillPath": "skills/brainstorming/SKILL.md",
       "computedHash": "759eaa3b4b3d06d9e1c98c24bcd58eeb4d2faf724b3239f81e8559aa41e28fdd"
     },
+    "canopy-part-title": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/canopy-part-title/SKILL.md",
+      "computedHash": "434e1dfc85154e3fa923260b6fa33ecd6078f4b1b23df02d68f23798ed675ae6"
+    },
+    "caveman": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "71b600c88c8d1d36f18c4875db23b53c5d6cb9ba3195e19451d6b1bb67db07c4"
+    },
+    "caveman-commit": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-commit/SKILL.md",
+      "computedHash": "b416cf134b0f33ddadeca7977aebdbb2d3db79a166d0fce2e1aabeec98132766"
+    },
+    "caveman-help": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-help/SKILL.md",
+      "computedHash": "c7a73a8c6afb6f871690666449209106aba847b4a9b0698686648960ece80012"
+    },
+    "caveman-review": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-review/SKILL.md",
+      "computedHash": "36a4007c5c0c6b90b5accfee1cd769a86e4963b651dece2ce5f17a223a0abb4b"
+    },
+    "caveman-stats": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-stats/SKILL.md",
+      "computedHash": "cc9fcd21f2a30cff5596b3cbb197fe0f4b1b30b58084a864350853c217ad301a"
+    },
+    "code-slice-hero": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/code-slice-hero/SKILL.md",
+      "computedHash": "15fda47fad4aafd7f0f0a617e88f51a7ea67b9c5225e394347a4f64b4b96ab3e"
+    },
+    "cuboid-carousel": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/cuboid-carousel/SKILL.md",
+      "computedHash": "8b3bb227e581f75e7be4c7a3b33855ca0535adfc3c32f356e77e3f7294208be1"
+    },
     "diagnosing-superpowers": {
       "source": "obra/superpowers",
       "sourceType": "github",
@@ -25,11 +73,59 @@
       "skillPath": "skills/executing-plans/SKILL.md",
       "computedHash": "cc778643e7d4cf455da8fab2d435d6ba26e59c0fc4aef29d892540185a54ff60"
     },
+    "figma": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/figma/SKILL.md",
+      "computedHash": "898884228cf905eedc1aac9d5d059f28c66c711ec4b950f627ec3d495c304da3"
+    },
     "finishing-a-development-branch": {
       "source": "obra/superpowers",
       "sourceType": "github",
       "skillPath": "skills/finishing-a-development-branch/SKILL.md",
       "computedHash": "4f571e7befb8b0946d9d7770232c818812412e9ab1dfb811f847edfba1fc6275"
+    },
+    "frost-sequence-camera-orbit": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/frost-sequence-camera-orbit/SKILL.md",
+      "computedHash": "c6e5a6c67efcde8116f0c39bb19f3c529cde24e2ed024d570eb6b190ccafaa74"
+    },
+    "glass-shard-title": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/glass-shard-title/SKILL.md",
+      "computedHash": "8ab5464a4df1fdb192b018f5d9b07a9f5fbadbf27bdced25d3c6433699723385"
+    },
+    "hyperframes": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/hyperframes/SKILL.md",
+      "computedHash": "b6d33de512783d10e54cb408820b72f10c9a7b5300f7a900d0bb27558ae25eb8"
+    },
+    "hyperframes-cli": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/hyperframes-cli/SKILL.md",
+      "computedHash": "c3e36755efa6695eb44901476f069d281bc4aa8feac903f37a92a2ef3ea361d9"
+    },
+    "hyperframes-registry": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/hyperframes-registry/SKILL.md",
+      "computedHash": "1acf359546af75f92fdcfa7fe685d53f0e85a121f145a4b90f8e4d9e763b8990"
+    },
+    "media-use": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/media-use/SKILL.md",
+      "computedHash": "3f892d62e9abe64575cf34eb76d5cd80309c18e5ab40e3b6f6f5c7d884d03d18"
+    },
+    "orbit-card": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/orbit-card/SKILL.md",
+      "computedHash": "3b5bf413163dfeb8e3fd633b0016f9859f002af465e00ab2e24f995a970fbac4"
     },
     "receiving-code-review": {
       "source": "obra/superpowers",
@@ -37,11 +133,23 @@
       "skillPath": "skills/receiving-code-review/SKILL.md",
       "computedHash": "59361179fc9225173e0c145ffd9bafbf9fdbf8b43ce3dc308497a0b4f83a6063"
     },
+    "remotion-to-hyperframes": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-to-hyperframes/SKILL.md",
+      "computedHash": "25ce0ef77a7a307949d8a89283c836e0bd9691c765dfd5fe45392a92f3c0f869"
+    },
     "requesting-code-review": {
       "source": "obra/superpowers",
       "sourceType": "github",
       "skillPath": "skills/requesting-code-review/SKILL.md",
       "computedHash": "b095ac8c980339436b41de9989328f3f288f2e2a70452df28452bbeb6531d604"
+    },
+    "slideshow": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "skills/slideshow/SKILL.md",
+      "computedHash": "2cce5d13b634a742a25e62a1d78366ee97d0bf51a708eb4746e44a0579a3b6a7"
     },
     "subagent-driven-development": {
       "source": "obra/superpowers",
@@ -78,6 +186,12 @@
       "sourceType": "github",
       "skillPath": "skills/verification-before-completion/SKILL.md",
       "computedHash": "b529822bdac4b197b180fe12225cff86b930b65910435103c10622df7f041651"
+    },
+    "wireframe-portal-title": {
+      "source": "heygen-com/hyperframes",
+      "sourceType": "github",
+      "skillPath": "registry/blocks/wireframe-portal-title/SKILL.md",
+      "computedHash": "92c857f1bead0506d9506ddc03a9a853206240c0d8efde9abfbc752779508b50"
     },
     "writing-plans": {
       "source": "obra/superpowers",
