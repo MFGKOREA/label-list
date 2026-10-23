@@ -775,6 +775,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; });
   window.addEventListener("appinstalled", () => { installEvt = null; $("howtoOpen").hidden = true; });
   if (matchMedia("(display-mode: standalone)").matches || navigator.standalone) $("howtoOpen").hidden = true; // 이미 홈 화면 앱으로 연 경우
+  // 오른쪽 위(접속중·홈 화면 추가)를 아래 날짜 상자와 같은 폭으로 맞춰 가운데 정렬
+  const alignTop = () => { document.querySelector(".top-right").style.minWidth = $("today").offsetWidth + "px"; };
+  alignTop(); addEventListener("resize", alignTop);
   $("howtoOpen").onclick = async () => {
     if (installEvt) { $("addHome").hidden = false; $("addHomeGo").focus(); return; }
     howtoTab(!/android/i.test(navigator.userAgent)); $("howto").hidden = false;
