@@ -950,8 +950,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("formTitle").textContent = "품목 수정";
     $("cancel").hidden = false;
     openForm(true);
-    $("form").scrollIntoView({ behavior: "smooth", block: "start" });
     $("fName").focus({ preventScroll: true });
+    formToTop();
   }
 
   // 사람이 직접 고른 방식만 다음 품목에도 이어서 씀 (사진·다른 매장 설정으로 바뀐 건 그 품목만)
@@ -963,8 +963,14 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("fUnit").addEventListener("change", () => { numTouched = true; });
 
   // ---- 입력칸 접기: 평소엔 목록 위주, [+ 품목 추가]를 눌러야 펼침 ----
-  function openForm(open) { $("form").hidden = !open; $("addOpen").hidden = open; }
-  $("addOpen").onclick = () => { openForm(true); $("fName").focus(); };
+  // 열 때 아래쪽 여백을 잠깐 늘려, 목록이 짧아도 입력칸을 화면 맨 위로 올릴 수 있게
+  function openForm(open) { $("form").hidden = !open; $("addOpen").hidden = open; document.body.style.paddingBottom = open ? "70vh" : ""; }
+  // 입력칸을 화면 맨 위로: 키보드가 올라와도 입력칸이 가려지지 않게 (아이폰은 키보드가 뜨며 화면을 한 번 더 밀어서 두 번)
+  function formToTop() {
+    const go = () => scrollTo({ top: $("form").getBoundingClientRect().top + scrollY - 12, behavior: "smooth" });
+    go(); setTimeout(go, 350);
+  }
+  $("addOpen").onclick = () => { openForm(true); $("fName").focus({ preventScroll: true }); formToTop(); };
   $("formClose").onclick = () => { discardFormPhoto(); resetForm(); openForm(false); };
 
   // ---- 품목명 자동완성 + 중복 경고 ----
