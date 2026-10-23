@@ -9,6 +9,7 @@
  *   POST {action:"append", key, item} → 배열 값 끝에 item 추가 (재고 입력 기록용)
  *   POST {action:"merge", key, patch} → 객체 값에 바뀐 칸만 합침 (null = 지움). 두 기기가 같은 날 입력해도 서로 안 지움
  *   GET  ?api=1&backups=1            → 백업 날짜 목록
+ *   GET  ?api=1&ver=1                → 마지막 저장 시각만 (앱이 10초마다 가볍게 확인하고, 바뀌었을 때만 전체를 받음)
  *   POST {action:"restore", date}    → 그 날짜 백업으로 되돌림 (되돌리기 전 상태는 "kv_되돌리기전" 탭에 남김)
  *
  * 백업: 하루 첫 저장 때 "kv" 탭을 "kv_YYYY-MM-DD" 탭으로 복사 (전날 마감 상태). 최근 14일치만 남김.
@@ -123,6 +124,10 @@ function restore_(date) {
   if (last > n) sh.deleteRows(n + 1, last - n);
 }
 
+// 저장할 때마다 바뀌는 버전 (시트를 읽지 않고 바로 답할 수 있게 스크립트 속성에)
+function ver_() { return PropertiesService.getScriptProperties().getProperty("VER") || "0"; }
+function bump_() { const v = String(Date.now()); PropertiesService.getScriptProperties().setProperty("VER", v); return v; }
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -130,8 +135,9 @@ function json_(obj) {
 function doGet(e) {
   if (!e || !e.parameter || !e.parameter.api) return json_({ ok: true, data: {}, sheet: spreadsheet_().getUrl() });
   try {
+    if (e.parameter.ver) return json_({ ok: true, ver: ver_() });
     if (e.parameter.backups) return json_({ ok: true, data: { backups: backupList_() } });
-    return json_({ ok: true, data: readAll_() });
+    return json_({ ok: true, data: readAll_(), ver: ver_() });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -158,7 +164,7 @@ function doPost(e) {
     } else {
       return json_({ ok: false, error: "알 수 없는 요청: " + body.action });
     }
-    return json_({ ok: true, data: readAll_() });
+    return json_({ ok: true, data: readAll_(), ver: bump_() });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {

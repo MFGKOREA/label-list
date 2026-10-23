@@ -33,7 +33,7 @@
   // 구글 시트 주소(Apps Script 웹앱 /exec). 배포를 새로 만들면 이 주소만 바꾸면 됩니다. 앱에서 바꾼 주소가 있으면 그게 우선.
   const DEFAULT_API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   let API = DEFAULT_API; try { const v = localStorage.getItem(LS_API); if (v !== null) API = v; } catch {}
-  let online = false, trackT = null;
+  let online = false, trackT = null, lastVer = null;
   const lsSave = () => { try { localStorage.setItem(LS, JSON.stringify(db)); } catch {} };
   async function apiCall(body) {
     const res = body
@@ -42,6 +42,7 @@
     if (!res.ok) throw new Error("HTTP " + res.status);
     const j = await res.json();
     if (!j.ok) throw new Error(j.error || "응답 오류");
+    if (j.ver) lastVer = j.ver;
     return j.data;
   }
   // 시트 저장이 실패한 값은 기억해 두고(이 기기 localStorage), 다음에 시트에서 받아올 때 덮어쓰지 않고 다시 보냄
@@ -2269,7 +2270,17 @@
     if (!$("v-files").hidden && !typing("v-files")) renderFiles();
   }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(refreshVisible); });
-  // 다른 기기에서 넣은 재고·Forecast도 1분 안에 반영 (리포트의 오차 범위 큰 품목 등)
-  setInterval(() => { if (!document.hidden) pull(true).then((ch) => { if (ch) refreshVisible(); }); }, 60000);
+  // 다른 기기에서 넣은 재고·Forecast도 10~30초 안에 반영 (리포트의 오차 범위 큰 품목 등)
+  // 시트 변경 확인: 10초마다 버전만 묻고(가벼움) 바뀌었을 때만 전체를 받음. 옛 Apps Script(버전 없음)면 30초마다 전체
+  let polling = false, lastFull = 0, noVer = false;
+  setInterval(async () => {
+    if (document.hidden || polling || !API) return;
+    polling = true;
+    try {
+      let need = Date.now() - lastFull > 30000;
+      if (!noVer) try { const r = await fetch(API + "?api=1&ver=1&t=" + Date.now()), j = await r.json(); if (j && j.ver) need = j.ver !== lastVer; else noVer = true; } catch {}
+      if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
+    } finally { polling = false; }
+  }, 10000);
   window.__orderCalc = { model, orderWindow, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY };
 })();
