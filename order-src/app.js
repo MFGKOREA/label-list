@@ -46,14 +46,53 @@
   }
   // 시트 저장이 실패한 값은 기억해 두고(이 기기 localStorage), 다음에 시트에서 받아올 때 덮어쓰지 않고 다시 보냄
   const LS_PEND = "order-calc-pending";
-  let pend = { set: {}, add: {} };
-  try { pend = { set: {}, add: {}, ...(JSON.parse(localStorage.getItem(LS_PEND)) || {}) }; } catch {}
+  let pend = { set: {}, add: {}, base: {} };
+  try { pend = { set: {}, add: {}, base: {}, ...(JSON.parse(localStorage.getItem(LS_PEND)) || {}) }; } catch {}
+  // 두 기기 동시 입력: 객체 값(날짜별 재고·발주, Forecast, 설정)은 통째로 덮지 않고 바뀐 칸만 보냄(merge)
+  //  syncBase = 마지막으로 시트에서 받은 값, pend.base = 아직 못 보낸 값의 기준 (새로고침해도 남게)
+  const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+  const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  function diffObj(base, now) {
+    const out = {};
+    Object.keys(base).forEach((k) => { if (!(k in now)) out[k] = null; });
+    Object.keys(now).forEach((k) => {
+      const a = base[k], b = now[k];
+      if (isObj(a) && isObj(b)) { const d = diffObj(a, b); if (Object.keys(d).length) out[k] = d; }
+      else if (JSON.stringify(a) !== JSON.stringify(b)) out[k] = b;
+    });
+    return out;
+  }
+  function mergeObj(cur, patch) {
+    const out = isObj(cur) ? { ...cur } : {};
+    Object.keys(patch).forEach((k) => { const v = patch[k]; if (v === null) delete out[k]; else if (isObj(v) && isObj(out[k])) out[k] = mergeObj(out[k], v); else out[k] = v; });
+    return out;
+  }
+  let syncBase = {}, noMerge = false;
+  const baseOf = (k) => (k in pend.base ? pend.base[k] : syncBase[k]);
+  // 한 키를 시트로: 기준이 있는 객체면 바뀐 칸만(merge), 아니면 통째로(set). 옛 Apps Script면 set으로
+  async function pushKey(key) {
+    // 기준이 없으면(시트에 아직 없는 새 날짜 키 등) 빈 객체 기준 = 이 기기 칸만 얹음 (시트에 있는 다른 칸은 안 건드림)
+    const value = clone(db[key] ?? null), base = isObj(baseOf(key)) ? baseOf(key) : {};
+    let data;
+    if (!noMerge && isObj(value)) {
+      const patch = diffObj(base, value);
+      if (!Object.keys(patch).length) return;
+      try { data = await apiCall({ action: "merge", key, patch }); }
+      catch (e) { if (!/알 수 없는 요청/.test(e.message)) throw e; noMerge = true; }
+    }
+    if (!data) data = await apiCall({ action: "set", key, value });
+    const srv = clone(data[key]);
+    syncBase[key] = srv;
+    // 보내는 동안 이 기기에서 또 고친 칸은 시트 값 위에 다시 얹음 (다른 기기가 넣은 칸은 받아 옴)
+    if (isObj(srv) && isObj(db[key])) { const later = diffObj(value, db[key]); db[key] = mergeObj(srv, later); lsSave(); }
+    if (JSON.stringify(db[key] ?? null) === JSON.stringify(value)) { delete pend.set[key]; delete pend.base[key]; savePend(); }
+  }
   const savePend = () => { try { localStorage.setItem(LS_PEND, JSON.stringify(pend)); } catch {} };
   let flushing = false;
   async function flush() {
     if (!API || flushing) return; flushing = true;
     try {
-      for (const k of Object.keys(pend.set)) { if (inflight[k]) continue; await apiCall({ action: "set", key: k, value: db[k] ?? null }); delete pend.set[k]; savePend(); }
+      for (const k of Object.keys(pend.set)) { if (inflight[k]) continue; await pushKey(k); delete pend.set[k]; delete pend.base[k]; savePend(); }
       for (const k of Object.keys(pend.add)) { while (pend.add[k] && pend.add[k].length) { await apiCall({ action: "append", key: k, item: pend.add[k][0] }); pend.add[k].shift(); savePend(); } delete pend.add[k]; savePend(); }
       online = true;
     } catch { online = false; setTimeout(flush, 30000); } finally { flushing = false; }
@@ -65,12 +104,15 @@
     try {
       const remote = await apiCall();
       const sig = JSON.stringify(remote), changed = sig !== lastSig; lastSig = sig;
-      // 아직 시트에 못 보낸 값은 이 기기 값을 지킴 (날짜별 객체는 합침: 시트 값 위에 이 기기 값)
+      const old = syncBase; syncBase = JSON.parse(sig);
+      // 아직 시트에 못 보낸 값은 이 기기 값을 지킴 (객체는 이 기기에서 바꾼 칸만 시트 값 위에 얹음)
       Object.keys(pend.set).forEach((k) => {
-        const loc = db[k], rem = remote[k];
-        remote[k] = loc && rem && typeof loc === "object" && typeof rem === "object" && !Array.isArray(loc) ? { ...rem, ...loc } : loc;
+        const loc = db[k], rem = remote[k], base = k in pend.base ? pend.base[k] : old[k];
+        if (!(k in pend.base) && isObj(old[k])) pend.base[k] = clone(old[k]);
+        remote[k] = isObj(loc) && isObj(rem) ? (isObj(base) ? mergeObj(rem, diffObj(base, loc)) : { ...rem, ...loc }) : loc;
         db[k] = remote[k];
       });
+      savePend();
       Object.keys(pend.add).forEach((k) => { const arr = Array.isArray(remote[k]) ? remote[k].slice() : []; pend.add[k].forEach((it) => { if (!arr.some((x) => JSON.stringify(x) === JSON.stringify(it))) arr.push(it); }); remote[k] = arr; });
       db = { ...db, ...remote }; online = true; lsSave();
       if (Object.keys(pend.set).length || Object.keys(pend.add).length) flush();
@@ -87,16 +129,15 @@
     if (value === null) delete db[key]; else db[key] = value;
     lsSave(); light(key);
     if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
-    if (API) { pend.set[key] = 1; savePend(); send(key); }
+    if (API) { if (!(key in pend.base) && isObj(syncBase[key])) pend.base[key] = clone(syncBase[key]); pend.set[key] = 1; savePend(); send(key); }
   }
   // 같은 키는 한 번에 하나씩 보냄 (먼저 보낸 옛 값이 늦게 도착해 새 값을 덮는 일 방지)
   const inflight = {};
   function send(key) {
     if (inflight[key]) { inflight[key] = 2; return; }
     inflight[key] = 1;
-    const value = db[key] ?? null;
-    apiCall({ action: "set", key, value })
-      .then(() => { if ((db[key] ?? null) === value) { delete pend.set[key]; savePend(); } online = true; })
+    pushKey(key)
+      .then(() => { online = true; })
       .catch(() => { online = false; toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); })
       .finally(() => { const again = inflight[key] === 2; delete inflight[key]; if (again) send(key); });
   }
@@ -1864,7 +1905,7 @@
   function renderFiles() {
     $("connState").className = "conn" + (API && online ? "" : " off");
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
-    $("apiIn").value = API;
+    $("apiIn").value = API; renderBackups();
     // 품목 목록
     const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
@@ -1977,6 +2018,24 @@
     API = $("apiIn").value.trim();
     try { localStorage.setItem(LS_API, API); } catch {}
     await pull(); renderFiles(); toast(online ? "구글 시트에 연결했어요" : API ? "연결하지 못했어요. 주소를 확인해 주세요" : "주소를 지웠어요");
+  };
+  // 백업에서 되돌리기 (Apps Script가 하루 첫 저장 때 전날 마감 상태를 복사해 둠, 14일)
+  async function renderBackups() {
+    const sel = $("bkSel"); if (!sel || !API) return;
+    try {
+      const res = await fetch(API + "?api=1&backups=1&t=" + Date.now()), j = await res.json(), list = j && j.data && j.data.backups;
+      if (!Array.isArray(list)) { sel.innerHTML = `<option value="">Apps Script 업데이트 필요</option>`; return; }
+      sel.innerHTML = list.length ? list.map((d) => `<option value="${d}">${mmdd(d)} ${DOW[dow(d)]} 시작 상태</option>`).join("") : `<option value="">아직 백업 없음 (내일부터)</option>`;
+    } catch { sel.innerHTML = `<option value="">불러오지 못했어요</option>`; }
+  }
+  $("bkGo").onclick = async () => {
+    const d = $("bkSel").value; if (!d) return;
+    if (!confirm(`${mmdd(d)} ${DOW[dow(d)]}요일 시작 상태로 되돌릴까요?\n그 뒤에 입력한 재고·발주·설정이 모두 사라져요. (지금 상태는 시트의 "kv_되돌리기전" 탭에 남아요)`)) return;
+    try {
+      await apiCall({ action: "restore", date: d });
+      pend = { set: {}, add: {}, base: {} }; savePend(); db = {}; lastSig = "";
+      await pull(); invalidate(); renderFiles(); toast(`${mmdd(d)} 백업으로 되돌렸어요`);
+    } catch (e) { toast("되돌리지 못했어요 · " + e.message); }
   };
   $("apiPush").onclick = async () => {
     if (!API) { toast("먼저 주소를 저장해 주세요"); return; }
