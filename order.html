@@ -1413,6 +1413,7 @@ html, body { overflow-x: hidden; }
       if (c && c.g) it.pk = { ...it.pk, g: c.g }; // 1단위 무게를 바로잡음 (브리오슈 1PK = 380g × 3개)
       if (c && c.label) { it.pk = { ...it.pk, stock: c.label, order: c.label }; it.unit = c.label; }
       it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
+      it.outStep = (c && c.outStep) || 0; // 꺼내 쓰는 단위 (버터라이스: 박스째 라인 리치인으로 → 재고가 40개씩 줄어듦)
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
     };
@@ -1926,6 +1927,11 @@ html, body { overflow-x: hidden; }
   }
   // 품목이 프랩 배치로 쓰이면 한 배치 원재료 양 (채점 묶음 기준)
   const batchRawOf = (M, it) => prepPlan(M).reduce((a, pl) => Math.max(a, (pl.raw.get(it.key) || 0) * pl.batchX), 0);
+  // 프랩 레시피 한 번에 들어가는 원재료 양 (재고 단위). 생새우처럼 유수해동해서 바로 프랩하는 품목은 이만큼씩 한꺼번에 줄어듦 (소테 새우 = 생새우 4PK)
+  const prepRawOf = (M, it) => {
+    if (!M.prepRaw) { M.prepRaw = new Map(); M.prep.forEach((pr) => pr.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, i.v); if (!t || t.kind !== "item" || !q || q.vol) return; const x = M.items.find((y) => y.key === t.id); const v = x && toStock(q, x.pk); if (v > 0) M.prepRaw.set(x.key, Math.max(M.prepRaw.get(x.key) || 0, v)); })); }
+    return M.prepRaw.get(it.key) || 0;
+  };
 
   // ---------- G: 재고채점 ----------
   const hourOf = (t) => { const m = /\s(\d{1,2}):(\d{2})/.exec(String(t || "")); return m ? +m[1] + +m[2] / 60 : 10; };
@@ -1984,7 +1990,8 @@ html, body { overflow-x: hidden; }
       // 채점 구간: 이어진 구간을 예상 사용량이 2단위 넘을 때까지 묶음 (시즈닝·고춧가루처럼 가끔 프랩에 쓰는 품목은 하루 단위로는 0 아니면 통째)
       //  재고가 그대로인 날(사용 0)도 넣고, 음수(입고 없이 늘어남)나 입고를 모르는 구간에서 끊음
       const err = (p, a) => Math.max(-1, Math.min(1, (p - a) / Math.max(a, 1e-9))); // ±100%에서 자름
-      const thr = Math.max(2, batchRawOf(M, it)); // 프랩 배치로 쓰는 품목은 한 배치 양이 될 때까지 묶음
+      // 프랩 배치로 쓰는 품목은 한 배치(레시피 한 번 양의 1.5배), 박스째 꺼내는 품목은 1.5박스 양이 될 때까지 묶음
+      const thr = Math.max(2, batchRawOf(M, it), prepRawOf(M, it) * 1.5, it.outStep * 1.5);
       let acc = null;
       const flushAcc = () => {
         if (!acc) return; const { d1, d2, actual, pA, pB, pF, g } = acc; acc = null;
@@ -1993,7 +2000,7 @@ html, body { overflow-x: hidden; }
         if (pA != null) it.scoreA.push(err(pA, actual));
         if (pB != null) it.scoreB.push(err(pB, actual));
         it.scoreF.push(err(pF, actual));
-        it.scoreQ.push(1 / (6 * pF * pF)); // 양 끝 재고가 각각 0~1단위 덜 세어질 수 있는 잡음의 분산 (상대값)
+        it.scoreQ.push((it.outStep || 1) ** 2 / (6 * pF * pF)); // 양 끝 재고가 각각 0~1단위(박스째 꺼내면 0~1박스) 덜 세어질 수 있는 잡음의 분산 (상대값)
         M.scores.push({ key, name: it.name, start: d1, end: d2, actual, pA, pB, pF });
       };
       pairs.forEach(({ d1, d2, actual, h1, h2 }, j) => {
