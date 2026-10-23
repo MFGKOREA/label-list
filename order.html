@@ -3127,7 +3127,7 @@ html, body { overflow-x: hidden; }
       .filter(Boolean).sort((p, q) => q.rel - p.rel || q.sd - p.sd).slice(0, 10);
     // 옵션 비율: 메뉴별 매출에 안 나오는 선택(안맵게 등)을 달마다 수불현황으로 구한 값. 앞으로 계산에 쓰는 값 = 최근 달 평균
     const sh = (M.shares || []).filter((x) => x.byMonth.length);
-    $("rSharesH").hidden = $("rShares").hidden = !sh.length;
+    $("rSharesH").hidden = $("rShares").hidden = true; // 옵션 비율은 계산에만 쓰고 리포트에는 안 보임 (KM 요청)
     $("rShares").innerHTML = sh.map((x) => `<div class="cell miss"><span class="nm">${esc(x.label)}<small>${x.byMonth.filter((b) => b.m >= "2026-09").map((b) => `${+b.m.slice(5)}월 ${Math.round(b.v * 100)}%`).join(" · ")}</small></span><span class="pc">${Math.round(x.now * 100)}%</span></div>`).join("");
     $("rMiss").innerHTML = wide.map((m) => `<div class="cell miss"><span class="nm">${esc(m.it.name)}<small>±${fmtQ(Math.max(0.1, m.sd), m.u)}${esc(m.u)} · 예상 사용 ${fmtQ(m.use, m.u)}${esc(m.u)}</small></span><span class="pc">±${Math.round(m.rel * 100)}%</span></div>`).join("");
   }
