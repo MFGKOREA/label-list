@@ -73,8 +73,8 @@
   };
 
   // KM 요청: 폰에서 확정하면 구글이 대신 넣는 기능을 만들려고, 주문 관련 요청(주소·보낸 값)만 기록해 끝에 파일로 저장
-  //  응답 내용은 기록하지 않음. 파일은 KM이 직접 채팅에 보냄. 처음 몇 번만 쓰고 RECORD = false로 끔
-  const RECORD = true, rec = [], origAjax = $.ajax;
+  //  응답 내용은 기록하지 않음. MIS는 매장 인터넷·VPN에서만 열려 구글 서버 방식은 못 써서 지금은 끔 (RECORD = false)
+  const RECORD = false, rec = [], origAjax = $.ajax;
   if (RECORD) $.ajax = function (o) {
     if (o && /\/Odmn\//.test(String(o.url))) rec.push({ url: o.url, type: o.type, data: String(typeof o.data === "string" ? o.data : JSON.stringify(o.data)).slice(0, 4000) });
     return origAjax.apply(this, arguments);
