@@ -61,11 +61,11 @@ body {
 .pick.off em { font-style: normal; font-size: 13px; font-weight: 700; background: var(--fill); border-radius: 8px; padding: 4px 9px; }
 .pick-empty { padding: 30px 16px; text-align: center; color: var(--muted); background: var(--surface); border-radius: 18px; }
 .picker #pickCancel { justify-self: center; margin-top: 6px; }
-.top-right { display: grid; justify-items: end; gap: 6px; flex: none; margin-left: auto; }
-.online { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ok); }
+.top-right { display: grid; justify-items: stretch; gap: 6px; flex: none; margin-left: auto; }
+.online { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ok); line-height: 1; }
 .online i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
 .online b { font-weight: 800; }
-.howto-open { font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.howto-open { width: 100%; text-align: center; font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .popup .seg { margin: 0; }
 .steps { margin: 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 10px; }
 .popup .steps li { counter-increment: st; display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.5; padding: 0; border: 0; }
@@ -796,6 +796,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     openPicker(false);
     return;
   }
+  showOnline(1); // 나 자신 포함, 합계가 오기 전에도 바로 표시
   refresh(); pingAll();
   setInterval(refresh, 5000);
   setInterval(() => { if (!document.hidden) pingAll(); }, 5000);
