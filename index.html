@@ -11,9 +11,6 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/label-192.png">
 <link rel="apple-touch-icon" href="icons/label-180.png">
 <title>한글표시사항 리스트</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
 <style>
 /* MG 코랄 테마 (발주량 계산기와 동일): 연회색 바탕 · 둥근 흰 카드 · 먹색 버튼 · 코랄 포인트 · 초록 '여유' */
 :root {
@@ -29,7 +26,7 @@
   --amber: #fff3e0; --amber-ink: #e08a1e;
   --ok-bg: #ebf7f0; --ok: #41b979;
   color-scheme: light; /* 다크 모드 없이 항상 밝은 화면 */
-  --font: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", "Malgun Gothic", system-ui, sans-serif; /* 휴대폰 기본 글꼴 (내려받기 없음) */
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -393,13 +390,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // ---- storage: Google Sheet via Apps Script API, localStorage as a fast first paint ----
   // ---- 매장: 링크 끝 ?store=코드 로 구분. 코드 없이 열면 수원컨벤션점 ----
   // 매장마다 구글 프로젝트(웹 앱 /exec 주소)가 따로 있습니다. 매장을 늘릴 때는 아래에 한 줄 추가.
-  // hidden: 전용 주소로만 들어오는 매장 (매장 선택 화면에는 안 보임)
+  // 모든 매장이 매장 선택에 나옴. 컨벤션·월드타워·용산은 전용 주소로도 바로 들어올 수 있음
   // 새 매장은 아래에 추가: 코드: { name: "매장 이름", api: "매장모음 웹 앱 주소" } — api가 비어 있으면 '준비 중'
   const HUB = "https://script.google.com/macros/s/AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw/exec"; // 매장모음 프로젝트 (매장별 탭)
   const STORES = {
-    suwon: { name: "MG수원컨벤션센터점", hidden: true, api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
-    lwt: { name: "MG롯데시네마월드타워점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
-    ys: { name: "MG용산아이파크몰점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
     // ---- 매장 선택 (매장모음 프로젝트, 매장별 탭) ----
     yeouido: { name: "MG여의도점", api: HUB },
     mokdong: { name: "MG목동점", api: HUB },
@@ -411,11 +405,13 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     sangammbc: { name: "MG상암MBC점", api: HUB },
     lsw: { name: "MG롯데시네마수원역점", api: HUB },
     djdunsan: { name: "MG대전둔산점", api: HUB },
+    lwt: { name: "MG롯데시네마월드타워점", api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
     gjgwangcheon: { name: "MG광주광천점", api: HUB },
     kdstarcity: { name: "MG건대스타시티점", api: HUB },
     pangyo: { name: "MG판교라스트리트점", api: HUB },
     ssgcheonan: { name: "MG신세계백화점천안아산점", api: HUB },
     dongtan: { name: "MG타임테라스동탄점", api: HUB },
+    ys: { name: "MG용산아이파크몰점", api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
     hdgasan: { name: "MG현대아울렛가산점", api: HUB },
     ulsanhd: { name: "MG울산현대백화점", api: HUB },
     centerone: { name: "MG센터원점", api: HUB },
@@ -436,6 +432,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     galleria: { name: "MG갤러리아센터시티점", api: HUB },
     cheongju: { name: "MG청주커넥트점", api: HUB },
     unjeong: { name: "MG스타필드빌리지운정점", api: HUB },
+    suwon: { name: "MG수원컨벤션센터점", api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
     hdsongdo: { name: "MG현대프리미엄아울렛송도점", api: HUB },
   };
   // 링크의 ?store= 가 있으면 그 매장, 없으면 이 기기에 기억된 매장, 둘 다 없으면 매장 선택 화면
@@ -719,7 +716,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const t = today();
   $("today").textContent = `${pad(t.getMonth() + 1)}.${pad(t.getDate())} ${"일월화수목금토"[t.getDay()]}`;
   $("fExpiry").value = ""; setMode("date");
-  setData(lsLoad()); render();
+  const cached = lsLoad(); setData(cached); render();
+  if (!cached.length && storeKnown) { $("empty").textContent = "목록을 불러오는 중…"; $("empty").hidden = false; }
 
   // ---- 전달사항: 바로 쓰고, 멈추면 자동 저장 ----
   function fitNotice() { const t = $("noticeInput"); t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
@@ -788,8 +786,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   });
   $("pickCancel").onclick = () => { $("picker").hidden = true; document.body.style.overflow = ""; };
   $("storeChange").onclick = () => openPicker(true);
-  // 전용 주소(?store=컨벤션·월드타워·용산)로 들어온 경우만 매장 변경 숨김. 통합 주소로 들어오면 항상 보임
-  if (storeKnown && isStore(qStore) && STORES[qStore].hidden) $("storeChange").hidden = true;
 
   // 주소 끝에 ?pick 을 붙이면 기억된 매장과 상관없이 매장 선택 화면 (관리자 확인용)
   if (new URLSearchParams(location.search).has("pick")) openPicker(storeKnown);
