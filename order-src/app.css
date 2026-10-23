@@ -421,6 +421,7 @@ html, body { overflow-x: hidden; }
 .gross input:focus, .set input:focus, .map select:focus { box-shadow: 0 0 0 2px var(--accent); }
 .set { display: grid; gap: 8px; }
 .set input { text-align: left; font-size: 13px; font-weight: 500; }
+.set select { flex: 1; min-width: 0; border: 0; border-radius: 10px; background: var(--fill-2); color: var(--fg); padding: 9px 10px; font-size: 13px; font-weight: 600; outline: none; }
 .set .row { display: flex; gap: 8px; }
 .btn { border: 0; border-radius: 11px; padding: 9px 14px; font-size: 14px; font-weight: 700; background: var(--accent); color: var(--accent-ink); white-space: nowrap; }
 .btn.ghost { background: var(--fill); color: var(--fg); }
