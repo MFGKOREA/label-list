@@ -499,7 +499,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     items = list.filter((x) => x.id !== NOTICE_ID && x.mode !== "note");
     renderNotice();
   }
-  function apply(list) { setData(list); try { localStorage.setItem(LS, JSON.stringify(list)); } catch {} render(); $("note").textContent = ""; showAlertOnce(); }
+  function apply(list) { setData(list); try { localStorage.setItem(LS, JSON.stringify(list)); localStorage.setItem(LS + "-ver", listVer); } catch {} render(); $("note").textContent = ""; showAlertOnce(); }
 
   // ---- 기한 임박 팝업: 앱을 열고 목록을 처음 받아왔을 때 한 번 (7일 이내 / 30일 이내) ----
   const SKIP = "label-list-alert-skip" + (STORE === "suwon" ? "" : "-" + STORE);
@@ -530,17 +530,25 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("alert").addEventListener("click", (e) => { if (e.target.id === "alert") closeAlert(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeAlert(); $("resetBox").hidden = true; $("howto").hidden = true; } });
 
+  // 저장·삭제는 화면에 먼저 반영하고 구글 응답은 뒤에서 받음 (여러 개 연달아 해도 마지막 응답만 적용)
+  let pending = 0;
+  async function send(fn, arg) {
+    pending++;
+    try { const list = await call(fn, arg); if (pending === 1) apply(list); }
+    catch (e) { listVer = ""; throw e; }
+    finally { pending--; }
+  }
   async function save(it) {
     const i = items.findIndex((x) => x.id === it.id); i >= 0 ? items[i] = it : items.push(it); render();
-    apply(await call("saveItem", it));
+    await send("saveItem", it);
   }
   async function remove(id) {
     items = items.filter((x) => x.id !== id); render();
-    apply(await call("deleteItem", id));
+    await send("deleteItem", id);
   }
   async function refresh() {
-    if (document.hidden || editId) return;
-    try { const list = await call("listItems"); if (list) apply(list); else $("note").textContent = ""; }
+    if (document.hidden || editId || pending) return;
+    try { const list = await call("listItems"); if (pending) return; if (list) apply(list); else $("note").textContent = ""; }
     catch { $("note").textContent = "목록을 불러오지 못했습니다. 인터넷 연결을 확인하세요."; }
   }
 
@@ -637,12 +645,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     if (!it || !it.name) { updatePreview(); if (!it?.name) $("fName").focus(); return; }
     it.id = editId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
     it.updatedAt = Date.now();
-    $("submit").disabled = true;
-    try {
-      await save(it); resetForm(); $("fName").focus();
+    const wasEdit = !!editId;
+    resetForm(); $("fName").focus();
+    try { await save(it); }
+    catch {
+      // 저장 실패: 목록을 다시 받고, 적던 내용을 입력칸에 되돌려 다시 누를 수 있게
+      refresh();
+      if (!editId && !$("fName").value) { startEdit(it); if (!wasEdit) { editId = null; $("submit").textContent = "추가"; $("formTitle").textContent = "품목 추가"; $("cancel").hidden = true; } }
+      $("preview").textContent = "저장하지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요.";
     }
-    catch { $("preview").textContent = "저장하지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요."; }
-    finally { $("submit").disabled = false; }
   });
   $("q").addEventListener("input", render);
 
@@ -717,7 +728,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   $("today").textContent = `${pad(t.getMonth() + 1)}.${pad(t.getDate())} ${"일월화수목금토"[t.getDay()]}`;
   $("fExpiry").value = ""; setMode("date");
   const cached = lsLoad(); setData(cached); render();
-  if (!cached.length && storeKnown) { $("empty").textContent = "목록을 불러오는 중…"; $("empty").hidden = false; }
+  if (cached.length) { try { listVer = localStorage.getItem(LS + "-ver") || ""; } catch {} if (storeKnown) showAlertOnce(); }
+  else if (storeKnown) { $("empty").textContent = "목록을 불러오는 중…"; $("empty").hidden = false; }
 
   // ---- 전달사항: 바로 쓰고, 멈추면 자동 저장 ----
   function fitNotice() { const t = $("noticeInput"); t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }
@@ -790,6 +802,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // 주소 끝에 ?pick 을 붙이면 기억된 매장과 상관없이 매장 선택 화면 (관리자 확인용)
   if (new URLSearchParams(location.search).has("pick")) openPicker(storeKnown);
 
+  // 다음부터는 휴대폰에 저장된 화면으로 바로 열림
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   if (!storeKnown) {
     $("storeName").textContent = "매장 선택";
     $("storeChange").hidden = true;
