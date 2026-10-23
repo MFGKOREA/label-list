@@ -886,6 +886,7 @@ html, body { overflow-x: hidden; }
     // 보내는 동안 이 기기에서 또 고친 칸은 시트 값 위에 다시 얹음 (다른 기기가 넣은 칸은 받아 옴)
     if (isObj(srv) && isObj(db[key])) { const later = diffObj(value, db[key]); db[key] = mergeObj(srv, later); lsSave(); }
     if (JSON.stringify(db[key] ?? null) === JSON.stringify(value)) { delete pend.set[key]; delete pend.base[key]; savePend(); }
+    else if (key in pend.base) { pend.base[key] = clone(srv); savePend(); } // 아직 못 보낸 칸은 시트 값을 기준으로 (다른 기기 칸을 내 옛 복사본으로 되돌리지 않게)
   }
   const savePend = () => { try { localStorage.setItem(LS_PEND, JSON.stringify(pend)); } catch {} };
   let flushing = false;
@@ -1953,7 +1954,7 @@ html, body { overflow-x: hidden; }
         if (!counted(rows[key])) return;
         if (!byKey.has(key)) byKey.set(key, []);
         const a = byKey.get(key);
-        if (!a.some((l) => l.t.slice(0, 10) === d)) a.push({ t: d + " 10:00", k: key, s: num(rows[key].s), v: 2 });
+        if (!a.some((l) => l.t.slice(0, 10) === d)) a.push({ t: d + " 10:00", k: key, s: num(rows[key].s), v: 2, src: "input" });
       });
     });
     byKey.forEach((l) => l.sort((x, y) => (x.t < y.t ? -1 : 1)));
@@ -1962,6 +1963,7 @@ html, body { overflow-x: hidden; }
       // 그날 재고는 발주 탭에 마지막으로 남은 값으로 (44로 잘못 쳤다가 4로 고친 경우 등)
       //  박스로 세는 품목은 예전에 팩으로 넣은 날이 있어 기록 그대로 씀
       if (!it.box) list = list.map((l) => { const r = (db["input." + l.t.slice(0, 10)] || {})[key]; return r && counted(r) ? { ...l, s: num(r.s) } : l; });
+      else list = list.map((l) => (l.src === "input" ? { ...l, s: l.s * it.box } : l)); // 발주 탭 재고는 박스 수 → 재고 단위(팩)로
       let uG = 0, gG = 0;
       // 두 재고 사이 실제 사용량 (입고를 모르면 null)
       const pairs = [];
@@ -2024,10 +2026,10 @@ html, body { overflow-x: hidden; }
         const pB = it.rateB != null ? Math.max(0, it.rateB * g + bdj) : null;
         const pF = pA != null && pB != null ? (pA + pB) / 2 : pA ?? pB;
         // 재고가 그대로여도 뜯은 건 안 세는 경우가 있어 1단위까지는 뜯은 걸 쓴 것으로 봄. 2단위 넘게 쓸 만큼 예상인데 그대로면 다시 안 센 값으로 보고 뺌
-        if (actual === 0 && pF != null && pF >= thr) { flushAcc(); return; }
+        if (actual === 0 && pF != null && pF >= thr) { flushAcc(); if (nx && nx.d1 === d2 && nx.actual != null) { nx.d1 = d1; nx.h1 = h1; } return; } // 안 센 값: 다음 쌍이 이 쌍 시작부터 이어받음
         const add = (x, y) => (x == null || y == null ? null : x + y);
         acc = acc ? { ...acc, d2, actual: acc.actual + actual, pA: add(acc.pA, pA), pB: add(acc.pB, pB), pF: add(acc.pF, pF), g: acc.g + g } : { d1, d2, actual, pA, pB, pF, g };
-        if (acc.pF != null && acc.pF >= thr) flushAcc();
+        if (acc.pF != null && acc.pF >= thr && !(it.thaw && nx && nx.d1 === d2 && nx.actual != null && [5, 6, 0].includes(dow(d2)))) flushAcc();
       });
       if (gG > 0) it.rateG = uG / gG;
     });
@@ -2331,7 +2333,7 @@ html, body { overflow-x: hidden; }
       if (v.s === "" && v.o === "" && !num(rec.i)) delete all[it.key]; else all[it.key] = rec;
       setKey("input." + TODAY, all);
       // 채점용 기록: 재고가 들어간 경우 (같은 날 다시 고치면 마지막 값이 쓰이도록 시각 포함). v:2 = 입고는 발주 기록으로 계산
-      if (isFinite(num(v.s))) appendKey("onhand", { t: localStamp(), k: it.key, s: stockOf(it, v), i: inc, v: 2 });
+      if (isFinite(num(v.s))) { const sv = stockOf(it, v), last = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(TODAY)).pop(); if (!last || num(last.s) !== sv) appendKey("onhand", { t: localStamp(), k: it.key, s: sv, i: inc, v: 2 }); }
       inp[it.key] = rec;
       // 발주 필요가 바뀌면 위로 올리거나 제자리로 (엔터로 갈 곳은 orderFocus, 아니면 지금 포커스 유지)
       // (포커스가 다음 칸으로 옮겨간 뒤에 다시 그려야 같은 품목의 발주칸을 눌렀을 때도 그 칸에 그대로 있음)
