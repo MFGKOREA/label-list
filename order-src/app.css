@@ -551,3 +551,18 @@ html, body { overflow-x: hidden; }
 .req .kv b { font-weight: 800; }
 .req .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: stretch; }
 .req .fld { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; }
+
+/* 폰에서 앱처럼: 탭할 때 회색 번쩍임 없애기 · 당겨서 새로고침 막기 · 누르는 순간 반응 · 버튼 글자 길게 눌러도 선택 안 됨 */
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
+button, a, [role="button"], label.fld { touch-action: manipulation; }
+button, a, [role="button"], .chips button, .tb { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+button:not(:disabled) { transition: transform 100ms cubic-bezier(.2, .8, .2, 1), filter 100ms; }
+button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96); }
+/* 아이폰은 16px보다 작은 입력칸을 누르면 화면을 확대하고 안 돌아옴 → 손가락 화면에서만 16px */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+  /* Forecast 칸은 좁아서 16px로 키우면 숫자가 잘림 → 16px로 두고 화면에서만 13px 크기로 줄여 보임 (확대 방지는 유지) */
+  .f-row input { width: 123.08%; margin-right: -23.08%; padding: 14.8px 8.6px; transform: scale(0.8125); transform-origin: left center; border-radius: 12.3px; }
+}
+/* 홈 화면 앱(노치 아래까지 그림)에서 맨 위 내용이 상태바에 가리지 않게 */
+.view { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
