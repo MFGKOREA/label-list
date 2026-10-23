@@ -295,7 +295,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   <section class="packsec" id="packSec" hidden>
     <div class="listhead"><h2>포장일자만 있는 품목 <span id="packTotal"></span></h2></div>
-    <p class="pack-sub">기한 계산에서 빠지고, 포장일 오래된 순으로 보여요.</p>
+    <p class="pack-sub">유통기한 계산에서 빠지고, 포장일 순서로 보여요.</p>
     <ul id="packList"></ul>
   </section>
 
@@ -385,7 +385,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   const expiryOf = (it) => it.mode === "period" ? addPeriod(it.mfg, it.num, it.unit) : it.expiry;
   const isPack = (it) => it.mode === "pack"; // 포장일자만 있는 품목 (예: 감말랭이) → 기한 계산에서 제외
-  const elapsedText = (iso) => { const n = -daysLeft(iso); return n <= 0 ? "오늘 포장" : `${n}일 경과`; };
   const today = () => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); };
   const daysLeft = (iso) => Math.round((parse(iso) - today()) / DAY);
   const status = (n) => n <= 7 ? "exp" : n <= 30 ? "soon" : "ok"; // 7일 이내(지난 것 포함) / 30일 이내 / 여유
@@ -565,7 +564,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   function updatePreview() {
     const it = readForm();
     if (!it) { $("preview").textContent = mode === "date" ? "유통기한 날짜를 선택하세요." : mode === "pack" ? "포장일자를 선택하세요. (유통기한 없이 아래쪽에 따로 모입니다)" : "제조일자와 기간을 입력하면 유통기한이 계산됩니다."; return; }
-    if (isPack(it)) { $("preview").innerHTML = `포장일자 <b>${fmt(it.mfg)}</b> · ${elapsedText(it.mfg)}`; return; }
+    if (isPack(it)) { $("preview").innerHTML = `포장일자 <b>${fmt(it.mfg)}</b> · 유통기한 없이 아래쪽에 따로 모입니다`; return; }
     const exp = expiryOf(it), n = daysLeft(exp);
     $("preview").innerHTML = `유통기한 <b>${fmt(exp)}</b> · ${n < 0 ? `${-n}일 지남` : n === 0 ? "오늘까지" : `${n}일 남음`}`;
   }
@@ -675,7 +674,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
       return `<li><div class="dday pack">포장</div>
         <div class="info"><div class="txt"><div class="name">${esc(it.name)}</div>
-          <div class="meta"><span>포장일자 <span class="date">${fmt(it.mfg)}</span></span><span>${elapsedText(it.mfg)}</span>${memo}</div></div></div>
+          <div class="meta"><span>포장일자 <span class="date">${fmt(it.mfg)}</span></span>${memo}</div></div></div>
         <div class="ops">${del}</div></li>`;
     }).join("");
 
