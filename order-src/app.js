@@ -1402,14 +1402,6 @@
     const v = { s: "", o: "", ...(inp[it.key] || {}) };
     const unit = it.pk.stock || "재고단위", ou = it.pk.order || unit;
     const inc = incomingOf(it, TODAY);
-    // 오늘부터 이번 발주 입고일 전까지 쓸 양 (월요일 기준 필요량·예상 재고를 보여줄 때 뺌)
-    let preMemoU = null;
-    const preUse = () => {
-      if (preMemoU != null) return preMemoU;
-      const days = Math.round((parseISO(win.deliv) - parseISO(TODAY)) / 864e5);
-      const c = days > 0 ? calc(it, { ...win, days, nEff: days, gross: sumGross(TODAY, win.deliv, false).s, wkGross: 0 }, 0, 0) : null;
-      return (preMemoU = c && !c.none ? c.use : 0);
-    };
     const draw = () => {
       const est = estFor(it, v);
       const s = est ? est.v : stockOf(it, v), i = inc;
@@ -1426,9 +1418,8 @@
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         else if (!r.packs) {
-          // 이번 발주가 들어오는 날(월) 기준: 그날부터 다음 입고까지 필요량(안전재고 포함) · 그날 아침 예상 재고(입고예정 포함)
-          const pre = preUse(), dd = DOW[dow(win.deliv)], needD = Math.max(0, r.need - pre), haveD = Math.max(0, s + i - pre);
-          need = `<span class="need enough">${por(+rm(needD))}<b>충분</b><span>${dd} 필요 ${rm(needD)} · ${dd} 예상 ${rm(haveD)}${esc(unit)}</span></span>`;
+          // 필요량 = 주말 영업까지 다 하고 이번 입고일(월)에 들어와야 할 양 = 필요(사용+안전재고) − 재고 − 입고예정. 발주 안 해도 되면 0
+          need = `<span class="need enough"><b>충분</b><span>필요 0${esc(unit)}</span></span>`;
         }
         else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
         else {
