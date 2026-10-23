@@ -28,21 +28,8 @@
   --rose: #fdeeec; --rose-ink: #ef6253;
   --amber: #fff3e0; --amber-ink: #e08a1e;
   --ok-bg: #ebf7f0; --ok: #41b979;
+  color-scheme: light; /* 다크 모드 없이 항상 밝은 화면 */
   --font: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
-    --accent: #f2f2f2; --accent-ink: #000000;
-    --rose: #2c1614; --rose-ink: #ff7b6d; --amber: #2b2010; --amber-ink: #f0a94a; --ok-bg: #10261b; --ok: #4cc38a;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
-  --accent: #f2f2f2; --accent-ink: #000000;
-  --rose: #2c1614; --rose-ink: #ff7b6d; --amber: #2b2010; --amber-ink: #f0a94a; --ok-bg: #10261b; --ok: #4cc38a;
-  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
