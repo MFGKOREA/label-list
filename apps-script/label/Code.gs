@@ -233,6 +233,9 @@ const PHOTO_SHEET = '사진';
 function setup() {
   photoFolder_();
   photoSheet_();
+  // 글자 읽기에 쓰는 '구글 문서' 권한도 여기서 같이 받음 (빈 문서를 만들었다 바로 휴지통으로)
+  const doc = DocumentApp.create('권한 확인용');
+  DriveApp.getFileById(doc.getId()).setTrashed(true);
   Logger.log('사진 폴더 준비 완료 / 글자 읽기: ' + (typeof Drive === 'undefined' ? 'Drive API 서비스를 추가하세요' : '사용 가능'));
 }
 
@@ -315,8 +318,17 @@ function unPhoto_(store, id) {
 function ocr_(blob) {
   if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
   let fileId;
-  if (Drive.Files.create) fileId = Drive.Files.create({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocrLanguage: 'ko' }).id;
-  else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ko' }).id;
+  // 구글이 가끔 '잠시 후 다시'(rate limit)를 돌려줌: 최대 3번까지 쉬었다 다시
+  for (let i = 0; ; i++) {
+    try {
+      if (Drive.Files.create) fileId = Drive.Files.create({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocrLanguage: 'ko' }).id;
+      else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ko' }).id;
+      break;
+    } catch (err) {
+      if (i >= 2 || !/rate limit/i.test(String(err))) throw err;
+      Utilities.sleep(1500 * (i + 1));
+    }
+  }
   try { return DocumentApp.openById(fileId).getBody().getText(); }
   finally { try { DriveApp.getFileById(fileId).setTrashed(true); } catch (err) {} }
 }
