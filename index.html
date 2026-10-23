@@ -79,11 +79,20 @@ body {
 .steps .tx small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
 .steps .ico { display: inline-block; font-size: 13px; font-weight: 700; background: var(--fill); border-radius: 6px; padding: 0 6px; }
 .store { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
-.hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin: 2px 2px 4px; flex-wrap: wrap; }
+.hdr { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 2px 2px 4px; flex-wrap: wrap; }
 h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.15; }
 .today { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; background: var(--surface); border-radius: 12px; padding: 6px 13px; white-space: nowrap; }
 
 /* summary tiles */
+/* 탭: 한글표시사항 · 축산물이력제 · (빈칸) · (빈칸) */
+.tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: var(--surface); border-radius: 14px; padding: 4px; }
+.tabs button { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: -0.04em; border: 0; border-radius: 10px; background: #f6f6f6; color: var(--muted); padding: 12px 0 13px; white-space: nowrap; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); font-weight: 800; box-shadow: inset 0 0 0 1.5px var(--fg); }
+.tabs button:disabled { background: #fafafa; cursor: default; }
+.panel { display: contents; }
+.panel[hidden] { display: none; }
+.soon-box { background: var(--surface); border-radius: 18px; padding: 40px 18px; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.soon-box b { display: block; color: var(--fg); font-size: 18px; margin-bottom: 4px; }
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .sum { background: var(--surface); border-radius: 18px; padding: 14px 14px 12px; display: flex; flex-direction: column-reverse; gap: 4px; }
 .sum span { font-size: 13px; color: var(--muted); font-weight: 500; }
@@ -242,6 +251,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     <h1>한글표시사항 리스트</h1>
     <div class="today" id="today"></div>
   </header>
+  <div class="tabs" role="tablist" aria-label="관리 항목">
+    <button type="button" role="tab" id="tabLabel" aria-selected="true">한글표시사항</button>
+    <button type="button" role="tab" id="tabTrace" aria-selected="false">축산물이력제</button>
+    <button type="button" role="tab" disabled aria-label="준비 중"></button>
+    <button type="button" role="tab" disabled aria-label="준비 중"></button>
+  </div>
+  <div class="panel" id="pTrace" hidden>
+    <div class="soon-box"><b>축산물이력제</b>준비 중입니다</div>
+  </div>
+  <div class="panel" id="pLabel">
   <div class="summary">
     <div class="sum exp"><b id="cExp">0</b><span>7일 이내</span></div>
     <div class="sum soon"><b id="cSoon">0</b><span>30일 이내</span></div>
@@ -335,6 +354,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   <div class="reset" id="resetZone">
     <button type="button" class="reset-open" id="resetOpen">초기화</button>
+  </div>
   </div>
 </div>
 
@@ -1077,6 +1097,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     clearTimeout(noticeTimer); noticeTimer = setTimeout(saveNotice, 1500);
   });
   $("noticeInput").addEventListener("blur", saveNotice);
+
+  // ---- 탭: 마지막에 본 탭을 기기에 기억 ----
+  function showTab(t) {
+    $("tabLabel").setAttribute("aria-selected", t === "label"); $("tabTrace").setAttribute("aria-selected", t === "trace");
+    $("pLabel").hidden = t !== "label"; $("pTrace").hidden = t !== "trace";
+    try { localStorage.setItem("label-list-tab", t); } catch {}
+  }
+  $("tabLabel").onclick = () => showTab("label");
+  $("tabTrace").onclick = () => showTab("trace");
+  try { if (localStorage.getItem("label-list-tab") === "trace") showTab("trace"); } catch {}
 
   // ---- 홈 화면 추가 방법 (기기에 맞는 탭을 먼저 보여 줌) ----
   function howtoTab(ios) {
