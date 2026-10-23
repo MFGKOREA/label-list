@@ -1139,7 +1139,25 @@
   // ---------- G: 재고채점 ----------
   const hourOf = (t) => { const m = /\s(\d{1,2}):(\d{2})/.exec(String(t || "")); return m ? +m[1] + +m[2] / 60 : 10; };
   // 그 시각에 센 재고 뒤로 그날 남은 영업 비율 (오픈 전·발주 마감 전 = 1, 마감 뒤 = 0)
-  const leftOf = (hh) => (hh <= ORDER_CUTOFF_H ? 1 : Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H))));
+  // 시간대별 매출 비율(시트 hourShare: 요일 묶음별 "N시까지 누적 비율"). 없으면 영업시간에 비례
+  //  hourCum(d, hh) = 그날 매출 중 hh시까지 팔린 비율, hourAt(d, f) = 누적 비율 f에 닿는 시각
+  const hourProf = (d) => { const hs = db.hourShare || {}, w = dow(d); const g = hs[w === 0 ? "sun" : w === 6 ? "sat" : "wd"]; return g && g.ends && g.cum && g.ends.length === g.cum.length ? g : null; };
+  function hourCum(d, hh) {
+    const g = hourProf(d);
+    if (!g) return Math.min(1, Math.max(0, (hh - OPEN_H) / (CLOSE_H - OPEN_H)));
+    let prev = 0, pe = OPEN_H;
+    for (let k = 0; k < g.ends.length; k++) { const e = g.ends[k], c = g.cum[k]; if (hh <= e) return prev + (c - prev) * Math.max(0, hh - pe) / Math.max(0.01, e - pe); prev = c; pe = e; }
+    return 1;
+  }
+  function hourAt(d, f) {
+    const g = hourProf(d);
+    if (!g) return OPEN_H + f * (CLOSE_H - OPEN_H);
+    let prev = 0, pe = OPEN_H;
+    for (let k = 0; k < g.ends.length; k++) { const e = g.ends[k], c = g.cum[k]; if (f <= c) return c > prev ? pe + (e - pe) * (f - prev) / (c - prev) : pe; prev = c; pe = e; }
+    return CLOSE_H;
+  }
+  // 그 시각에 센 재고 뒤로 그날 남은 매출 비율 (발주 마감 전 입력은 아침에 센 것으로 보고 1)
+  const leftOf = (hh, d) => (hh <= ORDER_CUTOFF_H ? 1 : 1 - hourCum(d || TODAY, hh));
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
@@ -1217,11 +1235,11 @@
         const actOk = (d) => num(((db.forecast || {})[d] || {}).act) > 0;
         // 해동 품목(고기·폭립·부라타·스프 등)은 쓰기 전날 냉동고에서 꺼내니 재고가 하루 먼저 줄어듦 → 매출도 해동 일수만큼 뒤 날짜로 맞춤
         const t = it.thaw || 0, s1 = addDays(d1, t), s2 = addDays(d2, t);
-        let gapAct = false; for (let x = s1; x < s2; x = addDays(x, 1)) if (!actOk(x) && !(x === s1 && leftOf(h1) === 0)) gapAct = true;
-        if (leftOf(h2) < 1 && !actOk(s2)) gapAct = true;
+        let gapAct = false; for (let x = s1; x < s2; x = addDays(x, 1)) if (!actOk(x) && !(x === s1 && leftOf(h1, s1) === 0)) gapAct = true;
+        if (leftOf(h2, s2) < 1 && !actOk(s2)) gapAct = true;
         if (gapAct) { flushAcc(); return; }
         // 센 시각만큼 그날 매출을 나눔: 저녁에 센 날은 그날 매출 대부분이 이미 빠진 뒤 (10/19 저녁 → 10/20 아침이면 하루치가 아님)
-        const g = (sumGross(s1, s2, true).s - (1 - leftOf(h1)) * dayGross(s1, true).v + (1 - leftOf(h2)) * dayGross(s2, true).v) / 1e6;
+        const g = (sumGross(s1, s2, true).s - (1 - leftOf(h1, s1)) * dayGross(s1, true).v + (1 - leftOf(h2, s2)) * dayGross(s2, true).v) / 1e6;
         const bdj = (() => { const ba = batchAdj(it, { today: d1, days, gross: g * 1e6 }); return ba ? ba.delta : 0; })(); // 프랩 배치(그 사이 만든 날)
         const pA = it.rateA != null ? Math.max(0, it.fixedA * days + it.rateA * g + bdj) : null;
         const pB = it.rateB != null ? Math.max(0, it.rateB * g + bdj) : null;
@@ -1380,7 +1398,7 @@
       (plan || []).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
       const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(x)).pop();
       const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
-      const left = hh <= ORDER_CUTOFF_H ? 1 : Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H)));
+      const left = leftOf(hh, x);
       const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
       const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross }, 0, 0);
       if (c.none) return null;
@@ -1553,7 +1571,7 @@
   // 86 가능성 = 입고 전까지 쓸 양이 가진 양보다 많을 확률 (사용량 오차 = ± 범위와 같은 계산 오차 + Forecast 오차)
   //  재고를 센 시각 이후 남은 오늘 영업분만 셈 (영업 10:30~20:30) · 60% 넘는 것만 띄움 (다 86 난다고 하지 않게)
   // 재고는 보통 런치 전 아침에 세고 14:30 발주 마감 전에 입력 → 마감 전 입력은 오늘 영업 전체가 남은 것으로 봄
-  const OPEN_H = 10.5, CLOSE_H = 20.5, SHOW_P = 0.6, ORDER_CUTOFF_H = 14.5; // 영업 10:30~20:30, 런치는 15시 전
+  const OPEN_H = 10.5, CLOSE_H = 20.5, SHOW_P = 0.6, ORDER_CUTOFF_H = 14.5; // 영업 10:30~20:30, 런치는 15시 전 (시간대별 비율은 시트 hourShare, 없으면 비례)
   const phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
   function riskOf(it, v) {
     if (!v || v.s === "" || !isFinite(num(v.s))) return null;
@@ -1562,7 +1580,7 @@
     let arr = 0; const arrs = []; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if (a.d > TODAY && a.d < until && (k > 0 || a.legacy)) { arr += a.q; arrs.push(a); } });
     const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(TODAY)).pop();
     const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
-    const left = hh <= ORDER_CUTOFF_H ? 1 : Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H)));
+    const left = leftOf(hh, TODAY);
     const gross = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), until, false).s;
     const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross }, 0, 0); if (r.none || !(r.use > 0)) return null;
     const have = stockOf(it, v) + arr;
@@ -1575,7 +1593,8 @@
       const first = d === TODAY, gd = (first ? left : 1) * dayGross(d, false).v, ud = r.use * gd / gross;
       if (!(ud > 0)) continue;
       if (stock - ud < 0) {
-        const o = first && left < 1 ? hh : OPEN_H, hr = Math.min(CLOSE_H, Math.max(OPEN_H, o + Math.max(0, stock) / ud * (CLOSE_H - o)));
+        // 그날 매출 누적 비율로 시각을 구함 (오늘 센 뒤라면 센 시각부터 남은 매출 중 비율)
+        const c0 = first && left < 1 ? hourCum(d, hh) : 0, hr = Math.min(CLOSE_H, Math.max(OPEN_H, hourAt(d, c0 + Math.max(0, stock) / ud * (1 - c0))));
         const hrR = Math.round(hr); when = `${first ? "오늘" : DOW[dow(d)]} ${hrR < 15 ? "런치" : "디너"} ${String(hrR).padStart(2, "0")}:00`; break;
       }
       stock -= ud;
