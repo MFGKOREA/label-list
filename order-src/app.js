@@ -1322,7 +1322,8 @@
   const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
   // 재고 단계: 충분(필요량 이상) · 여유(다음 입고까지는 되고 여유분만 모자람) · 부족(예상 사용량의 70~100%) · 발주필요(70% 미만)
   // 재고 단계: 필요량보다 적으면 무조건 발주필요. 필요량 이상이면 얼마나 넉넉한지로 충분(1.5배↑) · 여유(1.2~1.5배) · 부족(1.2배 미만)
-  const tierOf = (r, have) => (r.packs ? "buy" : have >= r.need * 1.5 ? "ok" : have >= r.need * 1.2 ? "spare" : "short");
+  // 발주 안 해도 되는 품목은 이미 안전재고까지 채워져 있음 → 모두 충분
+  const tierOf = (r) => (r.packs ? "buy" : "ok");
   // 사전발주 ON (쉬는 날 집에서 발주): 오늘 재고를 안 센 품목은 예상 재고로 계산
   //  예상 재고 = 최근 7일 안 마지막으로 센 재고 + 그 뒤 입고(앱 발주) − 그 사이 사용량 − 여유(1단위 + 그 사이 사용량 한 번 더)
   //  저녁(14:30 이후)에 센 재고는 그날 남은 영업분만 뺌. 86 위험·학습에는 안 씀. 켠 날만 유지 (다음 날 자동 꺼짐)
@@ -1391,7 +1392,7 @@
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return -1; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = stockOf(it, v), inc = incomingOf(it, TODAY), r = calc(it, w, s, inc);
     if (r.none) return -1;
-    return { buy: 0, short: 1, spare: 1 }[tierOf(r, s + inc)] ?? -1; // 충분은 제자리
+    return { buy: 0 }[tierOf(r, s + inc)] ?? -1; // 발주필요만 위로
   };
   function rowEl(it, win, inp) {
     win = orderWindowFor(it, TODAY); // 업체별 발주 요일이 있으면 그 기준 기간
@@ -1417,7 +1418,7 @@
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         else if (!r.packs) {
-          const t = tierOf(r, s + i), lb = { ok: "충분", spare: "여유", short: "빠듯" }[t];
+          const t = tierOf(r, s + i), lb = "충분";
           // 필요 = 다음 입고 전까지 쓸 양 + 안전재고, 있음 = 지금 재고 + 입고예정 (발주 안 해도 되는 품목)
           need = `<span class="need ${t === "ok" ? "enough" : "buy lbl t-" + t}">${por(+rm(r.need))}<b>${lb}</b><span>필요 ${rm(r.need)} · 있음 ${rm(s + i)}${esc(unit)}</span></span>`;
         }
