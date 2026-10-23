@@ -788,7 +788,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   });
   $("pickCancel").onclick = () => { $("picker").hidden = true; document.body.style.overflow = ""; };
   $("storeChange").onclick = () => openPicker(true);
-  if (storeKnown && STORES[STORE].hidden) $("storeChange").hidden = true; // 전용 주소 매장은 매장 변경 없음
+  // 전용 주소(?store=컨벤션·월드타워·용산)로 들어온 경우만 매장 변경 숨김. 통합 주소로 들어오면 항상 보임
+  if (storeKnown && isStore(qStore) && STORES[qStore].hidden) $("storeChange").hidden = true;
 
   // 주소 끝에 ?pick 을 붙이면 기억된 매장과 상관없이 매장 선택 화면 (관리자 확인용)
   if (new URLSearchParams(location.search).has("pick")) openPicker(storeKnown);
