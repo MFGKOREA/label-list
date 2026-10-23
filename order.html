@@ -1344,14 +1344,15 @@ html, body { overflow-x: hidden; }
     const wmean = (vals) => {
       if (!vals.length) return null;
       const med = vals.slice().sort((a, b) => a - b)[Math.floor(vals.length / 2)];
-      const keep = vals.map((v, i) => [v, vals.length - i]).filter(([v]) => vals.length < 3 || (v >= med * 0.6 && v <= med * 1.25));
+      // 아래쪽(중앙값 0.6배 미만, 휴무·반쪽 영업)만 버림. 위쪽 컷(1.25배)은 행사·단체 날을 버려 늘 적게 잡았음 (9/14~10/21 오차 31.6% → 26.5%, 과소 +12.9% → +1.2%)
+      const keep = vals.map((v, i) => [v, vals.length - i]).filter(([v]) => vals.length < 3 || v >= med * 0.6);
       return keep.reduce((a, [v, w]) => a + v * w, 0) / keep.reduce((a, [, w]) => a + w, 0);
     };
     const wd = dow(d);
     let v = wmean(pick((x) => dow(x) === wd && !isHoliday(x), 6, 120));
     if (isHoliday(d)) {
       const h = wmean(pick(isHoliday, 6, 400)) ?? wmean(pick((x) => dow(x) === 0 && !isHoliday(x), 6, 120));
-      v = v && h ? (v + h) / 2 : v || h || null;
+      v = v && h ? Math.max(v, h) : v || h || null; // 공휴일은 같은 요일과 공휴일·일요일 중 큰 쪽 (평균하면 공휴일을 35% 적게 잡음)
     }
     if (v == null) { const all = pick(() => true, 28, 60); v = all.length ? all.reduce((a, b) => a + b, 0) / all.length : null; }
     dataFcMemo.set(d, v);
@@ -1927,6 +1928,9 @@ html, body { overflow-x: hidden; }
   const batchRawOf = (M, it) => prepPlan(M).reduce((a, pl) => Math.max(a, (pl.raw.get(it.key) || 0) * pl.batchX), 0);
 
   // ---------- G: 재고채점 ----------
+  const hourOf = (t) => { const m = /\s(\d{1,2}):(\d{2})/.exec(String(t || "")); return m ? +m[1] + +m[2] / 60 : 10; };
+  // 그 시각에 센 재고 뒤로 그날 남은 영업 비율 (오픈 전·발주 마감 전 = 1, 마감 뒤 = 0)
+  const leftOf = (hh) => (hh <= ORDER_CUTOFF_H ? 1 : Math.min(1, Math.max(0, (CLOSE_H - hh) / (CLOSE_H - OPEN_H))));
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
@@ -1934,6 +1938,18 @@ html, body { overflow-x: hidden; }
     logs.forEach((l) => { if (!byKey.has(l.k)) byKey.set(l.k, []); const a = byKey.get(l.k); if (a.length && a[a.length - 1].t.slice(0, 10) === l.t.slice(0, 10)) a[a.length - 1] = l; else a.push(l); });
     M.scores = [];
     M.items.forEach((it) => { it.scoreA = []; it.scoreB = []; it.scoreF = []; it.scoreQ = []; it.rateG = null; });
+    // 발주 탭 재고(input.날짜)도 채점에 씀: 입력 기록(onhand)에 안 남은 날(시트로 바로 넣은 날 등, 하루 입력의 약 35%)을 채움
+    //  발주수량 칸이 생긴 10/20부터만 (그 전 날짜는 입고를 몰라 채점 못 함). 센 시각을 모르면 아침(10시)으로
+    Object.keys(db).filter((k) => k.startsWith("input.") && k.slice(6) >= "2026-10-20" && k.slice(6) <= TODAY).forEach((k) => {
+      const d = k.slice(6), rows = db[k] || {};
+      Object.keys(rows).forEach((key) => {
+        if (!counted(rows[key])) return;
+        if (!byKey.has(key)) byKey.set(key, []);
+        const a = byKey.get(key);
+        if (!a.some((l) => l.t.slice(0, 10) === d)) a.push({ t: d + " 10:00", k: key, s: num(rows[key].s), v: 2 });
+      });
+    });
+    byKey.forEach((l) => l.sort((x, y) => (x.t < y.t ? -1 : 1)));
     byKey.forEach((list, key) => {
       const it = M.items.find((i) => i.key === key); if (!it) return;
       // 그날 재고는 발주 탭에 마지막으로 남은 값으로 (44로 잘못 쳤다가 4로 고친 경우 등)
@@ -1959,10 +1975,11 @@ html, body { overflow-x: hidden; }
           if (!unknown) actual = num(a.s) + arr - num(b.s);
         } else {
           // 예전 기록(익일 칸): 두 입력 사이에 앱이 모르는 입고일이 있으면 뺌
+          //  익일 입고 칸이 비어 있으면 그날 입고를 모르는 것이라 뺌 (10/19→21 등심처럼 모르는 입고가 끼면 사용량이 틀어짐)
           let gap = 0; for (let x = addDays(d1, 2); x <= d2; x = addDays(x, 1)) if (dow(x) !== 0) gap++;
-          if (!gap) actual = num(a.s) + (num(a.i) || 0) - num(b.s);
+          if (!gap && num(a.i) > 0) actual = num(a.s) + num(a.i) - num(b.s);
         }
-        pairs.push({ d1, d2, actual });
+        pairs.push({ d1, d2, actual, h1: hourOf(a.t), h2: hourOf(b.t) });
       }
       // 채점 구간: 이어진 구간을 예상 사용량이 2단위 넘을 때까지 묶음 (시즈닝·고춧가루처럼 가끔 프랩에 쓰는 품목은 하루 단위로는 0 아니면 통째)
       //  재고가 그대로인 날(사용 0)도 넣고, 음수(입고 없이 늘어남)나 입고를 모르는 구간에서 끊음
@@ -1979,13 +1996,19 @@ html, body { overflow-x: hidden; }
         it.scoreQ.push(1 / (6 * pF * pF)); // 양 끝 재고가 각각 0~1단위 덜 세어질 수 있는 잡음의 분산 (상대값)
         M.scores.push({ key, name: it.name, start: d1, end: d2, actual, pA, pB, pF });
       };
-      pairs.forEach(({ d1, d2, actual }, j) => {
+      pairs.forEach(({ d1, d2, actual, h1, h2 }, j) => {
         const nx = pairs[j + 1];
         // 입고를 모름 / 음수 / 다음 날 입고 없이 늘어남(이 날 덜 셈) → 여기서 끊고 이 구간은 뺌
         if (actual == null || actual < 0 || (nx && nx.d1 === d2 && nx.actual != null && nx.actual < -0.5)) { flushAcc(); return; }
         if (acc && acc.d2 !== d1) { flushAcc(); }
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
-        const g = sumGross(d1, d2, true).s / 1e6;
+        // 그 사이 실제 Gross가 다 있어야 채점 (Forecast로 채점하면 매출이 틀린 걸 사용량 탓으로 봄)
+        const actOk = (d) => num(((db.forecast || {})[d] || {}).act) > 0;
+        let gapAct = false; for (let x = d1; x < d2; x = addDays(x, 1)) if (!actOk(x) && !(x === d1 && leftOf(h1) === 0)) gapAct = true;
+        if (leftOf(h2) < 1 && !actOk(d2)) gapAct = true;
+        if (gapAct) { flushAcc(); return; }
+        // 센 시각만큼 그날 매출을 나눔: 저녁에 센 날은 그날 매출 대부분이 이미 빠진 뒤 (10/19 저녁 → 10/20 아침이면 하루치가 아님)
+        const g = (sumGross(d1, d2, true).s - (1 - leftOf(h1)) * dayGross(d1, true).v + (1 - leftOf(h2)) * dayGross(d2, true).v) / 1e6;
         const bdj = (() => { const ba = batchAdj(it, { today: d1, days, gross: g * 1e6 }); return ba ? ba.delta : 0; })(); // 프랩 배치(그 사이 만든 날)
         const pA = it.rateA != null ? Math.max(0, it.fixedA * days + it.rateA * g + bdj) : null;
         const pB = it.rateB != null ? Math.max(0, it.rateB * g + bdj) : null;
