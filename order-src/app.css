@@ -545,3 +545,9 @@ html, body { overflow-x: hidden; }
 .week.predays button.today b, .week.predays button.today span { color: var(--accent-ink); }
 .week.predays button.deliv { background: var(--rose); }
 .week.predays button.deliv b, .week.predays button.deliv span { color: var(--rose-ink); }
+
+/* 데이터 요청 (리포트) */
+.req { display: grid; gap: 8px; }
+.req .kv b { font-weight: 800; }
+.req .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: stretch; }
+.req .fld { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; }
