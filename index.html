@@ -395,9 +395,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // 매장마다 구글 프로젝트(웹 앱 /exec 주소)가 따로 있습니다. 매장을 늘릴 때는 아래에 한 줄 추가.
   // hidden: 전용 주소로만 들어오는 매장 (매장 선택 화면에는 안 보임)
   // 새 매장은 아래에 추가: 코드: { name: "매장 이름", api: "매장모음 웹 앱 주소" } — api가 비어 있으면 '준비 중'
-  const HUB = "https://script.google.com/macros/s/AKfycbzdSaiet-UqZFzplIBRrea9dzStZu5GE5jqGT3d0Vq0j_X8L9MdobwakIZmw1xwXS4G/exec"; // 매장모음 프로젝트 (매장별 탭)
+  const HUB = "https://script.google.com/macros/s/AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw/exec"; // 매장모음 프로젝트 (매장별 탭)
   const STORES = {
-    suwon: { name: "MG수원컨벤션점", hidden: true, api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
+    suwon: { name: "MG수원컨벤션센터점", hidden: true, api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
     lwt: { name: "MG롯데시네마월드타워점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
     ys: { name: "MG용산아이파크몰점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
     // ---- 매장 선택 (매장모음 프로젝트, 매장별 탭) ----
@@ -415,7 +415,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     kdstarcity: { name: "MG건대스타시티점", api: HUB },
     pangyo: { name: "MG판교라스트리트점", api: HUB },
     ssgcheonan: { name: "MG신세계백화점천안아산점", api: HUB },
-    dongtan: { name: "MG타임테라스점동탄점", api: HUB },
+    dongtan: { name: "MG타임테라스동탄점", api: HUB },
     hdgasan: { name: "MG현대아울렛가산점", api: HUB },
     ulsanhd: { name: "MG울산현대백화점", api: HUB },
     centerone: { name: "MG센터원점", api: HUB },
@@ -470,7 +470,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     if (!data || data.error) throw new Error(data && data.error || "응답 오류");
     // 새 구글 코드: { items | same, ver, online } / 예전 코드: 목록 배열
     if (fn === "listItems" && !Array.isArray(data)) {
-      showOnline(data.online);
       listVer = data.ver || "";
       return data.same ? null : data.items;
     }
@@ -481,6 +480,15 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // 접속 중 인원: 이 화면을 연 기기마다 임시 번호
   const SID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   let listVer = "";
+  // 접속중 = 모든 매장 합계: 어느 매장이든 매장모음(HUB)의 'all'에 같이 출석 체크
+  let allVer = "";
+  async function pingAll() {
+    try {
+      const res = await fetch(HUB + "?api=1&store=all&who=" + SID + (allVer ? "&v=" + encodeURIComponent(allVer) : "") + "&t=" + Date.now());
+      const d = await res.json();
+      if (d && !Array.isArray(d) && d.online) { allVer = d.ver || allVer; showOnline(d.online); }
+    } catch {}
+  }
   function showOnline(n) {
     if (!(n > 0)) { $("online").hidden = true; return; }
     $("onlineN").textContent = n; $("online").hidden = false;
@@ -788,8 +796,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     openPicker(false);
     return;
   }
-  refresh();
-  setInterval(refresh, 5000); // 5초마다 새 내용 확인 (화면이 켜져 있을 때만)
+  refresh(); pingAll();
+  setInterval(refresh, 5000);
+  setInterval(() => { if (!document.hidden) pingAll(); }, 5000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pingAll(); }); // 5초마다 새 내용 확인 (화면이 켜져 있을 때만)
   document.addEventListener("visibilitychange", refresh);
 })();
 </script>
