@@ -64,8 +64,10 @@ body {
 .picker-in { max-width: 480px; margin: 0 auto; display: grid; gap: 14px; }
 .picker h2 { margin: 18px 2px 0; font-size: 30px; font-weight: 800; letter-spacing: -0.035em; }
 .pick-sub { margin: 0 2px 6px; font-size: 15px; color: var(--muted); line-height: 1.5; }
+.pick-search { font: inherit; font-size: 16px; font-weight: 600; color: var(--fg); background: var(--surface); border: 0; border-radius: 14px; padding: 14px 16px; width: 100%; }
+.pick-search:focus-visible { outline: 2px solid var(--fg); }
 .pick-list { display: grid; gap: 10px; }
-.pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: inherit; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-align: left; border: 0; border-radius: 18px; padding: 20px 18px; background: var(--surface); color: var(--fg); cursor: pointer; }
+.pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: inherit; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; text-align: left; border: 0; border-radius: 16px; padding: 17px 18px; background: var(--surface); color: var(--fg); cursor: pointer; }
 .pick svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
 .pick.on { box-shadow: inset 0 0 0 2px var(--fg); }
 .pick.off { cursor: default; color: var(--muted); }
@@ -304,6 +306,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   <div class="picker-in">
     <h2 id="pickTitle">매장 선택</h2>
     <p class="pick-sub">이 기기에서 쓸 매장을 골라 주세요.<br>한 번 고르면 다음부터 바로 열려요.</p>
+    <input id="pickSearch" class="pick-search" type="search" placeholder="매장 이름 검색 (예: 롯데, 강남)" autocomplete="off">
     <div class="pick-list" id="pickList"></div>
     <button type="button" class="btn" id="pickCancel" hidden>취소</button>
   </div>
@@ -394,7 +397,43 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     suwon: { name: "MG수원컨벤션점", hidden: true, api: "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec" },
     lwt: { name: "MG롯데시네마월드타워점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec" },
     ys: { name: "MG용산아이파크몰점", hidden: true, api: "https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec" },
+    // ---- 매장 선택 (매장모음 프로젝트, 매장별 탭) ----
+    yeouido: { name: "MG여의도점", api: HUB },
+    mokdong: { name: "MG목동점", api: HUB },
+    sadang: { name: "MG사당점", api: HUB },
+    gnsamsung: { name: "MG강남삼성타운점", api: HUB },
+    ydptimes: { name: "MG영등포타임스퀘어점", api: HUB },
+    sac: { name: "MG예술의전당점", api: HUB },
+    dogok: { name: "MG도곡점", api: HUB },
+    sangammbc: { name: "MG상암MBC점", api: HUB },
     lsw: { name: "MG롯데시네마수원역점", api: HUB },
+    djdunsan: { name: "MG대전둔산점", api: HUB },
+    gjgwangcheon: { name: "MG광주광천점", api: HUB },
+    kdstarcity: { name: "MG건대스타시티점", api: HUB },
+    pangyo: { name: "MG판교라스트리트점", api: HUB },
+    ssgcheonan: { name: "MG신세계백화점천안아산점", api: HUB },
+    dongtan: { name: "MG타임테라스점동탄점", api: HUB },
+    hdgasan: { name: "MG현대아울렛가산점", api: HUB },
+    ulsanhd: { name: "MG울산현대백화점", api: HUB },
+    centerone: { name: "MG센터원점", api: HUB },
+    ssgujb: { name: "MG신세계백화점의정부점", api: HUB },
+    hdmia: { name: "MG현대미아점", api: HUB },
+    bongeunsa: { name: "MG봉은사아이파크타워점", api: HUB },
+    anseongsf: { name: "MG안성스타필드점", api: HUB },
+    djssgart: { name: "MG대전신세계Art&Science점", api: HUB },
+    ldongbusan: { name: "MG롯데프리미엄아울렛동부산점", api: HUB },
+    lbusan: { name: "MG롯데백화점부산본점", api: HUB },
+    lnowon: { name: "MG롯데노원점", api: HUB },
+    lcastle: { name: "MG롯데캐슬잠실점", api: HUB },
+    lpyeongchon: { name: "MG롯데평촌점", api: HUB },
+    lworld: { name: "MG롯데월드점", api: HUB },
+    lsuji: { name: "MG롯데몰수지점", api: HUB },
+    onegrove: { name: "MG원그로브점", api: HUB },
+    lincheon: { name: "MG롯데백화점인천점", api: HUB },
+    galleria: { name: "MG갤러리아센터시티점", api: HUB },
+    cheongju: { name: "MG청주커넥트점", api: HUB },
+    unjeong: { name: "MG스타필드빌리지운정점", api: HUB },
+    hdsongdo: { name: "MG현대프리미엄아울렛송도점", api: HUB },
   };
   // 링크의 ?store= 가 있으면 그 매장, 없으면 이 기기에 기억된 매장, 둘 다 없으면 매장 선택 화면
   const SAVED_STORE = "label-list-store";
@@ -706,6 +745,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     const b = e.target.closest("button[data-store]"); if (!b) return;
     try { localStorage.setItem(SAVED_STORE, b.dataset.store); } catch {}
     location.replace(location.pathname + "?store=" + b.dataset.store);
+  });
+  $("pickSearch").addEventListener("input", () => {
+    const q = $("pickSearch").value.replace(/\s+/g, "").toLowerCase();
+    document.querySelectorAll("#pickList .pick").forEach((el) => { el.hidden = !!q && !el.textContent.replace(/\s+/g, "").toLowerCase().includes(q); });
   });
   $("pickCancel").onclick = () => { $("picker").hidden = true; document.body.style.overflow = ""; };
   $("storeChange").onclick = () => openPicker(true);
