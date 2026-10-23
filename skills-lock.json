@@ -7,6 +7,12 @@
       "skillPath": "skills/academy-guide/SKILL.md",
       "computedHash": "07075be5acc7c54fd6b06a1e7636608fa195b83eb98cbddb02e61b9ac1356889"
     },
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "skillPath": "skills/agent-browser/SKILL.md",
+      "computedHash": "dd491d53824ad9286ec950aee667098446332429a6d41fe28b4ba11f1959264c"
+    },
     "algorithmic-art": {
       "source": "anthropics/skills",
       "sourceType": "github",
