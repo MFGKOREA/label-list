@@ -1417,8 +1417,9 @@
         if (r.none) need = '<span class="need none"><b>?</b></span>';
         else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         else if (!r.packs) {
-          const t = tierOf(r, s + i), lb = { ok: "충분", spare: "여유", short: "부족" }[t];
-          need = `<span class="need ${t === "ok" ? "enough" : "buy lbl t-" + t}">${por(+rm(r.need))}<b>${lb}</b><span>필요 ${rm(r.need)}${esc(unit)}</span></span>`;
+          const t = tierOf(r, s + i), lb = { ok: "충분", spare: "여유", short: "빠듯" }[t];
+          // 필요 = 다음 입고 전까지 쓸 양 + 안전재고, 있음 = 지금 재고 + 입고예정 (발주 안 해도 되는 품목)
+          need = `<span class="need ${t === "ok" ? "enough" : "buy lbl t-" + t}">${por(+rm(r.need))}<b>${lb}</b><span>필요 ${rm(r.need)} · 있음 ${rm(s + i)}${esc(unit)}</span></span>`;
         }
         else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
         else {
