@@ -97,7 +97,7 @@ input, select { font: inherit; font-size: 16px; font-weight: 600; color: var(--f
 input::placeholder { color: var(--muted); font-weight: 500; }
 input:focus-visible, select:focus-visible { outline: 2px solid var(--fg); outline-offset: 0; }
 button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; }
-.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--fill); border-radius: 11px; padding: 2px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--fill); border-radius: 11px; padding: 2px; }
 .seg button { font: inherit; font-size: 14px; font-weight: 700; border: 0; background: transparent; color: var(--muted); padding: 9px 10px; border-radius: 9px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
 .period { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
@@ -161,6 +161,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 .ops button.confirm { background: var(--rose); color: var(--rose-ink); }
 .empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 14px; background: var(--surface); border-radius: 20px; }
 .note { font-size: 12px; color: var(--muted); text-align: center; }
+.packsec { display: grid; gap: 10px; margin-top: 6px; }
+.pack-sub { margin: -4px 2px 0; font-size: 13px; color: var(--muted); }
+.dday.pack { background: var(--fill); color: var(--fg); font-size: 12px; }
 .reset { display: flex; justify-content: center; padding-top: 12px; }
 .reset-open { font: inherit; font-size: 14px; font-weight: 700; color: var(--rose-ink); background: none; border: 0; cursor: pointer; padding: 8px 14px; border-radius: 10px; }
 .reset-open:hover { background: var(--rose); }
@@ -238,8 +241,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       </label>
     </div>
     <div class="seg" role="group" aria-label="기한 입력 방식">
-      <button type="button" id="mDate" aria-pressed="true">유통기한 직접 입력</button>
-      <button type="button" id="mPeriod" aria-pressed="false">제조일로부터 기간</button>
+      <button type="button" id="mDate" aria-pressed="true">유통기한 입력</button>
+      <button type="button" id="mPeriod" aria-pressed="false">제조일+기간</button>
+      <button type="button" id="mPack" aria-pressed="false">포장일자만</button>
     </div>
     <div class="by-date" id="byDate">
       <label>유통기한
@@ -267,6 +271,11 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         </span>
       </label>
     </div>
+    <div class="row" id="byPack" hidden>
+      <label>포장일자
+        <input type="date" id="fPack">
+      </label>
+    </div>
     <div class="preview" id="preview"></div>
     <div class="form-foot">
       <div class="actions">
@@ -283,6 +292,12 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   <ul id="list" hidden></ul>
   <div class="empty" id="empty">아직 등록된 제품이 없습니다. 위에서 제품명과 유통기한을 입력해 추가하세요.</div>
   <div class="note" id="note"></div>
+
+  <section class="packsec" id="packSec" hidden>
+    <div class="listhead"><h2>포장일자만 있는 품목 <span id="packTotal"></span></h2></div>
+    <p class="pack-sub">기한 계산에서 빠지고, 포장일 오래된 순으로 보여요.</p>
+    <ul id="packList"></ul>
+  </section>
 
   <div class="reset" id="resetZone">
     <button type="button" class="reset-open" id="resetOpen">초기화</button>
@@ -369,6 +384,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     return toISO(target);
   }
   const expiryOf = (it) => it.mode === "period" ? addPeriod(it.mfg, it.num, it.unit) : it.expiry;
+  const isPack = (it) => it.mode === "pack"; // 포장일자만 있는 품목 (예: 감말랭이) → 기한 계산에서 제외
+  const elapsedText = (iso) => { const n = -daysLeft(iso); return n <= 0 ? "오늘 포장" : `${n}일 경과`; };
   const today = () => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); };
   const daysLeft = (iso) => Math.round((parse(iso) - today()) / DAY);
   const status = (n) => n <= 7 ? "exp" : n <= 30 ? "soon" : "ok"; // 7일 이내(지난 것 포함) / 30일 이내 / 여유
@@ -492,7 +509,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     if (alertShown) return;
     alertShown = true;
     try { if (localStorage.getItem(SKIP) === toISO(today())) return; } catch {}
-    const rows = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
+    const rows = items.filter((it) => !isPack(it)).map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
       .filter((r) => r.n <= 30).sort((a, b) => a.n - b.n);
     if (!rows.length) return;
     const week = rows.filter((r) => r.n <= 7), month = rows.filter((r) => r.n > 7);
@@ -530,11 +547,14 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("mPeriod").setAttribute("aria-pressed", m === "period");
     $("byDate").hidden = m !== "date";
     $("byPeriod").hidden = m !== "period";
+    $("mPack").setAttribute("aria-pressed", m === "pack");
+    $("byPack").hidden = m !== "pack";
     updatePreview();
   }
   function readForm() {
     const it = { name: $("fName").value.trim(), memo: $("fMemo").value.trim(), mode };
     if (mode === "date") { if (!$("fExpiry").value) return null; it.expiry = $("fExpiry").value; }
+    else if (mode === "pack") { if (!$("fPack").value) return null; Object.assign(it, { mfg: $("fPack").value, expiry: "", num: 0, unit: "" }); }
     else {
       const num = parseInt($("fNum").value, 10);
       if (!$("fMfg").value || !(num > 0)) return null;
@@ -544,7 +564,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   function updatePreview() {
     const it = readForm();
-    if (!it) { $("preview").textContent = mode === "date" ? "유통기한 날짜를 선택하세요." : "제조일자와 기간을 입력하면 유통기한이 계산됩니다."; return; }
+    if (!it) { $("preview").textContent = mode === "date" ? "유통기한 날짜를 선택하세요." : mode === "pack" ? "포장일자를 선택하세요. (유통기한 없이 아래쪽에 따로 모입니다)" : "제조일자와 기간을 입력하면 유통기한이 계산됩니다."; return; }
+    if (isPack(it)) { $("preview").innerHTML = `포장일자 <b>${fmt(it.mfg)}</b> · ${elapsedText(it.mfg)}`; return; }
     const exp = expiryOf(it), n = daysLeft(exp);
     $("preview").innerHTML = `유통기한 <b>${fmt(exp)}</b> · ${n < 0 ? `${-n}일 지남` : n === 0 ? "오늘까지" : `${n}일 남음`}`;
   }
@@ -563,6 +584,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     editId = it.id;
     $("fName").value = it.name; $("fMemo").value = it.memo || "";
     if (it.mode === "period") { $("fMfg").value = it.mfg; $("fNum").value = it.num; $("fUnit").value = it.unit; }
+    else if (isPack(it)) $("fPack").value = it.mfg;
     else $("fExpiry").value = it.expiry;
     setMode(it.mode);
     $("submit").textContent = "수정 저장";
@@ -584,6 +606,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   });
   $("fExpiry").addEventListener("input", () => document.querySelectorAll(".quick button").forEach((x) => x.classList.remove("on")));
   $("mPeriod").onclick = () => setMode("period");
+  $("mPack").onclick = () => setMode("pack");
 
   // ---- 입력칸 접기: 평소엔 목록 위주, [+ 품목 추가]를 눌러야 펼침 ----
   function openForm(open) { $("form").hidden = !open; $("addOpen").hidden = open; }
@@ -596,8 +619,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     const key = norm($("fName").value);
     const same = key ? items.filter((x) => norm(x.name) === key && x.id !== editId) : [];
     if (!same.length) { $("nameHint").hidden = true; return; }
-    const near = same.map((x) => ({ x, n: daysLeft(expiryOf(x)) })).sort((a, b) => a.n - b.n)[0];
-    $("nameHint").innerHTML = `<span class="dup">이미 ${same.length}개 있음 · ${ddayText(near.n)} (${fmt(expiryOf(near.x)).slice(5)})</span>`;
+    const dated = same.filter((x) => !isPack(x)).map((x) => ({ x, n: daysLeft(expiryOf(x)) })).sort((a, b) => a.n - b.n)[0];
+    const info = dated ? `${ddayText(dated.n)} (${fmt(expiryOf(dated.x)).slice(5)})` : `포장 ${fmt(same[0].mfg).slice(5)}`;
+    $("nameHint").innerHTML = `<span class="dup">이미 ${same.length}개 있음 · ${info}</span>`;
     $("nameHint").hidden = false;
   }
   $("fName").addEventListener("input", nameHint);
@@ -621,7 +645,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // ---- render ----
   function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
   function render() {
-    const rows = items.map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
+    const rows = items.filter((it) => !isPack(it)).map((it) => { const exp = expiryOf(it); return { it, exp, n: daysLeft(exp) }; })
       .sort((a, b) => a.n - b.n || a.it.name.localeCompare(b.it.name, "ko"));
     const c = { exp: 0, soon: 0, ok: 0 };
     rows.forEach((r) => c[status(r.n)]++);
@@ -639,8 +663,24 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
     const q = $("q").value.trim().toLowerCase();
     const shown = q ? rows.filter((r) => (r.it.name + " " + (r.it.memo || "")).toLowerCase().includes(q)) : rows;
+    // 포장일자만 있는 품목: 아래쪽에 따로, 포장일 오래된 순
+    const packs = items.filter(isPack).filter((it) => !q || (it.name + " " + (it.memo || "")).toLowerCase().includes(q))
+      .sort((a, b) => (a.mfg || "").localeCompare(b.mfg || "") || a.name.localeCompare(b.name, "ko"));
+    $("packSec").hidden = !packs.length;
+    $("packTotal").textContent = packs.length ? `· ${packs.length}개` : "";
+    $("packList").innerHTML = packs.map((it) => {
+      const memo = it.memo ? `<span>${esc(it.memo)}</span>` : "";
+      const del = pendingDelete === it.id
+        ? `<button class="confirm" data-act="del" data-id="${it.id}">삭제 확인</button><button data-act="keep">취소</button>`
+        : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
+      return `<li><div class="dday pack">포장</div>
+        <div class="info"><div class="txt"><div class="name">${esc(it.name)}</div>
+          <div class="meta"><span>포장일자 <span class="date">${fmt(it.mfg)}</span></span><span>${elapsedText(it.mfg)}</span>${memo}</div></div></div>
+        <div class="ops">${del}</div></li>`;
+    }).join("");
+
     $("list").hidden = !shown.length;
-    $("empty").hidden = !!shown.length;
+    $("empty").hidden = !!shown.length || !!packs.length;
     $("empty").textContent = rows.length ? "검색 결과가 없습니다." : "아직 등록된 제품이 없습니다. [+ 품목 추가]를 눌러 시작하세요.";
 
     $("list").innerHTML = shown.map(({ it, exp, n }) => {
@@ -657,14 +697,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         <div class="ops">${del}</div></li>`;
     }).join("");
   }
-  $("list").addEventListener("click", async (e) => {
+  const onListClick = async (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const id = b.dataset.id, act = b.dataset.act;
     if (act === "edit") startEdit(items.find((x) => x.id === id));
     else if (act === "ask") { pendingDelete = id; render(); }
     else if (act === "keep") { pendingDelete = null; render(); }
     else if (act === "del") { pendingDelete = null; if (editId === id) resetForm(); try { await remove(id); } catch { refresh(); } }
-  });
+  };
+  $("list").addEventListener("click", onListClick);
+  $("packList").addEventListener("click", onListClick);
 
   // ---- boot ----
   const t = today();
