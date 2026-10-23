@@ -55,6 +55,7 @@ body {
 .pick-list { display: grid; gap: 10px; }
 .pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: inherit; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; text-align: left; border: 0; border-radius: 16px; padding: 17px 18px; background: var(--surface); color: var(--fg); cursor: pointer; }
 .pick svg { width: 18px; height: 18px; color: #cfcfcf; flex: none; }
+.pick.live > span { color: var(--ok); } /* 지금 접속 중인 매장 */
 .pick.used svg { color: var(--brand); } .pick.used svg path { stroke-width: 2.6; } /* 품목을 입력해 쓰는 매장 */
 .pick.on { box-shadow: inset 0 0 0 2px var(--fg); }
 .pick.off { cursor: default; color: var(--muted); }
@@ -495,7 +496,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   let allVer = "";
   async function pingAll() {
     try {
-      const res = await fetch(HUB + "?api=1&store=all&who=" + SID + (allVer ? "&v=" + encodeURIComponent(allVer) : "") + "&t=" + Date.now());
+      const res = await fetch(HUB + "?api=1&store=all&who=" + SID + "&from=" + STORE + (allVer ? "&v=" + encodeURIComponent(allVer) : "") + "&t=" + Date.now());
       const d = await res.json();
       if (d && !Array.isArray(d) && d.online) { allVer = d.ver || allVer; showOnline(d.online); }
     } catch {}
@@ -823,22 +824,33 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   // 품목을 입력해 쓰고 있는 매장은 화살표를 연두로 (지난번 결과로 먼저 칠하고, 새로 받아 다시 칠함)
   const USED = "label-list-used";
-  function paintUsed(used) {
-    document.querySelectorAll("#pickList .pick[data-store]").forEach((el) => el.classList.toggle("used", !!used[el.dataset.store]));
+  function paintUsed(used, live) {
+    document.querySelectorAll("#pickList .pick[data-store]").forEach((el) => {
+      if (used) el.classList.toggle("used", !!used[el.dataset.store]);
+      if (live) el.classList.toggle("live", (live[el.dataset.store] || 0) > 0);
+    });
   }
   async function markUsed() {
     let used = {}; try { used = JSON.parse(localStorage.getItem(USED)) || {}; } catch {}
     paintUsed(used);
     const count = (list) => Array.isArray(list) ? list.filter((x) => x.id && x.id !== NOTICE_ID && x.mode !== "note").length : null;
+    let live = null;
     const jobs = [fetch(HUB + "?api=1&stats=1&t=" + Date.now()).then((r) => r.json()).then((d) => {
       if (d && !Array.isArray(d) && d.counts) Object.keys(STORES).forEach((k) => { if (STORES[k].api === HUB) used[k] = (d.counts[k] || 0) > 0; });
+      if (d && d.online) live = d.online;
     })];
     Object.entries(STORES).filter(([, v]) => v.api && v.api !== HUB).forEach(([k, v]) => jobs.push(
       fetch(v.api + "?api=1&store=" + k + "&t=" + Date.now()).then((r) => r.json()).then((d) => { const n = count(d); if (n !== null) used[k] = n > 0; })));
     await Promise.allSettled(jobs);
     try { localStorage.setItem(USED, JSON.stringify(used)); } catch {}
-    paintUsed(used);
+    paintUsed(used, live);
   }
+  // 매장 선택 화면이 열려 있는 동안 접속 중 표시를 10초마다 새로
+  async function pollLive() {
+    if ($("picker").hidden || document.hidden) return;
+    try { const d = await (await fetch(HUB + "?api=1&stats=1&t=" + Date.now())).json(); if (d && d.online) paintUsed(null, d.online); } catch {}
+  }
+  setInterval(pollLive, 10000);
   $("pickList").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-store]"); if (!b) return;
     try { localStorage.setItem(SAVED_STORE, b.dataset.store); } catch {}

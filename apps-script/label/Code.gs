@@ -18,12 +18,14 @@ function store_(s) {
 function doGet(e) {
   if (e && e.parameter && e.parameter.api) {
     try {
-      if (e.parameter.stats) return json_({ counts: stats_() }); // 매장 선택 화면: 매장별 품목 수
+      if (e.parameter.stats) return json_({ counts: stats_(), online: where_() }); // 매장 선택 화면: 매장별 품목 수·접속 중
       const store = store_(e.parameter.store);
       // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
       // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
       if (e.parameter.who) {
         const online = ping_(store, String(e.parameter.who).slice(0, 40));
+        // 전체 합계('all')를 셀 때 어느 매장 화면인지(from)도 같이 적어 둠
+        if (store === 'all' && /^[a-z0-9]{1,20}$/.test(String(e.parameter.from || ''))) where_(String(e.parameter.who).slice(0, 40), e.parameter.from);
         const ver = ver_(store);
         if (e.parameter.v && e.parameter.v === ver) return json_({ same: true, ver: ver, online: online });
         return json_({ items: listItems(store), ver: ver, online: online });
@@ -165,6 +167,22 @@ function ping_(store, sid) {
   Object.keys(map).forEach((k) => { if (now - map[k] > ONLINE_SEC * 1000) delete map[k]; });
   cache.put(key, JSON.stringify(map), 120);
   return Object.keys(map).length;
+}
+
+// 매장별 접속 중 인원: who → [시각, 매장]. who 없이 부르면 세기만 함
+function where_(who, from) {
+  const cache = CacheService.getScriptCache();
+  let map = {};
+  try { map = JSON.parse(cache.get('where') || '{}'); } catch (err) { map = {}; }
+  const now = Date.now();
+  if (who) { map[who] = [now, from]; }
+  const out = {};
+  Object.keys(map).forEach((k) => {
+    if (now - map[k][0] > ONLINE_SEC * 1000) delete map[k];
+    else out[map[k][1]] = (out[map[k][1]] || 0) + 1;
+  });
+  if (who) cache.put('where', JSON.stringify(map), 120);
+  return out;
 }
 
 function ver_(store) {
