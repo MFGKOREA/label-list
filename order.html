@@ -936,7 +936,9 @@ html, body { overflow-x: hidden; }
     if ((m = /([\d./]+)\s*oz\b/i.exec(s))) return { g: frac(m[1]) * 28.35 };
     // 스쿱 번호: #N은 1쿼트(946ml)를 N번 뜨는 크기
     if ((m = /([\d./]+)\s*scoop\s*\(?\s*#\s*(\d+)/i.exec(s))) return { ml: frac(m[1]) * 946 / num(m[2]), vol: true };
-    if ((m = /([\d./]+)\s*(ea|pc|pcs|개|slice|장|pk|portion|포션)\b/i.exec(s))) return { ea: frac(m[1]) };
+    if ((m = /([\d./]+)\s*(ea|pc|pcs|piece|개|slice|장|pk|portion|포션)\b/i.exec(s))) return { ea: frac(m[1]) };
+    // 그라나파다노 "3 바퀴" = 강판 3번 ≈ 3 g (레시피에 "3 g | 3 바퀴"로 같이 적힘)
+    if ((m = /([\d./]+)\s*바퀴/.exec(s))) return { g: frac(m[1]) };
     return null;
   }
   function frac(s) { if (s.includes("/")) { const [a, b] = s.split("/").map(Number); return b ? a / b : NaN; } return num(s); }
@@ -1422,6 +1424,15 @@ html, body { overflow-x: hidden; }
     // 레시피 1건이 쓰는 품목별 재고단위 (프랩은 Yield로 원재료까지 풀기)
     const yieldOf = (p) => { const s = String(p.yield || ""); const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(s); if (!m) return null; const v = num(m[1]); const u = m[2].toLowerCase(); return u === "kg" || u === "l" ? v * 1000 : v; };
     const perMenuCache = new Map();
+    // "22 g | 1 TB"처럼 무게와 계량(TB·tsp·cup·스쿱)이 같이 적힌 줄 → 1TB 무게 (tbG 설정이 없을 때 씀)
+    let tbGMemo = null;
+    const pairTbG = () => {
+      if (tbGMemo) return tbGMemo;
+      const m = new Map(), acc2 = new Map();
+      [...line, ...prep].forEach((r) => r.ing.forEach((i) => { const t = resolveIng(i.n), q = parseQty(i.w, ""), c = parseQty("", i.v); if (t && !t.skip && q && q.g && c && c.vol && c.ml) { const k = t.kind + ":" + t.id, a = acc2.get(k) || []; a.push(q.g / (c.ml / 15)); acc2.set(k, a); } }));
+      acc2.forEach((a, k) => { a.sort((x, y) => x - y); m.set(k, a[a.length >> 1]); });
+      return (tbGMemo = m);
+    };
     // 라인 레시피에 "25 g | 6 ea"처럼 무게와 개수가 같이 적힌 프랩 → 1개 무게
     let eaGMemo = null;
     const prepEaG = () => {
@@ -1442,7 +1453,8 @@ html, body { overflow-x: hidden; }
         if (!t || t.skip || !q) return;
         // 매장에서 잰 1TB 무게 (itemCfg / prepCfg의 tbG): 1 TB = 15ml 기준으로 tsp·cup·스쿱도 같이 환산
         const tbG = (t.kind === "item" ? itemCfg[t.id] : (db.prepCfg || {})[t.id] || {}) || {};
-        if (q.vol && tbG.tbG) q = { g: (q.ml / 15) * tbG.tbG };
+        const tb = tbG.tbG || pairTbG().get(t.kind + ":" + t.id);
+        if (q.vol && tb) q = { g: (q.ml / 15) * tb };
         if (t.kind === "item") {
           const it = items.find((i) => i.key === t.id); if (!it) return;
           const s = toStock(q, it.pk); if (s == null) return;
@@ -1467,10 +1479,27 @@ html, body { overflow-x: hidden; }
           // "새우 12 ea"처럼 개수로 쓴 건 다른 라인 레시피의 "25 g | 6 ea"로 1개 무게를 구해 g으로
           const eg = amount == null && q.ea != null ? prepEaG().get(p.name) : null;
           const amt = amount ?? (eg ? q.ea * eg : null);
-          if (!y || amt == null) return;
+          if (amt == null) return;
+          if (!y) { passThrough(p, factor * amt, acc, depth + 1, prepAcc, batchAcc, m); return; }
           go((factor * amt) / y);
         }
       });
+    }
+    // 분량이 "As needed"인 프랩(튀긴 통마늘·루꼴라·베이컨 찹·그라나파다노 등)을 g으로 쓴 줄: 프랩 1g = 원재료 1g로 통과
+    //  원재료는 prepCfg.raw, 없으면 분량 없이 적힌 첫 재료(튀긴 통마늘 → 보일드 갈릭 → 깐마늘). 양념(스테이크 시즈닝)은 무시
+    function passThrough(p, grams, acc, depth, prepAcc, batchAcc, m) {
+      const c = (db.prepCfg || {})[p.name] || {};
+      if (!(grams > 0) || depth > 3 || c.split) return; // split(커팅비프)은 다른 레시피의 자투리라 원재료를 안 씀 (부족분은 shortOf로)
+      const raw = c.raw;
+      let t = raw ? { kind: "item", id: raw } : null;
+      if (!t) for (const ing of p.ing) { if (parseQty(ing.w, ing.v)) continue; const r = resolveIng(ing.n); if (r && !r.skip && !(r.kind === "prep" && r.id === p.name)) { t = r; break; } }
+      if (!t) return;
+      if (t.kind === "item") { const it = items.find((i) => i.key === t.id); if (!it) return; const s = toStock({ g: grams }, it.pk); if (s != null) acc.set(it.key, (acc.get(it.key) || 0) + s); return; }
+      const p2 = variantOf("prep", t.id, m) || prepByName.get(t.id); if (!p2) return;
+      if (prepAcc) prepAcc.set(p2.name, (prepAcc.get(p2.name) || 0) + grams);
+      const y2 = yieldOf(p2);
+      if (y2) { if (batchAcc) batchAcc.set(p2.name, (batchAcc.get(p2.name) || 0) + grams / y2); expand(p2, grams / y2, acc, depth + 1, prepAcc, batchAcc, m); }
+      else passThrough(p2, grams, acc, depth + 1, prepAcc, batchAcc, m);
     }
     function perMenu(recipe, m) {
       const mm = hasVariant(m) || (m && shareCfg.length) ? m : null, ck = recipe.name + (mm ? "|" + mm : "");
@@ -1574,7 +1603,7 @@ html, body { overflow-x: hidden; }
     const withB = monthRows.filter((r) => r.theo && r.gross > 0 && full(r));
     // 로스 계수 = 실제 ÷ 레시피의 중앙값 (짝수 개면 가운데 둘 평균). before를 주면 그 달 전까지만 (채점할 때 그 달 실제를 미리 보지 않게)
     const lossOf = (key, before) => {
-      const rs = withB.filter((r) => r !== withB[withB.length - 1] && (!before || r.m < before)).map((r) => { const t = r.theo.get(key), a = r.actual && r.actual.get(key); return t && a ? a / t : null; }).filter((x) => x && x > 0.5 && x < 3).sort((x, y) => x - y);
+      const rs = withB.filter((r) => !before || r.m < before).map((r) => { const t = r.theo.get(key), a = r.actual && r.actual.get(key); return t && a ? a / t : null; }).filter((x) => x && x > 1 / 3 && x < 3).sort((x, y) => x - y);
       if (!rs.length) return 1;
       const h = rs.length >> 1; return rs.length % 2 ? rs[h] : (rs[h - 1] + rs[h]) / 2;
     };
@@ -1629,9 +1658,9 @@ html, body { overflow-x: hidden; }
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       it.ledgerScores = [];
-      withAAll.forEach((r, idx) => {
+      withA.forEach((r, idx) => {
         const act = r.actual.get(it.key); if (!act) return;
-        const prev = withAAll.slice(Math.max(0, idx - 3), idx);
+        const prev = withA.slice(Math.max(0, idx - 3), idx);
         const lossB = lossOf(it.key, r.m);
         let pu = 0, pg = 0; prev.forEach((p) => { const u = p.actual.get(it.key); if (u) { pu += u; pg += p.gross / 1e6; } });
         if (pg > 0) errA.push((pu / pg * r.gross / 1e6 - act) / act);
