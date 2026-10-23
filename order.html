@@ -571,6 +571,7 @@ html, body { overflow-x: hidden; }
 .req .kv b { font-weight: 800; }
 .req .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: stretch; }
 .req .fld { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; }
+.risk86 button .why { display: block; font-style: normal; font-size: 11px; font-weight: 500; color: var(--rose-ink); opacity: .85; margin-top: 3px; white-space: normal; }
 
 </style>
 </head>
@@ -2400,7 +2401,10 @@ html, body { overflow-x: hidden; }
       }
       stock -= ud;
     }
-    return { it, have, use: r.use, out: until, p, when, at };
+    // 사유 (한 줄): 있는 양 vs 입고 전까지 쓸 양, 입고 여부, 주말 매출 비중
+    const u = it.pk.stock || "", wk = (() => { let a = 0; for (let d = TODAY; d < until; d = addDays(d, 1)) if (dow(d) === 0 || dow(d) === 6) a += dayGross(d, false).v; return gross > 0 ? a / gross : 0; })();
+    const why = `있음 ${r1(stockOf(it, v) + arr)}${arr ? `(입고 ${r1(arr)} 포함)` : ""} · ${DOW[dow(until)]}까지 ${r1(r.use)}${u} 필요` + (!arr ? " · 그 전 입고 없음" : wk >= 0.5 ? " · 주말 매출 큼" : "");
+    return { it, have, use: r.use, out: until, p, when, at, why };
   }
   function risk86(M, inp) {
     return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
@@ -2413,7 +2417,7 @@ html, body { overflow-x: hidden; }
     const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b></div>` +
-        rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${esc(x.when)} 부족 · 재고 ${r1(x.have)}${esc(x.it.pk.stock || "")}</em></span><small>${Math.min(99, Math.round(x.p * 100))}%</small></button>`).join("") + `</div>`);
+        rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${esc(x.when)} 부족</em><i class="why">${esc(x.why)}</i></span><small>${Math.min(99, Math.round(x.p * 100))}%</small></button>`).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
