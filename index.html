@@ -22,6 +22,7 @@
   --line: #ebebeb;
   --accent: #222222;
   --accent-ink: #ffffff;
+  --brand: #76ac95; /* 매드포갈릭 연두: 누르는 버튼에만 */
   --rose: #fdeeec; --rose-ink: #ef6253;
   --amber: #fff3e0; --amber-ink: #e08a1e;
   --ok-bg: #ebf7f0; --ok: #41b979;
@@ -101,7 +102,7 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .by-date { display: grid; gap: 8px; }
 .quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .quick button { font: inherit; font-size: 14px; font-weight: 700; border: 0; border-radius: 10px; padding: 9px 0; background: var(--fill); color: var(--fg); cursor: pointer; }
-.quick button.on { background: var(--accent); color: var(--accent-ink); }
+.quick button.on { background: var(--brand); color: #fff; }
 .todaybar { background: var(--surface); border-radius: 18px; padding: 14px 16px; display: grid; gap: 12px; }
 .need { display: grid; gap: 10px; }
 .notice { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -120,7 +121,7 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .todaybar .c.hot b { color: var(--rose-ink); }
 .todaybar .c.warm b { color: var(--amber-ink); }
 .todaybar .none { font-size: 14px; color: var(--muted); font-weight: 600; }
-.add-open { font: inherit; font-size: 17px; font-weight: 800; border: 0; border-radius: 16px; padding: 16px; background: #76ac95; color: #fff; cursor: pointer; letter-spacing: -0.02em; }
+.add-open { font: inherit; font-size: 17px; font-weight: 800; border: 0; border-radius: 16px; padding: 16px; background: var(--brand); color: #fff; cursor: pointer; letter-spacing: -0.02em; }
 .form-top { display: flex; justify-content: space-between; align-items: center; }
 .form-top b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
 .form-close { font: inherit; font-size: 14px; font-weight: 700; border: 0; background: var(--fill); color: var(--muted); border-radius: 9px; padding: 6px 12px; cursor: pointer; }
@@ -132,7 +133,7 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-left: auto; }
 .btn { white-space: nowrap; font: inherit; font-size: 15px; font-weight: 700; border: 0; border-radius: 11px; padding: 11px 18px; cursor: pointer; background: var(--fill); color: var(--fg); }
 .btn.small { padding: 8px 12px; font-size: 13px; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); padding-inline: 26px; }
+.btn.primary { background: var(--brand); color: #fff; padding-inline: 26px; }
 .btn:disabled { opacity: .5; cursor: progress; }
 
 /* list */
