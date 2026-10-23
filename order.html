@@ -2004,11 +2004,13 @@ html, body { overflow-x: hidden; }
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
         // 그 사이 실제 Gross가 다 있어야 채점 (Forecast로 채점하면 매출이 틀린 걸 사용량 탓으로 봄)
         const actOk = (d) => num(((db.forecast || {})[d] || {}).act) > 0;
-        let gapAct = false; for (let x = d1; x < d2; x = addDays(x, 1)) if (!actOk(x) && !(x === d1 && leftOf(h1) === 0)) gapAct = true;
-        if (leftOf(h2) < 1 && !actOk(d2)) gapAct = true;
+        // 해동 품목(고기·폭립·부라타·스프 등)은 쓰기 전날 냉동고에서 꺼내니 재고가 하루 먼저 줄어듦 → 매출도 해동 일수만큼 뒤 날짜로 맞춤
+        const t = it.thaw || 0, s1 = addDays(d1, t), s2 = addDays(d2, t);
+        let gapAct = false; for (let x = s1; x < s2; x = addDays(x, 1)) if (!actOk(x) && !(x === s1 && leftOf(h1) === 0)) gapAct = true;
+        if (leftOf(h2) < 1 && !actOk(s2)) gapAct = true;
         if (gapAct) { flushAcc(); return; }
         // 센 시각만큼 그날 매출을 나눔: 저녁에 센 날은 그날 매출 대부분이 이미 빠진 뒤 (10/19 저녁 → 10/20 아침이면 하루치가 아님)
-        const g = (sumGross(d1, d2, true).s - (1 - leftOf(h1)) * dayGross(d1, true).v + (1 - leftOf(h2)) * dayGross(d2, true).v) / 1e6;
+        const g = (sumGross(s1, s2, true).s - (1 - leftOf(h1)) * dayGross(s1, true).v + (1 - leftOf(h2)) * dayGross(s2, true).v) / 1e6;
         const bdj = (() => { const ba = batchAdj(it, { today: d1, days, gross: g * 1e6 }); return ba ? ba.delta : 0; })(); // 프랩 배치(그 사이 만든 날)
         const pA = it.rateA != null ? Math.max(0, it.fixedA * days + it.rateA * g + bdj) : null;
         const pB = it.rateB != null ? Math.max(0, it.rateB * g + bdj) : null;
