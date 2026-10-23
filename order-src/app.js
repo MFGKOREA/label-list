@@ -1266,7 +1266,28 @@
   // 화면
   // =========================================================
   const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help" };
+  // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
+  const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
+  // 필요량 칸 다시 그리기: 발주완료·충분으로 바뀌면 톡 튀어나오고(체크가 그려짐), 같은 칸에서 숫자만 바뀌면 위/아래로 굴러서 바뀜
+  function swapNeed(box, html) {
+    const old = box.firstElementChild, oc = old ? old.className : "";
+    const ot = old ? [...old.children].filter((x) => x.tagName !== "EM").map((x) => x.textContent) : [];
+    box.innerHTML = html;
+    const nw = box.firstElementChild;
+    if (!old || !nw || calm()) return;
+    if (nw.className !== oc) { if (/\b(done|enough)\b/.test(nw.className)) nw.classList.add("m-pop"); return; }
+    const kids = [...nw.children].filter((x) => x.tagName !== "EM");
+    kids.forEach((el, i) => {
+      if (ot[i] == null || el.textContent === ot[i]) return;
+      const a = parseFloat(ot[i].replace(/[^\d.-]/g, "")), b = parseFloat(el.textContent.replace(/[^\d.-]/g, ""));
+      el.classList.add(isFinite(a) && isFinite(b) && b < a ? "m-down" : "m-up");
+    });
+  }
+  // 데이터 리포트를 열 때만 학습량 숫자가 0부터 올라가며 게이지가 참
+  let xpAnim = false, xpTok = 0;
   function go(to) {
+    if (to === "report") xpAnim = true;
     Object.entries(views).forEach(([k, id]) => {
       const v = $(id); v.hidden = k !== to; v.classList.remove("push", "pop");
       if (k === to) { void v.offsetWidth; v.classList.add(to === "main" ? "pop" : "push"); }
@@ -1464,12 +1485,12 @@
       const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v));
       // 몇 포션인지 (itemCfg.portionG): 보이는 필요량 × 1단위 g ÷ 1포션 g
       const por = (q) => (it.portionG && it.pk.g && q > 0 ? `<em class="por">${Math.ceil(q * it.pk.g / it.portionG - 1e-9)}${esc(it.portionLabel)}</em>` : "");
-      if (!isFinite(s) && num(v.o) > 0) return `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+      if (!isFinite(s) && num(v.o) > 0) return `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
       if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle">${por(+rm(r.need))}<b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (num(v.o) > 0) need = `<span class="need done"><b>발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+        else if (num(v.o) > 0) need = `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         else if (!r.packs) {
           // 필요량 = 주말 영업까지 다 하고 이번 입고일(월)에 들어와야 할 양 = 필요(사용+안전재고) − 재고 − 입고예정. 발주 안 해도 되면 0
           need = `<span class="need enough"><b>충분</b><span>필요 0${esc(unit)}</span></span>`;
@@ -1509,7 +1530,7 @@
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
-    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); d.querySelector(".needbox").innerHTML = draw(); const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
+    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
     const jump = (to) => {
@@ -1870,7 +1891,7 @@
         const all = [...$("prepList").querySelectorAll("input")], next = all[all.indexOf(inp) + 1];
         if (next) { next.focus(); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else inp.blur();
       });
-      inp.addEventListener("input", () => { v.s = inp.value.trim(); d.querySelector(".needbox").innerHTML = draw(); });
+      inp.addEventListener("input", () => { v.s = inp.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); });
       inp.addEventListener("change", () => {
         const all = { ...(db["prepOnhand." + TODAY] || {}) }; if (v.s === "") delete all[id]; else all[id] = v.s; setKey("prepOnhand." + TODAY, all);
         // 학습 기록: 재고·만들 양·앱 하루 예상을 같은 단위(ex.unit 기준)로
@@ -2148,8 +2169,14 @@
   function renderXp(M) {
     const L = learnLevel(M);
     if (!$("xpLog").hidden) renderLog();
-    $("xpPct").innerHTML = `${L.pct.toFixed(3)}<small>%</small>`;
-    $("xpFill").style.width = `${Math.min(100, L.pct)}%`;
+    const tok = ++xpTok, fill = $("xpFill"), w = `${Math.min(100, L.pct)}%`, show = (x) => { $("xpPct").innerHTML = `${x.toFixed(3)}<small>%</small>`; };
+    if (xpAnim && !calm()) {
+      xpAnim = false;
+      fill.style.transition = "none"; fill.style.width = "0%"; void fill.offsetWidth; fill.style.transition = ""; fill.style.width = w;
+      const t0 = performance.now(), to = L.pct;
+      const tick = (t) => { if (tok !== xpTok) return; const k = Math.min(1, (t - t0) / 900); show(to * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); };
+      show(0); requestAnimationFrame(tick);
+    } else { xpAnim = false; show(L.pct); fill.style.width = w; }
     $("xpParts").innerHTML = L.parts.map((x) => `<div class="xp-row"><span>${x.t}<small>${x.d}</small></span><b>${x.v}</b><em>${x.p.toFixed(3)}<small>/ ${x.max}%</small></em></div>`).join("");
   }
   const toggle = (btn, box, after) => $(btn).addEventListener("click", () => { const open = $(box).hidden; $(box).hidden = !open; $(btn).setAttribute("aria-expanded", String(open)); if (after) after(); });

@@ -587,3 +587,21 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .ostate { font-size: 11px; }
 /* 데이터 요청 입력: 단위(g) 글씨가 입력칸 안에서 위로 뜨지 않게 */
 .req .fld > span { font-size: 12px; }
+
+/* 모션: 발주완료 체크 · 필요량 숫자 굴림 · 학습량 게이지 (동작 줄이기 설정이면 끔) */
+.need { overflow: hidden; }
+.need.done b { display: inline-flex; align-items: center; gap: 3px; }
+.need .ck { width: 12px; height: 12px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.need.m-pop { animation: m-pop 340ms cubic-bezier(.34, 1.56, .64, 1); }
+.need.m-pop .ck path { stroke-dasharray: 12; stroke-dashoffset: 12; animation: m-draw 240ms 140ms ease-out forwards; }
+@keyframes m-pop { from { transform: scale(.88); opacity: .5; } }
+@keyframes m-draw { to { stroke-dashoffset: 0; } }
+.need .m-up { animation: m-up 220ms cubic-bezier(.2, .8, .2, 1); }
+.need .m-down { animation: m-down 220ms cubic-bezier(.2, .8, .2, 1); }
+@keyframes m-up { from { transform: translateY(55%); opacity: 0; filter: blur(2px); } }
+@keyframes m-down { from { transform: translateY(-55%); opacity: 0; filter: blur(2px); } }
+.xp-bar i { transition: width 900ms cubic-bezier(.33, 1, .68, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .need.m-pop, .need.m-pop .ck path, .need .m-up, .need .m-down { animation: none; stroke-dashoffset: 0; }
+  .xp-bar i, .seg button::after { transition: none; }
+}
