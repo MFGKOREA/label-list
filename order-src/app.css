@@ -566,3 +566,24 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 }
 /* 홈 화면 앱(노치 아래까지 그림)에서 맨 위 내용이 상태바에 가리지 않게 */
 .view { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
+
+/* 디자인 다듬기 (크림 테마 유지): 설명 줄바꿈 · 탭 밑줄 · 86 카드 · 칸 모서리 통일 · 작은 글씨 */
+.c-meta, .kv small, .pn li, .steps span, .guide span, .calc span, .tipcard span { text-wrap: pretty; }
+.hdr h1, .nav h2, .h-hero b, .steps b { text-wrap: balance; }
+/* 발주/프랩 탭: 반쪽 전체 밑줄이 카드 모서리에 휘어 들어가던 것 → 글자 아래 짧고 둥근 막대 */
+.seg button[aria-selected="true"] { box-shadow: none; }
+.seg button::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 44px; height: 3px; border-radius: 3px 3px 0 0; background: var(--fg); translate: -50% 0; scale: 0 1; transition: scale 200ms cubic-bezier(.2, .8, .2, 1); }
+.seg button[aria-selected="true"]::after { scale: 1 1; }
+/* 86 위험: 굵은 테두리 대신 면으로, 안쪽 줄은 바깥 모서리에 맞춘 둥글기(바깥 20 = 안 12 + 여백 8) */
+.risk86 { border: 0; border-radius: 20px; padding: 13px 8px 8px; gap: 4px; }
+.risk86 .r-top { padding: 0 8px 4px; }
+.risk86 button { border-radius: 12px; padding: 10px 12px; }
+/* 품목 카드 안 칸(재고·발주·필요) 둥글기 통일: 카드 20 · 칸 12 */
+.fld, .need, .c-bot .estchip { border-radius: 12px; }
+.c-bot .estchip { border-radius: 6px; }
+/* 사전발주 버튼 글씨 7.5px → 읽히는 크기 */
+.sect .pre { min-height: 22px; padding: 0 9px; font-size: 10.5px; letter-spacing: 0; }
+/* 오늘 날짜 아래 발주 상태: 날짜 상자 가운데에 */
+.ostate { font-size: 11px; }
+/* 데이터 요청 입력: 단위(g) 글씨가 입력칸 안에서 위로 뜨지 않게 */
+.req .fld > span { font-size: 12px; }
