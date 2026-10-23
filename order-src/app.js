@@ -996,7 +996,8 @@
     const w = orderWindowBase(it, today), t = it.thaw || 0;
     if (!t) return w;
     const end = addDays(w.end, t), g = sumGross(today, end, false);
-    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(w.deliv, end) };
+    // 주말 여유분은 이 발주분을 쓸 수 있는 날(입고 다음 날)부터: 목요일 발주 해동 품목은 토요일을 수요일 발주가 맡으니 토요일 이중 계산 방지
+    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(addDays(w.deliv, t), end) };
   }
   function orderWindowBase(it, today) {
     const c = vcfg(it);
@@ -1036,7 +1037,7 @@
     const ba = batchAdj(it, win), useAvg = use;
     if (ba) use = Math.max(0, use + ba.delta);
     let ss = Z * Math.sqrt((Math.sqrt(sigma * sigma + fcErr() ** 2) * useAvg / Math.sqrt(nd)) ** 2 + (ba ? ba.varS : 0));
-    const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * (win.wkGross / win.gross) : 0;
+    const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * Math.min(1, win.wkGross / win.gross) : 0;
     ss += wkPlus;
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
