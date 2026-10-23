@@ -132,6 +132,35 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .name-hint { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 600; color: var(--muted); }
 .name-hint .dup { color: var(--rose-ink); }
 .preview { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+.name-hint .cat { color: #3f7a62; }
+/* 라벨 사진 */
+.ocr-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-size: 15px; font-weight: 800; border: 1.5px dashed var(--brand); background: #f1f7f4; color: #3f7a62; border-radius: 14px; padding: 13px; cursor: pointer; }
+.ocr-btn svg { width: 18px; height: 18px; }
+.ocr-res { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; background: #f1f7f4; border-radius: 14px; padding: 10px 12px; }
+.ocr-res img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; background: var(--fill); }
+.ocr-res b { display: block; font-size: 14px; color: #3f7a62; }
+.ocr-res b.err { color: var(--rose-ink); }
+.ocr-res span { display: block; font-size: 13px; font-weight: 700; margin-top: 2px; }
+.ocr-res em { display: block; font-style: normal; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ocr-res .again { font: inherit; font-size: 12px; font-weight: 700; border: 0; background: none; color: #3f7a62; padding: 4px 0 0; cursor: pointer; text-decoration: underline; }
+.ocr-ch { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ocr-ch:empty { display: none; }
+.ocr-ch button { font: inherit; font-size: 13px; font-weight: 800; border: 1.5px solid var(--brand); background: var(--surface); color: #3f7a62; border-radius: 9px; padding: 6px 9px; cursor: pointer; }
+.ocr-ch button small { font-weight: 600; color: var(--muted); margin-left: 3px; }
+.ocr-ch button.on { background: var(--brand); color: #fff; } .ocr-ch button.on small { color: #e6f1ec; }
+.thumb { flex: none; width: 46px; height: 46px; border: 0; padding: 0; border-radius: 10px; overflow: hidden; background: var(--fill); cursor: pointer; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv { position: fixed; inset: 0; z-index: 60; background: #111; display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: max(18px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom)); }
+.pv[hidden] { display: none; }
+.pv-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #fff; font-weight: 800; font-size: 17px; }
+.pv-h small { display: block; font-size: 13px; font-weight: 600; color: #bbb; margin-top: 2px; }
+.pv button { font: inherit; font-weight: 800; border: 0; border-radius: 12px; background: #ffffff26; color: #fff; cursor: pointer; }
+.pv-h button { padding: 8px 12px; font-size: 14px; }
+.pv-img { min-height: 0; display: grid; place-items: center; }
+.pv-img img { max-width: 100%; max-height: 100%; border-radius: 12px; }
+.pv-f { display: flex; gap: 8px; } .pv-f button { flex: 1; padding: 13px; font-size: 15px; }
+.pv-f button.warn { background: var(--rose); color: var(--rose-ink); }
+.pv-msg { color: #bbb; font-size: 13px; text-align: center; min-height: 1em; }
 .preview b { color: var(--fg); font-weight: 700; }
 .form-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-left: auto; }
@@ -237,10 +266,19 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         <input id="fName" required placeholder="예: 냉동 새우살 500g" list="nameList">
         <datalist id="nameList"></datalist>
         <span class="name-hint" id="nameHint" hidden></span>
+        <span class="name-hint" id="catHint" hidden></span>
       </label>
       <label>특이사항 (선택)
         <input id="fMemo" placeholder="예: 냉동보관 / 개봉 후 냉장">
       </label>
+    </div>
+    <div id="ocrBox">
+      <button type="button" class="ocr-btn" id="ocrBtn" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg> 라벨 사진 찍어서 날짜 채우기</button>
+      <div class="ocr-res" id="ocrRes" hidden>
+        <img id="ocrImg" alt="라벨 사진">
+        <div><b id="ocrT"></b><span id="ocrS"></span><em id="ocrE"></em><div class="ocr-ch" id="ocrCh"></div><button type="button" class="again" id="ocrAgain">다시 찍기</button></div>
+      </div>
+      <input type="file" id="ocrFile" accept="image/*" hidden>
     </div>
     <div class="seg" role="group" aria-label="기한 입력 방식">
       <button type="button" id="mDate" aria-pressed="true">유통기한 입력</button>
@@ -329,6 +367,13 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     </ol>
     <div class="actions"><button type="button" class="btn primary" id="howtoClose">확인</button></div>
   </div>
+</div>
+
+<div class="pv" id="pv" role="dialog" aria-modal="true" hidden>
+  <div class="pv-h"><div><span id="pvName"></span><small id="pvMeta"></small></div><button type="button" id="pvClose">닫기</button></div>
+  <div class="pv-img"><img id="pvImg" alt="라벨 사진"></div>
+  <div><div class="pv-msg" id="pvMsg"></div><div class="pv-f"><button type="button" id="pvRetake">다시 찍기</button><button type="button" id="pvDel">사진 삭제</button></div></div>
+  <input type="file" id="pvFile" accept="image/*" hidden>
 </div>
 
 <div class="overlay" id="addHome" hidden>
@@ -553,13 +598,281 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     await send("saveItem", it);
   }
   async function remove(id) {
-    items = items.filter((x) => x.id !== id); render();
+    items = items.filter((x) => x.id !== id); dropPhoto(id); render();
     await send("deleteItem", id);
   }
   async function refresh() {
     if (document.hidden || editId || pending) return;
     try { const list = await call("listItems"); if (pending) return; if (list) apply(list); else $("note").textContent = ""; }
     catch { $("note").textContent = "목록을 불러오지 못했습니다. 인터넷 연결을 확인하세요."; }
+  }
+
+  // ---- 라벨 사진 글자에서 날짜 찾기 ----
+  // 결과: { mode: "date"|"period"|"", expiry, mfg, num, unit, choices: [{iso, tag}], role, found }
+  const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
+    gen: 1, fev: 2, fév: 2, avr: 4, mai: 5, mag: 5, juin: 6, giu: 6, juil: 7, lug: 7, aou: 8, aoû: 8, ago: 8, set: 9, ott: 10, okt: 10, dic: 12, dez: 12, ene: 1, abr: 4, mrz: 3, mär: 3 };
+  const EXP_RE = /(소비\s*기한|유통\s*기한|품질\s*유지\s*기한|까지|best\s*before|best\s*by|\bbbe?\b|\bexp|use\s*by|\bdlc\b|\bddm\b|\bdluo\b|\bmhd\b|\btmc\b|consumir|scad|da\s*consumarsi|à\s*consommer|\bbb\b)/i;
+  const MFG_RE = /(제조\s*일|제조\s*년\s*월\s*일|생산\s*일|포장\s*일|\bmfg|\bmfd|\bprod|\bpd\b|packed|\bpkd|\bfab|fabbricazione|fabricación|herstell)/i;
+  function validYMD(y, m, d) {
+    if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return "";
+    const dt = new Date(y, m - 1, d);
+    return dt.getMonth() === m - 1 ? `${y}-${pad(m)}-${pad(d)}` : "";
+  }
+  const yr = (y) => (y < 100 ? 2000 + y : y);
+  // 한 줄에서 날짜 후보들 (애매하면 여러 해석)
+  function datesIn(line) {
+    const out = [];
+    const L = line.toLowerCase();
+    let m;
+    // 2026.01.05 / 2026-1-5 / 2026년 1월 5일 / 2026 01 05
+    const reY = /(20\d{2})\s*[.\-\/년\s]\s*(\d{1,2})\s*[.\-\/월\s]\s*(\d{1,2})\s*일?/g;
+    while ((m = reY.exec(L))) { const iso = validYMD(+m[1], +m[2], +m[3]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
+    // 20260105
+    const re8 = /(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)/g;
+    while ((m = re8.exec(L))) { const iso = validYMD(+m[1], +m[2], +m[3]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
+    // 05 MAY 2026 / 05-MAY-26 / MAY 05 2026
+    const reM1 = /(?<!\d)(\d{1,2})\s*[.\-\/ ]?\s*([a-zà-ü]{3,5})\.?\s*[.\-\/ ]?\s*(\d{4}|\d{2})(?!\d)/g;
+    while ((m = reM1.exec(L))) { const mo = MONTHS[m[2]] || MONTHS[m[2].slice(0, 3)]; const iso = mo && validYMD(yr(+m[3]), mo, +m[1]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
+    const reM2 = /(?<![a-z])([a-zà-ü]{3,5})\.?\s*[.\-\/ ]?\s*(\d{1,2})\s*[,.\-\/ ]\s*(\d{4}|\d{2})(?!\d)/g;
+    while ((m = reM2.exec(L))) { const mo = MONTHS[m[1]] || MONTHS[m[1].slice(0, 3)]; const iso = mo && validYMD(yr(+m[3]), mo, +m[2]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
+    // 01/05/2026 · 01.05.29 처럼 숫자만: 여러 해석
+    const reN = /(?<![\d.\-\/])(\d{1,2})\s*([.\-\/])\s*(\d{1,2})\s*\2\s*(\d{4}|\d{2})(?![\d.\-\/])/g;
+    while ((m = reN.exec(L))) {
+      const a = +m[1], b = +m[3], c = m[4], C = +c;
+      const opts = [];
+      const add = (iso, tag) => { if (iso && !opts.some((o) => o.iso === iso)) opts.push({ iso, tag }); };
+      add(validYMD(yr(C), b, a), "일/월/년");
+      add(validYMD(yr(C), a, b), "월/일/년");
+      if (c.length === 2) add(validYMD(yr(a), b, C), "년/월/일");
+      if (opts.length) out.push({ at: m.index, opts });
+    }
+    return out.sort((x, y) => x.at - y.at);
+  }
+  function parseLabel(text, now) {
+    const t0 = now || today();
+    const lines = String(text || "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    const res = { mode: "", expiry: "", mfg: "", num: 0, unit: "", choices: [], role: "", found: false };
+    // 제조일로부터 N개월 / N년 / N일
+    const per = String(text || "").match(/제조\s*일?\s*(?:자|로)?\s*(?:로)?\s*부터\s*(\d{1,3})\s*(개월|달|년|일)/) || String(text || "").match(/(\d{1,3})\s*(months?|years?|days?)\s*(?:from|after)\s*(?:the\s*)?(?:date\s*of\s*)?(?:production|manufactur)/i);
+    if (per) { res.num = +per[1]; const u = per[2].toLowerCase(); res.unit = /^(개월|달|month)/.test(u) ? "m" : /^(년|year)/.test(u) ? "y" : "d"; }
+    const todayIso = toISO(t0);
+    const far = toISO(new Date(t0.getFullYear() + 8, t0.getMonth(), t0.getDate()));
+    const old = toISO(new Date(t0.getFullYear() - 6, t0.getMonth(), t0.getDate()));
+    const plausible = (iso, role) => role === "mfg" ? iso >= old && iso <= todayIso : iso >= old && iso <= far;
+    let exp = null, mfg = null, loose = null;
+    lines.forEach((line, i) => {
+      const ds = datesIn(line);
+      if (!ds.length) return;
+      const prev = lines[i - 1] || "";
+      ds.forEach((d) => {
+        const before = line.slice(0, d.at);
+        const isExp = EXP_RE.test(before) || (!before.trim() && EXP_RE.test(prev)) || /까지/.test(line.slice(d.at));
+        const isMfg = MFG_RE.test(before) || (!before.trim() && MFG_RE.test(prev));
+        // 키워드가 둘 다 있으면 날짜에 더 가까운 쪽
+        let role = isExp && isMfg ? (before.search(EXP_RE) > before.search(MFG_RE) ? "exp" : "mfg") : isExp ? "exp" : isMfg ? "mfg" : "";
+        const opts = d.opts.filter((o) => plausible(o.iso, role || "exp"));
+        if (!opts.length) return;
+        if (role === "exp" && !exp) exp = opts;
+        else if (role === "mfg" && !mfg) mfg = opts;
+        else if (!role && !loose) loose = opts;
+      });
+    });
+    const pick = (opts) => { if (opts.length === 1) return opts[0].iso; res.choices = opts; return ""; };
+    if (mfg && res.num) { res.mode = "period"; res.mfg = pick(mfg); res.role = "mfg"; }
+    else if (exp) { res.mode = "date"; res.expiry = pick(exp); res.role = "exp"; }
+    else if (mfg) { res.mode = "period"; res.mfg = pick(mfg); res.role = "mfg"; }
+    else if (loose) { res.mode = "date"; res.expiry = pick(loose); res.role = "exp"; }
+    else if (res.num) res.mode = "period";
+    res.found = !!(res.expiry || res.mfg || res.choices.length || res.num);
+    return res;
+  }
+
+  // ---- 라벨 사진: 매장모음(HUB)에 저장, 목록엔 작은 사진 ----
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  let formNew = newId(), formPhotoNew = "", modeTouched = false, numTouched = false, catTimer = null;
+  const PH = LS + "-photos";
+  let photos = {}; try { photos = JSON.parse(localStorage.getItem(PH)) || {}; } catch {}
+  const localPhoto = {}; // 올리는 중인 사진은 기기 안의 사진으로 먼저 보여 줌
+  let photoReady = false; try { photoReady = localStorage.getItem("label-list-photo-ready") === "1"; } catch {}
+  const photoSrc = (id, w) => localPhoto[id] || `https://drive.google.com/thumbnail?id=${encodeURIComponent(photos[id])}&sz=w${w}`;
+  function thumbHtml(id) {
+    if (!photos[id] && !localPhoto[id]) return "";
+    return `<button class="thumb" data-act="photo" data-id="${id}" aria-label="사진 보기"><img loading="lazy" alt="" src="${photoSrc(id, 160)}"></button>`;
+  }
+  function savePhotos() { try { localStorage.setItem(PH, JSON.stringify(photos)); } catch {} }
+  async function fetchPhotos() {
+    if (document.hidden) return;
+    try {
+      const d = await (await fetch(HUB + "?api=1&photos=" + STORE + "&t=" + Date.now())).json();
+      if (!d || Array.isArray(d) || d.error) return; // 구글 코드가 아직 예전 버전: 사진 버튼 숨김 그대로
+      if (!photoReady) { photoReady = true; try { localStorage.setItem("label-list-photo-ready", "1"); } catch {} if ($("ocrRes").hidden) $("ocrBtn").hidden = false; }
+      if (JSON.stringify(d) !== JSON.stringify(photos)) { photos = d; savePhotos(); render(); }
+    } catch {}
+  }
+  async function hubPost(body) {
+    const res = await fetch(HUB, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const d = await res.json();
+    if (!d || d.error) throw new Error(d && d.error || "응답 오류");
+    return d;
+  }
+  // 휴대폰 사진을 긴 변 1400px JPEG로 줄임 (약 200KB)
+  function shrink(file) {
+    return new Promise((ok, fail) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        ok(c.toDataURL("image/jpeg", 0.72));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); fail(new Error("사진을 열 수 없습니다")); };
+      img.src = url;
+    });
+  }
+  async function uploadPhoto(id, data, ocr) {
+    localPhoto[id] = data; render();
+    try {
+      const d = await hubPost({ action: "photo", store: STORE, id, data, ocr });
+      if (!d.photo) throw new Error("사진 저장 응답 없음");
+      photos[id] = d.photo; savePhotos();
+      return d;
+    } finally { delete localPhoto[id]; render(); }
+  }
+  function dropPhoto(id) {
+    if (!photos[id]) return;
+    delete photos[id]; savePhotos();
+    hubPost({ action: "unphoto", store: STORE, id }).catch(() => {});
+  }
+  function discardFormPhoto() { if (formPhotoNew && !items.some((x) => x.id === formPhotoNew)) dropPhoto(formPhotoNew); formPhotoNew = ""; }
+
+  // 입력칸의 사진 상자
+  function showOcr(o) {
+    $("ocrBtn").hidden = !!o || !photoReady; $("ocrRes").hidden = !o;
+    if (!o) { $("ocrCh").innerHTML = ""; return; }
+    $("ocrImg").src = o.img || "";
+    $("ocrT").textContent = o.title || ""; $("ocrT").classList.toggle("err", !!o.err);
+    $("ocrS").textContent = o.sub || ""; $("ocrE").textContent = o.note || "";
+    $("ocrCh").innerHTML = (o.choices || []).map((c, i) => `<button type="button" data-i="${i}">${fmt(c.iso)}<small>${c.tag}</small></button>`).join("");
+    $("ocrCh").onclick = (e) => {
+      const b = e.target.closest("button[data-i]"); if (!b) return;
+      const c = o.choices[+b.dataset.i];
+      $(o.role === "mfg" ? "fMfg" : "fExpiry").value = c.iso;
+      $("ocrCh").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      updatePreview();
+    };
+  }
+  const roleText = (r) => r.mode === "period"
+    ? [r.mfg && `제조일자 ${fmt(r.mfg)}`, r.num && `제조일로부터 ${r.num}${UNIT[r.unit]}`].filter(Boolean).join(" · ")
+    : r.expiry ? `유통기한 ${fmt(r.expiry)}` : "";
+  async function takeFormPhoto(file) {
+    if (!file) return;
+    const id = editId || formNew;
+    let data;
+    try { data = await shrink(file); } catch (e) { showOcr({ title: "사진을 열 수 없습니다", err: true }); return; }
+    showOcr({ img: data, title: "사진에서 날짜를 읽는 중…", note: "몇 초 걸려요" });
+    let d;
+    try { d = await uploadPhoto(id, data, true); }
+    catch { showOcr({ img: data, title: "사진을 올리지 못했습니다", err: true, note: "인터넷 확인 후 다시 찍어 주세요" }); return; }
+    if (!editId) formPhotoNew = id;
+    const r = parseLabel(d.text);
+    if (d.ocrError) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자 읽기는 아직 준비 중이라 날짜는 직접 입력해 주세요" }); return; }
+    if (r.mode) { setMode(r.mode); modeTouched = true; }
+    if (r.mode === "period") {
+      if (r.mfg) $("fMfg").value = r.mfg;
+      if (r.num) { $("fNum").value = r.num; $("fUnit").value = r.unit; numTouched = true; }
+      else catApply(true);
+    } else if (r.expiry) $("fExpiry").value = r.expiry;
+    updatePreview();
+    if (!r.found) { showOcr({ img: data, title: "날짜를 찾지 못했어요", err: true, note: "사진은 저장했어요. 날짜는 직접 입력해 주세요" }); return; }
+    showOcr({
+      img: data, title: "사진에서 읽었어요", sub: roleText(r) || (r.role === "mfg" ? "제조일자를 골라 주세요" : "유통기한을 골라 주세요"),
+      note: r.choices.length ? "날짜 순서가 나라마다 달라요. 라벨과 맞는 날짜를 눌러 주세요" : (r.mode === "period" ? "제조일+기간으로 채웠어요. " : "") + "맞는지 보고 [" + $("submit").textContent + "]",
+      choices: r.choices, role: r.role,
+    });
+  }
+  $("ocrBtn").onclick = () => $("ocrFile").click();
+  $("ocrAgain").onclick = () => $("ocrFile").click();
+  $("ocrFile").onchange = () => { const f = $("ocrFile").files[0]; $("ocrFile").value = ""; takeFormPhoto(f); };
+
+  // 사진 크게 보기
+  let pvId = "";
+  function openViewer(id) {
+    const it = items.find((x) => x.id === id); if (!it) return;
+    pvId = id;
+    $("pvName").textContent = it.name;
+    $("pvMeta").textContent = isPack(it) ? `포장일자 ${fmt(it.mfg)}` : `유통기한 ${fmt(expiryOf(it))}`;
+    $("pvImg").src = photoSrc(id, 1600);
+    $("pvMsg").textContent = ""; $("pvDel").textContent = "사진 삭제"; $("pvDel").classList.remove("warn");
+    $("pv").hidden = false; document.body.style.overflow = "hidden";
+  }
+  const closeViewer = () => { $("pv").hidden = true; document.body.style.overflow = ""; pvId = ""; };
+  $("pvClose").onclick = closeViewer;
+  $("pvRetake").onclick = () => $("pvFile").click();
+  $("pvFile").onchange = async () => {
+    const f = $("pvFile").files[0]; $("pvFile").value = ""; if (!f || !pvId) return;
+    const id = pvId;
+    try {
+      const data = await shrink(f); $("pvImg").src = data; $("pvMsg").textContent = "올리는 중…";
+      await uploadPhoto(id, data, false);
+      if (pvId === id) $("pvMsg").textContent = "새 사진으로 바꿨어요";
+    } catch { if (pvId === id) $("pvMsg").textContent = "사진을 올리지 못했습니다. 인터넷을 확인하세요"; }
+  };
+  $("pvDel").onclick = () => {
+    if (!$("pvDel").classList.contains("warn")) { $("pvDel").classList.add("warn"); $("pvDel").textContent = "정말 삭제"; return; }
+    dropPhoto(pvId); render(); closeViewer();
+  };
+
+  // ---- 다른 매장 설정 참고: 같은 이름 품목의 '제조일로부터 N' ----
+  const ckey = (s) => String(s || "").toLowerCase().replace(/[\s()\[\]·.,_\-\/]/g, "");
+  let catalog = null;
+  async function loadCatalog() {
+    const CK = "label-list-catalog";
+    try { const c = JSON.parse(localStorage.getItem(CK)); if (c && Date.now() - c.at < 6 * 3600e3) { catalog = c.map; return; } } catch {}
+    const map = {};
+    const addStore = (list) => {
+      const seen = {};
+      (Array.isArray(list) ? list : []).forEach((x) => {
+        if (x.mode !== "period" || !(x.num > 0) || !x.name) return;
+        const k = ckey(x.name), combo = x.num + x.unit;
+        if (seen[k + combo]) return; seen[k + combo] = 1;
+        (map[k] = map[k] || { name: x.name, combos: {} }).combos[combo] = (map[k].combos[combo] || 0) + 1;
+      });
+    };
+    const jobs = [fetch(HUB + "?api=1&catalog=1&t=" + Date.now()).then((r) => r.json()).then((d) => {
+      if (!d || Array.isArray(d) || d.error) return;
+      Object.entries(d).forEach(([k, v]) => { const m = (map[k] = map[k] || { name: v.name, combos: {} }); Object.entries(v.combos || {}).forEach(([c, n]) => { m.combos[c] = (m.combos[c] || 0) + n; }); });
+    })];
+    Object.entries(STORES).filter(([, v]) => v.api && v.api !== HUB).forEach(([k, v]) => jobs.push(
+      fetch(v.api + "?api=1&store=" + k + "&t=" + Date.now()).then((r) => r.json()).then(addStore)));
+    await Promise.allSettled(jobs);
+    catalog = map;
+    try { localStorage.setItem(CK, JSON.stringify({ at: Date.now(), map })); } catch {}
+    catHint();
+  }
+  function catFind() {
+    const k = ckey($("fName").value);
+    const e = k && catalog && catalog[k];
+    if (!e) return null;
+    const [combo, n] = Object.entries(e.combos).sort((a, b) => b[1] - a[1])[0];
+    const m = combo.match(/^(\d+)([ymd])$/);
+    return m ? { num: +m[1], unit: m[2], n } : null;
+  }
+  // 날짜 방식을 아직 고르지 않았으면 '제조일+기간'으로 바꾸고 기간을 채움
+  function catApply(force) {
+    const c = catFind(); if (!c || editId) return null;
+    if (!force && modeTouched) return c;
+    if (!modeTouched) setMode("period");
+    if (!numTouched) { $("fNum").value = c.num; $("fUnit").value = c.unit; }
+    updatePreview();
+    return c;
+  }
+  function catHint() {
+    const c = catApply(false);
+    $("catHint").hidden = !c;
+    if (c) $("catHint").innerHTML = `<span class="cat">다른 매장 ${c.n}곳: 제조일로부터 ${c.num}${UNIT[c.unit]}</span>`;
   }
 
   // ---- form ----
@@ -593,13 +906,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   function resetForm() {
     editId = null;
+    formNew = newId(); modeTouched = false; numTouched = false;
+    showOcr(null);
+    $("catHint").hidden = true;
     $("form").reset();
     $("fNum").value = 3;
     $("submit").textContent = "추가";
     $("formTitle").textContent = "품목 추가";
     $("nameHint").hidden = true;
     $("cancel").hidden = true;
-    setMode(mode);
+    setMode(userMode);
   }
   function startEdit(it) {
     editId = it.id;
@@ -608,6 +924,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     else if (isPack(it)) $("fPack").value = it.mfg;
     else $("fExpiry").value = it.expiry;
     setMode(it.mode);
+    modeTouched = true; numTouched = true;
+    showOcr(photos[it.id] || localPhoto[it.id] ? { img: photoSrc(it.id, 200), title: "등록된 사진", sub: "", note: "다시 찍으면 날짜를 다시 읽어요" } : null);
     $("submit").textContent = "수정 저장";
     $("formTitle").textContent = "품목 수정";
     $("cancel").hidden = false;
@@ -616,14 +934,18 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("fName").focus({ preventScroll: true });
   }
 
-  $("mDate").onclick = () => setMode("date");
-  $("mPeriod").onclick = () => setMode("period");
-  $("mPack").onclick = () => setMode("pack");
+  // 사람이 직접 고른 방식만 다음 품목에도 이어서 씀 (사진·다른 매장 설정으로 바뀐 건 그 품목만)
+  let userMode = "date";
+  $("mDate").onclick = () => { modeTouched = true; userMode = "date"; setMode("date"); };
+  $("mPeriod").onclick = () => { modeTouched = true; userMode = "period"; setMode("period"); };
+  $("mPack").onclick = () => { modeTouched = true; userMode = "pack"; setMode("pack"); };
+  $("fNum").addEventListener("input", () => { numTouched = true; });
+  $("fUnit").addEventListener("change", () => { numTouched = true; });
 
   // ---- 입력칸 접기: 평소엔 목록 위주, [+ 품목 추가]를 눌러야 펼침 ----
   function openForm(open) { $("form").hidden = !open; $("addOpen").hidden = open; }
   $("addOpen").onclick = () => { openForm(true); $("fName").focus(); };
-  $("formClose").onclick = () => { resetForm(); openForm(false); };
+  $("formClose").onclick = () => { discardFormPhoto(); resetForm(); openForm(false); };
 
   // ---- 품목명 자동완성 + 중복 경고 ----
   const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
@@ -637,13 +959,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("nameHint").hidden = false;
   }
   $("fName").addEventListener("input", nameHint);
+  $("fName").addEventListener("input", () => { clearTimeout(catTimer); catTimer = setTimeout(catHint, 250); });
+  $("fName").addEventListener("focus", loadCatalog, { once: true });
   $("form").addEventListener("input", updatePreview);
-  $("cancel").onclick = resetForm;
+  $("cancel").onclick = () => { discardFormPhoto(); resetForm(); };
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const it = readForm();
     if (!it || !it.name) { updatePreview(); if (!it?.name) $("fName").focus(); return; }
-    it.id = editId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+    it.id = editId || formNew;
+    formPhotoNew = ""; // 저장하니 사진도 이 품목 것으로 확정
     it.updatedAt = Date.now();
     const wasEdit = !!editId;
     resetForm(); $("fName").focus();
@@ -689,7 +1014,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         ? `<button class="confirm" data-act="del" data-id="${it.id}">삭제 확인</button><button data-act="keep">취소</button>`
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
       return `<li><div class="dday pack">포장</div>
-        <div class="info"><div class="txt"><div class="name">${esc(it.name)}</div>
+        <div class="info">${thumbHtml(it.id)}<div class="txt"><div class="name">${esc(it.name)}</div>
           <div class="meta"><span>포장일자 <span class="date">${fmt(it.mfg)}</span></span>${memo}</div></div></div>
         <div class="ops">${del}</div></li>`;
     }).join("");
@@ -707,7 +1032,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
       return `<li class="${n < 0 ? "expired" : ""}">
         <div class="dday ${s}">${ddayText(n)}</div>
-        <div class="info"><div class="txt"><div class="name">${esc(it.name)}</div>
+        <div class="info">${thumbHtml(it.id)}<div class="txt"><div class="name">${esc(it.name)}</div>
           <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${basis}${memo}</div></div></div>
         <div class="ops">${del}</div></li>`;
     }).join("");
@@ -715,7 +1040,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const onListClick = async (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const id = b.dataset.id, act = b.dataset.act;
-    if (act === "edit") startEdit(items.find((x) => x.id === id));
+    if (act === "photo") openViewer(id);
+    else if (act === "edit") startEdit(items.find((x) => x.id === id));
     else if (act === "ask") { pendingDelete = id; render(); }
     else if (act === "keep") { pendingDelete = null; render(); }
     else if (act === "del") { pendingDelete = null; if (editId === id) resetForm(); try { await remove(id); } catch { refresh(); } }
@@ -863,6 +1189,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     openPicker(false);
     return;
   }
+  fetchPhotos(); setInterval(fetchPhotos, 30000);
   showOnline(1); // 나 자신 포함, 합계가 오기 전에도 바로 표시
   refresh(); pingAll();
   setInterval(refresh, 5000);

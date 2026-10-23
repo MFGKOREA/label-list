@@ -19,6 +19,8 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.api) {
     try {
       if (e.parameter.stats) return json_({ counts: stats_(), online: where_() }); // 매장 선택 화면: 매장별 품목 수·접속 중
+      if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
+      if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
       const store = store_(e.parameter.store);
       // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
       // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
@@ -48,6 +50,8 @@ function doPost(e) {
     if (body.action === 'save') return json_(saveItem(clean_(body.item), store));
     if (body.action === 'delete') return json_(deleteItem(String(body.id).slice(0, 40), store));
     if (body.action === 'clear') return json_(clearItems(store));
+    if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr));
+    if (body.action === 'unphoto') return json_(unPhoto_(store, String(body.id || '').slice(0, 40)));
     return json_(listItems(store));
   } catch (err) {
     return json_({ error: String(err) });
@@ -218,3 +222,127 @@ function stats_() {
   cache.put('stats', JSON.stringify(counts), 60);
   return counts;
 }
+
+// ---- 라벨 사진 (매장모음 프로젝트에서만 씀) ----
+// 사진은 내 드라이브 "한글표시사항 사진" 폴더에, 품목과의 연결은 "사진" 탭에 저장합니다.
+// 글자 읽기는 왼쪽 [서비스 +] → Drive API 를 추가해야 동작합니다.
+const PHOTO_FOLDER = '한글표시사항 사진';
+const PHOTO_SHEET = '사진';
+
+// 처음 한 번 편집기에서 실행해 드라이브·문서 사용을 허락합니다.
+function setup() {
+  photoFolder_();
+  photoSheet_();
+  Logger.log('사진 폴더 준비 완료 / 글자 읽기: ' + (typeof Drive === 'undefined' ? 'Drive API 서비스를 추가하세요' : '사용 가능'));
+}
+
+function photoFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('PHOTO_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (err) {} }
+  const folder = DriveApp.createFolder(PHOTO_FOLDER);
+  props.setProperty('PHOTO_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+function photoSheet_() {
+  const ss = spreadsheet_();
+  let sh = ss.getSheetByName(PHOTO_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(PHOTO_SHEET);
+    sh.getRange('A:D').setNumberFormat('@');
+    sh.appendRow(['store', 'id', 'file', 'at']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// 매장의 사진 목록 { 품목 id: 파일 id }
+function photos_(store) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('ph_' + store);
+  if (hit) return JSON.parse(hit);
+  const out = {};
+  const sh = photoSheet_();
+  const last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, 3).getValues().forEach((r) => { if (r[0] === store && r[1] && r[2]) out[r[1]] = String(r[2]); });
+  cache.put('ph_' + store, JSON.stringify(out), 21600);
+  return out;
+}
+
+function setPhoto_(store, id, file) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let old = '';
+  try {
+    const sh = photoSheet_();
+    const last = sh.getLastRow();
+    const rows = last > 1 ? sh.getRange(2, 1, last - 1, 3).getValues() : [];
+    const at = rows.findIndex((r) => r[0] === store && r[1] === id);
+    if (at >= 0) {
+      old = String(rows[at][2]);
+      if (file) sh.getRange(at + 2, 3, 1, 2).setValues([[file, String(Date.now())]]);
+      else sh.deleteRow(at + 2);
+    } else if (file) sh.appendRow([store, id, file, String(Date.now())]);
+    CacheService.getScriptCache().remove('ph_' + store);
+  } finally {
+    lock.releaseLock();
+  }
+  if (old && old !== file) { try { DriveApp.getFileById(old).setTrashed(true); } catch (err) {} }
+}
+
+function savePhoto_(store, id, data, ocr) {
+  if (!id) throw new Error('id 없음');
+  const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
+  if (!m) throw new Error('사진 형식이 올바르지 않습니다');
+  const bytes = Utilities.base64Decode(m[2]);
+  if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
+  const blob = Utilities.newBlob(bytes, 'image/' + m[1], store + '_' + id + '.jpg');
+  let text = '', ocrError = '';
+  if (ocr) { try { text = ocr_(blob); } catch (err) { ocrError = String(err); } }
+  const file = photoFolder_().createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  setPhoto_(store, id, file.getId());
+  return { photo: file.getId(), text: text, ocrError: ocrError };
+}
+
+function unPhoto_(store, id) {
+  if (id) setPhoto_(store, id, '');
+  return { ok: true };
+}
+
+// 사진 → 구글 문서로 변환하면서 글자 읽기(한국어), 읽은 뒤 임시 문서는 휴지통으로
+function ocr_(blob) {
+  if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
+  let fileId;
+  if (Drive.Files.create) fileId = Drive.Files.create({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocrLanguage: 'ko' }).id;
+  else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ko' }).id;
+  try { return DocumentApp.openById(fileId).getBody().getText(); }
+  finally { try { DriveApp.getFileById(fileId).setTrashed(true); } catch (err) {} }
+}
+
+// 매장들이 '제조일로부터 N' 으로 등록한 품목: { 이름키: { name, combos: { '24m': 매장 수 } } }
+function catalog_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('catalog');
+  if (hit) return JSON.parse(hit);
+  const out = {};
+  spreadsheet_().getSheets().forEach((sh) => {
+    const name = sh.getName();
+    if (name !== SHEET_NAME && name.indexOf(SHEET_NAME + '_') !== 0) return;
+    const seen = {};
+    sh.getDataRange().getValues().slice(1).forEach((r) => {
+      if (r[3] !== 'period' || !(Number(r[6]) > 0) || !r[1]) return;
+      const key = String(r[1]).toLowerCase().replace(/[\s()\[\]·.,_\-\/]/g, '');
+      const combo = Number(r[6]) + String(r[7]);
+      if (seen[key + combo]) return;
+      seen[key + combo] = 1;
+      out[key] = out[key] || { name: String(r[1]), combos: {} };
+      out[key].combos[combo] = (out[key].combos[combo] || 0) + 1;
+    });
+  });
+  const json = JSON.stringify(out);
+  if (json.length < 90000) cache.put('catalog', json, 600);
+  return out;
+}
+
