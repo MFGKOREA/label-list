@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIS 발주 버튼</title>
+<style>
+  :root { --bg: #f4f4f4; --fg: #222; --muted: #707070; --card: #fff; --line: #ebebeb; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+  .card { background: var(--card); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+  .bm { display: inline-block; background: #222; color: #fff; text-decoration: none; font-weight: 800; font-size: 16px; padding: 12px 18px; border-radius: 12px; cursor: grab; }
+  ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.7; font-size: 15px; }
+  b.k { background: var(--bg); border-radius: 6px; padding: 1px 6px; font-weight: 700; }
+  small { color: var(--muted); }
+  textarea { width: 100%; box-sizing: border-box; height: 70px; font-size: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MIS 발주 버튼</h1>
+  <p class="sub">발주앱에 넣은 오늘 발주수량을 MIS 주문등록 화면에 채워 줍니다. 저장은 직접 누르세요.</p>
+
+  <div class="card">
+    <b>1. 버튼 설치 (PC 크롬, 처음 한 번)</b>
+    <ol>
+      <li><b class="k">Ctrl + Shift + B</b>로 즐겨찾기 막대를 켭니다.</li>
+      <li>아래 검은 버튼을 마우스로 <b>끌어서</b> 즐겨찾기 막대에 놓습니다.</li>
+    </ol>
+    <p style="margin:14px 0 4px"><a class="bm" id="bm" href="#">앱 발주 넣기</a></p>
+    <small>끌어 놓기가 안 되면: 즐겨찾기 막대 우클릭 → 페이지 추가 → 이름 "앱 발주 넣기", URL에 아래 글을 통째로 붙여넣기</small>
+    <textarea id="bmText" readonly onclick="this.select()"></textarea>
+  </div>
+
+  <div class="card">
+    <b>2. 쓰는 법</b>
+    <ol>
+      <li>발주앱에서 오늘 발주수량을 넣습니다.</li>
+      <li>MIS → 주문등록 → 주문그룹(온세물류 등)을 엽니다.</li>
+      <li>즐겨찾기 막대의 <b>앱 발주 넣기</b>를 누릅니다 → 넣을 목록 확인 → 확인.</li>
+      <li>노란 줄을 확인하고 MIS <b>[저장]</b>을 누릅니다.</li>
+      <li>"이 화면에 없는 품목"이 나오면 다른 주문그룹(새싹농산 등)을 열고 버튼을 다시 누릅니다.</li>
+    </ol>
+  </div>
+  <small>앱 발주는 구글 시트에서 읽기만 합니다. MIS에는 주문수량 칸만 채우고, 저장·전송은 하지 않습니다.</small>
+</div>
+<script>
+  const code = "javascript:(()=>{const s=document.createElement('script');s.charset='utf-8';s.src='https://mfgkorea.github.io/label-list/mis.js?t='+Date.now();document.body.appendChild(s)})()";
+  document.getElementById("bm").href = code;
+  document.getElementById("bmText").value = code;
+  document.getElementById("bm").addEventListener("click", (e) => { e.preventDefault(); alert("이 버튼은 클릭이 아니라 즐겨찾기 막대로 끌어서 놓아 주세요."); });
+</script>
+</body>
+</html>
