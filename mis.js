@@ -107,7 +107,8 @@
     loud(); W.__appFillRunning = false;
   }
 
-  const warn = [...new Set(notes.filter((m) => /최근 15일|확인하세요|없습니다|아닙니다|실패|오류/.test(m)))];
+  // "최근 15일동안 주문한 수량보다 많습니다"는 무시 (KM 요청). 저장 실패·시간·품목 확인 같은 안내만 보여줌
+  const warn = [...new Set(notes.filter((m) => !/최근 15일/.test(m) && /확인하세요|없습니다|아닙니다|실패|오류/.test(m)))];
   W.alert(
     (bad.length ? "⚠ 확인 필요\n" + bad.join("\n") + "\n\n" : "✓ 모두 저장됐어요\n\n") +
     report.join("\n") +
