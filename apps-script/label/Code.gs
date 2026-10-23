@@ -18,6 +18,7 @@ function store_(s) {
 function doGet(e) {
   if (e && e.parameter && e.parameter.api) {
     try {
+      if (e.parameter.stats) return json_({ counts: stats_() }); // 매장 선택 화면: 매장별 품목 수
       const store = store_(e.parameter.store);
       // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
       // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
@@ -180,4 +181,22 @@ function bump_(store) {
 // 같은 순간에 두 번 바뀌어도 겹치지 않게 시각 + 무작위
 function newVer_() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// 매장별 품목 수 (전달사항 줄 제외). 1분 동안은 캐시에서 바로 답함
+function stats_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('stats');
+  if (hit) return JSON.parse(hit);
+  const counts = {};
+  spreadsheet_().getSheets().forEach((sh) => {
+    const name = sh.getName();
+    if (name !== SHEET_NAME && name.indexOf(SHEET_NAME + '_') !== 0) return;
+    const store = name === SHEET_NAME ? DEFAULT_STORE : name.slice(SHEET_NAME.length + 1);
+    const last = sh.getLastRow();
+    counts[store] = last < 2 ? 0 : sh.getRange(2, 1, last - 1, 1).getValues()
+      .filter((r) => r[0] && r[0] !== '__notice__').length;
+  });
+  cache.put('stats', JSON.stringify(counts), 60);
+  return counts;
 }
