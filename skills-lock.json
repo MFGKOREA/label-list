@@ -289,6 +289,12 @@
       "skillPath": "skills/internal-comms/SKILL.md",
       "computedHash": "0bdc8867452b7ab9ef6167f6b0db2025ce5fb03773d3f85efcef2dfeb9d4976d"
     },
+    "karpathy-guidelines": {
+      "source": "forrestchang/andrej-karpathy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/karpathy-guidelines/SKILL.md",
+      "computedHash": "41e8ca055bbde13d240776a14a076a59614057200340c243130a76ba4e64cac8"
+    },
     "loop-me": {
       "source": "mattpocock/skills",
       "sourceType": "github",
