@@ -101,6 +101,14 @@
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
 
+    <div class="sect"><span>발주 설정</span></div>
+    <div class="group">
+      <div class="cell gross">
+        <span class="kv"><span>주말 여유분<small>토·일에 쓸 양을 이만큼 더 잡아요 (안전재고에 더함)</small></span></span>
+        <label class="fld"><span>%</span><input id="wkIn" type="number" inputmode="numeric" min="0" max="200" step="5" aria-label="주말 여유분 퍼센트"></label>
+      </div>
+    </div>
+
     <div class="sect"><span>구글 시트 연결</span></div>
     <div class="group">
       <div class="cell set">
@@ -130,6 +138,8 @@
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
+    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
+    <div class="group" id="rReq" hidden></div>
     <div class="wkpick" hidden>
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
       <select id="rSel" aria-label="주 선택"></select>

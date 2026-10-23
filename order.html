@@ -564,6 +564,12 @@ html, body { overflow-x: hidden; }
 .week.predays button.deliv { background: var(--rose); }
 .week.predays button.deliv b, .week.predays button.deliv span { color: var(--rose-ink); }
 
+/* 데이터 요청 (리포트) */
+.req { display: grid; gap: 8px; }
+.req .kv b { font-weight: 800; }
+.req .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: stretch; }
+.req .fld { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; }
+
 </style>
 </head>
 <body>
@@ -670,6 +676,14 @@ html, body { overflow-x: hidden; }
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
 
+    <div class="sect"><span>발주 설정</span></div>
+    <div class="group">
+      <div class="cell gross">
+        <span class="kv"><span>주말 여유분<small>토·일에 쓸 양을 이만큼 더 잡아요 (안전재고에 더함)</small></span></span>
+        <label class="fld"><span>%</span><input id="wkIn" type="number" inputmode="numeric" min="0" max="200" step="5" aria-label="주말 여유분 퍼센트"></label>
+      </div>
+    </div>
+
     <div class="sect"><span>구글 시트 연결</span></div>
     <div class="group">
       <div class="cell set">
@@ -699,6 +713,8 @@ html, body { overflow-x: hidden; }
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
+    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
+    <div class="group" id="rReq" hidden></div>
     <div class="wkpick" hidden>
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
       <select id="rSel" aria-label="주 선택"></select>
@@ -1721,7 +1737,7 @@ html, body { overflow-x: hidden; }
       it.isNew = it.rateA == null && it.rateB != null;
     });
     const shares = shareCfg.map((c) => ({ ...c, now: shareOf(c.id, null), byMonth: allMonths.filter((m) => shareFit.has(c.id + "|" + m)).map((m) => ({ m, v: shareFit.get(c.id + "|" + m) })) }));
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares };
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf };
     applyScores(cache);
     return cache;
   }
@@ -1756,8 +1772,11 @@ html, body { overflow-x: hidden; }
     const g = sumGross(today, end, false), nEff = effDays(today, end);
     const covered = [];
     for (let d = deliv; d < nextDeliv; d = addDays(d, 1)) covered.push(DOW[dow(d)]);
-    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered };
+    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered, wkGross: wkGross(deliv, end) };
   }
+  // 주말 여유분: 입고 뒤 토·일 매출(이 발주가 맡는 주말)에 KM이 정한 비율만큼 사용량을 더 잡음 (settings.weekendPlus, 기본 25%)
+  const wkGross = (from, toExcl) => { let s = 0; for (let d = from; d < toExcl; d = addDays(d, 1)) if (dow(d) === 0 || dow(d) === 6) s += dayGross(d, false).v; return s; };
+  const weekendPlus = () => { const v = num((db.settings || {}).weekendPlus); return isFinite(v) ? Math.max(0, v) / 100 : 0.25; };
   // 매출이 며칠에 몰려 있는지 반영한 "실제 일수": (합)² ÷ 제곱합. 목~일(300·900·1700·1400만)이면 4일이 아니라 3.2일
   //  주말 하루하루 오차가 크니 안전재고가 덜 깎이게
   function effDays(from, toExcl) {
@@ -1775,7 +1794,7 @@ html, body { overflow-x: hidden; }
     const w = orderWindowBase(it, today), t = it.thaw || 0;
     if (!t) return w;
     const end = addDays(w.end, t), g = sumGross(today, end, false);
-    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end) };
+    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(w.deliv, end) };
   }
   function orderWindowBase(it, today) {
     const c = vcfg(it);
@@ -1785,7 +1804,7 @@ html, body { overflow-x: hidden; }
     const deliv = deliveryOf(it, o1), nextDeliv = deliveryOf(it, o2);
     const days = Math.round((parseISO(nextDeliv) - parseISO(today)) / 864e5);
     const g = sumGross(today, nextDeliv, false);
-    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today };
+    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today, wkGross: wkGross(deliv, nextDeliv) };
   }
 
   // ---------- C: 최종 발주량 ----------
@@ -1815,6 +1834,8 @@ html, body { overflow-x: hidden; }
     const ba = batchAdj(it, win), useAvg = use;
     if (ba) use = Math.max(0, use + ba.delta);
     let ss = Z * Math.sqrt((Math.sqrt(sigma * sigma + fcErr() ** 2) * useAvg / Math.sqrt(nd)) ** 2 + (ba ? ba.varS : 0));
+    const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * (win.wkGross / win.gross) : 0;
+    ss += wkPlus;
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
     const short = need - s - inc;
@@ -1828,7 +1849,7 @@ html, body { overflow-x: hidden; }
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
     // ± 범위(카드·리포트·86 위험)는 평균 사용량 기준 예측 오차만. 프랩 배치가 이번 기간에 드는지 아닌지는 오차가 아니라 덩어리라 여유분(ss)에만 넣음
     const sd = useAvg * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd);
-    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba };
+    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus };
   }
 
   // ---------- 프랩 배치 계획 ----------
@@ -2076,7 +2097,7 @@ html, body { overflow-x: hidden; }
     else if (dow(od) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
@@ -2691,6 +2712,7 @@ html, body { overflow-x: hidden; }
     $("connState").className = "conn" + (API && online ? "" : " off");
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API; renderBackups();
+    if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
     // 품목 목록
     const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
@@ -2813,6 +2835,10 @@ html, body { overflow-x: hidden; }
       sel.innerHTML = list.length ? list.map((d) => `<option value="${d}">${mmdd(d)} ${DOW[dow(d)]} 시작 상태</option>`).join("") : `<option value="">아직 백업 없음 (내일부터)</option>`;
     } catch { sel.innerHTML = `<option value="">불러오지 못했어요</option>`; }
   }
+  $("wkIn").addEventListener("change", () => {
+    const v = num($("wkIn").value); if (!isFinite(v) || v < 0 || v > 200) { toast("0~200 사이로 넣어 주세요"); return; }
+    setKey("settings", { ...(db.settings || {}), weekendPlus: v }); invalidate(); toast(`주말 여유분 ${v}%로 바꿨어요`);
+  });
   $("bkGo").onclick = async () => {
     const d = $("bkSel").value; if (!d) return;
     if (!confirm(`${mmdd(d)} ${DOW[dow(d)]}요일 시작 상태로 되돌릴까요?\n그 뒤에 입력한 재고·발주·설정이 모두 사라져요. (지금 상태는 시트의 "kv_되돌리기전" 탭에 남아요)`)) return;
@@ -2968,9 +2994,57 @@ html, body { overflow-x: hidden; }
       (log.length > 5 ? `<button type="button" class="pn-more" id="pnMore">${logMore ? "접기" : `지난 기록 ${log.length - 5}개 더 보기`}</button>` : "");
     const pm = $("pnMore"); if (pm) pm.onclick = () => { logMore = !logMore; renderLog(); };
   }
+  // 데이터 요청: 계산에 모르는 값이 들어간 곳을 찾아 KM에게 물어봄 (답하면 itemCfg·prepCfg에 저장되고 사라짐, "모름"은 다시 안 물음)
+  //  ① TB·tsp·cup·스쿱으로 쓰는데 1TB 무게를 모르는 재료(지금은 물처럼 15g) ② g으로 쓰는데 1단위 용량을 모르는 품목
+  function dataRequests(M) {
+    const ic = db.itemCfg || {}, pc = db.prepCfg || {}, skip = (db.settings || {}).reqSkip || {}, out = new Map();
+    const add = (id, o) => { if (skip[id]) return; const x = out.get(id) || { ...o, n: 0, ex: [] }; x.n++; if (x.ex.length < 2 && o.line && !x.ex.includes(o.line)) x.ex.push(o.line); out.set(id, x); };
+    [...M.line, ...M.prep].forEach((rc) => rc.ing.forEach((ing) => {
+      const t = M.resolveIng(ing.n); if (!t || t.skip) return;
+      const q = parseQty(ing.w, ing.v); if (!q) return;
+      const it = t.kind === "item" ? M.items.find((i) => i.key === t.id) : null;
+      const line = rc.name.replace(/\s*\(.*?\)\s*$/, "");
+      if (q.vol) {
+        const cfg = (t.kind === "item" ? ic[t.id] : pc[t.id]) || {};
+        if (cfg.tbG || M.pairTbG().get(t.kind + ":" + t.id)) return;
+        if (it && it.pk.ml && !it.pk.g) return; // 액체(ml 단위 품목)는 그대로 환산
+        if (t.kind === "prep") { const p = M.prep.find((x) => x.name === t.id); if (p && /\b(ml|l)\b/i.test(String(p.yield || ""))) return; }
+        add("tb:" + t.kind + ":" + t.id, { kind: "tb", target: t.kind, ref: t.id, label: t.kind === "prep" ? ing.n.replace(/\s*\(.*?\)\s*/g, "") : it ? it.name : t.id, line });
+      } else if (it && (q.g || q.ml) && !it.pk.g && !it.pk.ml) {
+        add("pk:" + it.key, { kind: "pk", target: "item", ref: it.key, label: it.name, unit: it.pk.stock || "EA", line });
+      }
+    }));
+    return [...out.entries()].map(([id, x]) => ({ id, ...x })).sort((a, b) => b.n - a.n);
+  }
+  function renderReq(M) {
+    const all = dataRequests(M), list = all.slice(0, 3);
+    $("rReqH").hidden = $("rReq").hidden = !all.length;
+    $("rReqN").textContent = all.length > 3 ? `${all.length}개 중 3개` : `${all.length}개`;
+    $("rReq").innerHTML = list.map((r) => {
+      const q = r.kind === "tb" ? `${esc(r.label)} <b>1TB</b> 무게` : `${esc(r.label)} <b>1${esc(r.unit)}</b> 용량`;
+      const why = r.kind === "tb" ? `레시피 ${r.n}줄 · 지금은 물처럼 15g으로 계산` : `레시피 ${r.n}줄 · 지금은 계산에서 빠짐`;
+      return `<div class="cell req" data-id="${esc(r.id)}"><span class="kv"><span>${q}<small>${why}${r.ex.length ? ` · ${esc(r.ex.join(", "))}` : ""}</small></span></span>` +
+        `<div class="row"><label class="fld"><span>g</span><input type="number" inputmode="decimal" step="any" min="0" placeholder="0"></label><button type="button" class="btn" data-act="save">저장</button><button type="button" class="btn ghost" data-act="skip">모름</button></div></div>`;
+    }).join("");
+    $("rReq")._reqs = list;
+  }
+  $("rReq").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-act]"); if (!b) return;
+    const cell = b.closest(".req"), r = ($("rReq")._reqs || []).find((x) => x.id === cell.dataset.id); if (!r) return;
+    if (b.dataset.act === "skip") {
+      const st = { ...(db.settings || {}) }; st.reqSkip = { ...(st.reqSkip || {}), [r.id]: 1 }; setKey("settings", st);
+    } else {
+      const v = num(cell.querySelector("input").value); if (!(v > 0)) { toast("무게(g)를 넣어 주세요"); return; }
+      const key = r.target === "prep" ? "prepCfg" : "itemCfg", cfg = { ...(db[key] || {}) };
+      cfg[r.ref] = { ...(cfg[r.ref] || {}), [r.kind === "tb" ? "tbG" : "g"]: v };
+      if (cfg[r.ref].tbGEst) delete cfg[r.ref].tbGEst;
+      setKey(key, cfg); toast(`${r.label} 저장했어요`);
+    }
+    invalidate(); renderReport();
+  });
   function renderReport() {
     const M = model();
-    renderXp(M);
+    renderXp(M); renderReq(M);
     // 한 주(월~일) 단위로 채점: 재고 입력 사이 사용량이 끝난 날의 주 (수불현황은 한 달 단위라 주 채점에서는 뺌)
     const byWeek = new Map();
     M.scores.forEach((s) => { if (s.src === "ledger") return; const w = mondayOf(s.end); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
@@ -3066,7 +3140,7 @@ html, body { overflow-x: hidden; }
       if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
     } finally { polling = false; }
   }, 10000);
-  window.__orderCalc = { model, orderWindow, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY };
+  window.__orderCalc = { model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY };
 })();
 
 </script>
