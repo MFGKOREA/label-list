@@ -1587,7 +1587,7 @@
     const p = r.sd > 0 ? 1 - phi((have - r.use) / r.sd) : have < r.use ? 1 : 0;
     if (p < SHOW_P) return null;
     // 언제 바닥나는지: 날마다 매출 비율로 사용량을 나누고(입고는 그날 아침에 더함), 그날 안에서는 영업시간에 비례해 시각으로 (런치 = 15시 전)
-    let stock = stockOf(it, v), when = `${DOW[dow(until)]} 입고 전`;
+    let stock = stockOf(it, v), when = `${DOW[dow(until)]} 입고 전`, at = days + 1; // at: 오늘부터 바닥날 때까지 (일 단위, 정렬용)
     for (let d = TODAY; d < until && gross > 0; d = addDays(d, 1)) {
       arrs.forEach((a) => { if (a.d === d) stock += a.q; });
       const first = d === TODAY, gd = (first ? left : 1) * dayGross(d, false).v, ud = r.use * gd / gross;
@@ -1595,14 +1595,14 @@
       if (stock - ud < 0) {
         // 그날 매출 누적 비율로 시각을 구함 (오늘 센 뒤라면 센 시각부터 남은 매출 중 비율)
         const c0 = first && left < 1 ? hourCum(d, hh) : 0, hr = Math.min(CLOSE_H, Math.max(OPEN_H, hourAt(d, c0 + Math.max(0, stock) / ud * (1 - c0))));
-        const hrR = Math.round(hr); when = `${first ? "오늘" : DOW[dow(d)]} ${hrR < 15 ? "런치" : "디너"} ${String(hrR).padStart(2, "0")}:00`; break;
+        const hrR = Math.round(hr); at = Math.round((parseISO(d) - parseISO(TODAY)) / 864e5) + hr / 24; when = `${first ? "오늘" : DOW[dow(d)]} ${hrR < 15 ? "런치" : "디너"} ${String(hrR).padStart(2, "0")}:00`; break;
       }
       stock -= ud;
     }
-    return { it, have, use: r.use, out: until, p, when };
+    return { it, have, use: r.use, out: until, p, when, at };
   }
   function risk86(M, inp) {
-    return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => b.p - a.p);
+    return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
   }
   function renderList() {
     preMemo = new Map();
