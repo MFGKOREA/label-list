@@ -68,7 +68,11 @@ body {
 .picker #pickCancel { justify-self: center; margin-top: 6px; }
 .top-right { display: grid; justify-items: stretch; gap: 6px; flex: none; margin-left: auto; }
 .online { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ok); line-height: 1; }
-.online i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.online i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+/* 접속중 점: 숨 쉬듯 퍼지는 고리 (transform·opacity만, CSS라 화면이 바빠도 부드럽게) */
+.online i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--ok); animation: breathe 2.4s cubic-bezier(0.23, 1, 0.32, 1) infinite; }
+@keyframes breathe { 0% { transform: scale(1); opacity: .45; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .online i::after { animation: none; opacity: 0; } }
 .online b { font-weight: 800; }
 .howto-open { width: 100%; text-align: center; font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 .popup .seg { margin: 0; }
@@ -613,11 +617,32 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     catch (e) { listVer = ""; throw e; }
     finally { pending--; }
   }
+  // ---- 움직임: 추가된 줄은 살짝 내려앉으며 연두빛, 지운 줄은 접히며 사라짐 ----
+  const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
+  const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const rowEl = (id) => document.querySelector(`li[data-row="${CSS.escape(id)}"]`);
+  function animateIn(id) {
+    const li = rowEl(id); if (!li || !li.animate) return;
+    if (!reduceMotion()) li.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }], { duration: 240, easing: EASE_OUT });
+    li.animate([{ backgroundColor: "#e6f1ec" }, { backgroundColor: "#e6f1ec", offset: 0.35 }, { backgroundColor: "rgb(230 241 236 / 0)" }], { duration: 1100, easing: "ease" });
+  }
+  function animateOut(id) {
+    const li = rowEl(id);
+    if (!li || !li.animate) return Promise.resolve();
+    const frames = reduceMotion()
+      ? [{ opacity: 1 }, { opacity: 0 }]
+      : [{ opacity: 1, height: li.offsetHeight + "px", paddingTop: getComputedStyle(li).paddingTop, paddingBottom: getComputedStyle(li).paddingBottom },
+         { opacity: 0, height: "0px", paddingTop: "0px", paddingBottom: "0px" }];
+    li.style.overflow = "hidden";
+    return li.animate(frames, { duration: 220, easing: EASE_OUT, fill: "forwards" }).finished.catch(() => {});
+  }
   async function save(it) {
     const i = items.findIndex((x) => x.id === it.id); i >= 0 ? items[i] = it : items.push(it); render();
+    if (i < 0) animateIn(it.id);
     await send("saveItem", it);
   }
   async function remove(id) {
+    await animateOut(id);
     items = items.filter((x) => x.id !== id); dropPhoto(id); render();
     await send("deleteItem", id);
   }
@@ -1039,7 +1064,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       const del = pendingDelete === it.id
         ? `<button class="confirm" data-act="del" data-id="${it.id}">삭제 확인</button><button data-act="keep">취소</button>`
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
-      return `<li><div class="dday pack">포장</div>
+      return `<li data-row="${it.id}"><div class="dday pack">포장</div>
         <div class="info">${thumbHtml(it.id)}<div class="txt"><div class="name">${esc(it.name)}</div>
           <div class="meta"><span>포장일자 <span class="date">${fmt(it.mfg)}</span></span>${memo}</div></div></div>
         <div class="ops">${del}</div></li>`;
@@ -1056,7 +1081,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       const del = pendingDelete === it.id
         ? `<button class="confirm" data-act="del" data-id="${it.id}">삭제 확인</button><button data-act="keep">취소</button>`
         : `<button data-act="edit" data-id="${it.id}">수정</button><button data-act="ask" data-id="${it.id}">삭제</button>`;
-      return `<li class="${n < 0 ? "expired" : ""}">
+      return `<li class="${n < 0 ? "expired" : ""}" data-row="${it.id}">
         <div class="dday ${s}">${ddayText(n)}</div>
         <div class="info">${thumbHtml(it.id)}<div class="txt"><div class="name">${esc(it.name)}</div>
           <div class="meta"><span>유통기한 <span class="date">${fmt(exp)}</span></span>${basis}${memo}</div></div></div>
