@@ -1405,7 +1405,7 @@
     else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
     else if (stale) { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
     else st = agOn ? `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}` : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
-    const busy = cls === "run";
+    const busy = p && p.status === "running" && !stale; // 기다리는 중(pending)이어도 다시 누를 수 있게
     el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
       `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button>`;
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
