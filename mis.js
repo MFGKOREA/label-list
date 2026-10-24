@@ -14,10 +14,13 @@ const fill = async (auto) => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // 주문등록 표가 있는 프레임 찾기 (MIS는 프레임 안에 프레임)
-  const find = (w) => {
-    try { if (w.jQuery && w.document.getElementById("dataGrid1")) return w; } catch (e) { return null; }
-    for (let i = 0; i < w.frames.length; i++) { const r = find(w.frames[i]); if (r) return r; }
-    return null;
+  // MIS 탭(주문현황·주문등록 …)마다 프레임이 있고 주문현황에도 dataGrid1이 있음 → 주문그룹 버튼(#custBtn)이 있는 주문등록 프레임을 고름
+  const find = (top) => {
+    const all = [];
+    const walk = (w) => { try { if (w.jQuery && w.document.getElementById("dataGrid1")) all.push(w); for (let i = 0; i < w.frames.length; i++) walk(w.frames[i]); } catch (e) {} };
+    walk(top);
+    const has = (w, sel) => { try { return !!w.document.querySelector(sel); } catch (e) { return false; } };
+    return all.find((w) => has(w, "#custBtn input.btn_basic")) || all.find((w) => typeof w.fn_Save === "function" && has(w, "#custBtn")) || all.find((w) => typeof w.fn_Save === "function") || all[0] || null;
   };
   const W = find(window.top);
   if (!W) return stop("MIS [주문등록] 화면이 아니에요. 주문등록 화면을 열어 두세요.");

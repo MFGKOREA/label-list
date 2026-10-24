@@ -12,10 +12,13 @@
   const pad = (n) => String(n).padStart(2, "0");
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-  const find = (w) => {
-    try { if (w.jQuery && w.document.getElementById("dataGrid1")) return w; } catch (e) { return null; }
-    for (let i = 0; i < w.frames.length; i++) { const r = find(w.frames[i]); if (r) return r; }
-    return null;
+  // MIS 탭(주문현황·주문등록 …)마다 프레임이 있고 주문현황에도 dataGrid1이 있음 → 주문그룹 버튼(#custBtn)이 있는 주문등록 프레임을 고름
+  const find = (top) => {
+    const all = [];
+    const walk = (w) => { try { if (w.jQuery && w.document.getElementById("dataGrid1")) all.push(w); for (let i = 0; i < w.frames.length; i++) walk(w.frames[i]); } catch (e) {} };
+    walk(top);
+    const has = (w, sel) => { try { return !!w.document.querySelector(sel); } catch (e) { return false; } };
+    return all.find((w) => has(w, "#custBtn input.btn_basic")) || all.find((w) => typeof w.fn_Save === "function" && has(w, "#custBtn")) || all.find((w) => typeof w.fn_Save === "function") || all[0] || null;
   };
   const get = async () => (await (await fetch(API + "?api=1&t=" + Date.now())).json()).data || {};
   const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }) });
@@ -46,6 +49,7 @@
         state = "MIS 입력 중"; badge();
         await set("misPush", { ...p, status: "running", startAt: Date.now() });
         let r;
+        await loadFill().catch(() => {}); // 고친 mis.js를 매번 새로 받아서 씀 (북마크 다시 안 눌러도 됨)
         try { r = await window.__misFill(true); } catch (e) { r = { ok: false, text: "중간에 멈춤: " + (e && e.message ? e.message : e) }; }
         if (!r) r = { ok: false, text: "실행 안 됨" };
         await set("misPush", { ...p, status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, saved: r.saved, total: r.total });
@@ -59,10 +63,17 @@
     } finally { busy = false; }
   };
 
-  const s = document.createElement("script");
-  s.charset = "utf-8";
-  s.src = "https://mfgkorea.github.io/label-list/mis.js?t=" + Date.now();
-  s.onload = () => { badge(); tick(); setInterval(tick, 20000); alert("발주앱 자동 대기를 켰어요.\n이 탭은 주문등록 화면으로 열어 두세요 (닫거나 새로고침하면 꺼져요)."); };
-  s.onerror = () => { window.__misAgent = false; alert("자동입력 스크립트를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); };
-  (document.body || document.documentElement).appendChild(s);
+  function loadFill() {
+    return new Promise((ok, no) => {
+      const s = document.createElement("script");
+      s.charset = "utf-8";
+      s.src = "https://mfgkorea.github.io/label-list/mis.js?t=" + Date.now();
+      s.onload = () => { s.remove(); ok(); };
+      s.onerror = () => { s.remove(); no(new Error("load")); };
+      (document.body || document.documentElement).appendChild(s);
+    });
+  }
+  loadFill().then(
+    () => { badge(); tick(); setInterval(tick, 20000); alert("발주앱 자동 대기를 켰어요.\n이 탭은 주문등록 화면으로 열어 두세요 (닫거나 새로고침하면 꺼져요)."); },
+    () => { window.__misAgent = false; alert("자동입력 스크립트를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); });
 })();
