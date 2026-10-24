@@ -50,6 +50,12 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     }
     if (m.q === "toMis") { if (sender.tab) chrome.tabs.update(sender.tab.id, { url: MIS_URL }); return reply({}); }
     if (m.q === "ensure") { await ensure("설정 저장"); return reply({}); }
+    if (m.q === "show") { // [MIS 자동 탭 열기]: 있으면 그 탭으로 이동, 없으면 새로 열기
+      await ensure("열기 버튼");
+      const { tabId: id } = await get("tabId"), tab = id != null ? await chrome.tabs.get(id).catch(() => null) : null;
+      if (tab) { await chrome.tabs.update(tab.id, { active: true }); await chrome.windows.update(tab.windowId, { focused: true }); }
+      return reply({});
+    }
     reply({});
   })();
   return true;
