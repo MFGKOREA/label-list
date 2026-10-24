@@ -7,7 +7,8 @@ async function load() {
   try {
     const d = (await (await fetch(API + "?api=1&t=" + Date.now())).json()).data || {};
     const a = d.misAgent || {}, p = d.misPush || {};
-    $("st").textContent = (a.at && Date.now() - a.at < 180000 ? `✓ 자동 대기 중 · ${hm(a.at)} 확인${a.grid ? "" : " · 주문등록 화면 아님"}` : `자동 대기 꺼짐${a.at ? ` · 마지막 ${hm(a.at)}` : ""}`) +
+    const fresh = a.at && Date.now() - a.at < (a.mode === "ondemand" ? 20 * 60e3 : 180000);
+    $("st").textContent = (!fresh ? `대기 꺼짐${a.at ? ` · 마지막 ${hm(a.at)}` : ""} (자동입력 켜기 확인)` : a.mode === "ondemand" ? `✓ 대기 중 · ${hm(a.at)} 확인 · 폰 전송 때만 창이 열려요` : `✓ MIS 입력 창 열림 · ${hm(a.at)} 확인${a.grid ? "" : " · 주문등록 화면 아님"}`) +
       (p.date ? `\n마지막 전송 ${p.date.slice(5)} ${p.status === "done" ? "저장 완료" : p.status === "error" ? "확인 필요" : p.status}` : "");
   } catch (e) { $("st").textContent = "시트에 연결 못 함 (인터넷 확인)"; }
 }
