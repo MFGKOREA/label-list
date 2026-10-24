@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><script src="jquery.js"></script></head><body>
+<div id="custBtn"><input type="button" class="btn_basic" value="온세물류" onclick="fn_Search('46492')"><input type="button" class="btn_basic" value="새싹농산" onclick="fn_Search('49212')"><input type="button" class="btn_basic" value="매장사입" onclick="fn_Search('56469')"></div>
+<table id="dataGrid1"></table>
+<script>
+var search_Length = 0, cur = null;
+$.fn.datagrid = function (cmd, arg) {
+  var st = this.data("dg"); if (!st) { st = { rows: [] }; this.data("dg", st); }
+  switch (cmd) {
+    case "getRows": return st.rows;
+    case "beginEdit": st.ed = arg; return this;
+    case "getEditor": return { target: {}, actions: { setValue: function (t, v) { st.val = v; } } };
+    case "endEdit": st.rows[arg].QT_ORDER = st.val; return this;
+    case "cancelEdit": return this;
+    case "updateRow": Object.assign(st.rows[arg.index], arg.row); return this;
+  }
+};
+function fn_Search(code) {
+  if (!window.event) throw new Error("no event");
+  cur = code; $("#dataGrid1").data("dg", { rows: [] });
+  setTimeout(function () {
+    var saved = top.__saved[code] || {};
+    var rows = top.__master.filter(function (r) { return r.grp === code; }).map(function (r) { return { CD_GROUP: code, CD_ITEM: r.code, QT_ORDER: saved[r.code] || 0 }; });
+    $("#dataGrid1").data("dg", { rows: rows });
+  }, 300);
+}
+function fn_Save() {
+  var s = top.__saved[cur] = top.__saved[cur] || {};
+  $("#dataGrid1").datagrid("getRows").forEach(function (r) { if (+r.QT_ORDER) s[r.CD_ITEM] = +r.QT_ORDER; });
+  top.__saveCalls = (top.__saveCalls || 0) + 1;
+}
+</script></body></html>
