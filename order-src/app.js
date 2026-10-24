@@ -1395,16 +1395,16 @@
     if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
     el.hidden = false;
     const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, list = misItems();
-    const agOn = ag.at && Date.now() - ag.at < 180000;
+    const agOn = ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? 20 * 60e3 : 180000); // 확장 1.3: 평소 10분마다 "대기 중" 기록
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 300000;
+    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > (ag.mode === "ondemand" ? 12 * 60e3 : 300000);
     let st, cls = "";
-    if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 받는 중…" : "PC가 꺼져 있어 기다리는 중 (PC에서 자동 대기를 켜 주세요)"; cls = "run"; }
+    if (p && p.status === "pending" && !stale) { st = agOn ? (ag.mode === "ondemand" ? "PC가 GW·MIS 여는 중… (1~2분)" : "PC가 받는 중…") : "PC가 꺼져 있어 기다리는 중 (PC에서 자동 대기를 켜 주세요)"; cls = "run"; }
     else if (p && p.status === "running" && !stale) { st = "PC에서 그룹웨어 입력 중…"; cls = "run"; }
     else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} 그룹웨어 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
     else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
     else if (stale) { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
-    else st = agOn ? `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}` : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
+    else st = agOn ? (ag.mode === "ondemand" ? `PC 대기 중 · 누르면 1~2분 안에 입력` : `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}`) : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
     const busy = p && p.status === "running" && !stale; // 기다리는 중(pending)이어도 다시 누를 수 있게
     el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
       `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button>`;

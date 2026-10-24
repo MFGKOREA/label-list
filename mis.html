@@ -62,7 +62,7 @@
       <li><a href="gw-agent.zip">gw-agent.zip</a> 내려받기 → 압축 풀기 (예: 문서 폴더. 지우면 안 돼요)</li>
       <li>크롬 주소창에 <b class="k">chrome://extensions</b> → 오른쪽 위 <b>개발자 모드</b> 켜기 → <b>압축해제된 확장 프로그램 로드</b> → 푼 <b>gw-agent</b> 폴더 선택</li>
       <li>주소창 오른쪽 퍼즐 아이콘 → <b>발주앱 GW 자동입력</b> 핀 고정 → 눌러서 GW 아이디·비밀번호 입력, <b>자동입력 켜기</b> 체크 → <b>저장</b></li>
-      <li>확장이 <b>자기 창을 따로 최소화</b>해서 열고(작업표시줄에만 보임) GW 로그인 → 경영정보 → MIS 주문등록 → 자동 대기까지 알아서 해요. 확장 창에 "✓ 자동 대기 중"이 뜨면 끝. 직원이 쓰는 크롬 창에는 끼어들지 않아요.</li>
+      <li>평소엔 <b>창 없이 대기</b>해요. 폰에서 <b>GW 전송</b>을 누르면 그때만 작은(최소화) 창으로 GW 로그인 → 경영정보 → MIS 주문등록 → 입력·저장하고 <b>창을 닫아요</b>(1~2분). 확장 창에 "✓ 대기 중"이 뜨면 끝. 크롬 설정 → 시스템 → "Chrome이 닫혀도 백그라운드 앱 계속 실행" <b>켜기</b>.</li>
       <li>PC를 켜면 크롬이 <b>창 없이</b> 켜지게: <b class="k">Win + R</b> → <b>shell:startup</b> → 빈 곳 우클릭 → 새로 만들기 → 바로 가기 → 위치에 아래를 붙여넣기 → 이름 "발주 자동입력"<br><textarea readonly onclick="this.select()">"C:\Program Files\Google\Chrome\Application\chrome.exe" --no-startup-window</textarea></li>
       <li>크롬이 통째로 꺼졌을 때 대비 (하루 2번 10:00·13:30, 꺼져 있을 때만 창 없이 다시 켬): 시작 → <b>cmd</b> 우클릭 관리자 실행 → 아래 두 줄<br><textarea readonly onclick="this.select()" style="height:120px">schtasks /create /f /tn ChromeKeep1 /sc daily /st 10:00 /tr "conhost --headless cmd /c tasklist | find /i \"chrome.exe\" || start \"\" \"C:\Program Files\Google\Chrome\Application\chrome.exe\" --no-startup-window"
 schtasks /create /f /tn ChromeKeep2 /sc daily /st 13:30 /tr "conhost --headless cmd /c tasklist | find /i \"chrome.exe\" || start \"\" \"C:\Program Files\Google\Chrome\Application\chrome.exe\" --no-startup-window"</textarea></li>
