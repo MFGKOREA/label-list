@@ -68,6 +68,19 @@
     </ol>
     <small>아이디·비밀번호는 이 PC 크롬 안에만 저장돼요. 로그인 실패는 30분에 2번까지만 시도해서 계정이 잠기지 않아요. MIS·VPN 연결이 끊기면 5분마다 다시 열어 봐요.</small>
   </div>
+  <div class="card">
+    <b>5. 매장 PC 자동 켜기 (사람 손 없이)</b>
+    <ol>
+      <li><b>윈도우 자동 로그인</b>: 설정 → 계정 → 로그인 옵션 → "Windows Hello 로그인만 허용" <b>끔</b> → <b class="k">Win + R</b> → <b>netplwiz</b> → "사용자 이름과 암호를 입력해야…" 체크 <b>해제</b> → 확인 → 비밀번호 두 번</li>
+      <li><b>크롬 자동 실행</b>: <b class="k">Win + R</b> → <b>shell:startup</b> → 열린 폴더에 크롬 바로가기 복사</li>
+      <li><b>절전 끄기</b>: 설정 → 시스템 → 전원 → 화면·절전 <b>안 함</b></li>
+      <li><b>매일 아침 자동 켜짐 (BIOS)</b>: PC 켤 때 <b class="k">Del</b> 또는 <b class="k">F2</b> 연타 → 전원(Power) 메뉴 → <b>RTC Alarm / Power On By RTC / Resume By Alarm</b> → Enabled · 매일(Every Day) · <b>09:00</b> → <b class="k">F10</b> 저장</li>
+      <li>BIOS에 그 메뉴가 없으면: <b>Restore on AC Power Loss → Power On</b>으로 바꾸고 스마트 플러그(매일 09:00 켜짐)에 PC 전원 연결. 이때는 밤에 윈도우가 먼저 꺼지게 아래 6번 필수</li>
+      <li>(스마트 플러그일 때) 밤 자동 종료: 시작 → <b>cmd</b> 우클릭 관리자 실행 → <b class="k">schtasks /create /tn PCoff /tr "shutdown /s /f /t 60" /sc daily /st 23:00</b></li>
+      <li>아침에 안 켜지면: 제어판 → 전원 옵션 → 전원 단추 작동 설정 → "빠른 시작 켜기" <b>끔</b></li>
+    </ol>
+    <small>확인: PC를 끄고 → 다음 날 09:00 이후 폰 발주앱에 "PC 자동 대기 중"이 뜨면 성공.</small>
+  </div>
   <small>앱 발주는 구글 시트에서 읽기만 합니다. MIS에는 주문수량만 넣고 저장하며, 저장 뒤 그룹을 다시 불러와 수량이 맞는지 대조합니다.</small>
 </div>
 <script>
