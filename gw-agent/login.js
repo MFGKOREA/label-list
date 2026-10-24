@@ -32,11 +32,26 @@
 
   async function openMis() {
     const frames = () => { const out = []; const walk = (w) => { try { void w.document; out.push(w); } catch (e) { return; } for (let i = 0; i < w.frames.length; i++) walk(w.frames[i]); }; walk(window); return out; };
-    const find = (re) => { for (const w of frames()) { try { const el = [...w.document.querySelectorAll("a, span, li, div, button, p")].find((e) => visible(e) && re.test((e.textContent || "").trim()) && [...e.children].every((c) => !re.test((c.textContent || "").trim()))); if (el) return el; } catch (e) {} } return null; };
+    // 메뉴가 접혀 있으면(아이콘만) 글자가 숨어 있음 → 숨은 것도 찾되 보이는 걸 먼저. title·툴팁 글자, MIS 주소 링크도 봄
+    const find = () => {
+      const hits = [];
+      for (const w of frames()) {
+        try {
+          const d = w.document;
+          d.querySelectorAll("a, span, li, div, button, p, em, strong, i").forEach((e) => {
+            const own = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim();
+            if (own === "경영정보" || (e.getAttribute("title") || "").trim() === "경영정보" || (e.getAttribute("aria-label") || "").trim() === "경영정보") hits.push(e);
+          });
+          d.querySelectorAll('a[href*="mis.madforgarlic"]').forEach((e) => hits.push(e));
+        } catch (e) {}
+      }
+      return hits.sort((a, b) => visible(b) - visible(a))[0] || null;
+    };
     let el = null;
-    for (let t = 0; t < 20 && !el; t++) { el = find(/^경영정보$/); if (!el) await sleep(500); }
+    for (let t = 0; t < 30 && !el; t++) { el = find(); if (!el) await sleep(500); }
     if (!el) { say("GW에서 '경영정보' 메뉴를 못 찾음"); return; }
-    (el.closest("a, button, li") || el).click();
-    say("GW → 경영정보(MIS) 열기");
+    const target = el.closest("a, button, li, [onclick]") || el;
+    target.click();
+    say(`GW → 경영정보(MIS) 열기 (${visible(el) ? "보이는 메뉴" : "접힌 메뉴"} · ${target.tagName.toLowerCase()})`);
   }
 })();
