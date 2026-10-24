@@ -10,7 +10,7 @@ async function ensure(reason) {
   let tab = null;
   if (tabId != null) tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab) {
-    tab = await chrome.tabs.create({ url: MIS_URL, pinned: true, active: false });
+    tab = await chrome.tabs.create({ url: GW_URL, pinned: true, active: false });
     chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {}); // 메모리 절약 모드가 탭을 잠재우지 않게
     await chrome.storage.local.set({ tabId: tab.id });
     await log(`MIS 자동 탭 열기 (${reason})`);
@@ -22,8 +22,8 @@ async function ensure(reason) {
     const at = (d.misAgent || {}).at || 0, { startedAt = 0 } = await get("startedAt");
     if (Date.now() - at > 10 * 60e3 && Date.now() - startedAt > 10 * 60e3) {
       await chrome.storage.local.set({ startedAt: Date.now() });
-      await chrome.tabs.update(tab.id, { url: MIS_URL });
-      await log("자동 대기 응답 없음 → MIS 다시 열기");
+      await chrome.tabs.update(tab.id, { url: GW_URL });
+      await log("자동 대기 응답 없음 → GW부터 다시 들어감");
     }
   } catch (e) { /* 인터넷·VPN 끊김: 다음 확인 때 다시 */ }
 }
@@ -32,6 +32,19 @@ chrome.runtime.onStartup.addListener(() => ensure("크롬 시작"));
 chrome.runtime.onInstalled.addListener(() => ensure("설치"));
 chrome.alarms.create("watch", { periodInMinutes: 5 });
 chrome.alarms.onAlarm.addListener(() => ensure("5분 확인"));
+// GW 경영정보가 MIS를 새 탭(창)으로 열면 그 탭을 자동 탭으로 넘겨받고, GW 탭은 닫음 (탭이 쌓이지 않게)
+async function adopt(newId, fromId) {
+  const { tabId, on } = await get(["tabId", "on"]);
+  if (!on || fromId == null || fromId !== tabId || newId === tabId) return;
+  const tab = await chrome.tabs.get(newId).catch(() => null); if (!tab) return;
+  await chrome.storage.local.set({ tabId: tab.id, startedAt: Date.now() });
+  chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
+  if (!tab.pinned && tab.windowId) chrome.tabs.update(tab.id, { pinned: true }).catch(() => {});
+  setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 5000);
+  await log("MIS 새 탭을 자동 탭으로");
+}
+chrome.tabs.onCreated.addListener((tab) => adopt(tab.id, tab.openerTabId));
+chrome.webNavigation.onCreatedNavigationTarget.addListener((d) => adopt(d.tabId, d.sourceTabId)); // window.open·새 창도 확실히 잡음
 chrome.tabs.onRemoved.addListener(async (id) => { const { tabId } = await get("tabId"); if (id === tabId) { await chrome.storage.local.remove("tabId"); setTimeout(() => ensure("탭 닫힘"), 3000); } });
 
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
@@ -48,7 +61,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       }).then(() => log("주문등록 화면 · 자동 대기 켬"), (e) => log("자동 대기 못 켬: " + e.message));
       return reply({});
     }
-    if (m.q === "toMis") { if (sender.tab) chrome.tabs.update(sender.tab.id, { url: MIS_URL }); return reply({}); }
+    if (m.q === "toGw") { if (sender.tab) chrome.tabs.update(sender.tab.id, { url: GW_URL }); return reply({}); }
     if (m.q === "ensure") { await ensure("설정 저장"); return reply({}); }
     if (m.q === "show") { // [MIS 자동 탭 열기]: 있으면 그 탭으로 이동, 없으면 새로 열기
       await ensure("열기 버튼");
