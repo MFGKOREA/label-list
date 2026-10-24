@@ -72,7 +72,7 @@
     return new Promise((ok, no) => {
       const s = document.createElement("script");
       s.charset = "utf-8";
-      s.src = "https://mfgkorea.github.io/label-list/mis.js?t=" + Date.now();
+      s.src = "https://mfgkorea.github.io/label-list/mis.js?agent=1&t=" + Date.now();
       s.onload = () => { s.remove(); ok(); };
       s.onerror = () => { s.remove(); no(new Error("load")); };
       (document.body || document.documentElement).appendChild(s);

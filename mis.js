@@ -136,7 +136,11 @@ const fill = async (auto) => {
   );
   return { ok: !bad.length && !left.size, text, saved: list.length - left.size - bad.length, total: list.length };
 };
-window.__misFill = fill;
-if (window.__misAgentMode) return;
-fill(false).then((r) => { if (r) alert(r.text); }, (e) => alert("오류: " + (e && e.message ? e.message : e)));
+let called = false;
+window.__misFill = (auto) => { called = true; return fill(auto); };
+const run = () => fill(false).then((r) => { if (r) alert(r.text); }, (e) => alert("오류: " + (e && e.message ? e.message : e)));
+if (/[?&]agent=1/.test((document.currentScript || {}).src || "")) return; // 자동 대기가 불러온 것
+// 자동 대기가 켜졌던 탭에서 북마크를 눌러도 실행되게: 자동 대기가 바로 __misFill을 부르지 않으면 북마크로 보고 실행
+if (window.__misAgentMode) { setTimeout(() => { if (!called) run(); }, 600); return; }
+run();
 })();
