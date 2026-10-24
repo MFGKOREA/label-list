@@ -1400,22 +1400,22 @@
     const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 300000;
     let st, cls = "";
     if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 받는 중…" : "PC가 꺼져 있어 기다리는 중 (PC에서 자동 대기를 켜 주세요)"; cls = "run"; }
-    else if (p && p.status === "running" && !stale) { st = "PC에서 MIS 입력 중…"; cls = "run"; }
-    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} MIS 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
+    else if (p && p.status === "running" && !stale) { st = "PC에서 그룹웨어 입력 중…"; cls = "run"; }
+    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} 그룹웨어 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
     else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
     else if (stale) { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
     else st = agOn ? `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}` : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
     const busy = cls === "run";
-    el.innerHTML = `<div class="mis-t"><b>MIS 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>${p && p.status === "done" ? "다시 보내기" : "보내기"} ${list.length}</button>`;
+    el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
+      `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button>`;
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
     el.querySelector("#misGo").addEventListener("click", () => {
       const now = misItems();
       if (!now.length) return;
-      if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 MIS에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
+      if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 그룹웨어(MIS)에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
       setKey("misPush", { date: TODAY, id: Date.now(), at: Date.now(), status: "pending", n: now.length });
       misFastUntil = Date.now() + 180000;
-      toast(agOn ? "PC로 보냈어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
+      toast(agOn ? "GW 전송했어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
     });
   }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
