@@ -132,6 +132,7 @@
     lsSave(); light(key);
     if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
     if (API) { if (!(key in pend.base) && isObj(syncBase[key])) pend.base[key] = clone(syncBase[key]); pend.set[key] = 1; savePend(); send(key); }
+    if (key === "input." + TODAY || key === "misPush") setTimeout(renderMis, 0);
   }
   // 같은 키는 한 번에 하나씩 보냄 (먼저 보낸 옛 값이 늦게 도착해 새 값을 덮는 일 방지)
   const inflight = {};
@@ -1379,6 +1380,43 @@
       return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(c)}<span class="cnt">${n}</span></button>`;
     }).join("");
     renderList();
+    renderMis();
+  }
+  // ---------- MIS 자동입력 (폰 → PC) ----------
+  // 폰에서 [보내기] → 시트 misPush = {date, status: pending} → PC의 MIS 탭(북마크 "자동 대기", mis-agent.js)이 20초 안에 받아 넣고 저장 → 결과를 misPush에 적음
+  //  PC는 2분마다 misAgent.at 기록 → 3분 넘게 없으면 "PC 연결 안 됨"
+  let misFastUntil = 0;
+  function misItems() {
+    const byName = new Map((((db["master.order"] || {}).rows) || []).map((r) => [r.name, r]));
+    return Object.entries(todayInput()).filter(([k, v]) => num((v || {}).o) > 0 && (byName.get(k) || {}).code).map(([k, v]) => ({ name: k, q: num(v.o), vendor: (byName.get(k) || {}).vendor || "" }));
+  }
+  function renderMis() {
+    const el = $("misBar"); if (!el) return;
+    if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
+    el.hidden = false;
+    const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, list = misItems();
+    const agOn = ag.at && Date.now() - ag.at < 180000;
+    const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 300000;
+    let st, cls = "";
+    if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 받는 중…" : "PC가 꺼져 있어 기다리는 중 (PC에서 자동 대기를 켜 주세요)"; cls = "run"; }
+    else if (p && p.status === "running" && !stale) { st = "PC에서 MIS 입력 중…"; cls = "run"; }
+    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} MIS 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
+    else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
+    else if (stale) { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
+    else st = agOn ? `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}` : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
+    const busy = cls === "run";
+    el.innerHTML = `<div class="mis-t"><b>MIS 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
+      `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>${p && p.status === "done" ? "다시 보내기" : "보내기"} ${list.length}</button>`;
+    el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
+    el.querySelector("#misGo").addEventListener("click", () => {
+      const now = misItems();
+      if (!now.length) return;
+      if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 MIS에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
+      setKey("misPush", { date: TODAY, id: Date.now(), at: Date.now(), status: "pending", n: now.length });
+      misFastUntil = Date.now() + 180000;
+      toast(agOn ? "PC로 보냈어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
+    });
   }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
   // 재고를 넣었고 발주가 필요한 품목 → 목록 맨 위 "발주 필요"로
@@ -2419,6 +2457,7 @@
     invalidate();
     const typing = (id) => { const a = document.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && $(id).contains(a); };
     if (!$("v-main").hidden && !typing("v-main")) renderMain();
+    else if (!$("v-main").hidden) renderMis();
     if (!$("v-forecast").hidden && !typing("v-forecast")) renderForecast();
     if (!$("v-report").hidden) renderReport();
     if (!$("v-files").hidden && !typing("v-files")) renderFiles();
@@ -2431,7 +2470,7 @@
     if (document.hidden || polling || !API) return;
     polling = true;
     try {
-      let need = Date.now() - lastFull > 30000;
+      let need = Date.now() - lastFull > 30000 || Date.now() < misFastUntil;
       if (!noVer) try { const r = await fetch(API + "?api=1&ver=1&t=" + Date.now()), j = await r.json(); if (j && j.ver) need = j.ver !== lastVer; else noVer = true; } catch {}
       if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
     } finally { polling = false; }

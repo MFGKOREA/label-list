@@ -44,13 +44,28 @@
       <li>끝나면 결과가 뜹니다: 그룹별 저장 개수, 못 찾은 품목, MIS 안내.</li>
     </ol>
   </div>
+  <div class="card">
+    <b>3. 폰에서 보내기 (PC 자동 대기)</b>
+    <ol>
+      <li>아래 <b>MIS 자동 대기</b> 버튼도 즐겨찾기 막대로 끌어 놓습니다 (처음 한 번).</li>
+      <li>PC에서 MIS → 주문등록 화면을 열고 <b>MIS 자동 대기</b>를 누릅니다 → 탭 제목에 [자동대기]가 붙고 오른쪽 아래에 상태가 떠요.</li>
+      <li>그 탭은 열어 둔 채로 두세요 (닫거나 새로고침하면 꺼져요. 다시 누르면 켜짐).</li>
+      <li>폰 발주앱 → 발주 탭의 <b>MIS 자동입력 · 보내기</b> → 20초 안에 PC가 넣고 저장 → 폰에 결과가 떠요.</li>
+    </ol>
+    <p style="margin:14px 0 4px"><a class="bm" id="bm2" href="#">MIS 자동 대기</a></p>
+    <small>끌어 놓기가 안 되면: 페이지 추가 → 이름 "MIS 자동 대기", URL에 아래 글을 통째로</small>
+    <textarea id="bmText2" readonly onclick="this.select()"></textarea>
+  </div>
   <small>앱 발주는 구글 시트에서 읽기만 합니다. MIS에는 주문수량만 넣고 저장하며, 저장 뒤 그룹을 다시 불러와 수량이 맞는지 대조합니다.</small>
 </div>
 <script>
   const code = "javascript:(()=>{const s=document.createElement('script');s.charset='utf-8';s.src='https://mfgkorea.github.io/label-list/mis.js?t='+Date.now();document.body.appendChild(s)})()";
   document.getElementById("bm").href = code;
   document.getElementById("bmText").value = code;
-  document.getElementById("bm").addEventListener("click", (e) => { e.preventDefault(); alert("이 버튼은 클릭이 아니라 즐겨찾기 막대로 끌어서 놓아 주세요."); });
+  const code2 = code.replace("mis.js", "mis-agent.js");
+  document.getElementById("bm2").href = code2;
+  document.getElementById("bmText2").value = code2;
+  ["bm", "bm2"].forEach((id) => document.getElementById(id).addEventListener("click", (e) => { e.preventDefault(); alert("이 버튼은 클릭이 아니라 즐겨찾기 막대로 끌어서 놓아 주세요."); }));
 </script>
 </body>
 </html>

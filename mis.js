@@ -3,7 +3,10 @@
 //  2) 처음에 넣을 목록을 한 번 보여주고 확인 → 주문그룹(온세물류·새싹농산 …)을 차례로 열어 품목코드로 주문수량(QT_ORDER)을 넣고 [저장]
 //  3) 저장 뒤 그룹을 다시 불러와 수량이 맞게 들어갔는지 대조하고 결과를 알려줌
 //  MIS 쪽 함수: fn_Search(그룹코드) = 그룹 열기, fn_Save() = 저장, search_Length > 0 = 주문 가능 시간 지남
-(async () => {
+//  자동 대기(mis-agent.js)가 불러오면 바로 실행하지 않고 window.__misFill(true)만 만들어 둠 → 폰에서 [MIS로 보내기] 누르면 확인창 없이 실행하고 결과를 돌려줌
+(() => {
+const fill = async (auto) => {
+  const stop = (msg) => ({ ok: false, text: msg });
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const num = (v) => { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isFinite(n) ? n : 0; };
   const pad = (n) => String(n).padStart(2, "0");
@@ -17,10 +20,10 @@
     return null;
   };
   const W = find(window.top);
-  if (!W) { alert("MIS [주문등록] 화면에서 눌러 주세요."); return; }
+  if (!W) return stop("MIS [주문등록] 화면이 아니에요. 주문등록 화면을 열어 두세요.");
   const $ = W.jQuery, g = $("#dataGrid1");
-  if (W.__appFillRunning) return;
-  if (num(W.search_Length) > 0) { W.alert("지금은 MIS 주문 가능 시간이 아니에요."); return; }
+  if (W.__appFillRunning) return stop("이미 입력 중이에요.");
+  if (num(W.search_Length) > 0) return stop("지금은 MIS 주문 가능 시간이 아니에요.");
 
   // MIS 함수가 window.event(키보드인지)를 보므로, 우리 작업도 이벤트 안에서 실행
   const inEvent = (fn) => {
@@ -48,23 +51,23 @@
   // 앱 데이터
   let db;
   try { const r = await fetch(API + "?api=1&t=" + Date.now()); db = (await r.json()).data; }
-  catch (e) { W.alert("발주앱 데이터를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); return; }
+  catch (e) { return stop("발주앱 데이터를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); }
   const inp = db["input." + TODAY] || {};
   const master = ((db["master.order"] || {}).rows) || [];
   const byName = new Map(master.map((r) => [r.name, r]));
   const want = new Map(); // 품목코드 → {name, q, vendor}
   Object.keys(inp).forEach((k) => { const q = num((inp[k] || {}).o), m = byName.get(k); if (q > 0 && m && m.code) want.set(String(m.code), { name: k, q, vendor: m.vendor || "" }); });
-  if (!want.size) { W.alert(`발주앱에 오늘(${TODAY.slice(5)}) 발주수량이 없어요.`); return; }
+  if (!want.size) return stop(`발주앱에 오늘(${TODAY.slice(5)}) 발주수량이 없어요.`);
 
   // 주문그룹 버튼: <input value="온세물류" onclick="fn_Search('46492')">
   const groups = $("#custBtn input.btn_basic").toArray().map((el) => { const m = /fn_Search\('([^']+)'\)/.exec(el.getAttribute("onclick") || ""); return m ? { code: m[1], name: el.value.trim() } : null; }).filter(Boolean);
-  if (!groups.length) { W.alert("주문그룹 버튼을 못 찾았어요. 매장을 먼저 선택해 주세요."); return; }
+  if (!groups.length) return stop("주문그룹 버튼을 못 찾았어요. 매장을 먼저 선택해 주세요.");
   const vendors = new Set([...want.values()].map((w) => w.vendor));
   // 앱 업체와 이름이 같은 그룹 먼저, 나머지 그룹은 남은 품목이 있을 때만 열어 봄
   const order = [...groups.filter((x) => vendors.has(x.name)), ...groups.filter((x) => !vendors.has(x.name))];
 
   const list = [...want.values()];
-  if (!origConfirm.call(W, `발주앱 오늘(${TODAY.slice(5)}) 발주 ${list.length}개를 MIS에 넣고 저장할까요?\n\n${list.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
+  if (!auto && !origConfirm.call(W, `발주앱 오늘(${TODAY.slice(5)}) 발주 ${list.length}개를 MIS에 넣고 저장할까요?\n\n${list.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return null;
 
   const loadGroup = async (code) => {
     inEvent(() => W.fn_Search(code));
@@ -121,11 +124,16 @@
   }
   // "최근 15일동안 주문한 수량보다 많습니다"는 무시 (KM 요청). 저장 실패·시간·품목 확인 같은 안내만 보여줌
   const warn = [...new Set(notes.filter((m) => !/최근 15일/.test(m) && /확인하세요|없습니다|아닙니다|실패|오류/.test(m)))];
-  W.alert(
+  const text = (
     (bad.length ? "⚠ 확인 필요\n" + bad.join("\n") + "\n\n" : "✓ 모두 저장됐어요\n\n") +
     report.join("\n") +
     (left.size ? `\n\nMIS 주문그룹에서 못 찾은 품목 ${left.size}개:\n${[...left.values()].map((w) => `${w.name} ${w.q}`).join("\n")}` : "") +
     (warn.length ? `\n\nMIS 안내:\n${warn.slice(0, 6).join("\n")}` : "") +
     (RECORD && rec.length ? `\n\n다운로드 폴더의 mis_기록_${TODAY}.txt 파일을 채팅에 보내 주세요 (폰 자동 입력 만들 때 씀).` : "")
   );
+  return { ok: !bad.length && !left.size, text, saved: list.length - left.size - bad.length, total: list.length };
+};
+window.__misFill = fill;
+if (window.__misAgentMode) return;
+fill(false).then((r) => { if (r) alert(r.text); }, (e) => alert("오류: " + (e && e.message ? e.message : e)));
 })();
