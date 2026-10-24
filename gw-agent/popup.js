@@ -19,5 +19,5 @@ $("save").addEventListener("click", async () => {
   $("st").textContent = v.on ? "저장했어요 · MIS 자동 탭을 열어요" : "저장했어요 · 자동입력 꺼짐";
   setTimeout(load, 1500);
 });
-$("open").addEventListener("click", async () => { await chrome.storage.local.set({ on: true }); $("on").checked = true; await chrome.runtime.sendMessage({ q: "ensure" }); });
+$("open").addEventListener("click", async () => { await chrome.storage.local.set({ on: true }); $("on").checked = true; await chrome.runtime.sendMessage({ q: "show" }); });
 load();
