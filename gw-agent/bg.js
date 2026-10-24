@@ -10,7 +10,9 @@ async function ensure(reason) {
   let tab = null;
   if (tabId != null) tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab) {
-    tab = await chrome.tabs.create({ url: GW_URL, pinned: true, active: false });
+    // 자기 창을 따로 만들어 최소화 (직원이 쓰는 크롬 창에 끼어들거나 앞으로 튀어나오지 않게)
+    const win = await chrome.windows.create({ url: GW_URL, state: "minimized", focused: false });
+    tab = win.tabs[0];
     chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {}); // 메모리 절약 모드가 탭을 잠재우지 않게
     await chrome.storage.local.set({ tabId: tab.id });
     await log(`MIS 자동 탭 열기 (${reason})`);
@@ -39,7 +41,10 @@ async function adopt(newId, fromId) {
   const tab = await chrome.tabs.get(newId).catch(() => null); if (!tab) return;
   await chrome.storage.local.set({ tabId: tab.id, startedAt: Date.now() });
   chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
-  if (!tab.pinned && tab.windowId) chrome.tabs.update(tab.id, { pinned: true }).catch(() => {});
+  // GW가 MIS를 새 탭·새 창으로 열면 그 탭도 최소화된 자기 창으로
+  const w = await chrome.windows.get(tab.windowId, { populate: true }).catch(() => null);
+  if (w && w.tabs.length === 1) chrome.windows.update(w.id, { state: "minimized" }).catch(() => {});
+  else chrome.windows.create({ tabId: tab.id, state: "minimized", focused: false }).catch(() => {});
   setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 5000);
   await log("MIS 새 탭을 자동 탭으로");
 }
@@ -66,7 +71,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     if (m.q === "show") { // [MIS 자동 탭 열기]: 있으면 그 탭으로 이동, 없으면 새로 열기
       await ensure("열기 버튼");
       const { tabId: id } = await get("tabId"), tab = id != null ? await chrome.tabs.get(id).catch(() => null) : null;
-      if (tab) { await chrome.tabs.update(tab.id, { active: true }); await chrome.windows.update(tab.windowId, { focused: true }); }
+      if (tab) { await chrome.tabs.update(tab.id, { active: true }); await chrome.windows.update(tab.windowId, { state: "normal", focused: true }); }
       return reply({});
     }
     reply({});

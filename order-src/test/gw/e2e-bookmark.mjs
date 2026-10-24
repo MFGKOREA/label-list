@@ -1,5 +1,5 @@
 // GW 전송 시험 (북마크 자동 대기): 가짜 MIS(주문현황+주문등록 탭) + 가짜 시트로 폰 [GW 전송] → PC 자동 대기 → 저장 → 폰 결과까지
-// 사용: node order-src/test/gw/e2e-bookmark.mjs <kv.json>    (kv.json은 시트 사본, 저장소에 넣지 않음. 진짜 시트·MIS에는 안 씀)
+// 사용: node order-src/test/gw/e2e-bookmark.mjs <kv.json>   (TWO=1 이면 자동 대기 탭 2개가 같이 받는 경우)    (kv.json은 시트 사본, 저장소에 넣지 않음. 진짜 시트·MIS에는 안 씀)
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -40,6 +40,13 @@ await pc.goto("https://mis.test/main.html");
 await pc.evaluate((m) => { window.__master = m; window.__saved = {}; }, master);
 await pc.waitForTimeout(500);
 await pc.evaluate(() => { const s = document.createElement("script"); s.charset = "utf-8"; s.src = "https://mfgkorea.github.io/label-list/mis-agent.js?t=" + Date.now(); document.body.appendChild(s); });
+// 탭 2개(북마크 자동 대기 2개)가 같이 받는 경우: TWO=1
+if (process.env.TWO) {
+  const pc2 = await ctx.newPage(); pc2.on("pageerror", (e) => errs.push("pc2 " + e.message)); pc2.on("dialog", (dl) => dl.accept());
+  await pc2.goto("https://mis.test/main.html"); await pc2.evaluate((m) => { window.__master = m; window.__saved = {}; }, master); await pc2.waitForTimeout(500);
+  await pc2.evaluate(() => { const s = document.createElement("script"); s.src = "https://mfgkorea.github.io/label-list/mis-agent.js?t=" + Date.now(); document.body.appendChild(s); });
+  globalThis.__pc2 = pc2;
+}
 await pc.waitForTimeout(3000);
 console.log("misAgent", JSON.stringify(store.misAgent), "title", await pc.title());
 // 폰: 앱에서 보내기
@@ -54,6 +61,7 @@ console.log("after send:", (await ph.textContent("#misBar")).trim(), JSON.string
 for (let i = 0; i < 6 && !/done|error/.test((store.misPush || {}).status); i++) await pc.waitForTimeout(6000);
 console.log("misPush", JSON.stringify(store.misPush));
 console.log("saved in MIS", JSON.stringify(await pc.evaluate(() => window.__saved)), "saveCalls", await pc.evaluate(() => window.__saveCalls));
+if (globalThis.__pc2) console.log("pc2 saved", JSON.stringify(await globalThis.__pc2.evaluate(() => window.__saved)), "saveCalls", await globalThis.__pc2.evaluate(() => window.__saveCalls));
 for (let i = 0; i < 4 && !/저장 완료|확인 필요/.test(await ph.textContent("#misBar")); i++) await ph.waitForTimeout(6000);
 console.log("phone bar:", (await ph.textContent("#misBar")).trim());
 await ph.evaluate(() => document.getElementById("misBar").scrollIntoView({ block: "center" }));

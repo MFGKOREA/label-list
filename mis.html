@@ -62,8 +62,10 @@
       <li><a href="gw-agent.zip">gw-agent.zip</a> 내려받기 → 압축 풀기 (예: 문서 폴더. 지우면 안 돼요)</li>
       <li>크롬 주소창에 <b class="k">chrome://extensions</b> → 오른쪽 위 <b>개발자 모드</b> 켜기 → <b>압축해제된 확장 프로그램 로드</b> → 푼 <b>gw-agent</b> 폴더 선택</li>
       <li>주소창 오른쪽 퍼즐 아이콘 → <b>발주앱 GW 자동입력</b> 핀 고정 → 눌러서 GW 아이디·비밀번호 입력, <b>자동입력 켜기</b> 체크 → <b>저장</b></li>
-      <li>MIS가 고정 탭으로 열리고 로그인 → 주문등록 → 자동 대기까지 알아서 해요. 확장 창에 "✓ 자동 대기 중"이 뜨면 끝.</li>
-      <li>PC를 켜면 크롬이 자동으로 켜지게: <b class="k">Win + R</b> → <b>shell:startup</b> → 열린 폴더에 크롬 바로가기 복사</li>
+      <li>확장이 <b>자기 창을 따로 최소화</b>해서 열고(작업표시줄에만 보임) GW 로그인 → 경영정보 → MIS 주문등록 → 자동 대기까지 알아서 해요. 확장 창에 "✓ 자동 대기 중"이 뜨면 끝. 직원이 쓰는 크롬 창에는 끼어들지 않아요.</li>
+      <li>PC를 켜면 크롬이 <b>창 없이</b> 켜지게: <b class="k">Win + R</b> → <b>shell:startup</b> → 빈 곳 우클릭 → 새로 만들기 → 바로 가기 → 위치에 아래를 붙여넣기 → 이름 "발주 자동입력"<br><textarea readonly onclick="this.select()">"C:\Program Files\Google\Chrome\Application\chrome.exe" --no-startup-window</textarea></li>
+      <li>크롬이 통째로 꺼졌을 때 대비 (하루 2번 10:00·13:30, 꺼져 있을 때만 창 없이 다시 켬): 시작 → <b>cmd</b> 우클릭 관리자 실행 → 아래 두 줄<br><textarea readonly onclick="this.select()" style="height:120px">schtasks /create /f /tn ChromeKeep1 /sc daily /st 10:00 /tr "conhost --headless cmd /c tasklist | find /i \"chrome.exe\" || start \"\" \"C:\Program Files\Google\Chrome\Application\chrome.exe\" --no-startup-window"
+schtasks /create /f /tn ChromeKeep2 /sc daily /st 13:30 /tr "conhost --headless cmd /c tasklist | find /i \"chrome.exe\" || start \"\" \"C:\Program Files\Google\Chrome\Application\chrome.exe\" --no-startup-window"</textarea></li>
       <li>절전 끄기: 설정 → 시스템 → 전원 → 화면·절전 <b>안 함</b></li>
     </ol>
     <small>아이디·비밀번호는 이 PC 크롬 안에만 저장돼요. 로그인 실패는 30분에 2번까지만 시도해서 계정이 잠기지 않아요. MIS·VPN 연결이 끊기면 5분마다 다시 열어 봐요.</small>
@@ -72,7 +74,7 @@
     <b>5. 매장 PC 자동 켜기 (사람 손 없이)</b>
     <ol>
       <li><b>윈도우 자동 로그인</b>: 설정 → 계정 → 로그인 옵션 → "Windows Hello 로그인만 허용" <b>끔</b> → <b class="k">Win + R</b> → <b>netplwiz</b> → "사용자 이름과 암호를 입력해야…" 체크 <b>해제</b> → 확인 → 비밀번호 두 번</li>
-      <li><b>크롬 자동 실행</b>: <b class="k">Win + R</b> → <b>shell:startup</b> → 열린 폴더에 크롬 바로가기 복사</li>
+      <li><b>크롬 자동 실행</b>: 위 4번의 "창 없이 켜기" 바로 가기</li>
       <li><b>절전 끄기</b>: 설정 → 시스템 → 전원 → 화면·절전 <b>안 함</b></li>
       <li><b>매일 아침 자동 켜짐 (BIOS)</b>: PC 켤 때 <b class="k">Del</b> 또는 <b class="k">F2</b> 연타 → 전원(Power) 메뉴 → <b>RTC Alarm / Power On By RTC / Resume By Alarm</b> → Enabled · 매일(Every Day) · <b>09:00</b> → <b class="k">F10</b> 저장</li>
       <li>BIOS에 그 메뉴가 없으면: <b>Restore on AC Power Loss → Power On</b>으로 바꾸고 스마트 플러그(매일 09:00 켜짐)에 PC 전원 연결. 이때는 밤에 윈도우가 먼저 꺼지게 아래 6번 필수</li>

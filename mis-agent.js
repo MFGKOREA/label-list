@@ -8,7 +8,8 @@
   const QUIET = /[?&]quiet=1/.test((document.currentScript || {}).src || "");
   const say = (m) => { if (!QUIET) alert(m); };
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
-  const VER = "1";
+  const VER = "2";
+  const ME = Math.random().toString(36).slice(2, 8); // 이 탭 이름 (탭 2개가 같이 받을 때 하나만 하게)
   if (window.__misAgent) { say("이미 자동 대기 중이에요. (이 탭을 닫지 마세요)"); return; }
   window.__misAgent = true;
   window.__misAgentMode = true;
@@ -51,12 +52,17 @@
       miss = W ? 0 : miss + 1;
       if (QUIET && miss >= 6) { location.reload(); return; }
       if (p && p.date === today() && p.status === "pending") {
+        // 맡았다고 적고 3초 뒤 다시 읽어 내 이름이 남아 있을 때만 실행 (다른 탭이 맡았으면 넘김)
+        await set("misPush", { ...p, status: "running", startAt: Date.now(), by: ME });
+        await new Promise((ok) => setTimeout(ok, 3000));
+        const q = (await get()).misPush || {};
+        if (q.by !== ME || q.id !== p.id) return;
         state = "MIS 입력 중"; badge();
-        await set("misPush", { ...p, status: "running", startAt: Date.now() });
         let r;
         await loadFill().catch(() => {}); // 고친 mis.js를 매번 새로 받아서 씀 (북마크 다시 안 눌러도 됨)
         try { r = await window.__misFill(true); } catch (e) { r = { ok: false, text: "중간에 멈춤: " + (e && e.message ? e.message : e) }; }
         if (!r) r = { ok: false, text: "실행 안 됨" };
+        if (/이미 입력 중/.test(r.text || "")) { await set("misPush", { ...p, status: "pending" }); state = "대기 중"; return; } // 다른 입력이 끝나면 다음 확인 때 다시
         await set("misPush", { ...p, status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, saved: r.saved, total: r.total });
         state = r.ok ? `${hm(Date.now())} 저장 완료` : `${hm(Date.now())} 확인 필요`;
       }
