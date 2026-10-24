@@ -56,6 +56,18 @@
     <small>끌어 놓기가 안 되면: 페이지 추가 → 이름 "MIS 자동 대기", URL에 아래 글을 통째로</small>
     <textarea id="bmText2" readonly onclick="this.select()"></textarea>
   </div>
+  <div class="card">
+    <b>4. PC 켜 두기만 하면 (크롬 확장 · 추천)</b>
+    <ol>
+      <li><a href="gw-agent.zip">gw-agent.zip</a> 내려받기 → 압축 풀기 (예: 문서 폴더. 지우면 안 돼요)</li>
+      <li>크롬 주소창에 <b class="k">chrome://extensions</b> → 오른쪽 위 <b>개발자 모드</b> 켜기 → <b>압축해제된 확장 프로그램 로드</b> → 푼 <b>gw-agent</b> 폴더 선택</li>
+      <li>주소창 오른쪽 퍼즐 아이콘 → <b>발주앱 GW 자동입력</b> 핀 고정 → 눌러서 GW 아이디·비밀번호 입력, <b>자동입력 켜기</b> 체크 → <b>저장</b></li>
+      <li>MIS가 고정 탭으로 열리고 로그인 → 주문등록 → 자동 대기까지 알아서 해요. 확장 창에 "✓ 자동 대기 중"이 뜨면 끝.</li>
+      <li>PC를 켜면 크롬이 자동으로 켜지게: <b class="k">Win + R</b> → <b>shell:startup</b> → 열린 폴더에 크롬 바로가기 복사</li>
+      <li>절전 끄기: 설정 → 시스템 → 전원 → 화면·절전 <b>안 함</b></li>
+    </ol>
+    <small>아이디·비밀번호는 이 PC 크롬 안에만 저장돼요. 로그인 실패는 30분에 2번까지만 시도해서 계정이 잠기지 않아요. MIS·VPN 연결이 끊기면 5분마다 다시 열어 봐요.</small>
+  </div>
   <small>앱 발주는 구글 시트에서 읽기만 합니다. MIS에는 주문수량만 넣고 저장하며, 저장 뒤 그룹을 다시 불러와 수량이 맞는지 대조합니다.</small>
 </div>
 <script>

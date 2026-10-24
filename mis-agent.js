@@ -3,10 +3,13 @@
 //  2) 결과(완료/확인 필요)를 misPush에 적어 폰에서 보이게, 2분마다 misAgent에 "살아 있음" 기록
 //  3) MIS 로그인이 풀리지 않게 10분마다 MIS 화면을 가볍게 다시 불러옴 (읽기만)
 //  이 탭을 닫거나 새로고침하면 꺼짐 → 북마크를 다시 누르면 됨
+//  크롬 확장(gw-agent)이 켤 때는 ?quiet=1 → 알림창 없이, 주문등록 화면이 2분 넘게 안 보이면 새로고침(로그인 풀림 → 확장이 다시 로그인)
 (() => {
+  const QUIET = /[?&]quiet=1/.test((document.currentScript || {}).src || "");
+  const say = (m) => { if (!QUIET) alert(m); };
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const VER = "1";
-  if (window.__misAgent) { alert("이미 자동 대기 중이에요. (이 탭을 닫지 마세요)"); return; }
+  if (window.__misAgent) { say("이미 자동 대기 중이에요. (이 탭을 닫지 마세요)"); return; }
   window.__misAgent = true;
   window.__misAgentMode = true;
   const pad = (n) => String(n).padStart(2, "0");
@@ -38,13 +41,15 @@
     if (el) el.textContent = `발주앱 자동입력 · ${state}${last ? ` · ${hm(last)} 확인` : ""}${W ? "" : " · 주문등록 화면 아님"}`;
   };
 
-  let busy = false, beatAt = 0, aliveAt = Date.now();
+  let busy = false, beatAt = 0, aliveAt = Date.now(), miss = 0;
   const tick = async () => {
     if (busy) return; busy = true;
     try {
       const db = await get(); last = Date.now();
       const p = db.misPush, W = find(window.top);
-      if (Date.now() - beatAt > 120000) { beatAt = Date.now(); set("misAgent", { at: Date.now(), grid: !!W, ver: VER }).catch(() => {}); }
+      if (Date.now() - beatAt > 120000) { beatAt = Date.now(); set("misAgent", { at: Date.now(), grid: !!W, ver: VER, auto: QUIET }).catch(() => {}); }
+      miss = W ? 0 : miss + 1;
+      if (QUIET && miss >= 6) { location.reload(); return; }
       if (p && p.date === today() && p.status === "pending") {
         state = "MIS 입력 중"; badge();
         await set("misPush", { ...p, status: "running", startAt: Date.now() });
@@ -74,6 +79,6 @@
     });
   }
   loadFill().then(
-    () => { badge(); tick(); setInterval(tick, 20000); alert("발주앱 자동 대기를 켰어요.\n이 탭은 주문등록 화면으로 열어 두세요 (닫거나 새로고침하면 꺼져요)."); },
-    () => { window.__misAgent = false; alert("자동입력 스크립트를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); });
+    () => { badge(); tick(); setInterval(tick, 20000); say("발주앱 자동 대기를 켰어요.\n이 탭은 주문등록 화면으로 열어 두세요 (닫거나 새로고침하면 꺼져요)."); },
+    () => { window.__misAgent = false; say("자동입력 스크립트를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); });
 })();

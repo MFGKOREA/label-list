@@ -1,0 +1,23 @@
+const $ = (id) => document.getElementById(id);
+const hm = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+async function load() {
+  const c = await chrome.storage.local.get(["id", "pw", "on", "logs"]);
+  $("id").value = c.id || ""; $("on").checked = !!c.on; $("pw").placeholder = c.pw ? "저장됨 (바꿀 때만 입력)" : "비밀번호";
+  $("log").textContent = (c.logs || []).slice(0, 12).join("\n");
+  try {
+    const d = (await (await fetch(API + "?api=1&t=" + Date.now())).json()).data || {};
+    const a = d.misAgent || {}, p = d.misPush || {};
+    $("st").textContent = (a.at && Date.now() - a.at < 180000 ? `✓ 자동 대기 중 · ${hm(a.at)} 확인${a.grid ? "" : " · 주문등록 화면 아님"}` : `자동 대기 꺼짐${a.at ? ` · 마지막 ${hm(a.at)}` : ""}`) +
+      (p.date ? `\n마지막 전송 ${p.date.slice(5)} ${p.status === "done" ? "저장 완료" : p.status === "error" ? "확인 필요" : p.status}` : "");
+  } catch (e) { $("st").textContent = "시트에 연결 못 함 (인터넷 확인)"; }
+}
+$("save").addEventListener("click", async () => {
+  const v = { id: $("id").value.trim(), on: $("on").checked, tries: [] };
+  if ($("pw").value) v.pw = $("pw").value;
+  await chrome.storage.local.set(v); $("pw").value = "";
+  await chrome.runtime.sendMessage({ q: "ensure" });
+  $("st").textContent = v.on ? "저장했어요 · MIS 자동 탭을 열어요" : "저장했어요 · 자동입력 꺼짐";
+  setTimeout(load, 1500);
+});
+$("open").addEventListener("click", async () => { await chrome.storage.local.set({ on: true }); $("on").checked = true; await chrome.runtime.sendMessage({ q: "ensure" }); });
+load();
