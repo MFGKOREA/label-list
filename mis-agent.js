@@ -1,5 +1,5 @@
 // MIS 자동 대기: PC의 MIS [주문등록] 화면에서 북마크로 한 번 켜 두면, 폰 발주앱의 [MIS로 보내기]를 기다렸다가 자동으로 넣고 저장
-//  1) 20초마다 구글 시트의 misPush(오늘 날짜·pending)를 확인 → 있으면 mis.js의 입력·저장을 확인창 없이 실행
+//  1) 20초마다 시트의 전송 상태만 가볍게 확인(?api=1&status=1 — 품목·수량은 안 받음) → misPush(오늘 날짜·pending)가 있으면 mis.js의 입력·저장을 확인창 없이 실행 (이때만 전체를 받음)
 //  2) 결과(완료/확인 필요)를 misPush에 적어 폰에서 보이게, 2분마다 misAgent에 "살아 있음" 기록
 //  3) MIS 로그인이 풀리지 않게 10분마다 MIS 화면을 가볍게 다시 불러옴 (읽기만)
 //  이 탭을 닫거나 새로고침하면 꺼짐 → 북마크를 다시 누르면 됨
@@ -9,7 +9,7 @@
   const WARM = /[?&]warm=1/.test((document.currentScript || {}).src || ""); // 확장 대기 창: 확장이 요청을 보면 바로 깨움(__misKick), 스스로는 1분마다만
   const say = (m) => { if (!QUIET) alert(m); };
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
-  const VER = "2";
+  const VER = "3";
   const ME = Math.random().toString(36).slice(2, 8); // 이 탭 이름 (탭 2개가 같이 받을 때 하나만 하게)
   if (window.__misAgent) { say("이미 자동 대기 중이에요. (이 탭을 닫지 마세요)"); return; }
   window.__misAgent = true;
@@ -28,7 +28,16 @@
   // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
   const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
   const withKey = (u) => u + (KEY ? "&k=" + encodeURIComponent(KEY) : "");
-  const get = async () => { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(); if (!j.ok && j.auth) { state = "가게 키 필요 (확장 창에서 입력)"; throw new Error("auth"); } return j.data || {}; };
+  // 가벼운 확인: 상태만(품목·수량 없음) 받고, 맡은 뒤에만 전체를 받음 → 20초마다 시트 전체를 읽지 않음
+  //  시트 스크립트가 아직 status=1을 모르면(옛 것) 예전처럼 전체를 받아 씀
+  const get = async () => {
+    const s = await (await fetch(withKey(API + "?api=1&status=1&t=" + Date.now()))).json();
+    if (s && s.status) return s.status;
+    const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json();
+    if (!j.ok && j.auth) { state = "가게 키 필요 (확장 창에서 입력)"; throw new Error("auth"); }
+    return j.data || {};
+  };
+  const getFull = async () => { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(); if (!j.ok && j.auth) { state = "가게 키 필요 (확장 창에서 입력)"; throw new Error("auth"); } return j.data || {}; };
   const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value, k: KEY }) });
 
   // 화면 표시: 탭 제목 앞에 [자동대기], 주문등록 화면 오른쪽 아래에 상태 배지
@@ -57,10 +66,10 @@
       miss = W ? 0 : miss + 1;
       if (QUIET && miss >= 6) { location.reload(); return; }
       if (p && p.date === today() && p.status === "pending") {
-        // 맡았다고 적고 3초 뒤 다시 읽어 내 이름이 남아 있을 때만 실행 (다른 탭이 맡았으면 넘김)
+        // 맡았다고 적고 3초 뒤 다시 읽어 내 이름이 남아 있을 때만 실행 (다른 탭이 맡았으면 넘김) — 여기서만 전체를 읽음
         await set("misPush", { ...p, status: "running", startAt: Date.now(), by: ME });
         await new Promise((ok) => setTimeout(ok, 1200));
-        const q = (await get()).misPush || {};
+        const q = (await getFull()).misPush || {};
         if (q.by !== ME || q.id !== p.id) return;
         state = "MIS 입력 중"; badge();
         let r;
