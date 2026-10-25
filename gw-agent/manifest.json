@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "발주 GW 자동연동",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "폰 발주앱의 [GW 전송]을 이 PC의 MIS 주문등록에 자동으로 넣고 저장합니다. 크롬이 켜지면 로그인부터 알아서 합니다.",
   "permissions": ["storage", "alarms", "tabs", "scripting", "webNavigation", "background"],
   "host_permissions": ["https://mis.madforgarlic.com/*", "https://gw.madforgarlic.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],
