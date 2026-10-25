@@ -1,5 +1,5 @@
 // 배경: 평소엔 창 없이 조용히 있다가, 폰에서 [GW 전송]을 누르면 그때만 MIS를 엶 (필요할 때만)
-//  발주 시간(08:00~14:35, 일요일 제외)엔 10초마다, 그 밖엔 30초마다 시트 misPush를 확인 → 폰에서 누르면 10~30초 안에 창이 열림
+//  매장 시간(매일 08:00~22:00)엔 10초마다, 그 밖엔 30초마다 시트 misPush를 확인 → 폰에서 누르면 10~30초 안에 창이 열림
 //  → 오늘 전송 요청(pending)이 있으면 최소화된 창으로 GW 로그인 → 경영정보 → MIS 주문등록 → 자동 대기가 입력·저장
 //  → 결과(done/error)가 적히면 창을 닫음. 12분 안에 못 끝내면 닫고 같은 요청은 한 번만 다시 시도
 //  창이 없어도 크롬이 꺼지지 않게 manifest에 "background" 권한 (크롬 설정 "백그라운드 앱 계속 실행" 켜짐 필요)
@@ -8,7 +8,7 @@ const get = (k) => chrome.storage.local.get(k);
 const put = (o) => chrome.storage.local.set(o);
 const log = async (msg) => { const { logs = [] } = await get("logs"); logs.unshift(`${new Date().toLocaleString("ko-KR")} ${msg}`); await put({ logs: logs.slice(0, 30) }); };
 const pad = (n) => String(n).padStart(2, "0");
-const orderHours = (d = new Date()) => { if (self.__forceFast) return true; const h = d.getHours() + d.getMinutes() / 60; return d.getDay() !== 0 && h >= 8 && h < 14.6; };
+const orderHours = (d = new Date()) => { if (self.__forceFast) return true; const h = d.getHours() + d.getMinutes() / 60; return h >= 8 && h < 22; }; // 매장 시간(매일 08~22시)엔 10초마다
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 async function openWin(reason, manual, job = "order") {

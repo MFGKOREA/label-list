@@ -2507,5 +2507,11 @@
       if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
     } finally { polling = false; }
   }, 10000);
+  // GW 전송·Gross 불러오기를 누른 뒤 3분 동안은 3초마다 결과를 받아 옴 (평소 10초)
+  setInterval(async () => {
+    if (Date.now() > misFastUntil || document.hidden || polling || !API) return;
+    polling = true;
+    try { lastFull = Date.now(); if (await pull(true)) refreshVisible(); } finally { polling = false; }
+  }, 3000);
   window.__orderCalc = { model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY };
 })();

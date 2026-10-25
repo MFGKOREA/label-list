@@ -16,17 +16,17 @@
     }
     return false;
   };
-  for (let t = 0; t < 30 && !q(".tree-title") && !ready(); t++) await sleep(500); // 메뉴가 그려질 때까지
+  for (let t = 0; t < 60 && !q(".tree-title") && !ready(); t++) await sleep(250); // 메뉴가 그려질 때까지
   // 매출 가져오기 창이면 주문등록 대신 매출 스크립트(mis-sales.js)에 맡김 — 메뉴 이동·조회·읽기는 그쪽이 함
-  if (info.job === "sales") { await sleep(1000); chrome.runtime.sendMessage({ q: "startSales" }); return; }
+  if (info.job === "sales") { await sleep(200); chrome.runtime.sendMessage({ q: "startSales" }); return; }
   for (let t = 0; t < 4 && !ready(); t++) {
     if (t === 0 || t === 2) clickText("주문정보관리");
-    await sleep(800);
+    await sleep(400);
     clickText("주문등록");
-    for (let k = 0; k < 10 && !ready(); k++) await sleep(500);
+    for (let k = 0; k < 20 && !ready(); k++) await sleep(250);
   }
   if (!ready()) { chrome.runtime.sendMessage({ q: "log", msg: "주문등록 화면을 못 열었어요 (메뉴를 못 찾음)" }); return; }
-  await sleep(1500);
+  await sleep(300);
   // 확장 안에서 만든 script 태그는 확장 보안 규칙에 막힘 → 배경이 페이지 쪽(MAIN)에서 넣어 줌 (북마크를 누른 것과 같음)
   chrome.runtime.sendMessage({ q: "started" });
 })();

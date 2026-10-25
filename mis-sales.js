@@ -24,7 +24,7 @@
   try { job = (await get()).salesPush; } catch (e) { return; }
   if (!job || job.status !== "pending") return;
   await set("salesPush", { ...job, status: "running", startAt: Date.now(), by: ME });
-  await sleep(2500);
+  await sleep(1000);
   try { const q = (await get()).salesPush || {}; if (q.by !== ME || q.id !== job.id) return; } catch (e) { return; }
 
   let step = "시작";
@@ -51,12 +51,12 @@
     const isReport = () => frames().find((w) => /miscellaneous/i.test(w.location.href + " " + w.document.title) || [...w.document.querySelectorAll(".panel-title, .tabs-title, h1, h2, td, span")].some((e) => /^miscellaneous\s*report$/i.test(e.textContent.trim()) && w !== window.top && e.closest("body") && w.document.querySelector("input")));
     let R = isReport();
     for (let t = 0; t < 4 && !R; t++) {
-      for (const re of [/^매출정보관리$/, /^매출현황$/, /^miscellaneous\s*report$/i]) { const hit = byText(re, ".tree-title"); if (hit) { hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); } await sleep(900); }
-      for (let k = 0; k < 10 && !(R = isReport()); k++) await sleep(500);
+      for (const re of [/^매출정보관리$/, /^매출현황$/, /^miscellaneous\s*report$/i]) { const hit = byText(re, ".tree-title"); if (hit) { hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); } await sleep(350); }
+      for (let k = 0; k < 20 && !(R = isReport()); k++) await sleep(250);
     }
     if (!R) return finish(false, "MiscellaneousReport 메뉴를 못 열었어요");
     // 보고서 프레임이 다 그려질 때까지
-    for (let k = 0; k < 20 && !(R.jQuery && R.document.querySelector("input")); k++) { await sleep(500); R = isReport() || R; }
+    for (let k = 0; k < 40 && !(R.jQuery && R.document.querySelector("input")); k++) { await sleep(250); R = isReport() || R; }
     const $ = R.jQuery, d = R.document;
     if (!$) return finish(false, "보고서 화면에 jQuery가 없어요");
 
@@ -99,7 +99,7 @@
     press(R, btn.closest("a, button, input") || btn);
     let grid = null, rows = [];
     for (let k = 0; k < 40; k++) {
-      await sleep(500);
+      await sleep(250);
       const gs = [...d.querySelectorAll("table[id], div[id]")].filter((el) => $(el).data("datagrid"));
       grid = gs.find((el) => ($(el).datagrid("getRows") || []).length) || null;
       if (grid) { rows = $(grid).datagrid("getRows"); break; }
