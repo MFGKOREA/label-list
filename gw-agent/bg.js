@@ -51,7 +51,7 @@ async function tick(reason) {
     if (!d) { d = (await (await fetch(API + "?api=1&t=" + now)).json()).data || {}; lastData = d; }
   } catch (e) { return; } // 인터넷·VPN 끊김: 다음에 다시
   // 폰에 "PC 대기 중"으로 보이게 10분마다 기록 (창이 열려 있을 땐 자동 대기가 2분마다 따로 적음)
-  if (!tab && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key: "misAgent", value: { at: now, mode: "ondemand", ver: "bg1.3" } }) }).catch(() => {}); }
+  if (!tab && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key: "misAgent", value: { at: now, mode: "ondemand", ver: chrome.runtime.getManifest().version } }) }).catch(() => {}); }
   const p = d.misPush || {}, mine = p.date === ymd();
   const waiting = mine && p.status === "pending";
   // 매출 가져오기 요청 (Forecast 탭 [GW에서 가져오기]): 30분 안에 누른 것만
