@@ -2830,7 +2830,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} ${p.text || "가져옴"}`; cls = "ok"; }
     else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 못 가져옴 · 눌러서 보기`; cls = "bad"; }
     else if (stale) { st = "⚠ PC 응답 없음 · 다시 눌러 주세요"; cls = "bad"; }
-    else st = agOn ? "이번 주 ~ 어제 실제 Gross를 MIS에서 채워요" : "PC 연결 안 됨";
+    else { const to = addDays(TODAY, -1); st = `(${mmdd(mondayOf(to))} ~ ${mmdd(to)})`; } // 이번 주 월요일 ~ 어제
     el.innerHTML = `<div class="mis-t"><b>Gross Sales 불러오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
       `<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>불러오기</button>`;
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
