@@ -1961,8 +1961,8 @@
     else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 못 가져옴 · 눌러서 보기`; cls = "bad"; }
     else if (stale) { st = "⚠ PC 응답 없음 · 다시 눌러 주세요"; cls = "bad"; }
     else st = agOn ? "이번 주 ~ 어제 실제 Gross를 MIS에서 채워요" : "PC 연결 안 됨";
-    el.innerHTML = `<div class="mis-t"><b>실제 Gross 가져오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>GW에서 가져오기</button>`;
+    el.innerHTML = `<div class="mis-t"><b>Gross Sales 불러오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
+      `<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>불러오기</button>`;
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
     el.querySelector("#salesGo").addEventListener("click", () => {
       const to = addDays(TODAY, -1), from = mondayOf(to);
