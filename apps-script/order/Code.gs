@@ -69,6 +69,27 @@ function readAll_() {
   return out;
 }
 
+// 시트 전체가 아니라 지정한 키의 행만 읽음 (status 폴링을 가볍게 하려고: 전송 상태 몇 개만 필요할 때 씀)
+function readKeys_(keys) {
+  const sh = sheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return {};
+  const at = {};
+  keys.forEach((k) => { at[k] = []; });
+  sh.getRange(2, 1, last - 1, 1).getValues().forEach(([key], i) => { if (key && at[key]) at[key].push(i + 2); });
+  const out = {};
+  Object.keys(at).forEach((key) => {
+    const rows = at[key];
+    if (!rows.length) return;
+    const first = rows[0], span = rows[rows.length - 1] - first + 1;
+    const vals = sh.getRange(first, 2, span, 2).getValues(); // [part, value] (키 행은 붙어 있음)
+    const parts = [];
+    rows.forEach((r) => { parts[Number(vals[r - first][0]) || 0] = String(vals[r - first][1]); });
+    try { out[key] = JSON.parse(parts.join("")); } catch (e) { /* 깨진 값은 건너뜀 */ }
+  });
+  return out;
+}
+
 function write_(key, value) {
   const sh = sheet_();
   const last = sh.getLastRow();
@@ -138,10 +159,10 @@ function bump_() { const v = String(Date.now()); PropertiesService.getScriptProp
 function appKey_() { return PropertiesService.getScriptProperties().getProperty("APP_KEY") || ""; }
 function authOk_(k) { const key = appKey_(); return !key || String(k || "") === key; }
 function denied_() { Utilities.sleep(1000); return json_({ ok: false, auth: true, error: "가게 키가 필요해요" }); }
-// 키 없이 보여 주는 전송 상태: 시각·상태·날짜만 (내용 없음)
+// 키 없이 보여 주는 전송 상태: 시각·상태·날짜만 (내용 없음). 시트 전체를 읽지 않고 상태 키 3개만 읽어 답이 빠름
 function status_() {
-  const all = readAll_(), pick = (o, ks) => { const out = {}; if (o) ks.forEach((k) => { if (o[k] != null) out[k] = o[k]; }); return out; };
-  return { misPush: pick(all.misPush, ["date", "id", "at", "status", "startAt", "doneAt"]), salesPush: pick(all.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(all.misAgent, ["at", "mode", "grid"]) };
+  const all = readKeys_(["misPush", "salesPush", "misAgent"]), pick = (o, ks) => { const out = {}; if (o) ks.forEach((k) => { if (o[k] != null) out[k] = o[k]; }); return out; };
+  return { misPush: pick(all.misPush, ["date", "id", "at", "status", "startAt", "doneAt", "by"]), salesPush: pick(all.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(all.misAgent, ["at", "mode", "grid"]) };
 }
 const ACTIONS_ = { set: 1, append: 1, merge: 1, restore: 1 };
 const KEY_RE_ = /^[\w.\-|:가-힣 ]{1,120}$/; // 시트 키 이름: 글자·숫자·._-|: 공백만, 120자까지
