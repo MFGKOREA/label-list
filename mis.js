@@ -68,6 +68,11 @@ const fill = async (auto) => {
   const inp = db["input." + TODAY] || {};
   const master = ((db["master.order"] || {}).rows) || [];
   const byName = new Map(master.map((r) => [r.name, r]));
+  const rowName = (r) => { // 표 칸의 품목 이름 (칸에 이름이 없으면 앱의 품목 마스터에서, 그래도 없으면 코드로)
+    const code = String(r.CD_ITEM ?? "");
+    return r.NM_ITEM || r.ITEM_NM || r.NM_GOODS || (byCode.get(code) || {}).name || code;
+  };
+  const byCode = new Map(master.filter((m) => m.code).map((m) => [String(m.code), m]));
   const want = new Map(); // 품목코드 → {name, q, vendor}
   Object.keys(inp).forEach((k) => { const q = num((inp[k] || {}).o), m = byName.get(k); if (q > 0 && m && m.code) want.set(String(m.code), { name: k, q, vendor: m.vendor || "" }); });
   if (!want.size) return stop(`발주앱에 오늘(${TODAY.slice(5)}) 발주수량이 없어요.`);
@@ -99,14 +104,23 @@ const fill = async (auto) => {
   const left = new Map(want), report = [], bad = [];
   quiet();
   try {
+    // 모든 그룹을 열어 봄: 오늘 발주 품목을 넣는 것뿐 아니라, 앱 목록에 없는데 MIS에 수량이 남아 있는 품목(지난 발주·시험 데이터)을 0으로 정리하려면
     for (const grp of order) {
-      if (!left.size) break;
       let rows = await loadGroup(grp.code);
       const here = [];
       left.forEach((w, code) => { const idx = rows.findIndex((r) => String(r.CD_ITEM) === code); if (idx >= 0) here.push({ idx, code, ...w }); });
-      if (!here.length) continue;
       here.forEach((h) => left.delete(h.code));
-      const todo = here.filter((h) => num(rows[h.idx].QT_ORDER) !== h.q);
+      // 잔여 품목: 오늘 앱 발주에 없는데 MIS에 수량이 남아 있는 칸 → 0으로 지움 (남아 있으면 그대로 발주가 나감)
+      const resid = [];
+      rows.forEach((r, idx) => {
+        const code = String(r.CD_ITEM ?? "");
+        if (!code || code === "null" || code === "undefined") return;
+        if (num(r.QT_ORDER) > 0 && !want.has(code)) resid.push({ idx, code, name: rowName(r), old: num(r.QT_ORDER) });
+      });
+      const todo = [
+        ...here.filter((h) => num(rows[h.idx].QT_ORDER) !== h.q).map((h) => ({ idx: h.idx, q: h.q })),
+        ...resid.map((h) => ({ idx: h.idx, q: 0 })),
+      ];
       if (todo.length) {
         // 사람이 칸에 입력한 것처럼: 편집 시작 → 값 넣기 → 편집 끝 (MIS가 금액·입고일 다시 계산)
         todo.forEach((h) => inEvent(() => {
@@ -117,12 +131,19 @@ const fill = async (auto) => {
         }));
         inEvent(() => W.fn_Save());
         for (let t = 0; t < 10; t++) { await sleep(300); if (!clickMessager() && t > 2) break; }
+        // 저장됐는지: 그룹을 다시 불러와 대조
+        rows = await loadGroup(grp.code);
       }
-      // 저장됐는지: 그룹을 다시 불러와 대조
-      rows = await loadGroup(grp.code);
       const miss = here.filter((h) => { const r = rows.find((x) => String(x.CD_ITEM) === h.code); return !r || num(r.QT_ORDER) !== h.q; });
       miss.forEach((h) => bad.push(`[${grp.name}] ${h.name} 앱 ${h.q} / MIS ${(rows.find((x) => String(x.CD_ITEM) === h.code) || {}).QT_ORDER ?? "없음"}`));
-      report.push(`${grp.name}: ${here.length - miss.length}/${here.length}개 저장${todo.length ? "" : " (이미 같음)"}`);
+      // 잔여 품목이 0이 됐는지 확인
+      resid.forEach((h) => {
+        const r = rows.find((x) => String(x.CD_ITEM) === h.code);
+        if (!r) return;
+        if (num(r.QT_ORDER) !== 0) bad.push(`[${grp.name}] 잔여 품목 ${h.name} 0으로 못 지움 (MIS ${r.QT_ORDER} 남음)`);
+        else report.push(`[${grp.name}] 잔여 품목 ${h.name} (기존 ${h.old}개) -> 0개로 정리`);
+      });
+      if (here.length) report.push(`${grp.name}: ${here.length - miss.length}/${here.length}개 저장${todo.length ? "" : " (이미 같음)"}`);
     }
   } catch (e) {
     bad.push("중간에 멈춤: " + (e && e.message ? e.message : e));
