@@ -1,7 +1,9 @@
-// 배경: 평소엔 창 없이 조용히 있다가, 폰에서 [GW 전송]을 누르면 그때만 MIS를 엶 (필요할 때만)
-//  매장 시간(매일 08:00~22:00)엔 10초마다, 그 밖엔 30초마다 시트 misPush를 확인 → 폰에서 누르면 10~30초 안에 창이 열림
-//  → 오늘 전송 요청(pending)이 있으면 최소화된 창으로 GW 로그인 → 경영정보 → MIS 주문등록 → 자동 대기가 입력·저장
-//  → 결과(done/error)가 적히면 창을 닫음. 12분 안에 못 끝내면 닫고 같은 요청은 한 번만 다시 시도
+// 배경
+//  매장 시간(매일 08:00~22:00): 최소화된 "대기 창"에 GW 로그인 → 경영정보 → MIS 주문등록을 미리 열어 둠 (warm)
+//   → 3~5초마다 시트 확인, 폰에서 GW 전송·Gross 불러오기를 누르면 열린 MIS에서 바로 실행 (10초 안팎)
+//   → 22시가 되면 대기 창을 닫음. 로그인이 풀리면(자동 대기 응답 6분 없음) GW부터 다시
+//  그 밖의 시간: 창 없이 30초마다 확인 → 요청이 오면 그때 창을 열고, 끝나면 닫음 (필요할 때만)
+//  시트가 새 Apps Script(?ver=1 지원)면 버전만 가볍게 묻고 바뀌었을 때만 전체를 받음
 //  창이 없어도 크롬이 꺼지지 않게 manifest에 "background" 권한 (크롬 설정 "백그라운드 앱 계속 실행" 켜짐 필요)
 importScripts("common.js");
 const get = (k) => chrome.storage.local.get(k);
@@ -27,16 +29,27 @@ async function closeWin(reason) {
   await log(reason);
 }
 
+// 열린 대기 창(MIS 첫 화면) 안에서 스크립트 실행 (페이지 쪽)
+const inTab = (tabId, func, args = []) => chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: "MAIN", func, args }).catch(() => null);
+const addScript = (url) => { const s = document.createElement("script"); s.charset = "utf-8"; s.src = url; (document.body || document.documentElement).appendChild(s); };
+let lastVer = null, hasVer = null, lastData = null;
+
 async function tick(reason) {
-  const { on, tabId, openedAt = 0, manual, job = "order", lastPoll = 0, lastBeat = 0, tried = {} } = await get(["on", "tabId", "openedAt", "manual", "job", "lastPoll", "lastBeat", "tried"]);
+  const { on, tabId, openedAt = 0, manual, job = "order", lastPoll = 0, lastBeat = 0, tried = {}, kicked = {}, warmAt = 0 } = await get(["on", "tabId", "openedAt", "manual", "job", "lastPoll", "lastBeat", "tried", "kicked", "warmAt"]);
   if (!on) return;
-  const now = Date.now();
+  const now = Date.now(), hours = orderHours();
   const tab = tabId != null ? await chrome.tabs.get(tabId).catch(() => null) : null;
-  if (!tab && tabId != null) await chrome.storage.local.remove(["tabId", "openedAt", "manual"]);
-  if (!tab && (reason === "alarm" || reason === "fast") && now - lastPoll < (reason === "fast" ? 8e3 : 25e3)) return;
+  if (!tab && tabId != null) await chrome.storage.local.remove(["tabId", "openedAt", "manual", "job"]);
+  if ((reason === "alarm" || reason === "fast") && now - lastPoll < (reason === "fast" ? 2500 : 25e3)) return;
   await put({ lastPoll: now });
+  // 매장 시간인데 대기 창이 없으면 미리 열어 둠 (실패 반복 막으려고 10분에 한 번까지)
+  if (hours && !tab && now - warmAt > 10 * 60e3) { await put({ warmAt: now }); await openWin("매장 시간 · MIS 대기 창 열기", false, "warm"); return; }
   let d;
-  try { d = (await (await fetch(API + "?api=1&t=" + now)).json()).data || {}; } catch (e) { return; } // 인터넷·VPN 끊김: 다음에 다시
+  try {
+    // 새 Apps Script면 버전만 물어봄 (가벼움) → 바뀐 게 없으면 전에 받은 내용 그대로
+    if (hasVer !== false) { const v = await (await fetch(API + "?api=1&ver=1&t=" + now)).json(); if (v && v.ver) { hasVer = true; if (v.ver === lastVer && lastData) d = lastData; else lastVer = v.ver; } else { hasVer = false; if (v && v.data && Object.keys(v.data).length) d = lastData = v.data; } }
+    if (!d) { d = (await (await fetch(API + "?api=1&t=" + now)).json()).data || {}; lastData = d; }
+  } catch (e) { return; } // 인터넷·VPN 끊김: 다음에 다시
   // 폰에 "PC 대기 중"으로 보이게 10분마다 기록 (창이 열려 있을 땐 자동 대기가 2분마다 따로 적음)
   if (!tab && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key: "misAgent", value: { at: now, mode: "ondemand", ver: "bg1.3" } }) }).catch(() => {}); }
   const p = d.misPush || {}, mine = p.date === ymd();
@@ -52,6 +65,16 @@ async function tick(reason) {
     return;
   }
   if (manual) return; // [자동 탭 보기]로 연 창은 사람이 닫음
+  if (job === "warm") {
+    // 대기 창: 열린 MIS에서 바로 실행
+    if (waiting && kicked.o !== p.id) { await put({ kicked: { ...kicked, o: p.id } }); await inTab(tab.id, () => window.__misKick && window.__misKick()); await log("폰 전송 → 대기 창에서 바로 입력"); }
+    if (salesWaiting && kicked.s !== sp.id) { await put({ kicked: { ...kicked, s: sp.id } }); await inTab(tab.id, addScript, ["https://mfgkorea.github.io/label-list/mis-sales.js?quiet=1&t=" + now]); await log("Gross 불러오기 → 대기 창에서 바로 조회"); }
+    // 로그인 풀림 등으로 자동 대기 응답이 6분 넘게 없으면 GW부터 다시
+    const at = (d.misAgent || {}).at || 0;
+    if (now - openedAt > 6 * 60e3 && now - at > 6 * 60e3) { await put({ openedAt: now }); chrome.tabs.update(tab.id, { url: GW_URL }); await log("대기 창 응답 없음 → GW부터 다시"); }
+    if (!hours && !waiting && !salesWaiting && !/running/.test(p.status + sp.status)) await closeWin("매장 시간 끝 → 대기 창 닫음");
+    return;
+  }
   if (job === "sales") { if (/done|error/.test(sp.status) && (sp.doneAt || 0) > openedAt) await closeWin(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`); else if (now - openedAt > 12 * 60e3) await closeWin("12분 안에 못 끝냄 → 창 닫음 (기록 확인)"); return; }
   if (mine && /done|error/.test(p.status) && (p.doneAt || 0) > openedAt) { await closeWin(`입력 ${p.status === "done" ? "완료" : "확인 필요"} → 창 닫음`); return; }
   if (now - openedAt > 12 * 60e3) await closeWin("12분 안에 못 끝냄 → 창 닫음 (기록 확인)");
@@ -65,8 +88,10 @@ chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); });
 let fastOn = false;
 function fast() {
   if (fastOn) return; fastOn = true;
-  const step = async () => { if (!orderHours()) { fastOn = false; return; } await tick("fast").catch(() => {}); setTimeout(step, 10e3); };
-  setTimeout(step, 10e3);
+  // 버전만 물어볼 수 있으면 3초, 아니면 5초마다 (전체를 받아야 해서)
+  const gap = () => (hasVer ? 3e3 : 5e3);
+  const step = async () => { if (!orderHours()) { fastOn = false; return; } await tick("fast").catch(() => {}); setTimeout(step, gap()); };
+  setTimeout(step, gap());
 }
 fast();
 // GW 경영정보가 MIS를 새 탭(창)으로 열면 그 탭을 자동 탭으로 넘겨받고, GW 탭은 닫음 (탭이 쌓이지 않게)
@@ -101,7 +126,7 @@ chrome.webNavigation.onCommitted.addListener(async (d) => {
   }).catch(() => {});
 });
 chrome.webNavigation.onCreatedNavigationTarget.addListener((d) => adopt(d.tabId, d.sourceTabId)); // window.open·새 창도 확실히 잡음
-chrome.tabs.onRemoved.addListener(async (id) => { const { tabId } = await get("tabId"); if (id === tabId) await chrome.storage.local.remove(["tabId", "openedAt", "manual"]); }); // 닫으면 다시 안 엶
+chrome.tabs.onRemoved.addListener(async (id) => { const { tabId } = await get("tabId"); if (id === tabId) await chrome.storage.local.remove(["tabId", "openedAt", "manual", "job"]); }); // 닫으면 (매장 시간엔 10분 뒤 대기 창을 다시 엶)
 
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   (async () => {
@@ -121,7 +146,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       await chrome.scripting.executeScript({
         target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] }, world: "MAIN",
         func: (url) => { const s = document.createElement("script"); s.charset = "utf-8"; s.src = url; (document.body || document.documentElement).appendChild(s); },
-        args: ["https://mfgkorea.github.io/label-list/mis-agent.js?quiet=1&t=" + Date.now()],
+        args: ["https://mfgkorea.github.io/label-list/mis-agent.js?quiet=1" + ((await get("job")).job === "warm" ? "&warm=1" : "") + "&t=" + Date.now()],
       }).then(() => log("주문등록 화면 · 자동 대기 켬"), (e) => log("자동 대기 못 켬: " + e.message));
       return reply({});
     }
