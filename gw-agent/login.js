@@ -7,7 +7,7 @@
   const visible = (el) => el && el.offsetParent !== null && !el.disabled;
   const say = (msg) => chrome.runtime.sendMessage({ q: "log", msg });
   let pw = null;
-  for (let t = 0; t < 10 && !visible(pw); t++) { pw = [...document.querySelectorAll('input[type="password"]')].find(visible) || null; if (!pw) await sleep(500); }
+  for (let t = 0; t < 5 && !visible(pw); t++) { pw = [...document.querySelectorAll('input[type="password"]')].find(visible) || null; if (!pw) await sleep(200); }
   const managed = await chrome.runtime.sendMessage({ q: "managed" }).then((r) => r && r.managed, () => false);
   if (!managed) return;
   const onGw = location.host.startsWith("gw.");
@@ -23,7 +23,7 @@
   const idIn = ids.pop();
   if (idIn && cfg.id) setV(idIn, cfg.id);
   setV(pw, cfg.pw);
-  await sleep(400);
+  await sleep(150);
   const btn = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], input[type="image"], a')].find((b) => visible(b) && /log\s*in|로그인/i.test(b.textContent || b.value || b.alt || ""));
   if (btn) btn.click();
   else if (pw.form) (pw.form.requestSubmit ? pw.form.requestSubmit() : pw.form.submit());
@@ -48,7 +48,7 @@
       return hits.sort((a, b) => visible(b) - visible(a))[0] || null;
     };
     let el = null;
-    for (let t = 0; t < 30 && !el; t++) { el = find(); if (!el) await sleep(500); }
+    for (let t = 0; t < 60 && !el; t++) { el = find(); if (!el) await sleep(250); }
     if (!el) { say("GW에서 '경영정보' 메뉴를 못 찾음"); return; }
     const target = el.closest("a, button, li, [onclick]") || el;
     target.click();

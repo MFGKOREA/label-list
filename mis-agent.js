@@ -54,7 +54,7 @@
       if (p && p.date === today() && p.status === "pending") {
         // 맡았다고 적고 3초 뒤 다시 읽어 내 이름이 남아 있을 때만 실행 (다른 탭이 맡았으면 넘김)
         await set("misPush", { ...p, status: "running", startAt: Date.now(), by: ME });
-        await new Promise((ok) => setTimeout(ok, 3000));
+        await new Promise((ok) => setTimeout(ok, 1200));
         const q = (await get()).misPush || {};
         if (q.by !== ME || q.id !== p.id) return;
         state = "MIS 입력 중"; badge();
