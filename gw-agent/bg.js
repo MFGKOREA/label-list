@@ -84,6 +84,22 @@ async function adopt(newId, fromId) {
   await log("MIS 새 탭을 자동 탭으로");
 }
 chrome.tabs.onCreated.addListener((tab) => adopt(tab.id, tab.openerTabId));
+// 자동 창에서는 GW·MIS 알림창(alert)·확인창(confirm)이 사람 없이 멈추게 함 (예: 일요일 "주문 가능 시간이 아닙니다")
+//  → 페이지가 뜨자마자 그 창의 모든 프레임에서 알림창을 기록만 하고 넘김, 확인창은 "예"
+//  사람이 직접 연 창([MIS 직접 열어 보기])과 다른 크롬 창에는 안 함
+chrome.webNavigation.onCommitted.addListener(async (d) => {
+  const { tabId, manual } = await get(["tabId", "manual"]);
+  if (d.tabId !== tabId || manual || !/madforgarlic\.com/.test(d.url)) return;
+  chrome.scripting.executeScript({
+    target: { tabId: d.tabId, frameIds: [d.frameId] }, world: "MAIN", injectImmediately: true,
+    func: () => {
+      if (window.__gwQuiet) return; window.__gwQuiet = true;
+      const note = (m) => { try { (window.top.__gwNotes = window.top.__gwNotes || []).push(String(m)); } catch (e) {} };
+      window.alert = (m) => note(m);
+      window.confirm = (m) => { note("확인: " + m); return true; };
+    },
+  }).catch(() => {});
+});
 chrome.webNavigation.onCreatedNavigationTarget.addListener((d) => adopt(d.tabId, d.sourceTabId)); // window.open·새 창도 확실히 잡음
 chrome.tabs.onRemoved.addListener(async (id) => { const { tabId } = await get("tabId"); if (id === tabId) await chrome.storage.local.remove(["tabId", "openedAt", "manual"]); }); // 닫으면 다시 안 엶
 
