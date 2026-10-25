@@ -23,7 +23,9 @@ const api = (r) => {
   const q = r.request(), u = new URL(q.url());
   if (q.method() === "GET") {
     log.get.push(u.searchParams.get("k"));
-    if (u.searchParams.get("status")) return r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, locked: true, status: { misPush: store.misPush ? { status: store.misPush.status, date: store.misPush.date } : {}, salesPush: {}, misAgent: {} } }) });
+    // Code.gs status_()와 같은 모양: 시각·상태·id만 (품목·수량 없음)
+    const pick = (o, ks) => { const out = {}; if (o) ks.forEach((k) => { if (o[k] != null) out[k] = o[k]; }); return out; };
+    if (u.searchParams.get("status")) return r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, locked: true, status: { misPush: pick(store.misPush, ["date", "id", "at", "status", "startAt", "doneAt", "by"]), salesPush: pick(store.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(store.misAgent, ["at", "mode", "grid"]) } }) });
     if (u.searchParams.get("k") !== KEY) return r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: false, auth: true, error: "가게 키가 필요해요" }) });
     return r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, data: store }) });
   }
@@ -70,7 +72,7 @@ for (const withKey of [true, false]) {
   await p.goto("https://mis.test/main.html"); await p.waitForTimeout(600);
   store.misPush = { date: T, id: Date.now(), at: Date.now(), status: "pending", n: pick.length };
   await p.evaluate((u) => { const s = document.createElement("script"); s.src = u; document.body.appendChild(s); }, "https://mfgkorea.github.io/label-list/mis-agent.js?quiet=1&t=1" + (withKey ? "&k=" + KEY : ""));
-  for (let i = 0; i < 30 && !/done|error/.test(store.misPush.status); i++) await p.waitForTimeout(500);
+  for (let i = 0; i < 120 && !/done|error/.test(store.misPush.status); i++) await p.waitForTimeout(500); // mis.js가 모든 주문그룹을 열어 보므로(잔여 품목 정리) 빈 그룹 2개 × 12초 대기가 더 걸림
   const saved = await p.evaluate(() => JSON.stringify(window.__saved));
   if (withKey) ok(store.misPush.status === "done" && saved.includes("46492"), `키 있는 자동 대기 → 저장 (${store.misPush.status})`);
   else ok(store.misPush.status === "pending" && saved === "{}", `키 없는 자동 대기 → 저장 안 함 (${store.misPush.status}, MIS ${saved})`);
