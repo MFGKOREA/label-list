@@ -133,6 +133,7 @@
     if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
     if (API) { if (!(key in pend.base) && isObj(syncBase[key])) pend.base[key] = clone(syncBase[key]); pend.set[key] = 1; savePend(); send(key); }
     if (key === "input." + TODAY || key === "misPush") setTimeout(renderMis, 0);
+    if (key === "salesPush") setTimeout(renderSales, 0);
   }
   // 같은 키는 한 번에 하나씩 보냄 (먼저 보낸 옛 값이 늦게 도착해 새 값을 덮는 일 방지)
   const inflight = {};
@@ -1943,7 +1944,35 @@
 
   // ---------- Forecast ----------
   let fcWeekStart = mondayOf(TODAY);
+  // ---------- 실제 Gross를 MIS에서 가져오기 (폰 → PC, GW 전송과 같은 길) ----------
+  // [GW에서 가져오기] → 시트 salesPush pending {from, to} → PC 확장이 MIS 매출현황(MiscellaneousReport, 일자별)을 조회 → forecast[날짜].act를 채우고 결과를 salesPush에
+  function renderSales() {
+    const el = $("salesBar"); if (!el) return;
+    if (!API) { el.hidden = true; return; }
+    el.hidden = false;
+    const ag = db.misAgent || {}, p = db.salesPush || null;
+    const agOn = ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? 20 * 60e3 : 180000);
+    const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 12 * 60e3;
+    let st, cls = "";
+    if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 MIS 매출현황 여는 중… (1~2분)" : "PC가 꺼져 있어 기다리는 중"; cls = "run"; }
+    else if (p && p.status === "running" && !stale) { st = "PC에서 매출 읽는 중…"; cls = "run"; }
+    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} ${p.text || "가져옴"}`; cls = "ok"; }
+    else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 못 가져옴 · 눌러서 보기`; cls = "bad"; }
+    else if (stale) { st = "⚠ PC 응답 없음 · 다시 눌러 주세요"; cls = "bad"; }
+    else st = agOn ? "이번 주 ~ 어제 실제 Gross를 MIS에서 채워요" : "PC 연결 안 됨";
+    el.innerHTML = `<div class="mis-t"><b>실제 Gross 가져오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
+      `<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>GW에서 가져오기</button>`;
+    el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
+    el.querySelector("#salesGo").addEventListener("click", () => {
+      const to = addDays(TODAY, -1), from = mondayOf(to);
+      setKey("salesPush", { id: Date.now(), at: Date.now(), status: "pending", from, to });
+      misFastUntil = Date.now() + 180000;
+      toast(agOn ? "PC로 보냈어요 · 1~2분 뒤 채워져요" : "보냈어요 · PC가 켜지면 가져와요");
+    });
+  }
   function renderForecast() {
+    renderSales();
     const sel = $("wSel");
     const y = +TODAY.slice(0, 4);
     if (!sel.options.length) {
@@ -2460,6 +2489,7 @@
     const typing = (id) => { const a = document.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && $(id).contains(a); };
     if (!$("v-main").hidden && !typing("v-main")) renderMain();
     else if (!$("v-main").hidden) renderMis();
+    if (!$("v-forecast").hidden) renderSales();
     if (!$("v-forecast").hidden && !typing("v-forecast")) renderForecast();
     if (!$("v-report").hidden) renderReport();
     if (!$("v-files").hidden && !typing("v-files")) renderFiles();
