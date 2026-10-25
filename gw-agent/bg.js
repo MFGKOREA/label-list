@@ -74,7 +74,7 @@ async function tick(reason) {
     // 로그인 풀림 등으로 자동 대기 응답이 6분 넘게 없으면 GW부터 다시
     const at = (d.misAgent || {}).at || 0;
     if (now - openedAt > 6 * 60e3 && now - at > 6 * 60e3) { await put({ openedAt: now }); chrome.tabs.update(tab.id, { url: GW_URL }); await log("대기 창 응답 없음 → GW부터 다시"); }
-    if (!hours && !waiting && !salesWaiting && !/running/.test(p.status + sp.status)) await closeWin("매장 시간 끝 → 대기 창 닫음");
+    if (!hours && !waiting && !salesWaiting && !(mine && p.status === "running") && sp.status !== "running") await closeWin("매장 시간 끝 → 대기 창 닫음"); // 어제 날짜 running은 무시
     return;
   }
   if (job === "sales") { if (/done|error/.test(sp.status) && (sp.doneAt || 0) > openedAt) await closeWin(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`); else if (now - openedAt > 12 * 60e3) await closeWin("12분 안에 못 끝냄 → 창 닫음 (기록 확인)"); return; }
