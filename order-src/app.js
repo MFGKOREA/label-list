@@ -540,10 +540,10 @@
   //   9/14~10/20 실적으로 맞춰 보면 하루 오차 30.7% → 28.2%
   function dataForecast(d) {
     const b = dataBase(d); if (b == null) return null;
-    const f = db.forecast || {}, k = fcBias().k, mon = mondayOf(d);
+    const f = db.forecast || {}, mon = mondayOf(d);
     let a = 0, z = 0, all = 0;
     for (let i = 0; i < 7; i++) {
-      const x = addDays(mon, i), fv = num((f[x] || {}).fc) * k, bx = dataBase(x); if (!bx) continue; all += bx;
+      const x = addDays(mon, i), fv = num((f[x] || {}).fc) * fcBias(x).k, bx = dataBase(x); if (!bx) continue; all += bx;
       if (fv >= 0.3 * bx) { a += Math.min(2 * bx, Math.max(0.5 * bx, fv)); z += bx; } // 0.3배 아래는 오타로 보고 뺌, 하루 값은 0.5~2배로 자름
     }
     // 그 주에 Forecast를 넣은 만큼만 (하루만 넣으면 조금, 한 주 다 넣으면 다)
@@ -571,23 +571,48 @@
     dataFcMemo.set(d, v);
     return v;
   }
-  // I: Forecast 보정. 지난 28일(Forecast와 실제가 둘 다 있는 날) 실제 ÷ Forecast의 중앙값을 앞으로의 Forecast에 곱함
-  // Forecast 하루 오차(상대값): 실제 Gross와 같이 있는 최근 28일의 RMS. 5일 미만이면 25%로 봄 (9~10월 데이터 예상 오차 약 30%)
-  let fcErrMemo = null;
-  function fcErr() {
-    if (fcErrMemo != null) return fcErrMemo;
-    const f = db.forecast || {}, k = fcBias().k;
-    const r = Object.keys(f).filter((d) => d < TODAY).sort().map((d) => [num(f[d].fc) * k, num(f[d].act)]).filter(([a, b]) => a > 0 && b > 0).slice(-28).map(([a, b]) => (b - a) / a);
-    return (fcErrMemo = r.length >= 5 ? Math.min(0.6, Math.max(0.05, Math.sqrt(r.reduce((x, e) => x + e * e, 0) / r.length))) : 0.25);
-  }
-  function fcBias() {
+  // I: Forecast 보정 — 요일 묶음(월·화 / 수·목·금 / 토·일·공휴일)마다 "실제 ÷ Forecast" 중앙값으로. 점장 Forecast가 수·목·금은 계속 10~20% 적게,
+  //  월·화는 조금 많게 잡혀 왔음 (9/14~10/25, 34일). 표본이 적을수록 덜 믿음(n/(n+3)), ±5% 안은 우연으로 보고 안 함, 0.7~1.3배로 자름.
+  //  되돌려 보기(그날 이전 날들만 보고 정함): 하루 오차 17.4→16.8% (10/6~), 15.4% (10/13~), 17.7% (10/19~) · 편향 +4.3→+0.5%
+  const fcGroup = (d) => { const w = dow(d); return w === 0 || w === 6 || isHoliday(d) ? "we" : w <= 2 ? "mt" : "wtf"; };
+  const FC_GROUP_NAME = { mt: "월·화", wtf: "수·목·금", we: "토·일" };
+  function fcHist() {
     if (fcBiasMemo) return fcBiasMemo;
     const f = db.forecast || {};
-    const r = Object.keys(f).filter((d) => d < TODAY).sort().map((d) => [num(f[d].fc), num(f[d].act)]).filter(([a, b]) => a > 0 && b > 0).slice(-28).map(([a, b]) => b / a).sort((x, y) => x - y);
-    const k0 = r.length >= 5 ? Math.min(1.3, Math.max(0.7, r[Math.floor(r.length / 2)])) : 1;
-    // ±10% 안은 우연한 들쭉날쭉이라 보정하지 않음 (9/14~10/20 되돌려 보니 보정하면 하루 오차 16.5% → 17.4%로 오히려 나빠짐)
-    const k = Math.abs(k0 - 1) <= 0.1 ? 1 : k0;
-    return (fcBiasMemo = { k, n: r.length });
+    const hist = Object.keys(f).filter((d) => d < TODAY).sort().map((d) => ({ d, fc: num(f[d].fc), act: num(f[d].act) })).filter((x) => x.fc > 0 && x.act > 0);
+    const groups = {};
+    ["mt", "wtf", "we"].forEach((g) => {
+      const r = hist.filter((x) => fcGroup(x.d) === g).slice(-12).map((x) => x.act / x.fc).sort((a, b) => a - b);
+      let k = 1;
+      if (r.length >= 3 && (db.settings || {}).fcBias !== "off") { // 시트 settings.fcBias = "off"면 보정 안 함 const med = Math.min(1.3, Math.max(0.7, r[Math.floor(r.length / 2)])); k = 1 + (med - 1) * r.length / (r.length + 3); if (Math.abs(k - 1) <= 0.05) k = 1; }
+      groups[g] = { k: Math.round(k * 1000) / 1000, n: r.length };
+    });
+    return (fcBiasMemo = { hist, groups, n: hist.length });
+  }
+  // fcBias(d) = 그날의 보정 배수. 날짜 없이 부르면 묶음별 배수 목록(화면 표시용)
+  function fcBias(d) {
+    const h = fcHist();
+    if (!d) return { k: 1, n: h.n, groups: h.groups, label: Object.keys(h.groups).filter((g) => h.groups[g].k !== 1).map((g) => `${FC_GROUP_NAME[g]} ${h.groups[g].k > 1 ? "+" : ""}${Math.round((h.groups[g].k - 1) * 100)}%`).join(" · ") };
+    return h.groups[fcGroup(d)];
+  }
+  // Forecast 하루 오차(상대값, 보정 뒤 남는 오차의 RMS): 평일과 주말을 따로 (최근 28일 기준 평일 0.24, 주말 0.11 — 주말은 점장 Forecast가 훨씬 정확).
+  //  4일 미만이면 전체 값으로, 전체도 5일 미만이면 25%
+  let fcErrMemo = null;
+  function fcErrAll() {
+    if (fcErrMemo) return fcErrMemo;
+    const rms = (arr) => Math.sqrt(arr.reduce((x, e) => x + e * e, 0) / arr.length);
+    const res = fcHist().hist.slice(-28).map((x) => ({ g: fcGroup(x.d) === "we" ? "we" : "wd", e: x.act / (x.fc * fcBias(x.d).k) - 1 }));
+    const all = res.length >= 5 ? Math.min(0.6, Math.max(0.05, rms(res.map((x) => x.e)))) : 0.25;
+    const of = (g) => { const a = res.filter((x) => x.g === g).map((x) => x.e); return a.length >= 4 ? Math.min(0.6, Math.max(0.05, rms(a))) : all; };
+    return (fcErrMemo = { all, wd: of("wd"), we: of("we") });
+  }
+  const fcErr = (d) => (d ? fcErrAll()[fcGroup(d) === "we" ? "we" : "wd"] : fcErrAll().all);
+  // 기간 Forecast 오차의 분산: 날마다 (그날 매출 × 그날 오차)²를 더함. 실제 매출이 있는 지난날은 오차 0.
+  //  기간 전체의 상대 오차 = √fcVar ÷ 기간 매출 (주말이 끼면 작아지고, 평일만이면 커짐 — 전에는 하루 오차 하나를 √일수로만 나눴음)
+  function fcVar(from, toExcl, preferActual, firstLeft) {
+    let v = 0;
+    for (let d = from; d < toExcl; d = addDays(d, 1)) { const g = dayGross(d, preferActual); if (g.src === "act") continue; const w = (d === from ? (firstLeft == null ? 1 : firstLeft) : 1) * g.v; const s = g.src === "fc" ? fcErr(d) : Math.max(fcErr(d), 0.3); v += w * w * s * s; }
+    return v;
   }
 
   function model() {
@@ -968,7 +993,7 @@
   function dayGross(d, preferActual) {
     const f = (db.forecast || {})[d] || {};
     if (preferActual && isFinite(num(f.act))) return { v: num(f.act), src: "act" };
-    if (isFinite(num(f.fc))) return { v: num(f.fc) * fcBias().k, src: "fc" };
+    if (isFinite(num(f.fc))) return { v: num(f.fc) * fcBias(d).k, src: "fc" };
     // 없으면 데이터 예상 Forecast (같은 요일·공휴일 실적), 그것도 없으면 최근 달 평균
     const de = dataForecast(d);
     if (de) return { v: de, src: "est" };
@@ -987,7 +1012,7 @@
     const g = sumGross(today, end, false), nEff = effDays(today, end);
     const covered = [];
     for (let d = deliv; d < nextDeliv; d = addDays(d, 1)) covered.push(DOW[dow(d)]);
-    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered, wkGross: wkGross(deliv, end) };
+    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered, wkGross: wkGross(deliv, end), fcVar: fcVar(today, end, false) };
   }
   // 주말 여유분: 입고 뒤 토·일 매출(이 발주가 맡는 주말)에 KM이 정한 비율만큼 사용량을 더 잡음 (settings.weekendPlus, 기본 25%)
   const wkGross = (from, toExcl) => { let s = 0; for (let d = from; d < toExcl; d = addDays(d, 1)) if (dow(d) === 0 || dow(d) === 6) s += dayGross(d, false).v; return s; };
@@ -1010,7 +1035,7 @@
     if (!t) return w;
     const end = addDays(w.end, t), g = sumGross(today, end, false);
     // 주말 여유분은 이 발주분을 쓸 수 있는 날(입고 다음 날)부터: 목요일 발주 해동 품목은 토요일을 수요일 발주가 맡으니 토요일 이중 계산 방지
-    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(addDays(w.deliv, t), end) };
+    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(addDays(w.deliv, t), end), fcVar: fcVar(today, end, false) };
   }
   function orderWindowBase(it, today) {
     const c = vcfg(it);
@@ -1020,7 +1045,7 @@
     const deliv = deliveryOf(it, o1), nextDeliv = deliveryOf(it, o2);
     const days = Math.round((parseISO(nextDeliv) - parseISO(today)) / 864e5);
     const g = sumGross(today, nextDeliv, false);
-    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today, wkGross: wkGross(deliv, nextDeliv) };
+    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today, wkGross: wkGross(deliv, nextDeliv), fcVar: fcVar(today, nextDeliv, false) };
   }
 
   // ---------- C: 최종 발주량 ----------
@@ -1050,7 +1075,10 @@
     // 프랩 배치: 소스·드레싱 원재료는 프랩하는 날 통째로 나가니, 이 기간에 돌아오는 배치만큼 평균 사용량을 고쳐 잡고, 배치 시점 불확실성은 여유분에 더함
     const ba = batchAdj(it, win), useAvg = use;
     if (ba) use = Math.max(0, use + ba.delta);
-    let ss = Z * Math.sqrt((Math.sqrt(sigma * sigma + fcErr() ** 2) * useAvg / Math.sqrt(nd)) ** 2 + (ba ? ba.varS : 0));
+    // Forecast 오차: 기간의 날별 오차 합(fcVar, 평일·주말 따로) → 상대값. 없으면 예전처럼 하루 오차 ÷ √일수
+    const fcRel = win.fcVar != null && win.gross > 0 ? Math.sqrt(win.fcVar) / win.gross : fcErr() / Math.sqrt(nd);
+    const relErr = Math.sqrt(sigma * sigma / nd + fcRel * fcRel); // 기간 사용량의 상대 오차 (사용량 계산 오차는 날마다 상쇄, Forecast 오차는 날별 합)
+    let ss = Z * Math.sqrt((relErr * useAvg) ** 2 + (ba ? ba.varS : 0));
     const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * Math.min(1, win.wkGross / win.gross) : 0;
     ss += wkPlus;
     let need = use + ss;
@@ -1065,8 +1093,8 @@
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
     // ± 범위(카드·리포트·86 위험)는 평균 사용량 기준 예측 오차만. 프랩 배치가 이번 기간에 드는지 아닌지는 오차가 아니라 덩어리라 여유분(ss)에만 넣음
-    const sd = useAvg * Math.sqrt(sigma * sigma + fcErr() ** 2) / Math.sqrt(nd);
-    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus };
+    const sd = useAvg * relErr;
+    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus, fcRel, sigma };
   }
 
   // ---------- 프랩 배치 계획 ----------
@@ -1384,7 +1412,7 @@
     else if (dow(od) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().k !== 1 ? ` · Forecast 보정 ${Math.round(fcBias().k * 100)}%` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
@@ -1471,7 +1499,7 @@
       const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
       const left = leftOf(hh, x);
       const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
-      const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross }, 0, 0);
+      const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, fcVar: fcVar(x, d, true, left) }, 0, 0);
       if (c.none) return null;
       return { v: Math.max(0, stockOf(it, r) + arr - c.use), from: x, days: k };
     }
@@ -1605,7 +1633,7 @@
         const x = addDays(TODAY, -k), r = (db["input." + x] || {})[it.key]; if (!counted(r)) continue;
         const b = num(r.s), f = it.box || 1; if (!(b > 0)) return null;
         let arr = 0; for (let j = 0; j <= 7; j++) arrivalsOf(it, addDays(TODAY, -j)).forEach((q) => { if (q.d > x && q.d <= TODAY) arr += q.q / f; });
-        const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s }, 0, 0), use = c.none ? 0 : c.use / f;
+        const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s, fcVar: fcVar(x, TODAY, true) }, 0, 0), use = c.none ? 0 : c.use / f;
         const up = a >= 3 * (b + arr) && a - (b + arr) >= 2, down = a <= b / 3 && b - a >= 2 && b - a > 3 * use + arr;
         return up || down ? `${it.name}: ${k === 1 ? "어제" : mmdd(x)} ${b} → 오늘 ${a}. 숫자 확인해 주세요` : null;
       }
@@ -1653,7 +1681,7 @@
     const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
     const left = leftOf(hh, TODAY);
     const gross = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), until, false).s;
-    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross }, 0, 0); if (r.none || !(r.use > 0)) return null;
+    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross, fcVar: fcVar(TODAY, until, false, left) }, 0, 0); if (r.none || !(r.use > 0)) return null;
     const have = stockOf(it, v) + arr;
     const p = r.sd > 0 ? 1 - phi((have - r.use) / r.sd) : have < r.use ? 1 : 0;
     if (p < SHOW_P) return null;
@@ -1869,7 +1897,7 @@
     const M = model();
     const g = dayGross(TODAY, false);
     $("prepBanner").className = "banner" + (g.src === "fc" ? "" : " soft");
-    $("prepBanner").innerHTML = `<span>오늘 ${DOW[dow(TODAY)]}요일 Forecast${g.src === "fc" ? (fcBias().k !== 1 ? ` (보정 ${Math.round(fcBias().k * 100)}%)` : "") : " (추정)"}</span><span>${won(g.v)}원</span>`;
+    $("prepBanner").innerHTML = `<span>오늘 ${DOW[dow(TODAY)]}요일 Forecast${g.src === "fc" ? (fcBias(TODAY).k !== 1 ? ` (보정 ${fcBias(TODAY).k > 1 ? "+" : ""}${Math.round((fcBias(TODAY).k - 1) * 100)}%)` : "") : " (추정)"}</span><span>${won(g.v)}원</span>`;
     const sheet = M.prepSheet;
     const list = sheet.length ? sheet.map((x) => ({ name: x.name, code: x.code || "", shelf: x.shelf, section: x.section || "" }))
       : M.prep.map((p) => ({ name: p.short || p.name, code: p.code || "", shelf: p.shelf }));
@@ -2526,5 +2554,5 @@
     polling = true;
     try { lastFull = Date.now(); if (await pull(true)) refreshVisible(); } finally { polling = false; }
   }, 3000);
-  window.__orderCalc = { model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY };
+  window.__orderCalc = { model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar };
 })();

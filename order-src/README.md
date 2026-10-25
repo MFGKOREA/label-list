@@ -11,6 +11,11 @@
 | `build.py` | 위 세 파일을 order.html에 끼워 넣음 |
 | `test/smoke.mjs` | 실제 시트 데이터로 전 화면을 열어 오류·A/B 차이를 출력, `test/shots/`에 스크린샷 (시트에 쓰지 않음) |
 
+## Forecast 보정·오차 (10/26)
+- **보정(fcBias)**: 요일 묶음(월·화 / 수·목·금 / 토·일·공휴일)별로 최근 12일 "실제÷Forecast" 중앙값 → n/(n+3)으로 줄여 적용, ±5% 안은 1, 0.7~1.3 클램프. `settings.fcBias = "off"`면 끔. 되돌려 보기(as-of): 하루 MAPE 17.4→16.8%(10/6~)·17.5→15.4%(10/13~)·22.3→17.7%(10/19~), 편향 +4.3→+0.5%. 10/26 기준 수·목·금 +14%, 월·화·토·일 보정 없음.
+- **오차(fcErr)**: 보정 뒤 잔차 RMS를 평일/주말 따로(최근 28일, 그룹 4일 미만이면 전체). 기간 오차는 `fcVar = Σ(그날 매출 × 그날 오차)²`로 날별 합 → `fcRel = √fcVar ÷ 기간 매출` (실제 매출이 있는 지난날은 오차 0). `calc`의 안전재고·± = `useAvg × √(σ²/nEff + fcRel²)`. 창에 fcVar가 없으면 예전 식(fcErr/√nEff).
+- 되돌려 보기 스크립트: 스크래치 `fcbt.mjs`(규칙별 as-of MAPE).
+
 ## 데이터 (구글 시트 KV, Apps Script)
 - 주소: `app.js`의 `DEFAULT_API`. 읽기 `GET ?api=1` → `{key: value}` 전체. 쓰기 `POST {action:"set"|"append", key, value|item}` (Content-Type text/plain).
 - **쓰기는 매장 실제 데이터를 바꿉니다.** 사용자(점장·KM)가 요청한 것만, 기존 값을 읽어 합친 뒤 씁니다.
