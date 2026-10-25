@@ -6,6 +6,7 @@
 //  크롬 확장(gw-agent)이 켤 때는 ?quiet=1 → 알림창 없이, 주문등록 화면이 2분 넘게 안 보이면 새로고침(로그인 풀림 → 확장이 다시 로그인)
 (() => {
   const QUIET = /[?&]quiet=1/.test((document.currentScript || {}).src || "");
+  const WARM = /[?&]warm=1/.test((document.currentScript || {}).src || ""); // 확장 대기 창: 확장이 요청을 보면 바로 깨움(__misKick), 스스로는 1분마다만
   const say = (m) => { if (!QUIET) alert(m); };
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const VER = "2";
@@ -85,6 +86,6 @@
     });
   }
   loadFill().then(
-    () => { badge(); tick(); setInterval(tick, 20000); say("발주앱 자동 대기를 켰어요.\n이 탭은 주문등록 화면으로 열어 두세요 (닫거나 새로고침하면 꺼져요)."); },
+    () => { badge(); tick(); setInterval(tick, WARM ? 60000 : 20000); window.__misKick = () => tick(); say("발주앱 자동 대기를 켰어요.\n이 탭은 주문등록 화면으로 열어 두세요 (닫거나 새로고침하면 꺼져요)."); },
     () => { window.__misAgent = false; say("자동입력 스크립트를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); });
 })();

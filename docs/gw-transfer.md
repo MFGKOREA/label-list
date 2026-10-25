@@ -7,7 +7,8 @@
 ```
 폰 발주앱 [GW 전송] ─→ 구글 시트 misPush {date, status: pending}
                               │  (20초마다 확인)
-PC 크롬 확장 gw-agent(1.4.2, 평소 창 없음) ─ 매일 08~22시 10초·그 밖 30초마다 시트 확인 → pending이면 최소화 창으로 GW 로그인 → 경영정보 → MIS 주문등록
+PC 크롬 확장 gw-agent(1.5) ─ 매장 시간(08~22시)엔 최소화 대기 창에 MIS 주문등록을 열어 두고 3~5초마다 시트 확인 → 요청 오면 바로 실행(__misKick / mis-sales.js 주입)
+   그 밖 시간엔 창 없이 30초마다 확인 → pending이면 그때 최소화 창으로 GW 로그인 → 경영정보 → MIS 주문등록
    → 자동 대기(mis-agent.js) ─→ mis.js: 그룹 열기 → 수량 넣기 → 저장 → 다시 불러와 대조 → 끝나면 창 닫음 (12분 넘으면 닫고 같은 요청 2번까지)
                               │
 구글 시트 misPush {status: done/error, text, saved/total} ─→ 폰에 "✓ 저장 완료 N/N" 또는 "⚠ 확인 필요"

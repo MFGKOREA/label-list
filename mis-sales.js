@@ -3,7 +3,8 @@
 //  → 날짜별 Gross를 읽어 시트 forecast[날짜].act에 넣고 결과를 salesPush에 적음 (MIS에는 아무것도 저장하지 않음, 조회만)
 //  어느 단계에서 막히면 그 화면의 칸 이름·표 머리글만 salesDiag에 적어 둠 → 고칠 때 씀 (확장은 다시 설치할 필요 없음)
 (async () => {
-  if (window.__misSales) return; window.__misSales = true;
+  if (window.__misSalesBusy) return; window.__misSalesBusy = true; // 대기 창에서는 같은 페이지에서 여러 번 실행됨
+  setTimeout(() => { window.__misSalesBusy = false; }, 90e3);
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const STORE = "1345090";
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -21,11 +22,11 @@
   };
 
   let job;
-  try { job = (await get()).salesPush; } catch (e) { return; }
-  if (!job || job.status !== "pending") return;
+  try { job = (await get()).salesPush; } catch (e) { window.__misSalesBusy = false; return; }
+  if (!job || job.status !== "pending") { window.__misSalesBusy = false; return; }
   await set("salesPush", { ...job, status: "running", startAt: Date.now(), by: ME });
   await sleep(1000);
-  try { const q = (await get()).salesPush || {}; if (q.by !== ME || q.id !== job.id) return; } catch (e) { return; }
+  try { const q = (await get()).salesPush || {}; if (q.by !== ME || q.id !== job.id) { window.__misSalesBusy = false; return; } } catch (e) { window.__misSalesBusy = false; return; }
 
   let step = "시작";
   const diag = {};
@@ -43,6 +44,7 @@
       await set("salesDiag", diag).catch(() => {});
     }
     await set("salesPush", { ...job, status: ok ? "done" : "error", doneAt: Date.now(), text, ...(extra || {}) });
+    window.__misSalesBusy = false;
   };
 
   try {
