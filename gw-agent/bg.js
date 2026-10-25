@@ -67,8 +67,10 @@ async function tick(reason) {
   if (manual) return; // [자동 탭 보기]로 연 창은 사람이 닫음
   if (job === "warm") {
     // 대기 창: 열린 MIS에서 바로 실행
-    if (waiting && kicked.o !== p.id) { await put({ kicked: { ...kicked, o: p.id } }); await inTab(tab.id, () => window.__misKick && window.__misKick()); await log("폰 전송 → 대기 창에서 바로 입력"); }
-    if (salesWaiting && kicked.s !== sp.id) { await put({ kicked: { ...kicked, s: sp.id } }); await inTab(tab.id, addScript, ["https://mfgkorea.github.io/label-list/mis-sales.js?quiet=1&t=" + now]); await log("Gross 불러오기 → 대기 창에서 바로 조회"); }
+    // MIS 첫 화면이 다 열리고 자동 대기가 켜진 뒤에만 (크롬이 막 켜졌을 땐 자동 대기가 켜지면서 스스로 처리)
+    const ready = /mis\.madforgarlic/.test(tab.url || "") && ((d.misAgent || {}).at || 0) > openedAt;
+    if (ready && waiting && kicked.o !== p.id) { await put({ kicked: { ...kicked, o: p.id } }); await inTab(tab.id, () => window.__misKick && window.__misKick()); await log("폰 전송 → 대기 창에서 바로 입력"); }
+    if (ready && salesWaiting && kicked.s !== sp.id) { await put({ kicked: { ...kicked, s: sp.id } }); await inTab(tab.id, addScript, ["https://mfgkorea.github.io/label-list/mis-sales.js?quiet=1&t=" + now]); await log("Gross 불러오기 → 대기 창에서 바로 조회"); }
     // 로그인 풀림 등으로 자동 대기 응답이 6분 넘게 없으면 GW부터 다시
     const at = (d.misAgent || {}).at || 0;
     if (now - openedAt > 6 * 60e3 && now - at > 6 * 60e3) { await put({ openedAt: now }); chrome.tabs.update(tab.id, { url: GW_URL }); await log("대기 창 응답 없음 → GW부터 다시"); }
