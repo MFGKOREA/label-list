@@ -1953,9 +1953,10 @@
     const ag = db.misAgent || {}, p = db.salesPush || null;
     const agOn = ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? 20 * 60e3 : 180000);
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 12 * 60e3;
+    // 매출 조회는 1분이면 끝남 → 3분 넘게 그대로면 멈춘 걸로 보고 다시 누를 수 있게
+    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 3 * 60e3;
     let st, cls = "";
-    if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 MIS 매출현황 여는 중… (1~2분)" : "PC가 꺼져 있어 기다리는 중"; cls = "run"; }
+    if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 MIS 매출현황 여는 중…" : "PC가 꺼져 있어 기다리는 중"; cls = "run"; }
     else if (p && p.status === "running" && !stale) { st = "PC에서 매출 읽는 중…"; cls = "run"; }
     else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} ${p.text || "가져옴"}`; cls = "ok"; }
     else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 못 가져옴 · 눌러서 보기`; cls = "bad"; }
