@@ -1,5 +1,5 @@
 // GW 전송 시험 (크롬 확장 gw-agent): 가짜 GW 로그인 → 경영정보 → 가짜 MIS → 주문등록 → 자동 대기 → 저장
-// 사용: node order-src/test/gw/e2e-extension.mjs <kv.json>
+// 사용: node order-src/test/gw/e2e-extension.mjs <kv.json>   (CLOSED=1: 마감 뒤 MIS가 알림창을 띄우는 경우)
 //  한계: 확장·새 창이 연 탭은 Playwright 가로채기가 안 돼서 첫 탭은 테스트가 다시 열어 줌(GW→MIS 새 창 넘어가기는 실제 PC에서 확인)
 import fs from "fs";
 import os from "os";
@@ -43,6 +43,7 @@ await ctx.route("https://mis.madforgarlic.com:8443/**", (r) => {
     if (!/misS=1/.test(ck)) return r.fulfill({ contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><body><input type="text" id="uid" value=""><input type="password" id="upw"><a href="#" id="go">LOGIN</a><script>document.getElementById("go").onclick=function(e){e.preventDefault();window.__lg=(window.__lg||0)+1;if(document.getElementById("upw").value==="pw123"&&document.getElementById("uid").value==="tester"){document.cookie="misS=1;path=/";location.reload();}else{document.body.insertAdjacentHTML("beforeend","<p>bad</p>")}}</script></body>` });
     return r.fulfill({ contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><title>MIS</title><body style="margin:0"><iframe src="menu.html" style="width:200px;height:400px"></iframe><div id="tabs"></div><script>window.__master=${JSON.stringify(master)};window.__saved={};function openTab(s){var f=document.createElement("iframe");f.src=s;f.style.cssText="width:600px;height:400px";document.getElementById("tabs").appendChild(f);}</script></body>` });
   }
+  if (process.env.CLOSED && f === "grid.html") return r.fulfill({ contentType: "text/html", body: fs.readFileSync(HERE + "/mock/grid.html", "utf8").replace("var search_Length = 0", "var search_Length = 1").replace("</body>", "<script>alert('주문 가능 시간이 아닙니다');</script></body>") });
   return r.fulfill({ path: HERE + "/mock/" + f });
 });
 let [sw] = ctx.serviceWorkers(); if (!sw) sw = await ctx.waitForEvent("serviceworker");
