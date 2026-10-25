@@ -40,7 +40,8 @@
         const inputs = [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password").map((i) => `${i.tagName.toLowerCase()}#${i.id || "-"}[${i.name || ""}].${(i.className || "").split(" ").slice(0, 3).join(".")}=${String(i.value).slice(0, 30)}`).slice(0, 40);
         const buttons = [...d.querySelectorAll("a, button, input[type=button], .l-btn-text")].map((b) => (b.textContent || b.value || "").trim()).filter((t) => t && t.length < 20).slice(0, 30);
         return { url: w.location.href.slice(0, 120), title: d.title, grids, inputs, buttons };
-      }).filter((f) => f.grids.length || f.inputs.length);
+      });
+      diag.tree = frames().flatMap((w) => { try { return [...w.document.querySelectorAll(".tree-title")].map((e) => e.textContent.trim()).filter((t) => /매출|Report|Misc/i.test(t)); } catch (e) { return []; } }).slice(0, 30);
       await set("salesDiag", diag).catch(() => {});
     }
     await set("salesPush", { ...job, status: ok ? "done" : "error", doneAt: Date.now(), text, ...(extra || {}) });
@@ -49,16 +50,30 @@
 
   try {
     // 1) 메뉴: 매출정보관리 → 매출현황 → MiscellaneousReport
+    //  보고서 화면 = 주소에 miscellaneous가 있거나, 왼쪽 메뉴·맨 위가 아닌 프레임 중 날짜칸(datebox)이 있는 곳
+    //  (왼쪽 메뉴 프레임에도 "MiscellaneousReport" 글자가 있어서 글자로는 찾지 않음)
     step = "메뉴";
-    const isReport = () => frames().find((w) => /miscellaneous/i.test(w.location.href + " " + w.document.title) || [...w.document.querySelectorAll(".panel-title, .tabs-title, h1, h2, td, span")].some((e) => /^miscellaneous\s*report$/i.test(e.textContent.trim()) && w !== window.top && e.closest("body") && w.document.querySelector("input")));
+    const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+    const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+    const before = new Set(frames());
+    const bodyHas = (w) => { try { return /miscellaneous/i.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 3000) : "")); } catch (e) { return false; } };
+    // 주소에 miscellaneous → 화면 글자에 miscellaneous + 날짜칸 → 메뉴를 누른 뒤 새로 생긴 프레임 중 날짜칸이 있는 곳
+    const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => /miscellaneous/i.test(w.location.href)) || fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+    const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+    const clickTree = (re) => { const hit = byText(re, ".tree-title"); if (!hit) return false; hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); return true; };
     let R = isReport();
-    for (let t = 0; t < 4 && !R; t++) {
-      for (const re of [/^매출정보관리$/, /^매출현황$/, /^miscellaneous\s*report$/i]) { const hit = byText(re, ".tree-title"); if (hit) { hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); } await sleep(350); }
-      for (let k = 0; k < 20 && !(R = isReport()); k++) await sleep(250);
+    for (let t = 0; t < 3 && !R; t++) {
+      // 폴더는 펼쳐질 때까지(자식이 그려질 때까지) 기다린 뒤 다음 단계
+      if (!byText(/^miscellaneous\s*report$/i, ".tree-title")) {
+        if (!byText(/^매출현황$/, ".tree-title")) { clickTree(/^매출정보관리$/); await waitFor(() => byText(/^매출현황$/, ".tree-title"), 3000); }
+        clickTree(/^매출현황$/); await waitFor(() => byText(/^miscellaneous\s*report$/i, ".tree-title"), 3000);
+      }
+      clickTree(/^miscellaneous\s*report$/i);
+      R = await waitFor(isReport, 8000);
     }
     if (!R) return finish(false, "MiscellaneousReport 메뉴를 못 열었어요");
     // 보고서 프레임이 다 그려질 때까지
-    for (let k = 0; k < 40 && !(R.jQuery && R.document.querySelector("input")); k++) { await sleep(250); R = isReport() || R; }
+    for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
     const $ = R.jQuery, d = R.document;
     if (!$) return finish(false, "보고서 화면에 jQuery가 없어요");
 
