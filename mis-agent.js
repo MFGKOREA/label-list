@@ -49,7 +49,8 @@
     try {
       const db = await get(); last = Date.now();
       const p = db.misPush, W = find(window.top);
-      if (Date.now() - beatAt > 120000) { beatAt = Date.now(); set("misAgent", { at: Date.now(), grid: !!W, ver: VER, auto: QUIET }).catch(() => {}); }
+      // 대기 창(1분 확인)에서도 2분마다 기록되게 (3분이면 폰이 "연결 안 됨"으로 깜빡임)
+      if (Date.now() - beatAt >= 110000) { beatAt = Date.now(); set("misAgent", { at: Date.now(), grid: !!W, ver: VER, auto: QUIET }).catch(() => {}); }
       miss = W ? 0 : miss + 1;
       if (QUIET && miss >= 6) { location.reload(); return; }
       if (p && p.date === today() && p.status === "pending") {

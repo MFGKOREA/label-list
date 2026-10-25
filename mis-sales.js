@@ -127,18 +127,27 @@
     step = "읽기";
     const o = $(grid).datagrid("options"), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
     const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
-    const toIso = (v) => { const s = String(v ?? "").trim(); let m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(s); if (m) return `${m[1]}-${m[2]}-${m[3]}`; m = /^(\d\d?)[-./](\d\d?)/.exec(s); if (m) return `${job.to.slice(0, 4)}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`; return null; };
+    // 날짜 칸: 칸 전체가 날짜 하나일 때만 (뒤에 "~ 10/24 합계" 같은 글이 붙은 합계 행은 날짜로 안 봄)
+    const toIso = (v) => { const s = String(v ?? "").trim(); let m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)(?:\s*\([^)]*\)|\s*[월화수목금토일])?$/.exec(s); if (m) return `${m[1]}-${m[2]}-${m[3]}`; m = /^(\d\d?)[-./](\d\d?)(?:\s*\([^)]*\)|\s*[월화수목금토일])?$/.exec(s); if (m) return `${job.to.slice(0, 4)}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`; return null; };
+    const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total|~/i.test(String(v ?? "").trim()));
     const dateCol = cols.find((c) => /일자|날짜|date|영업일/i.test(title(c) + c.field) && rows.some((r) => toIso(r[c.field]))) || cols.find((c) => rows.filter((r) => toIso(r[c.field])).length >= Math.min(2, rows.length));
-    const grossCol = cols.find((c) => /gross/i.test(title(c) + c.field)) || cols.find((c) => /총\s*매출|매출\s*합계|매출액/.test(title(c)) && !/순|net|할인/i.test(title(c)));
+    // Gross 칸: "Gross Sales"가 먼저, 수량·건수·비율 칸은 제외
+    const bad = (c) => /qty|수량|건수|율|%|cnt|count|net|순|할인/i.test(title(c) + " " + c.field);
+    const grossCol = cols.find((c) => /gross\s*sales/i.test(title(c) + " " + c.field)) || cols.find((c) => /gross/i.test(title(c) + " " + c.field) && !bad(c)) || cols.find((c) => /총\s*매출|매출\s*합계|매출액/.test(title(c)) && !bad(c));
     if (!dateCol || !grossCol) return finish(false, `날짜·Gross 칸을 못 찾았어요 (머리글: ${cols.map(title).join(", ").slice(0, 200)})`);
-    const got = {};
-    rows.forEach((r) => { const dt = toIso(r[dateCol.field]), v = num(r[grossCol.field]); if (dt && dt >= job.from && dt <= job.to && v > 0) got[dt] = Math.round(v); });
+    const got = {}, dup = [];
+    rows.forEach((r) => { if (isTotal(r)) return; const dt = toIso(r[dateCol.field]), v = num(r[grossCol.field]); if (!dt || dt < job.from || dt > job.to || !(v > 0)) return; if (dt in got) dup.push(dt); got[dt] = Math.round(v); });
+    if (dup.length) return finish(false, `같은 날짜가 두 번 나와요 (${[...new Set(dup)].map((d) => d.slice(5)).join(", ")}) · 옵션이 '일자별'인지 확인`);
     if (!Object.keys(got).length) return finish(false, `${title(grossCol)} 값이 없어요 (${job.from} ~ ${job.to})`);
+    // 말이 안 되는 값이면 안 씀: 하루 Gross가 10만 원 미만·1억 초과, 또는 기존 값의 1/3~3배 밖
+    const fc0 = (await get()).forecast || {};
+    const odd = Object.entries(got).filter(([dt, v]) => { const old = num((fc0[dt] || {}).act); return v < 1e5 || v > 1e8 || (old > 0 && (v / old > 3 || v / old < 1 / 3)); });
+    if (odd.length) return finish(false, `값이 이상해서 안 넣었어요 (${odd.map(([dt, v]) => `${dt.slice(5)} ${Math.round(v / 1e4).toLocaleString("ko-KR")}만`).join(", ")}) · 칸 "${title(grossCol)}"가 맞는지 확인`);
 
     // 7) 앱 Forecast 실제 칸에 넣기 (MIS 값이 기준: 비었거나 다르면 바꿈)
     step = "저장";
     // 원 단위까지 MIS 값으로 맞추되, 알림에는 빈 칸을 채운 날과 1만 원 넘게 달랐던 날만
-    const fc = { ...((await get()).forecast || {}) }, filled = [], diff = []; let n = 0;
+    const fc = { ...fc0 }, filled = [], diff = []; let n = 0;
     const man = (v) => `${Math.round(v / 1e4).toLocaleString("ko-KR")}만`, md = (dt) => dt.slice(5).replace("-", "/");
     Object.entries(got).forEach(([dt, v]) => {
       const cur = { ...(fc[dt] || { fc: "" }) }, old = num(cur.act);
