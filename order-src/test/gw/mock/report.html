@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>MiscellaneousReport</title><script src="jquery.js"></script></head><body>
+<input id="sDate" class="easyui-datebox" value="2026-10-25"><input id="eDate" class="easyui-datebox" value="2026-10-25">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled><a href="#">🔍</a>
+<label><input type="radio" name="opt" value="T" checked>합계</label><label><input type="radio" name="opt" value="D" id="optD">일자별</label>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="dataGrid1"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: [[{ field: "DT_SALE", title: "영업일자" }, { field: "AM_NET", title: "Net Sales" }, { field: "AM_GROSS", title: "Gross Sales" }]] }; };
+$("#dataGrid1").data("datagrid", 1);
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var daily = document.getElementById("optD").checked, s = $("#sDate").val(), e = $("#eDate").val(), rows = [];
+  var all = { "2026-10-20": 3432000, "2026-10-21": 3538000, "2026-10-22": 4089000, "2026-10-23": 10120000, "2026-10-24": 16366000 };
+  setTimeout(function () { Object.keys(all).forEach(function (d) { if (d >= s && d <= e) rows.push({ DT_SALE: d, AM_NET: Math.round(all[d] / 1.1), AM_GROSS: all[d].toLocaleString() }); }); if (!daily) rows = [{ DT_SALE: "합계", AM_GROSS: "1" }]; $("#dataGrid1").data("dg", { rows: rows }); }, 400);
+}
+</script></body></html>

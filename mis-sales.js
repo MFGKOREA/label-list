@@ -1,0 +1,130 @@
+// MIS 매출 가져오기: 크롬 확장(발주 GW 자동연동)이 매출 요청 때 MIS 첫 화면에 넣어 줌
+//  매출정보관리 → 매출현황 → MiscellaneousReport → 조회일(salesPush.from ~ to) · 매장 1345090 · 일자별 → 조회
+//  → 날짜별 Gross를 읽어 시트 forecast[날짜].act에 넣고 결과를 salesPush에 적음 (MIS에는 아무것도 저장하지 않음, 조회만)
+//  어느 단계에서 막히면 그 화면의 칸 이름·표 머리글만 salesDiag에 적어 둠 → 고칠 때 씀 (확장은 다시 설치할 필요 없음)
+(async () => {
+  if (window.__misSales) return; window.__misSales = true;
+  const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
+  const STORE = "1345090";
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[,\s원]/g, "")); return isFinite(n) ? n : NaN; };
+  const get = async () => (await (await fetch(API + "?api=1&t=" + Date.now())).json()).data || {};
+  const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }) });
+  const ME = Math.random().toString(36).slice(2, 8);
+  const frames = () => { const out = []; const walk = (w) => { try { void w.document.body; out.push(w); } catch (e) { return; } for (let i = 0; i < w.frames.length; i++) walk(w.frames[i]); }; walk(window.top); return out; };
+  const visible = (el) => el && el.offsetParent !== null;
+  // MIS 함수가 window.event를 보므로 그 프레임의 함수로 감싼 이벤트 안에서 누름 (mis.js와 같은 방법)
+  const press = (W, el) => { const h = new W.Function("el", "return function () { el.click(); };")(el); W.document.addEventListener("x-sales", h); W.document.dispatchEvent(new W.Event("x-sales")); W.document.removeEventListener("x-sales", h); };
+  const byText = (re, sel = ".tree-title, a, span, li, div, td, button, input[type=button]") => {
+    for (const w of frames()) { const els = [...w.document.querySelectorAll(sel)].filter((e) => e.children.length === 0 && re.test((e.textContent || e.value || "").trim())); if (els.length) return { w, el: els[els.length - 1] }; }
+    return null;
+  };
+
+  let job;
+  try { job = (await get()).salesPush; } catch (e) { return; }
+  if (!job || job.status !== "pending") return;
+  await set("salesPush", { ...job, status: "running", startAt: Date.now(), by: ME });
+  await sleep(2500);
+  try { const q = (await get()).salesPush || {}; if (q.by !== ME || q.id !== job.id) return; } catch (e) { return; }
+
+  let step = "시작";
+  const diag = {};
+  const finish = async (ok, text, extra) => {
+    if (!ok) {
+      // 막힌 화면의 구조만 (표 머리글, 입력칸 이름, 앞 3줄)
+      diag.at = new Date().toString(); diag.step = step;
+      diag.frames = frames().map((w) => {
+        const d = w.document, $ = w.jQuery, grids = [];
+        if ($) d.querySelectorAll("table[id], div[id]").forEach((el) => { if (!$(el).data("datagrid")) return; const o = $(el).datagrid("options"); grids.push({ id: el.id, cols: [].concat(...(o.frozenColumns || []), ...(o.columns || [])).map((c) => `${c.field}=${String(c.title || "").replace(/<[^>]+>/g, "")}`), rows: ($(el).datagrid("getRows") || []).slice(0, 3) }); });
+        const inputs = [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password").map((i) => `${i.tagName.toLowerCase()}#${i.id || "-"}[${i.name || ""}].${(i.className || "").split(" ").slice(0, 3).join(".")}=${String(i.value).slice(0, 30)}`).slice(0, 40);
+        const buttons = [...d.querySelectorAll("a, button, input[type=button], .l-btn-text")].map((b) => (b.textContent || b.value || "").trim()).filter((t) => t && t.length < 20).slice(0, 30);
+        return { url: w.location.href.slice(0, 120), title: d.title, grids, inputs, buttons };
+      }).filter((f) => f.grids.length || f.inputs.length);
+      await set("salesDiag", diag).catch(() => {});
+    }
+    await set("salesPush", { ...job, status: ok ? "done" : "error", doneAt: Date.now(), text, ...(extra || {}) });
+  };
+
+  try {
+    // 1) 메뉴: 매출정보관리 → 매출현황 → MiscellaneousReport
+    step = "메뉴";
+    const isReport = () => frames().find((w) => /miscellaneous/i.test(w.location.href + " " + w.document.title) || [...w.document.querySelectorAll(".panel-title, .tabs-title, h1, h2, td, span")].some((e) => /^miscellaneous\s*report$/i.test(e.textContent.trim()) && w !== window.top && e.closest("body") && w.document.querySelector("input")));
+    let R = isReport();
+    for (let t = 0; t < 4 && !R; t++) {
+      for (const re of [/^매출정보관리$/, /^매출현황$/, /^miscellaneous\s*report$/i]) { const hit = byText(re, ".tree-title"); if (hit) { hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); } await sleep(900); }
+      for (let k = 0; k < 10 && !(R = isReport()); k++) await sleep(500);
+    }
+    if (!R) return finish(false, "MiscellaneousReport 메뉴를 못 열었어요");
+    // 보고서 프레임이 다 그려질 때까지
+    for (let k = 0; k < 20 && !(R.jQuery && R.document.querySelector("input")); k++) { await sleep(500); R = isReport() || R; }
+    const $ = R.jQuery, d = R.document;
+    if (!$) return finish(false, "보고서 화면에 jQuery가 없어요");
+
+    // 2) 조회일: datebox 2개 (시작·끝). 화면에 있던 값의 모양(2026-10-25 / 20261025)에 맞춰 넣음
+    step = "조회일";
+    const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+    const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+    if (dbs.length >= 2) {
+      const like = $(dbs[0]).datebox("getValue") || "";
+      $(dbs[0]).datebox("setValue", fmt(job.from, like)); $(dbs[1]).datebox("setValue", fmt(job.to, like));
+    } else {
+      const ds = [...d.querySelectorAll("input")].filter((i) => /^\d{4}[-./]?\d\d[-./]?\d\d$/.test(i.value));
+      if (ds.length < 2) return finish(false, "조회일 칸을 못 찾았어요");
+      ds[0].value = fmt(job.from, ds[0].value); ds[1].value = fmt(job.to, ds[1].value);
+    }
+
+    // 3) 매장: 이미 1345090이 잡혀 있으면 그대로, 아니면 매장 코드 칸에 넣음
+    step = "매장";
+    const all = [...d.querySelectorAll("input")];
+    if (!all.some((i) => String(i.value).includes(STORE))) {
+      const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name));
+      if (!code) return finish(false, "매장 칸을 못 찾았어요 (돋보기로 고르는 방식이면 조정 필요)");
+      if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE;
+    }
+
+    // 4) 옵션: 일자별
+    step = "일자별";
+    const daily = [...d.querySelectorAll("input[type=radio], input[type=checkbox]")].find((i) => { const l = (i.id && d.querySelector(`label[for="${i.id}"]`)) || i.closest("label") || i.nextSibling; return /일자별/.test((l && l.textContent) || i.value || ""); });
+    if (daily) { if (!daily.checked) daily.click(); }
+    else {
+      const sel = [...d.querySelectorAll("select")].find((s) => [...s.options].some((o) => /일자별/.test(o.text)));
+      if (sel) { sel.value = [...sel.options].find((o) => /일자별/.test(o.text)).value; sel.dispatchEvent(new Event("change", { bubbles: true })); if ($(sel).data("combobox")) $(sel).combobox("setValue", sel.value); }
+      else { const cb = [...d.querySelectorAll("input")].find((i) => $(i).data("combobox") && ($(i).combobox("getData") || []).some((o) => /일자별/.test(JSON.stringify(o)))); if (!cb) return finish(false, "옵션 '일자별'을 못 찾았어요"); const o = $(cb).combobox("getData").find((x) => /일자별/.test(JSON.stringify(x))); $(cb).combobox("select", o[$(cb).combobox("options").valueField]); }
+    }
+
+    // 5) 조회
+    step = "조회";
+    const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+    if (!btn) return finish(false, "조회 버튼을 못 찾았어요");
+    press(R, btn.closest("a, button, input") || btn);
+    let grid = null, rows = [];
+    for (let k = 0; k < 40; k++) {
+      await sleep(500);
+      const gs = [...d.querySelectorAll("table[id], div[id]")].filter((el) => $(el).data("datagrid"));
+      grid = gs.find((el) => ($(el).datagrid("getRows") || []).length) || null;
+      if (grid) { rows = $(grid).datagrid("getRows"); break; }
+    }
+    if (!grid) return finish(false, "조회 결과가 안 나왔어요");
+
+    // 6) 날짜 칸·Gross 칸 찾기
+    step = "읽기";
+    const o = $(grid).datagrid("options"), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
+    const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+    const toIso = (v) => { const s = String(v ?? "").trim(); let m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(s); if (m) return `${m[1]}-${m[2]}-${m[3]}`; m = /^(\d\d?)[-./](\d\d?)/.exec(s); if (m) return `${job.to.slice(0, 4)}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`; return null; };
+    const dateCol = cols.find((c) => /일자|날짜|date|영업일/i.test(title(c) + c.field) && rows.some((r) => toIso(r[c.field]))) || cols.find((c) => rows.filter((r) => toIso(r[c.field])).length >= Math.min(2, rows.length));
+    const grossCol = cols.find((c) => /gross/i.test(title(c) + c.field)) || cols.find((c) => /총\s*매출|매출\s*합계|매출액/.test(title(c)) && !/순|net|할인/i.test(title(c)));
+    if (!dateCol || !grossCol) return finish(false, `날짜·Gross 칸을 못 찾았어요 (머리글: ${cols.map(title).join(", ").slice(0, 200)})`);
+    const got = {};
+    rows.forEach((r) => { const dt = toIso(r[dateCol.field]), v = num(r[grossCol.field]); if (dt && dt >= job.from && dt <= job.to && v > 0) got[dt] = Math.round(v); });
+    if (!Object.keys(got).length) return finish(false, `${title(grossCol)} 값이 없어요 (${job.from} ~ ${job.to})`);
+
+    // 7) 앱 Forecast 실제 칸에 넣기 (MIS 값이 기준: 비었거나 다르면 바꿈)
+    step = "저장";
+    const fc = { ...((await get()).forecast || {}) }, changed = [];
+    Object.entries(got).forEach(([dt, v]) => { const cur = { ...(fc[dt] || { fc: "" }) }; if (num(cur.act) !== v) { changed.push(`${dt.slice(5).replace("-", "/")} ${Math.round(v / 1e4).toLocaleString("ko-KR")}만`); cur.act = String(v); fc[dt] = cur; } });
+    if (changed.length) await set("forecast", fc);
+    await finish(true, changed.length ? `${changed.length}일 채움 · ${changed.join(", ")}` : `바뀐 날 없음 (${Object.keys(got).length}일 확인)`, { col: title(grossCol), days: Object.keys(got).length });
+  } catch (e) {
+    await finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+  }
+})();

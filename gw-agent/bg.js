@@ -11,24 +11,24 @@ const pad = (n) => String(n).padStart(2, "0");
 const orderHours = (d = new Date()) => { if (self.__forceFast) return true; const h = d.getHours() + d.getMinutes() / 60; return d.getDay() !== 0 && h >= 8 && h < 14.6; };
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-async function openWin(reason, manual) {
+async function openWin(reason, manual, job = "order") {
   const win = await chrome.windows.create({ url: GW_URL, state: manual ? "normal" : "minimized", focused: !!manual });
   const tab = win.tabs[0];
   chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {}); // 메모리 절약 모드가 탭을 잠재우지 않게
-  await put({ tabId: tab.id, openedAt: Date.now(), manual: !!manual });
+  await put({ tabId: tab.id, openedAt: Date.now(), manual: !!manual, job });
   await log(reason);
   return tab;
 }
 async function closeWin(reason) {
   const { tabId } = await get("tabId");
-  await chrome.storage.local.remove(["tabId", "openedAt", "manual"]);
+  await chrome.storage.local.remove(["tabId", "openedAt", "manual", "job"]);
   const tab = tabId != null ? await chrome.tabs.get(tabId).catch(() => null) : null;
   if (tab) { const w = await chrome.windows.get(tab.windowId, { populate: true }).catch(() => null); if (w && w.tabs.length === 1) chrome.windows.remove(w.id).catch(() => {}); else chrome.tabs.remove(tab.id).catch(() => {}); }
   await log(reason);
 }
 
 async function tick(reason) {
-  const { on, tabId, openedAt = 0, manual, lastPoll = 0, lastBeat = 0, tried = {} } = await get(["on", "tabId", "openedAt", "manual", "lastPoll", "lastBeat", "tried"]);
+  const { on, tabId, openedAt = 0, manual, job = "order", lastPoll = 0, lastBeat = 0, tried = {} } = await get(["on", "tabId", "openedAt", "manual", "job", "lastPoll", "lastBeat", "tried"]);
   if (!on) return;
   const now = Date.now();
   const tab = tabId != null ? await chrome.tabs.get(tabId).catch(() => null) : null;
@@ -41,14 +41,18 @@ async function tick(reason) {
   if (!tab && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key: "misAgent", value: { at: now, mode: "ondemand", ver: "bg1.3" } }) }).catch(() => {}); }
   const p = d.misPush || {}, mine = p.date === ymd();
   const waiting = mine && p.status === "pending";
+  // 매출 가져오기 요청 (Forecast 탭 [GW에서 가져오기]): 30분 안에 누른 것만
+  const sp = d.salesPush || {}, salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 30 * 60e3;
   if (!tab) {
-    if (!waiting) return;
-    if ((tried[p.id] || 0) >= 2) return; // 같은 요청은 두 번까지만 (로그인 실패 반복 방지)
-    tried[p.id] = (tried[p.id] || 0) + 1; await put({ tried: Object.fromEntries(Object.entries(tried).slice(-10)) });
-    await openWin(`폰 전송 받음 → GW·MIS 열기${tried[p.id] > 1 ? " (다시 시도)" : ""}`);
+    const req = waiting ? { id: p.id, job: "order", msg: "폰 전송 받음 → GW·MIS 열기" } : salesWaiting ? { id: "s" + sp.id, job: "sales", msg: "매출 가져오기 받음 → GW·MIS 열기" } : null;
+    if (!req) return;
+    if ((tried[req.id] || 0) >= 2) return; // 같은 요청은 두 번까지만 (로그인 실패 반복 방지)
+    tried[req.id] = (tried[req.id] || 0) + 1; await put({ tried: Object.fromEntries(Object.entries(tried).slice(-10)) });
+    await openWin(`${req.msg}${tried[req.id] > 1 ? " (다시 시도)" : ""}`, false, req.job);
     return;
   }
   if (manual) return; // [자동 탭 보기]로 연 창은 사람이 닫음
+  if (job === "sales") { if (/done|error/.test(sp.status) && (sp.doneAt || 0) > openedAt) await closeWin(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`); else if (now - openedAt > 12 * 60e3) await closeWin("12분 안에 못 끝냄 → 창 닫음 (기록 확인)"); return; }
   if (mine && /done|error/.test(p.status) && (p.doneAt || 0) > openedAt) { await closeWin(`입력 ${p.status === "done" ? "완료" : "확인 필요"} → 창 닫음`); return; }
   if (now - openedAt > 12 * 60e3) await closeWin("12분 안에 못 끝냄 → 창 닫음 (기록 확인)");
 }
@@ -86,7 +90,15 @@ chrome.tabs.onRemoved.addListener(async (id) => { const { tabId } = await get("t
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   (async () => {
     const { tabId, on } = await get(["tabId", "on"]);
-    if (m.q === "managed") return reply({ managed: !!on && sender.tab && sender.tab.id === tabId });
+    if (m.q === "managed") { const { job = "order" } = await get("job"); return reply({ managed: !!on && sender.tab && sender.tab.id === tabId, job }); }
+    if (m.q === "startSales") { // MIS 첫 화면 → 매출 가져오기 스크립트(GitHub에서 매번 새로 받음)를 페이지 쪽에 넣음
+      await chrome.scripting.executeScript({
+        target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] }, world: "MAIN",
+        func: (url) => { const s = document.createElement("script"); s.charset = "utf-8"; s.src = url; (document.body || document.documentElement).appendChild(s); },
+        args: ["https://mfgkorea.github.io/label-list/mis-sales.js?quiet=1&t=" + Date.now()],
+      }).then(() => log("MIS 첫 화면 · 매출 가져오기 시작"), (e) => log("매출 가져오기 못 켬: " + e.message));
+      return reply({});
+    }
     if (m.q === "log") { await log(m.msg); return reply({}); }
     if (m.q === "started") {
       await put({ tries: [] });
