@@ -137,10 +137,18 @@
 
     // 7) 앱 Forecast 실제 칸에 넣기 (MIS 값이 기준: 비었거나 다르면 바꿈)
     step = "저장";
-    const fc = { ...((await get()).forecast || {}) }, changed = [];
-    Object.entries(got).forEach(([dt, v]) => { const cur = { ...(fc[dt] || { fc: "" }) }; if (num(cur.act) !== v) { changed.push(`${dt.slice(5).replace("-", "/")} ${Math.round(v / 1e4).toLocaleString("ko-KR")}만`); cur.act = String(v); fc[dt] = cur; } });
-    if (changed.length) await set("forecast", fc);
-    await finish(true, changed.length ? `${changed.length}일 채움 · ${changed.join(", ")}` : `바뀐 날 없음 (${Object.keys(got).length}일 확인)`, { col: title(grossCol), days: Object.keys(got).length });
+    // 원 단위까지 MIS 값으로 맞추되, 알림에는 빈 칸을 채운 날과 1만 원 넘게 달랐던 날만
+    const fc = { ...((await get()).forecast || {}) }, filled = [], diff = []; let n = 0;
+    const man = (v) => `${Math.round(v / 1e4).toLocaleString("ko-KR")}만`, md = (dt) => dt.slice(5).replace("-", "/");
+    Object.entries(got).forEach(([dt, v]) => {
+      const cur = { ...(fc[dt] || { fc: "" }) }, old = num(cur.act);
+      if (old === v) return;
+      if (!(old > 0)) filled.push(`${md(dt)} ${man(v)}`); else if (Math.abs(old - v) >= 1e4) diff.push(`${md(dt)} ${man(old)}→${man(v)}`);
+      cur.act = String(v); fc[dt] = cur; n++;
+    });
+    if (n) await set("forecast", fc);
+    const parts = [filled.length ? `채움 ${filled.join(", ")}` : "", diff.length ? `고침 ${diff.join(", ")}` : ""].filter(Boolean);
+    await finish(true, `${Object.keys(got).length}일 확인${parts.length ? " · " + parts.join(" · ") : " · 모두 같음"}`, { col: title(grossCol), days: Object.keys(got).length });
   } catch (e) {
     await finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
   }
