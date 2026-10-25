@@ -12,7 +12,7 @@ while ($true) {
   try {
     if (-not (Get-Process chrome -ErrorAction SilentlyContinue)) {
       # 시트 전체를 JSON으로 풀면 대소문자만 다른 키 때문에 실패할 수 있어서, 필요한 두 칸만 글자로 잘라 읽음
-      $raw = (Invoke-WebRequest -Uri ($API + "?api=1&t=" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds()) -UseBasicParsing -TimeoutSec 20).Content
+      $raw = (Invoke-WebRequest -Uri ($API + "?api=1&status=1&t=" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds()) -UseBasicParsing -TimeoutSec 20).Content  # 새 시트면 전송 상태만(키 필요 없음), 옛 시트면 전체
       $pick = { param($k) $m = [regex]::Match($raw, '"' + $k + '":(\{[^{}]*\})'); if ($m.Success) { $m.Groups[1].Value | ConvertFrom-Json } else { $null } }
       $today = (Get-Date).ToString("yyyy-MM-dd")
       $now = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()

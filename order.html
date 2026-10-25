@@ -763,6 +763,10 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         <div class="row"><button type="button" class="btn" id="apiSave">저장하고 연결</button><button type="button" class="btn ghost" id="apiPush">이 기기 데이터를 시트로 보내기</button></div>
       </div>
       <div class="cell set">
+        <span class="kv"><span>가게 키<small>시트를 잠갔으면 이 기기에서 한 번만 넣어요 · 이 기기에만 저장</small></span><b class="mut" id="keyState"></b></span>
+        <div class="row"><input id="keyIn" type="password" autocomplete="off" placeholder="가게 키" aria-label="가게 키"><button type="button" class="btn" id="keySave">저장</button></div>
+      </div>
+      <div class="cell set">
         <span class="kv"><span>백업에서 되돌리기<small>매일 첫 저장 때 전날 마감 상태를 복사 · 14일 보관</small></span></span>
         <div class="row"><select id="bkSel" aria-label="백업 날짜"><option value="">불러오는 중…</option></select><button type="button" class="btn ghost" id="bkGo">되돌리기</button></div>
       </div>
@@ -905,12 +909,21 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   let API = DEFAULT_API; try { const v = localStorage.getItem(LS_API); if (v !== null) API = v; } catch {}
   let online = false, trackT = null, lastVer = null;
   const lsSave = () => { try { localStorage.setItem(LS, JSON.stringify(db)); } catch {} };
-  async function apiCall(body) {
+  // 가게 키: 시트가 잠겨 있으면(Apps Script 스크립트 속성 APP_KEY) 모든 읽기·쓰기에 필요. 이 기기에만 저장
+  const LS_KEY = "order-calc-key";
+  let appKey = ""; try { appKey = localStorage.getItem(LS_KEY) || ""; } catch {}
+  const setAppKey = (v) => { appKey = String(v || "").trim(); try { localStorage.setItem(LS_KEY, appKey); } catch {} };
+  let askingKey = null;
+  // 시트가 키를 요구하면 한 번만 물어봄 (여러 요청이 동시에 거절돼도 창은 하나)
+  const askKey = () => askingKey || (askingKey = new Promise((ok) => setTimeout(() => { const v = prompt("가게 키를 입력해 주세요 (점장·KM에게 받은 키)"); askingKey = null; if (v && v.trim()) { setAppKey(v); ok(true); } else ok(false); }, 0)));
+  const withKey = (u) => u + (appKey ? (u.includes("?") ? "&" : "?") + "k=" + encodeURIComponent(appKey) : "");
+  async function apiCall(body, retried) {
     const res = body
-      ? await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) })
-      : await fetch(API + "?api=1&t=" + Date.now());
+      ? await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(appKey ? { ...body, k: appKey } : body) })
+      : await fetch(withKey(API + "?api=1&t=" + Date.now()));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const j = await res.json();
+    if (!j.ok && j.auth && !retried && (await askKey())) return apiCall(body, true);
     if (!j.ok) throw new Error(j.error || "응답 오류");
     if (j.ver) lastVer = j.ver;
     return j.data;
@@ -2943,6 +2956,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API; renderBackups();
     if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
+    renderKey();
     // 품목 목록
     const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
@@ -3051,6 +3065,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       ["G · 재고채점", "같은 품목 재고를 두 번 이상 입력하면 채점", `${M.scores.filter((x) => !x.src).length}건`, ""],
     ].map(([t, s, v, c]) => `<div class="cell kv"><span>${t}<small>${s}</small></span><b class="${c || "mut"}">${v}</b></div>`).join("");
   }
+  $("keySave").onclick = async () => { setAppKey($("keyIn").value); $("keyIn").value = ""; renderKey(); await pull(); renderFiles(); toast(online ? "가게 키를 저장했어요" : "시트에 연결하지 못했어요. 키를 확인해 주세요"); };
+  function renderKey() { const el = $("keyState"); if (el) el.textContent = appKey ? `저장됨 · 끝 ${appKey.slice(-2).replace(/./g, "•")}` : "아직 없음"; }
   $("apiSave").onclick = async () => {
     API = $("apiIn").value.trim();
     try { localStorage.setItem(LS_API, API); } catch {}
@@ -3060,7 +3076,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   async function renderBackups() {
     const sel = $("bkSel"); if (!sel || !API) return;
     try {
-      const res = await fetch(API + "?api=1&backups=1&t=" + Date.now()), j = await res.json(), list = j && j.data && j.data.backups;
+      const res = await fetch(withKey(API + "?api=1&backups=1&t=" + Date.now())), j = await res.json(), list = j && j.data && j.data.backups;
       if (!Array.isArray(list)) { sel.innerHTML = `<option value="">Apps Script 업데이트 필요</option>`; return; }
       sel.innerHTML = list.length ? list.map((d) => `<option value="${d}">${mmdd(d)} ${DOW[dow(d)]} 시작 상태</option>`).join("") : `<option value="">아직 백업 없음 (내일부터)</option>`;
     } catch { sel.innerHTML = `<option value="">불러오지 못했어요</option>`; }

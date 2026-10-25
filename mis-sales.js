@@ -9,8 +9,11 @@
   const STORE = "1345090";
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[,\s원]/g, "")); return isFinite(n) ? n : NaN; };
-  const get = async () => (await (await fetch(API + "?api=1&t=" + Date.now())).json()).data || {};
-  const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }) });
+  // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
+  const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
+  const withKey = (u) => u + (KEY ? "&k=" + encodeURIComponent(KEY) : "");
+  const get = async () => (await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json()).data || {};
+  const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value, k: KEY }) });
   const ME = Math.random().toString(36).slice(2, 8);
   const frames = () => { const out = []; const walk = (w) => { try { void w.document.body; out.push(w); } catch (e) { return; } for (let i = 0; i < w.frames.length; i++) walk(w.frames[i]); }; walk(window.top); return out; };
   const visible = (el) => el && el.offsetParent !== null;
