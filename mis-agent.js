@@ -25,8 +25,11 @@
     const has = (w, sel) => { try { return !!w.document.querySelector(sel); } catch (e) { return false; } };
     return all.find((w) => has(w, "#custBtn input.btn_basic")) || all.find((w) => typeof w.fn_Save === "function" && has(w, "#custBtn")) || all.find((w) => typeof w.fn_Save === "function") || all[0] || null;
   };
-  const get = async () => (await (await fetch(API + "?api=1&t=" + Date.now())).json()).data || {};
-  const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }) });
+  // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
+  const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
+  const withKey = (u) => u + (KEY ? "&k=" + encodeURIComponent(KEY) : "");
+  const get = async () => { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(); if (!j.ok && j.auth) { state = "가게 키 필요 (확장 창에서 입력)"; throw new Error("auth"); } return j.data || {}; };
+  const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value, k: KEY }) });
 
   // 화면 표시: 탭 제목 앞에 [자동대기], 주문등록 화면 오른쪽 아래에 상태 배지
   const baseTitle = document.title.replace(/^\[[^\]]*\]\s*/, "");
@@ -72,7 +75,7 @@
       if (W && Date.now() - aliveAt > 600000) { aliveAt = Date.now(); fetch(W.location.href, { credentials: "include" }).catch(() => {}); }
       if (state === "대기 중" || /완료|확인 필요/.test(state)) badge();
     } catch (e) {
-      state = "시트 연결 안 됨"; badge();
+      if (e.message !== "auth") state = "시트 연결 안 됨"; badge();
     } finally { busy = false; }
   };
 
@@ -80,7 +83,7 @@
     return new Promise((ok, no) => {
       const s = document.createElement("script");
       s.charset = "utf-8";
-      s.src = "https://mfgkorea.github.io/label-list/mis.js?agent=1&t=" + Date.now();
+      s.src = withKey("https://mfgkorea.github.io/label-list/mis.js?agent=1&t=" + Date.now());
       s.onload = () => { s.remove(); ok(); };
       s.onerror = () => { s.remove(); no(new Error("load")); };
       (document.body || document.documentElement).appendChild(s);

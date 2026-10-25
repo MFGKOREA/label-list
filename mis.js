@@ -5,6 +5,9 @@
 //  MIS 쪽 함수: fn_Search(그룹코드) = 그룹 열기, fn_Save() = 저장, search_Length > 0 = 주문 가능 시간 지남
 //  자동 대기(mis-agent.js)가 불러오면 바로 실행하지 않고 window.__misFill(true)만 만들어 둠 → 폰에서 [MIS로 보내기] 누르면 확인창 없이 실행하고 결과를 돌려줌
 (() => {
+// 가게 키 (시트가 잠겨 있으면 필요): 자동 대기가 넣어 주면 주소의 k=, 북마크면 이 MIS 브라우저에 저장해 둔 값
+let KEY = ""; try { KEY = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {}
+try { if (KEY) localStorage.setItem("orderAppKey", KEY); else KEY = localStorage.getItem("orderAppKey") || ""; } catch (e) {}
 const fill = async (auto) => {
   const stop = (msg) => ({ ok: false, text: msg });
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
@@ -53,7 +56,14 @@ const fill = async (auto) => {
 
   // 앱 데이터
   let db;
-  try { const r = await fetch(API + "?api=1&t=" + Date.now()); db = (await r.json()).data; }
+  try {
+    const load = async () => (await fetch(API + "?api=1&t=" + Date.now() + (KEY ? "&k=" + encodeURIComponent(KEY) : ""))).json();
+    let j = await load();
+    // 시트가 잠겨 있는데 키가 없거나 틀리면: 북마크(사람)일 땐 한 번 물어보고 저장, 자동일 땐 알림
+    if (!j.ok && j.auth) { if (auto) return stop("가게 키가 필요해요 (확장 창에서 입력)"); const v = prompt("발주앱 가게 키를 입력해 주세요 (이 PC에 저장돼요)"); if (!v) return null; KEY = v.trim(); try { localStorage.setItem("orderAppKey", KEY); } catch (e) {} j = await load(); }
+    if (!j.ok) return stop(j.auth ? "가게 키가 맞지 않아요" : "발주앱 데이터를 못 불러왔어요.");
+    db = j.data;
+  }
   catch (e) { return stop("발주앱 데이터를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); }
   const inp = db["input." + TODAY] || {};
   const master = ((db["master.order"] || {}).rows) || [];

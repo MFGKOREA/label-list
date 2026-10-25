@@ -15,6 +15,12 @@
  * 백업: 하루 첫 저장 때 "kv" 탭을 "kv_YYYY-MM-DD" 탭으로 복사 (전날 마감 상태). 최근 14일치만 남김.
  *
  * 응답은 항상 { ok: true, data: {...} } 또는 { ok: false, error: "..." } 입니다.
+ *
+ * 가게 키 (잠금): 이 주소는 공개 저장소에 있어서 누구나 부를 수 있음 → 스크립트 속성 APP_KEY를 넣으면
+ *   읽기·쓰기 모두 k=가게 키가 맞아야 함 (앱·PC 확장은 처음 한 번 키를 물어보고 그 기기에 저장).
+ *   APP_KEY가 없으면 예전처럼 열려 있음 (교체 → 기기마다 키 넣기 → APP_KEY 넣기 순서로 끊김 없이 잠금).
+ *   키 없이 되는 것: GET ?api=1&status=1 → 전송 상태만 (misPush·salesPush·misAgent의 시각·상태, 품목·수량 없음)
+ *   틀린 키는 1초 늦게 답해 마구 넣어 보기를 늦춤. 오류 글에 내부 정보는 안 담음.
  */
 
 const SHEET = "kv";
@@ -128,18 +134,33 @@ function restore_(date) {
 function ver_() { return PropertiesService.getScriptProperties().getProperty("VER") || "0"; }
 function bump_() { const v = String(Date.now()); PropertiesService.getScriptProperties().setProperty("VER", v); return v; }
 
+// ---------- 가게 키 ----------
+function appKey_() { return PropertiesService.getScriptProperties().getProperty("APP_KEY") || ""; }
+function authOk_(k) { const key = appKey_(); return !key || String(k || "") === key; }
+function denied_() { Utilities.sleep(1000); return json_({ ok: false, auth: true, error: "가게 키가 필요해요" }); }
+// 키 없이 보여 주는 전송 상태: 시각·상태·날짜만 (내용 없음)
+function status_() {
+  const all = readAll_(), pick = (o, ks) => { const out = {}; if (o) ks.forEach((k) => { if (o[k] != null) out[k] = o[k]; }); return out; };
+  return { misPush: pick(all.misPush, ["date", "id", "at", "status", "startAt", "doneAt"]), salesPush: pick(all.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(all.misAgent, ["at", "mode", "grid"]) };
+}
+const ACTIONS_ = { set: 1, append: 1, merge: 1, restore: 1 };
+const KEY_RE_ = /^[\w.\-|:가-힣 ]{1,120}$/; // 시트 키 이름: 글자·숫자·._-|: 공백만, 120자까지
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doGet(e) {
-  if (!e || !e.parameter || !e.parameter.api) return json_({ ok: true, data: {}, sheet: spreadsheet_().getUrl() });
+  if (!e || !e.parameter || !e.parameter.api) return json_({ ok: true, data: {}, locked: !!appKey_() });
   try {
+    if (e.parameter.status) return json_({ ok: true, status: status_(), ver: ver_(), locked: !!appKey_() });
     if (e.parameter.ver) return json_({ ok: true, ver: ver_() });
+    if (!authOk_(e.parameter.k)) return denied_();
     if (e.parameter.backups) return json_({ ok: true, data: { backups: backupList_() } });
     return json_({ ok: true, data: readAll_(), ver: ver_() });
   } catch (err) {
-    return json_({ ok: false, error: String(err) });
+    console.error(err);
+    return json_({ ok: false, error: "읽는 중 오류가 났어요" });
   }
 }
 
@@ -148,6 +169,11 @@ function doPost(e) {
   lock.waitLock(20000);
   try {
     const body = JSON.parse(e.postData.contents);
+    if (!authOk_(body.k)) return denied_();
+    // 입력 검사: 정해진 요청만, 키 이름 모양, 값 크기(시트 셀 나눠 담기 감안 1.5MB까지)
+    if (!ACTIONS_[body.action]) return json_({ ok: false, error: "알 수 없는 요청: " + String(body.action).slice(0, 20) });
+    if (body.action !== "restore" && !KEY_RE_.test(String(body.key || ""))) return json_({ ok: false, error: "키 이름이 이상해요" });
+    if (JSON.stringify(body.value === undefined ? (body.patch || body.item || null) : body.value).length > 1500000) return json_({ ok: false, error: "값이 너무 커요" });
     try { backupDaily_(); } catch (err) { /* 백업 실패해도 저장은 계속 */ }
     if (body.action === "set") {
       write_(body.key, body.value);
@@ -166,7 +192,8 @@ function doPost(e) {
     }
     return json_({ ok: true, data: readAll_(), ver: bump_() });
   } catch (err) {
-    return json_({ ok: false, error: String(err) });
+    console.error(err); // 자세한 내용은 Apps Script 실행 기록에만
+    return json_({ ok: false, error: "저장 중 오류가 났어요" });
   } finally {
     lock.releaseLock();
   }
