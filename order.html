@@ -1537,6 +1537,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
       it.useK = (c && num(c.useK) > 0 && num(c.useK)) || 1; // KM이 정한 사용량 반영률 (라구소스 1.2 = 계산보다 20% 더)
+      it.countStep = (c && num(c.countStep) > 0 && num(c.countStep)) || 0; // 재고를 박스째로만 세는 품목의 셈 단위 (없으면 최근 기록으로 짐작)
     };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
@@ -2184,6 +2185,20 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const err = (p, a) => Math.max(-1, Math.min(1, (p - a) / Math.max(a, 1e-9))); // ±100%에서 자름
       // 프랩 배치로 쓰는 품목은 한 배치(레시피 한 번 양의 1.5배), 박스째 꺼내는 품목은 1.5박스 양이 될 때까지 묶음
       const thr = Math.max(2, batchRawOf(M, it), prepRawOf(M, it) * 1.5, it.outStep * 1.5);
+      // 가운데 재고가 틀린 경우(2팀 F 10/27): 이어진 두 구간이 반대로 튀고(한쪽 실제÷예상 1.8 넘게, 다른 쪽 0.55 밑) 둘을 합치면 0.6~1.6이면
+      //  가운데 재고를 빼고 한 구간으로 채점 (우대갈비 10/23·새송이 10/25·루토사 10/24처럼 한 점이 앞뒤를 반대로 틀어 놓는 경우)
+      const roughP = (p) => {
+        const g = (sumGross(p.d1, p.d2, true).s - (1 - leftOf(p.h1, p.d1)) * dayGross(p.d1, true).v + (1 - leftOf(p.h2, p.d2)) * dayGross(p.d2, true).v) / 1e6;
+        const days = Math.round((parseISO(p.d2) - parseISO(p.d1)) / 864e5), a = it.rateA != null ? it.fixedA * days + it.rateA * g : null, b = it.rateB != null ? it.rateB * g : null;
+        return a != null && b != null ? (a + b) / 2 : a ?? b;
+      };
+      for (let i = 0; i + 1 < pairs.length; i++) {
+        const x = pairs[i], y = pairs[i + 1];
+        if (x.actual == null || y.actual == null || x.d2 !== y.d1 || x.h2 !== y.h1) continue;
+        const px = roughP(x), py = roughP(y); if (!(px > 0 && py > 0) || px + py < thr) continue;
+        const rx = x.actual / px, ry = y.actual / py, rs = (x.actual + y.actual) / (px + py);
+        if (((rx > 1.8 && ry < 0.55) || (rx < 0.55 && ry > 1.8)) && rs >= 0.6 && rs <= 1.6) { pairs.splice(i, 2, { d1: x.d1, h1: x.h1, d2: y.d2, h2: y.h2, actual: x.actual + y.actual }); i--; }
+      }
       let acc = null;
       const dayPairs = [];
       const flushAcc = () => {
@@ -2464,6 +2479,17 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     return null;
   }
   const counted = (v) => !!v && v.s !== "" && v.s != null && isFinite(num(v.s));
+  // 박스째로만 세는 품목(버터라이스 40·스파게티니 20·시즐링 25 등): 예상 칩을 셈 단위로 내려서 보여 줌 (계산은 그대로)
+  //  한 단위가 안 되면 내리지 않고 그대로 (0으로 보이지 않게)
+  //  itemCfg.countStep이 없으면 최근 5번(4번 이상) 센 값이 모두 40·25·20·10·5의 배수인지로 짐작 (40·40·40만 보면 40으로 잘못 봄) (2팀 G 백테스트: 해당 품목 적중 26%→47%)
+  function countStepOf(it) {
+    if (it.box) return 0;
+    if (it.countStep) return it.countStep;
+    const vals = Object.keys(db).filter((k) => /^input\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(6) <= TODAY).sort().reverse()
+      .map((k) => (db[k] || {})[it.key]).filter((v) => counted(v) && num(v.s) > 0).slice(0, 5).map((v) => num(v.s));
+    if (vals.length < 4) return 0;
+    return [40, 25, 20, 10, 5].find((st) => vals.every((x) => Math.abs(x / st - Math.round(x / st)) < 1e-9)) || 0;
+  }
   // 사전발주 계산: 오늘부터 고른 날(P) 전까지 발주일에 아직 발주 기록이 없으면 그날 앱 추천량대로 넣는다고 보고 이어서 계산
   //  (토요일 사전발주를 수요일에 보면 목·금 발주분이 주말을 맡으니, 토요일 발주는 화요일 입고 뒤 몫만)
   let preMemo = new Map();
@@ -2562,7 +2588,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     d.innerHTML = top +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
       // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
-      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t) : new Date().getHours() < MEAT_H), et = e0 ? r1(e0.v / (it.box || 1)) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
+      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t) : new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? Math.floor(e0.v / st + 1e-9) * st : r1(e0.v / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
