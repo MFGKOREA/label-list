@@ -1275,8 +1275,9 @@
         const days = Math.round((parseISO(d2) - parseISO(d1)) / 864e5);
         // 그 사이 실제 Gross가 다 있어야 채점 (Forecast로 채점하면 매출이 틀린 걸 사용량 탓으로 봄)
         const actOk = (d) => num(((db.forecast || {})[d] || {}).act) > 0;
-        // 해동 품목(고기·폭립·부라타·스프 등)은 쓰기 전날 냉동고에서 꺼내니 재고가 하루 먼저 줄어듦 → 매출도 해동 일수만큼 뒤 날짜로 맞춤
-        const t = it.thaw || 0, s1 = addDays(d1, t), s2 = addDays(d2, t);
+        // 해동 품목도 재고는 냉동고 + 해동고를 같이 셈(10/26 KM) → 꺼내 둔 것도 재고라 매출을 뒤로 밀지 않음
+        //  (냉동고만 센다고 보고 하루 밀었을 때 해동 품목 채점 오차 30% → 안 밀면 20%, 10/21~25)
+        const s1 = d1, s2 = d2;
         let gapAct = false; for (let x = s1; x < s2; x = addDays(x, 1)) if (!actOk(x) && !(x === s1 && leftOf(h1, s1) === 0)) gapAct = true;
         if (leftOf(h2, s2) < 1 && !actOk(s2)) gapAct = true;
         if (gapAct) { flushAcc(); return; }
