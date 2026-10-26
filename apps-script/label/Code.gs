@@ -50,7 +50,8 @@ function doPost(e) {
     if (body.action === 'save') return json_(saveItem(clean_(body.item), store));
     if (body.action === 'delete') return json_(deleteItem(String(body.id).slice(0, 40), store));
     if (body.action === 'clear') return json_(clearItems(store));
-    if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr));
+    if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20)));
+    if (body.action === 'learn') return json_(learn_(store, String(body.id || '').slice(0, 40), String(body.name || '').slice(0, 80), String(body.text || '').slice(0, 3000), String(body.color || '').slice(0, 20)));
     if (body.action === 'unphoto') return json_(unPhoto_(store, String(body.id || '').slice(0, 40)));
     return json_(listItems(store));
   } catch (err) {
@@ -294,7 +295,7 @@ function setPhoto_(store, id, file) {
   if (old && old !== file) { try { DriveApp.getFileById(old).setTrashed(true); } catch (err) {} }
 }
 
-function savePhoto_(store, id, data, ocr) {
+function savePhoto_(store, id, data, ocr, color) {
   if (!id) throw new Error('id 없음');
   const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
   if (!m) throw new Error('사진 형식이 올바르지 않습니다');
@@ -306,7 +307,9 @@ function savePhoto_(store, id, data, ocr) {
   const file = photoFolder_().createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   setPhoto_(store, id, file.getId());
-  return { photo: file.getId(), text: text, ocrError: ocrError };
+  let suggest = [];
+  if (text) { try { suggest = suggest_(text, color); } catch (err) {} }
+  return { photo: file.getId(), text: text, ocrError: ocrError, suggest: suggest };
 }
 
 function unPhoto_(store, id) {
@@ -344,17 +347,104 @@ function catalog_() {
     if (name !== SHEET_NAME && name.indexOf(SHEET_NAME + '_') !== 0) return;
     const seen = {};
     sh.getDataRange().getValues().slice(1).forEach((r) => {
-      if (r[3] !== 'period' || !(Number(r[6]) > 0) || !r[1]) return;
+      if (!r[1] || r[0] === '__notice__' || r[3] === 'note') return;
       const key = String(r[1]).toLowerCase().replace(/[\s()\[\]·.,_\-\/]/g, '');
+      out[key] = out[key] || { name: String(r[1]), combos: {} };
+      if (r[3] !== 'period' || !(Number(r[6]) > 0)) return;
       const combo = Number(r[6]) + String(r[7]);
       if (seen[key + combo]) return;
       seen[key + combo] = 1;
-      out[key] = out[key] || { name: String(r[1]), combos: {} };
       out[key].combos[combo] = (out[key].combos[combo] || 0) + 1;
     });
   });
   const json = JSON.stringify(out);
   if (json.length < 90000) cache.put('catalog', json, 600);
   return out;
+}
+
+// ---- 라벨 사진으로 품목 추천 ----
+// 직원이 사진을 찍고 품목을 저장할 때마다 "사진 속 글자 + 대표 색 → 품목 이름"을 '학습' 탭에 쌓고,
+// 새 사진이 들어오면 글자가 많이 겹치는 품목을 추천합니다. (색은 보조 점수)
+const LEARN_SHEET = '학습';
+const LEARN_KEEP = 3000; // 최근 3000줄만 유지
+const STOP_ = {};
+('소비기한 유통기한 품질유지기한 제조일자 제조일 제조년월일 까지 이내 보관 보관방법 냉장 냉동 실온 냉장보관 냉동보관 제품명 '
+  + '식품유형 내용량 원재료명 원재료 제조원 수입원 판매원 유통전문판매원 소재지 이하 이상 영하 개봉 개봉후 섭취 반품 교환 '
+  + 'the and best before exp lot date use mfg prod net weight store keep').split(' ').forEach((w) => { STOP_[w] = 1; });
+
+function tokens_(text) {
+  const t = String(text || '').toLowerCase().replace(/\d{1,4}[.\-\/년]\s*\d{1,2}[.\-\/월]\s*\d{1,4}/g, ' ');
+  const out = {};
+  (t.match(/[가-힣]{2,}|[a-z][a-z0-9]{2,}/g) || []).forEach((w) => { if (!STOP_[w] && w.length <= 30) out[w] = 1; });
+  return Object.keys(out).slice(0, 80);
+}
+
+function learnSheet_() {
+  const ss = spreadsheet_();
+  let sh = ss.getSheetByName(LEARN_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(LEARN_SHEET);
+    sh.getRange('A:G').setNumberFormat('@');
+    sh.appendRow(['at', 'store', 'id', 'name', 'key', 'tokens', 'color']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function learn_(store, id, name, text, color) {
+  const toks = tokens_(text);
+  if (!name || !toks.length) return { ok: true, skipped: true };
+  const key = name.toLowerCase().replace(/[\s()\[\]·.,_\-\/]/g, '');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = learnSheet_();
+    sh.appendRow([String(Date.now()), store, id, name, key, toks.join(' '), color]);
+    const last = sh.getLastRow();
+    if (last > LEARN_KEEP + 500) sh.deleteRows(2, last - 1 - LEARN_KEEP);
+    CacheService.getScriptCache().remove('learn');
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true };
+}
+
+function learnRows_() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('learn');
+  if (hit) return JSON.parse(hit);
+  const sh = learnSheet_();
+  const last = sh.getLastRow();
+  const rows = last > 1 ? sh.getRange(2, 4, last - 1, 4).getValues().map((r) => [String(r[0]), String(r[1]), String(r[2]), String(r[3])]) : [];
+  const json = JSON.stringify(rows);
+  if (json.length < 95000) cache.put('learn', json, 600);
+  return rows;
+}
+
+// 반환: [{ name, score(0~100) }] 최대 3개. 확신이 낮으면 빈 배열
+function suggest_(text, color) {
+  const q = tokens_(text);
+  if (!q.length) return [];
+  const rows = learnRows_(); // [name, key, tokens, color]
+  if (!rows.length) return [];
+  const df = {};
+  const docs = rows.map((r) => { const set = {}; r[2].split(' ').forEach((w) => { if (w) set[w] = 1; }); Object.keys(set).forEach((w) => { df[w] = (df[w] || 0) + 1; }); return set; });
+  const N = rows.length;
+  const idf = (w) => Math.log(1 + N / (1 + (df[w] || 0)));
+  const qw = q.reduce((a, w) => a + idf(w), 0);
+  const rgb = (c) => { const m = String(c || '').split(',').map(Number); return m.length === 3 && m.every((x) => x >= 0) ? m : null; };
+  const qc = rgb(color);
+  const best = {};
+  rows.forEach((r, i) => {
+    let hit = 0;
+    q.forEach((w) => { if (docs[i][w]) hit += idf(w); });
+    if (!hit) return;
+    let s = hit / qw;
+    const rc = rgb(r[3]);
+    if (qc && rc) s += 0.1 * (1 - Math.min(1, Math.hypot(qc[0] - rc[0], qc[1] - rc[1], qc[2] - rc[2]) / 255)); // 색은 최대 10점
+    if (!best[r[1]] || s > best[r[1]].s) best[r[1]] = { name: r[0], s: s };
+  });
+  return Object.keys(best).map((k) => best[k]).filter((x) => x.s >= 0.3)
+    .sort((a, b) => b.s - a.s).slice(0, 3).map((x) => ({ name: x.name, score: Math.min(99, Math.round(x.s * 100)) }));
 }
 
