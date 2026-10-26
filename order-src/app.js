@@ -33,7 +33,7 @@
   // 구글 시트 주소(Apps Script 웹앱 /exec). 배포를 새로 만들면 이 주소만 바꾸면 됩니다. 앱에서 바꾼 주소가 있으면 그게 우선.
   const DEFAULT_API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   let API = DEFAULT_API; try { const v = localStorage.getItem(LS_API); if (v !== null) API = v; } catch {}
-  let online = false, trackT = null, lastVer = null;
+  let online = false, pulled = false, trackT = null, lastVer = null; // pulled: 이번에 켠 뒤 시트 전체를 한 번이라도 받았나
   const lsSave = () => { try { localStorage.setItem(LS, JSON.stringify(db)); } catch {} };
   // 가게 키: 시트가 잠겨 있으면(Apps Script 스크립트 속성 APP_KEY) 모든 읽기·쓰기에 필요. 이 기기에만 저장
   const LS_KEY = "order-calc-key";
@@ -125,7 +125,7 @@
       });
       savePend();
       Object.keys(pend.add).forEach((k) => { const arr = Array.isArray(remote[k]) ? remote[k].slice() : []; pend.add[k].forEach((it) => { if (!arr.some((x) => JSON.stringify(x) === JSON.stringify(it))) arr.push(it); }); remote[k] = arr; });
-      db = { ...db, ...remote }; online = true; lsSave();
+      db = { ...db, ...remote }; online = true; pulled = true; lsSave();
       if (Object.keys(pend.set).length || Object.keys(pend.add).length) flush();
       return changed;
     } catch (e) { online = false; if (!quiet) toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); return false; }
@@ -2118,7 +2118,6 @@
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API; renderBackups();
     if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
-    renderKey();
     // 품목 목록
     const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
@@ -2227,8 +2226,6 @@
       ["G · 재고채점", "같은 품목 재고를 두 번 이상 입력하면 채점", `${M.scores.filter((x) => !x.src).length}건`, ""],
     ].map(([t, s, v, c]) => `<div class="cell kv"><span>${t}<small>${s}</small></span><b class="${c || "mut"}">${v}</b></div>`).join("");
   }
-  $("keySave").onclick = async () => { setAppKey($("keyIn").value); $("keyIn").value = ""; renderKey(); await pull(); renderFiles(); toast(online ? "가게 키를 저장했어요" : "시트에 연결하지 못했어요. 키를 확인해 주세요"); };
-  function renderKey() { const el = $("keyState"); if (el) el.textContent = appKey ? `저장됨 · 끝 ${appKey.slice(-2).replace(/./g, "•")}` : "아직 없음"; }
   // 버튼 비밀번호: GW 전송·Gross 불러오기·데이터 파일 들어가기 앞에 물어봄 (링크가 퍼져도 다른 사람이 못 누르게)
   //  시트 btnLock = {salt, hash}(번호는 안 남김). 기기마다 한 번 맞히면 기억. 아직 없으면 처음 누를 때 정함. 버튼 옆 자물쇠로 바꿈
   //  앱에서 막는 잠금 — 시트 자체를 잠그는 건 가게 키(APP_KEY)
@@ -2238,9 +2235,9 @@
   const pinOk = () => { try { return pinOn() && localStorage.getItem(LS_PIN) === db.btnLock.hash; } catch { return false; } };
   const rememberPin = (h) => { try { localStorage.setItem(LS_PIN, h); } catch {} };
   async function newPin(title) {
-    const v = prompt(`${title}\n숫자 4~8자리 · KM끼리만 알기`); if (v == null) return false;
+    const v = prompt(title); if (v == null) return false;
     if (!/^\d{4,8}$/.test(v.trim())) { toast("숫자 4~8자리로 넣어 주세요"); return false; }
-    if ((prompt("확인: 한 번 더 넣어 주세요") || "").trim() !== v.trim()) { toast("두 번 넣은 번호가 달라요"); return false; }
+    if ((prompt("비밀번호를 한 번 더 넣어주세요") || "").trim() !== v.trim()) { toast("두 번 넣은 번호가 달라요"); return false; }
     const salt = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
     const hash = await pinHash(salt, v.trim());
     setKey("btnLock", { salt, hash, at: Date.now() }); rememberPin(hash);
@@ -2248,14 +2245,17 @@
   }
   async function unlock() {
     if (pinOk()) return true;
-    if (!pinOn()) return newPin("버튼 비밀번호를 정해 주세요 (처음 한 번)");
-    const v = prompt("버튼 비밀번호를 넣어 주세요"); if (v == null) return false;
+    // 시트를 아직 못 받았으면(앱이 막 켜짐) 먼저 받아서 확인 — 안 그러면 잠금이 없는 줄 알고 새 번호를 정하게 됨
+    if (!pinOn() && !pulled) await pull(true);
+    if (pinOk()) return true;
+    if (!pinOn()) { if (!pulled) { toast("시트에 연결한 뒤 다시 눌러 주세요"); return false; } return newPin("비밀번호를 넣어주세요"); }
+    const v = prompt("비밀번호를 넣어주세요"); if (v == null) return false;
     const h = await pinHash(db.btnLock.salt, v.trim());
     if (h !== db.btnLock.hash) { toast("비밀번호가 달라요"); return false; }
     rememberPin(h); return true;
   }
   function pinBtn() { return `<button type="button" class="pinbtn" aria-label="버튼 비밀번호 바꾸기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></button>`; }
-  function bindPin(el) { el.querySelector(".pinbtn")?.addEventListener("click", async () => { if (pinOn() && !(await unlock())) return; newPin("새 버튼 비밀번호"); }); }
+  function bindPin(el) { el.querySelector(".pinbtn")?.addEventListener("click", async () => { if (pinOn() && !(await unlock())) return; newPin("새 비밀번호를 넣어주세요"); }); }
   $("apiSave").onclick = async () => {
     API = $("apiIn").value.trim();
     try { localStorage.setItem(LS_API, API); } catch {}
