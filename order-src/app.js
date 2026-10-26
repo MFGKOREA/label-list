@@ -1352,15 +1352,16 @@
         if (acc.pF != null && acc.pF >= thr && !(it.thaw && nx && nx.d1 === d2 && nx.actual != null && [5, 6, 0].includes(dow(d2)))) flushAcc();
       });
       if (gG > 0) it.rateG = uG / gG;
-      // 주말 배수: (주말 구간 실제÷예상) ÷ (평일 구간 실제÷예상). 주말 구간이 적으면 1 쪽으로 당김(n÷(n+3)), 0.9~1.6
-      //  Forecast 보정과 같은 방식. 평일·주말이 섞인 구간(주말 몫 40~60%)은 안 씀. 주말·평일 구간이 각각 2번 이상일 때만
+      // 주말 배수: 주말 구간 실제÷예상. 주말 구간이 적으면 1 쪽으로 당김(n÷(n+3)), 0.9~1.6. 주말 구간 2번 이상일 때만
+      //  Forecast 보정과 같은 방식. 평일·주말이 섞인 구간(주말 몫 40~60%)은 안 씀
+      //  (10/27: 예전엔 평일 비율로 나눴는데, 평일이 더 모자란 품목은 주말에도 모자란데 주말을 깎는 반대 보정이 됨 → 주말 값만)
       //  줄이는 쪽은 10%까지만 (주말에 다시 안 센 품목이 "안 씀"으로 보여 86 날 수 있음)
       const sumOf = (xs, f) => xs.reduce((a, x) => a + f(x), 0);
       const W = dayPairs.filter((x) => x.we >= 0.6), D = dayPairs.filter((x) => x.we <= 0.4);
       const pW = sumOf(W, (x) => x.p), pD = sumOf(D, (x) => x.p);
       it.weK = 1; it.weN = W.length;
-      if (W.length >= 2 && D.length >= 2 && pW >= thr && pD >= thr && sumOf(D, (x) => x.a) > 0) {
-        const ratio = (sumOf(W, (x) => x.a) / pW) / (sumOf(D, (x) => x.a) / pD);
+      if (W.length >= 2 && pW >= thr) {
+        const ratio = sumOf(W, (x) => x.a) / pW;
         it.weK = Math.min(1.6, Math.max(0.9, 1 + (ratio - 1) * W.length / (W.length + 3)));
       }
       it.wdK = 1;
