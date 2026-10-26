@@ -1450,9 +1450,9 @@
     el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
       `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button>`;
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
-    el.querySelector("#misGo").addEventListener("click", () => {
+    el.querySelector("#misGo").addEventListener("click", async () => {
       const now = misItems();
-      if (!now.length) return;
+      if (!now.length || !(await unlock())) return;
       if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 그룹웨어(MIS)에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
       setKey("misPush", { date: TODAY, id: Date.now(), at: Date.now(), status: "pending", n: now.length });
       misFastUntil = Date.now() + 180000;
@@ -2003,7 +2003,8 @@
     el.innerHTML = `<div class="mis-t"><b>Gross Sales 불러오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
       `<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>불러오기</button>`;
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
-    el.querySelector("#salesGo").addEventListener("click", () => {
+    el.querySelector("#salesGo").addEventListener("click", async () => {
+      if (!(await unlock())) return;
       const to = addDays(TODAY, -1), from = mondayOf(to);
       setKey("salesPush", { id: Date.now(), at: Date.now(), status: "pending", from, to });
       misFastUntil = Date.now() + 180000;
@@ -2111,7 +2112,7 @@
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API; renderBackups();
     if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
-    renderKey();
+    renderKey(); renderPin();
     // 품목 목록
     const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
@@ -2222,6 +2223,34 @@
   }
   $("keySave").onclick = async () => { setAppKey($("keyIn").value); $("keyIn").value = ""; renderKey(); await pull(); renderFiles(); toast(online ? "가게 키를 저장했어요" : "시트에 연결하지 못했어요. 키를 확인해 주세요"); };
   function renderKey() { const el = $("keyState"); if (el) el.textContent = appKey ? `저장됨 · 끝 ${appKey.slice(-2).replace(/./g, "•")}` : "아직 없음"; }
+  // 버튼 비밀번호: GW 전송·Gross 불러오기 앞에 물어봄. 시트 btnLock = {salt, hash}(번호는 안 남김), 이 기기에서 한 번 맞히면 기억
+  //  다른 사람이 함부로 못 누르게 하는 잠금 — 시트 자체를 잠그는 건 가게 키(APP_KEY)
+  const LS_PIN = "order-calc-pin";
+  const pinHash = async (salt, pin) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + ":" + pin)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const pinOn = () => !!(db.btnLock && db.btnLock.hash);
+  const pinOk = () => { if (!pinOn()) return true; try { return localStorage.getItem(LS_PIN) === db.btnLock.hash; } catch { return false; } };
+  const rememberPin = (h) => { try { localStorage.setItem(LS_PIN, h); } catch {} };
+  async function unlock() {
+    if (pinOk()) return true;
+    const v = prompt("버튼 비밀번호를 넣어 주세요"); if (v == null) return false;
+    const h = await pinHash(db.btnLock.salt, v.trim());
+    if (h !== db.btnLock.hash) { toast("비밀번호가 달라요"); return false; }
+    rememberPin(h); renderPin(); return true;
+  }
+  function renderPin() { const el = $("pinState"); if (el) el.textContent = !pinOn() ? "꺼짐" : pinOk() ? "켜짐 · 이 기기 확인됨" : "켜짐"; }
+  $("pinSave").onclick = async () => {
+    const v = $("pinIn").value.trim();
+    if (!/^\d{4,8}$/.test(v)) { toast("숫자 4~8자리로 넣어 주세요"); return; }
+    if (!(await unlock())) return; // 바꿀 때는 지금 번호부터
+    const salt = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const hash = await pinHash(salt, v);
+    setKey("btnLock", { salt, hash, at: Date.now() }); rememberPin(hash);
+    $("pinIn").value = ""; renderPin(); toast("버튼 비밀번호를 저장했어요");
+  };
+  $("pinOff").onclick = async () => {
+    if (!pinOn() || !(await unlock()) || !confirm("버튼 비밀번호를 끌까요?")) return;
+    setKey("btnLock", {}); renderPin(); toast("버튼 비밀번호를 껐어요");
+  };
   $("apiSave").onclick = async () => {
     API = $("apiIn").value.trim();
     try { localStorage.setItem(LS_API, API); } catch {}
