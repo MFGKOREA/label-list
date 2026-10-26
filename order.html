@@ -638,6 +638,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .misbar .mis-s.tap { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .misbar .btn { flex: none; min-height: 40px; padding: 9px 16px; border-radius: 999px; }
 .misbar .btn:disabled { background: var(--fill); color: var(--muted); }
+.misbar .mis-act { flex: none; display: flex; align-items: center; gap: 6px; }
+.pinbtn { border: 0; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--muted); }
 #salesBar { margin: 0 0 14px; }
 
 </style>
@@ -766,10 +768,6 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       <div class="cell set">
         <span class="kv"><span>가게 키<small>시트를 잠갔으면 이 기기에서 한 번만 넣어요 · 이 기기에만 저장</small></span><b class="mut" id="keyState"></b></span>
         <div class="row"><input id="keyIn" type="password" autocomplete="off" placeholder="가게 키" aria-label="가게 키"><button type="button" class="btn" id="keySave">저장</button></div>
-      </div>
-      <div class="cell set">
-        <span class="kv"><span>버튼 비밀번호<small>GW 전송·Gross 불러오기 · 기기마다 처음 한 번 물어봐요</small></span><b class="mut" id="pinState"></b></span>
-        <div class="row"><input id="pinIn" type="password" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="숫자 4~8자리" aria-label="버튼 비밀번호"><button type="button" class="btn" id="pinSave">저장</button><button type="button" class="btn ghost" id="pinOff">끄기</button></div>
       </div>
       <div class="cell set">
         <span class="kv"><span>백업에서 되돌리기<small>매일 첫 저장 때 전날 마감 상태를 복사 · 14일 보관</small></span></span>
@@ -2327,7 +2325,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     else st = agOn ? (ag.mode === "ondemand" ? `PC 대기 중 · 누르면 1~2분 안에 입력` : `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}`) : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
     const busy = p && p.status === "running" && !stale; // 기다리는 중(pending)이어도 다시 누를 수 있게
     el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button>`;
+      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button></span>`;
+    bindPin(el);
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
     el.querySelector("#misGo").addEventListener("click", async () => {
       const now = misItems();
@@ -2880,7 +2879,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     else if (stale) { st = "⚠ PC 응답 없음 · 다시 눌러 주세요"; cls = "bad"; }
     else { const to = addDays(TODAY, -1); st = `(${mmdd(mondayOf(to))} ~ ${mmdd(to)})`; } // 이번 주 월요일 ~ 어제
     el.innerHTML = `<div class="mis-t"><b>Gross Sales 불러오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>불러오기</button>`;
+      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>불러오기</button></span>`;
+    bindPin(el);
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
     el.querySelector("#salesGo").addEventListener("click", async () => {
       if (!(await unlock())) return;
@@ -2991,7 +2991,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     $("connState").innerHTML = API ? (online ? '<i class="mk"></i>구글 시트에 연결됨' : '<i class="mk wait"></i>구글 시트에 연결되지 않음 · 이 기기에만 저장 중') : '<i class="mk wait"></i>구글 시트 주소가 없어서 이 기기에만 저장 중이에요 (맨 아래에서 연결)';
     $("apiIn").value = API; renderBackups();
     if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
-    renderKey(); renderPin();
+    renderKey();
     // 품목 목록
     const ms = [["master.order", "발주 시트", (v) => `품목 ${v.rows.length}개`], ["master.prep", "프랩 시트", (v) => `프랩 ${v.rows.length}개`]];
     $("masters").innerHTML = ms.map(([key, t, info]) => {
@@ -3102,34 +3102,33 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   }
   $("keySave").onclick = async () => { setAppKey($("keyIn").value); $("keyIn").value = ""; renderKey(); await pull(); renderFiles(); toast(online ? "가게 키를 저장했어요" : "시트에 연결하지 못했어요. 키를 확인해 주세요"); };
   function renderKey() { const el = $("keyState"); if (el) el.textContent = appKey ? `저장됨 · 끝 ${appKey.slice(-2).replace(/./g, "•")}` : "아직 없음"; }
-  // 버튼 비밀번호: GW 전송·Gross 불러오기 앞에 물어봄. 시트 btnLock = {salt, hash}(번호는 안 남김), 이 기기에서 한 번 맞히면 기억
-  //  다른 사람이 함부로 못 누르게 하는 잠금 — 시트 자체를 잠그는 건 가게 키(APP_KEY)
+  // 버튼 비밀번호: GW 전송·Gross 불러오기 앞에 물어봄 (링크가 퍼져도 다른 사람이 못 누르게)
+  //  시트 btnLock = {salt, hash}(번호는 안 남김). 기기마다 한 번 맞히면 기억. 아직 없으면 처음 누를 때 정함. 버튼 옆 자물쇠로 바꿈
+  //  앱에서 막는 잠금 — 시트 자체를 잠그는 건 가게 키(APP_KEY)
   const LS_PIN = "order-calc-pin";
   const pinHash = async (salt, pin) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + ":" + pin)))].map((b) => b.toString(16).padStart(2, "0")).join("");
   const pinOn = () => !!(db.btnLock && db.btnLock.hash);
-  const pinOk = () => { if (!pinOn()) return true; try { return localStorage.getItem(LS_PIN) === db.btnLock.hash; } catch { return false; } };
+  const pinOk = () => { try { return pinOn() && localStorage.getItem(LS_PIN) === db.btnLock.hash; } catch { return false; } };
   const rememberPin = (h) => { try { localStorage.setItem(LS_PIN, h); } catch {} };
+  async function newPin(title) {
+    const v = prompt(`${title}\n숫자 4~8자리 · KM끼리만 알기`); if (v == null) return false;
+    if (!/^\d{4,8}$/.test(v.trim())) { toast("숫자 4~8자리로 넣어 주세요"); return false; }
+    if ((prompt("확인: 한 번 더 넣어 주세요") || "").trim() !== v.trim()) { toast("두 번 넣은 번호가 달라요"); return false; }
+    const salt = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const hash = await pinHash(salt, v.trim());
+    setKey("btnLock", { salt, hash, at: Date.now() }); rememberPin(hash);
+    toast("버튼 비밀번호를 정했어요"); return true;
+  }
   async function unlock() {
     if (pinOk()) return true;
+    if (!pinOn()) return newPin("버튼 비밀번호를 정해 주세요 (처음 한 번)");
     const v = prompt("버튼 비밀번호를 넣어 주세요"); if (v == null) return false;
     const h = await pinHash(db.btnLock.salt, v.trim());
     if (h !== db.btnLock.hash) { toast("비밀번호가 달라요"); return false; }
-    rememberPin(h); renderPin(); return true;
+    rememberPin(h); return true;
   }
-  function renderPin() { const el = $("pinState"); if (el) el.textContent = !pinOn() ? "꺼짐" : pinOk() ? "켜짐 · 이 기기 확인됨" : "켜짐"; }
-  $("pinSave").onclick = async () => {
-    const v = $("pinIn").value.trim();
-    if (!/^\d{4,8}$/.test(v)) { toast("숫자 4~8자리로 넣어 주세요"); return; }
-    if (!(await unlock())) return; // 바꿀 때는 지금 번호부터
-    const salt = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    const hash = await pinHash(salt, v);
-    setKey("btnLock", { salt, hash, at: Date.now() }); rememberPin(hash);
-    $("pinIn").value = ""; renderPin(); toast("버튼 비밀번호를 저장했어요");
-  };
-  $("pinOff").onclick = async () => {
-    if (!pinOn() || !(await unlock()) || !confirm("버튼 비밀번호를 끌까요?")) return;
-    setKey("btnLock", {}); renderPin(); toast("버튼 비밀번호를 껐어요");
-  };
+  function pinBtn() { return `<button type="button" class="pinbtn" aria-label="버튼 비밀번호 바꾸기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></button>`; }
+  function bindPin(el) { el.querySelector(".pinbtn")?.addEventListener("click", async () => { if (pinOn() && !(await unlock())) return; newPin("새 버튼 비밀번호"); }); }
   $("apiSave").onclick = async () => {
     API = $("apiIn").value.trim();
     try { localStorage.setItem(LS_API, API); } catch {}
