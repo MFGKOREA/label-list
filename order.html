@@ -2217,7 +2217,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     if (to === "files") renderFiles();
     if (to === "report") renderReport();
   }
-  document.addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-go]"); if (!b) return;
+    if (b.dataset.go === "files") { unlock().then((ok) => ok && go("files")); return; } // 데이터 파일은 버튼 비밀번호와 같은 번호
+    go(b.dataset.go);
+  });
   const tabs = [["tabOrder", "pOrder", "발주량 계산"], ["tabPrep", "pPrep", "프랩량 계산"]];
   tabs.forEach(([t]) => $(t).addEventListener("click", () => {
     tabs.forEach(([t2, p2, title]) => { const on = t2 === t; $(t2).setAttribute("aria-selected", on); $(p2).hidden = !on; if (on) $("mainTitle").textContent = title; });
@@ -3102,7 +3106,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   }
   $("keySave").onclick = async () => { setAppKey($("keyIn").value); $("keyIn").value = ""; renderKey(); await pull(); renderFiles(); toast(online ? "가게 키를 저장했어요" : "시트에 연결하지 못했어요. 키를 확인해 주세요"); };
   function renderKey() { const el = $("keyState"); if (el) el.textContent = appKey ? `저장됨 · 끝 ${appKey.slice(-2).replace(/./g, "•")}` : "아직 없음"; }
-  // 버튼 비밀번호: GW 전송·Gross 불러오기 앞에 물어봄 (링크가 퍼져도 다른 사람이 못 누르게)
+  // 버튼 비밀번호: GW 전송·Gross 불러오기·데이터 파일 들어가기 앞에 물어봄 (링크가 퍼져도 다른 사람이 못 누르게)
   //  시트 btnLock = {salt, hash}(번호는 안 남김). 기기마다 한 번 맞히면 기억. 아직 없으면 처음 누를 때 정함. 버튼 옆 자물쇠로 바꿈
   //  앱에서 막는 잠금 — 시트 자체를 잠그는 건 가게 키(APP_KEY)
   const LS_PIN = "order-calc-pin";

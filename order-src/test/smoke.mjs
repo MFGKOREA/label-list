@@ -21,6 +21,8 @@ await p.addInitScript(() => { try { localStorage.clear(); } catch {} });
 await p.goto("file://" + html);
 await p.waitForFunction(() => window.__orderCalc && window.__orderCalc.model().items.length, null, { timeout: 60000 });
 await p.waitForTimeout(800);
+// 버튼 비밀번호가 걸려 있으면 이 기기는 확인된 걸로 (데이터 파일 화면 열기)
+await p.evaluate((h) => h && localStorage.setItem("order-calc-pin", h), (JSON.parse(kv).data?.btnLock || {}).hash || "");
 const out = await p.evaluate(() => {
   const C = window.__orderCalc, M = C.model(), w = C.orderWindow(C.TODAY);
   const both = M.items.filter((i) => i.rateA != null && i.rateB != null);
