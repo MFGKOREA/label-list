@@ -284,6 +284,14 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
 
   <form id="form" autocomplete="off" hidden>
     <div class="form-top"><b id="formTitle">품목 추가</b><button type="button" class="form-close" id="formClose" aria-label="닫기">닫기</button></div>
+    <div id="ocrBox">
+      <button type="button" class="ocr-btn" id="ocrBtn" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg> 라벨 사진 찍어서 날짜 채우기</button>
+      <div class="ocr-res" id="ocrRes" hidden>
+        <img id="ocrImg" alt="라벨 사진">
+        <div><b id="ocrT"></b><span id="ocrS"></span><em id="ocrE"></em><div class="ocr-ch" id="ocrCh"></div><button type="button" class="again" id="ocrAgain">다시 찍기</button></div>
+      </div>
+      <input type="file" id="ocrFile" accept="image/*" hidden>
+    </div>
     <div class="row">
       <label>제품명
         <input id="fName" required placeholder="예: 냉동 새우살 500g" list="nameList">
@@ -294,14 +302,6 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       <label>특이사항 (선택)
         <input id="fMemo" placeholder="예: 냉동보관 / 개봉 후 냉장">
       </label>
-    </div>
-    <div id="ocrBox">
-      <button type="button" class="ocr-btn" id="ocrBtn" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg> 라벨 사진 찍어서 날짜 채우기</button>
-      <div class="ocr-res" id="ocrRes" hidden>
-        <img id="ocrImg" alt="라벨 사진">
-        <div><b id="ocrT"></b><span id="ocrS"></span><em id="ocrE"></em><div class="ocr-ch" id="ocrCh"></div><button type="button" class="again" id="ocrAgain">다시 찍기</button></div>
-      </div>
-      <input type="file" id="ocrFile" accept="image/*" hidden>
     </div>
     <div class="seg" role="group" aria-label="기한 입력 방식">
       <button type="button" id="mDate" aria-pressed="true">유통기한 입력</button>
