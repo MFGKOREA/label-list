@@ -9,7 +9,7 @@
   const WARM = /[?&]warm=1/.test((document.currentScript || {}).src || ""); // 확장 대기 창: 확장이 요청을 보면 바로 깨움(__misKick), 스스로는 1분마다만
   const say = (m) => { if (!QUIET) alert(m); };
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
-  const VER = "3";
+  const VER = "4";
   const ME = Math.random().toString(36).slice(2, 8); // 이 탭 이름 (탭 2개가 같이 받을 때 하나만 하게)
   if (window.__misAgent) { say("이미 자동 대기 중이에요. (이 탭을 닫지 마세요)"); return; }
   window.__misAgent = true;
@@ -33,6 +33,7 @@
   const get = async () => {
     const s = await (await fetch(withKey(API + "?api=1&status=1&t=" + Date.now()))).json();
     if (s && s.status) return s.status;
+    if (s && s.ok && s.data) return s.data; // 옛 스크립트는 status=1에도 전체를 줌 → 그대로 씀 (예전엔 한 번 더 받아서 2초 낭비)
     const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json();
     if (!j.ok && j.auth) { state = "가게 키 필요 (확장 창에서 입력)"; throw new Error("auth"); }
     return j.data || {};
@@ -68,12 +69,13 @@
       if (p && p.date === today() && p.status === "pending") {
         // 맡았다고 적고 3초 뒤 다시 읽어 내 이름이 남아 있을 때만 실행 (다른 탭이 맡았으면 넘김) — 여기서만 전체를 읽음
         await set("misPush", { ...p, status: "running", startAt: Date.now(), by: ME });
+        const filling = loadFill().catch(() => {}); // 고친 mis.js를 매번 새로 받아서 씀 (북마크 다시 안 눌러도 됨) — 확인 기다리는 동안 미리 받음
         await new Promise((ok) => setTimeout(ok, 1200));
-        const q = (await getFull()).misPush || {};
+        const q = (await get()).misPush || {}; // 상태(id·by)만 보면 됨 → 가벼운 확인으로
         if (q.by !== ME || q.id !== p.id) return;
         state = "MIS 입력 중"; badge();
         let r;
-        await loadFill().catch(() => {}); // 고친 mis.js를 매번 새로 받아서 씀 (북마크 다시 안 눌러도 됨)
+        await filling;
         try { r = await window.__misFill(true); } catch (e) { r = { ok: false, text: "중간에 멈춤: " + (e && e.message ? e.message : e) }; }
         if (!r) r = { ok: false, text: "실행 안 됨" };
         if (/이미 입력 중/.test(r.text || "")) { await set("misPush", { ...p, status: "pending" }); state = "대기 중"; return; } // 다른 입력이 끝나면 다음 확인 때 다시

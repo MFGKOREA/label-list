@@ -4,7 +4,7 @@
  * 시트 "kv" 한 장에 키별 JSON 값을 저장합니다. 셀 하나에 5만 자까지만 들어가므로
  * 긴 값(레시피 등)은 여러 줄로 나눠 저장하고, 읽을 때 다시 합칩니다.
  *
- *   GET  ?api=1                      → { key: value, ... } 전체
+ *   GET  ?api=1                      → { key: value, ... } 전체 (버전별로 캐시해서 두 번째부터 시트를 안 읽음)
  *   POST {action:"set", key, value}  → 해당 키 저장 (value가 null이면 삭제)
  *   POST {action:"append", key, item} → 배열 값 끝에 item 추가 (재고 입력 기록용)
  *   POST {action:"merge", key, patch} → 객체 값에 바뀐 칸만 합침 (null = 지움). 두 기기가 같은 날 입력해도 서로 안 지움
@@ -15,6 +15,7 @@
  * 백업: 하루 첫 저장 때 "kv" 탭을 "kv_YYYY-MM-DD" 탭으로 복사 (전날 마감 상태). 최근 14일치만 남김.
  *
  * 응답은 항상 { ok: true, data: {...} } 또는 { ok: false, error: "..." } 입니다.
+ * 저장(POST) 응답의 data에는 바꾼 키 하나만 담음 (되돌리기만 전체).
  *
  * 가게 키 (잠금): 이 주소는 공개 저장소에 있어서 누구나 부를 수 있음 → 스크립트 속성 APP_KEY를 넣으면
  *   읽기·쓰기 모두 k=가게 키가 맞아야 함 (앱·PC 확장은 처음 한 번 키를 물어보고 그 기기에 저장).
@@ -50,6 +51,24 @@ function sheet_() {
     sh.setFrozenRows(1);
   }
   return sh;
+}
+
+// 전체 읽기(JSON 글자)를 버전별로 캐시: 저장(bump_)하면 버전이 바뀌어 자동으로 새로 읽음. 캐시 한 칸 100KB 제한 → 3만 자씩 나눠 담음
+function readAllJson_() {
+  const v = ver_(), c = CacheService.getScriptCache(), n = Number(c.get("all_n_" + v)) || 0;
+  if (n) {
+    const names = []; for (let i = 0; i < n; i++) names.push("all_" + v + "_" + i);
+    const got = c.getAll(names), parts = names.map((k) => got[k]);
+    if (parts.every((x) => x != null)) return parts.join("");
+  }
+  const json = JSON.stringify(readAll_());
+  try {
+    const put = {}; let i = 0;
+    for (let at = 0; at < json.length; at += 30000, i++) put["all_" + v + "_" + i] = json.slice(at, at + 30000);
+    put["all_n_" + v] = String(i);
+    if (i <= 40) c.putAll(put, 21600);
+  } catch (err) { /* 캐시 실패해도 읽기는 됨 */ }
+  return json;
 }
 
 function readAll_() {
@@ -153,7 +172,8 @@ function restore_(date) {
 
 // 저장할 때마다 바뀌는 버전 (시트를 읽지 않고 바로 답할 수 있게 스크립트 속성에)
 function ver_() { return PropertiesService.getScriptProperties().getProperty("VER") || "0"; }
-function bump_() { const v = String(Date.now()); PropertiesService.getScriptProperties().setProperty("VER", v); return v; }
+// 같은 ms에 두 번 저장돼도 버전은 꼭 바뀌게 (전체 읽기 캐시가 버전별이라)
+function bump_() { const p = PropertiesService.getScriptProperties(), v = String(Math.max(Date.now(), (Number(p.getProperty("VER")) || 0) + 1)); p.setProperty("VER", v); return v; }
 
 // ---------- 가게 키 ----------
 function appKey_() { return PropertiesService.getScriptProperties().getProperty("APP_KEY") || ""; }
@@ -178,7 +198,8 @@ function doGet(e) {
     if (e.parameter.ver) return json_({ ok: true, ver: ver_() });
     if (!authOk_(e.parameter.k)) return denied_();
     if (e.parameter.backups) return json_({ ok: true, data: { backups: backupList_() } });
-    return json_({ ok: true, data: readAll_(), ver: ver_() });
+    const v = ver_(), body = readAllJson_();
+    return ContentService.createTextOutput('{"ok":true,"data":' + body + ',"ver":' + JSON.stringify(v) + "}").setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     console.error(err);
     return json_({ ok: false, error: "읽는 중 오류가 났어요" });
@@ -196,22 +217,29 @@ function doPost(e) {
     if (body.action !== "restore" && !KEY_RE_.test(String(body.key || ""))) return json_({ ok: false, error: "키 이름이 이상해요" });
     if (JSON.stringify(body.value === undefined ? (body.patch || body.item || null) : body.value).length > 1500000) return json_({ ok: false, error: "값이 너무 커요" });
     try { backupDaily_(); } catch (err) { /* 백업 실패해도 저장은 계속 */ }
+    // 저장 뒤에는 바꾼 키만 돌려줌 (예전엔 시트 전체 ~370KB를 돌려줘서 저장마다 느렸음). 되돌리기만 전체
+    let out;
     if (body.action === "set") {
       write_(body.key, body.value);
+      out = { [body.key]: body.value === undefined ? null : body.value };
     } else if (body.action === "append") {
-      const all = readAll_();
-      const list = Array.isArray(all[body.key]) ? all[body.key] : [];
+      const cur = readKeys_([body.key])[body.key];
+      const list = Array.isArray(cur) ? cur : [];
       list.push(body.item);
       write_(body.key, list);
+      out = { [body.key]: list };
     } else if (body.action === "merge") {
-      const all = readAll_();
-      write_(body.key, merge_(all[body.key], body.patch || {}));
+      const merged = merge_(readKeys_([body.key])[body.key], body.patch || {});
+      write_(body.key, merged);
+      out = { [body.key]: merged };
     } else if (body.action === "restore") {
       restore_(String(body.date || ""));
+      const ver = bump_();
+      return json_({ ok: true, data: readAll_(), ver: ver });
     } else {
       return json_({ ok: false, error: "알 수 없는 요청: " + body.action });
     }
-    return json_({ ok: true, data: readAll_(), ver: bump_() });
+    return json_({ ok: true, data: out, ver: bump_() });
   } catch (err) {
     console.error(err); // 자세한 내용은 Apps Script 실행 기록에만
     return json_({ ok: false, error: "저장 중 오류가 났어요" });

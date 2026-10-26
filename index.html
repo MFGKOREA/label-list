@@ -1257,9 +1257,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   fetchPhotos(); setInterval(fetchPhotos, 30000);
   showOnline(1); // 나 자신 포함, 합계가 오기 전에도 바로 표시
   refresh(); pingAll();
-  setInterval(refresh, 5000);
+  setInterval(refresh, 3000); // 다른 폰이 바꾼 것: 바뀐 게 없으면 서버가 캐시만 보고 짧게 답해서 3초마다 물어도 가벼움
   setInterval(() => { if (!document.hidden) pingAll(); }, 5000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pingAll(); }); // 5초마다 새 내용 확인 (화면이 켜져 있을 때만)
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pingAll(); }); // 화면이 다시 켜지면 바로 확인
   document.addEventListener("visibilitychange", refresh);
 })();
 </script>

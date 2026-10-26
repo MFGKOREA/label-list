@@ -928,7 +928,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const j = await res.json();
     if (!j.ok && j.auth && !retried && (await askKey())) return apiCall(body, true);
     if (!j.ok) throw new Error(j.error || "응답 오류");
-    if (j.ver) lastVer = j.ver;
+    if (j.ver && !body) lastVer = j.ver; // 저장 응답은 바꾼 키만 오므로 버전은 전체를 받을 때만 맞춤 (다른 기기 변경을 놓치지 않게)
     return j.data;
   }
   // 시트 저장이 실패한 값은 기억해 두고(이 기기 localStorage), 다음에 시트에서 받아올 때 덮어쓰지 않고 다시 보냄
@@ -3460,12 +3460,24 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
     } finally { polling = false; }
   }, 10000);
-  // GW 전송·Gross 불러오기를 누른 뒤 3분 동안은 3초마다 결과를 받아 옴 (평소 10초)
+  // GW 전송·Gross 불러오기를 누른 뒤 3분 동안은 2초마다 전송 상태만 가볍게 확인 → 바뀌었을 때만 전체를 받음. 결과가 나오면 바로 멈춤
+  //  옛 Apps Script(status 모름)면 3초마다 전체
+  let fastSig = "", noStatus = false;
   setInterval(async () => {
     if (Date.now() > misFastUntil || document.hidden || polling || !API) return;
+    if (noStatus && Date.now() - lastFull < 3000) return;
     polling = true;
-    try { lastFull = Date.now(); if (await pull(true)) refreshVisible(); } finally { polling = false; }
-  }, 3000);
+    try {
+      let need = true;
+      if (!noStatus) try {
+        const j = await (await fetch(API + "?api=1&status=1&t=" + Date.now())).json();
+        if (j && j.status) { const sig = JSON.stringify([j.status.misPush, j.status.salesPush]); need = sig !== fastSig; fastSig = sig; } else noStatus = true;
+      } catch {}
+      if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
+      const busy = (x) => x && /pending|running/.test(x.status);
+      if (!busy(db.misPush) && !busy(db.salesPush)) misFastUntil = 0;
+    } finally { polling = false; }
+  }, 2000);
   window.__orderCalc = { model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar };
 })();
 

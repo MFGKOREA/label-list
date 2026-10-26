@@ -51,6 +51,8 @@ await pc.waitForTimeout(3000);
 console.log("misAgent", JSON.stringify(store.misAgent), "title", await pc.title());
 // 폰: 앱에서 보내기
 const ph = await ctx.newPage(); ph.on("pageerror", (e) => errs.push("phone " + e.message)); ph.on("dialog", (dl) => { console.log("phone dialog:", dl.message().split("\n").slice(0, 2).join(" / ")); dl.accept(); });
+// 버튼 비밀번호가 걸려 있으면 이 폰은 확인된 걸로
+await ph.addInitScript((h) => { if (h) localStorage.setItem("order-calc-pin", h); }, (store.btnLock || {}).hash || "");
 await ph.goto("file://" + REPO + "/order.html");
 await ph.waitForFunction(() => window.__orderCalc && window.__orderCalc.model().items.length, null, { timeout: 60000 });
 await ph.waitForTimeout(1500);
