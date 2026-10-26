@@ -1,7 +1,8 @@
 <!doctype html><html><head><meta charset="utf-8"></head><body>
-<span class="tree-title" id="a">매출정보관리</span><div id="ca" style="display:none"><span class="tree-title" id="b">매출현황</span><div id="cb" style="display:none"><span class="tree-title" id="c">MiscellaneousReport</span></div></div>
+<span class="tree-title" id="a">매출정보관리</span><div id="ca" style="display:none"><span class="tree-title" id="b">매출현황</span><div id="cb" style="display:none"><span class="tree-title" id="c">MiscellaneousReport</span><span class="tree-title" id="m">메뉴별매출현황</span></div></div>
 <script>
 document.getElementById("a").onclick = function () { document.getElementById("ca").style.display = ""; };
 document.getElementById("b").onclick = function () { document.getElementById("cb").style.display = ""; };
 document.getElementById("c").onclick = function () { parent.openTab("report.html"); };
+document.getElementById("m").onclick = function () { parent.openTab("menureport.html"); };
 </script></body></html>

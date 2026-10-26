@@ -26,6 +26,10 @@ Forecast 탭 [GW에서 가져오기] → 시트 salesPush {pending, from=이번 
 - PC 자동 대기(mis-agent.js 4): 옛 서버에서 같은 걸 두 번 받던 것 제거, 맡기 확인을 가벼운 상태로, mis.js를 확인 기다리는 동안 미리 받음.
 - 한글표시사항 앱: 다른 폰 변경 확인 5초 → 3초 (바뀐 게 없으면 서버가 캐시로 짧게 답함).
 
+## 메뉴 판매 불러오기 (10/26)
+Forecast 탭 [메뉴 판매 불러오기] → salesPush {kind: "menu", 최근 4주 ~ 어제} → 확장이 Gross와 똑같이 `mis-sales.js`를 넣음 → 매출현황 → **메뉴별매출현황**을 하루씩 조회(이미 받은 날은 건너뜀) → 시트 `menuDay.날짜` = [{c 중분류, m 메뉴, q 수량}].
+앱은 주말 2일·평일 3일 이상 모이면 레시피로 품목마다 주말·평일 배수를 계산(한 달 합은 그대로). 실제 MIS 화면 모양은 아직 모름 → 막히면 salesDiag(kind: menu)에 머리글·메뉴 이름이 남음. 시험: `order-src/test/gw/e2e-sales.mjs` (mock/menureport.html은 추측한 모양).
+
 ## 구성 (저장소)
 | 파일 | 하는 일 |
 |---|---|

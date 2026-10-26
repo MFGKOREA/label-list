@@ -1,10 +1,11 @@
 // MIS 매출 가져오기: 크롬 확장(발주 GW 자동연동)이 매출 요청 때 MIS 첫 화면에 넣어 줌
+//  salesPush.kind = "menu"면 메뉴별 매출현황을 하루씩 조회 → 시트 menuDay.날짜 = [{c 중분류, m 메뉴, q 수량}] (요일별 메뉴 쏠림 → 품목별 주말 배수)
 //  매출정보관리 → 매출현황 → MiscellaneousReport → 조회일(salesPush.from ~ to) · 매장 1345090 · 일자별 → 조회
 //  → 날짜별 Gross를 읽어 시트 forecast[날짜].act에 넣고 결과를 salesPush에 적음 (MIS에는 아무것도 저장하지 않음, 조회만)
 //  어느 단계에서 막히면 그 화면의 칸 이름·표 머리글만 salesDiag에 적어 둠 → 고칠 때 씀 (확장은 다시 설치할 필요 없음)
 (async () => {
   if (window.__misSalesBusy) return; window.__misSalesBusy = true; // 대기 창에서는 같은 페이지에서 여러 번 실행됨
-  setTimeout(() => { window.__misSalesBusy = false; }, 90e3);
+  setTimeout(() => { window.__misSalesBusy = false; }, 240e3);
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const STORE = "1345090";
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -44,13 +45,15 @@
         const buttons = [...d.querySelectorAll("a, button, input[type=button], .l-btn-text")].map((b) => (b.textContent || b.value || "").trim()).filter((t) => t && t.length < 20).slice(0, 30);
         return { url: w.location.href.slice(0, 120), title: d.title, grids, inputs, buttons };
       });
-      diag.tree = frames().flatMap((w) => { try { return [...w.document.querySelectorAll(".tree-title")].map((e) => e.textContent.trim()).filter((t) => /매출|Report|Misc/i.test(t)); } catch (e) { return []; } }).slice(0, 30);
+      diag.tree = frames().flatMap((w) => { try { return [...w.document.querySelectorAll(".tree-title")].map((e) => e.textContent.trim()).filter((t) => /매출|메뉴|Report|Misc/i.test(t)); } catch (e) { return []; } }).slice(0, 40);
+      diag.kind = job.kind || "gross";
       await set("salesDiag", diag).catch(() => {});
     }
     await set("salesPush", { ...job, status: ok ? "done" : "error", doneAt: Date.now(), text, ...(extra || {}) });
     window.__misSalesBusy = false;
   };
 
+  if (job.kind === "menu") return runMenu();
   try {
     // 1) 메뉴: 매출정보관리 → 매출현황 → MiscellaneousReport
     //  보고서 화면 = 주소에 miscellaneous가 있거나, 왼쪽 메뉴·맨 위가 아닌 프레임 중 날짜칸(datebox)이 있는 곳
@@ -163,5 +166,76 @@
     await finish(true, `${Object.keys(got).length}일 확인${parts.length ? " · " + parts.join(" · ") : " · 모두 같음"}`, { col: title(grossCol), days: Object.keys(got).length });
   } catch (e) {
     await finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+  }
+
+  // ---------- 메뉴별 매출현황: 하루씩 조회 ----------
+  async function runMenu() {
+    try {
+      step = "메뉴별 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const clickTree = (re) => { const hit = byText(re, ".tree-title"); if (!hit) return false; hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); return true; };
+      const MENU_RE = /^메뉴\s*별\s*매출\s*(현황)?$/;
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /메뉴\s*별\s*매출/.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 3000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => /menu/i.test(w.location.pathname) && dateInputs(w).length) || fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(MENU_RE, ".tree-title")) {
+          if (!byText(/^매출현황$/, ".tree-title")) { clickTree(/^매출정보관리$/); await waitFor(() => byText(/^매출현황$/, ".tree-title"), 3000); }
+          clickTree(/^매출현황$/); await waitFor(() => byText(MENU_RE, ".tree-title"), 3000);
+        }
+        if (!clickTree(MENU_RE)) break;
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "메뉴별 매출현황 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "메뉴별 매출현황 화면에 jQuery가 없어요");
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = () => [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+      if (dbs().length < 2) { step = "조회일"; return finish(false, "메뉴별 매출현황 조회일 칸을 못 찾았어요"); }
+      const all = [...d.querySelectorAll("input")];
+      if (!all.some((i) => String(i.value).includes(STORE))) {
+        const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name));
+        if (!code) { step = "매장"; return finish(false, "메뉴별 매출현황 매장 칸을 못 찾았어요"); }
+        if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE;
+      }
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) { step = "조회"; return finish(false, "메뉴별 매출현황 조회 버튼을 못 찾았어요"); }
+      const grids = () => [...d.querySelectorAll("table[id], div[id]")].filter((el) => $(el).data("datagrid"));
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total/i.test(String(v ?? "").trim()));
+      // 날짜 목록: from ~ to 중 시트에 아직 없는 날만 (force면 다)
+      const have = await get();
+      const days = []; for (let x = job.from; x <= job.to; ) { if (job.force || !have["menuDay." + x]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      let saved = 0; const empty = [];
+      for (const day of days) {
+        step = "조회 " + day;
+        const like = $(dbs()[0]).datebox("getValue") || "";
+        $(dbs()[0]).datebox("setValue", fmt(day, like)); $(dbs()[1]).datebox("setValue", fmt(day, like));
+        const prev = grids().map((g) => $(g).datagrid("getRows"));
+        press(R, btn.closest("a, button, input") || btn);
+        let grid = null;
+        for (let k = 0; k < 48 && !grid; k++) { await sleep(250); grid = grids().find((g, i) => { const rs = $(g).datagrid("getRows"); return rs !== prev[i] && rs && rs.length; }) || null; }
+        if (!grid) { empty.push(day); continue; } // 그날 판매 없음(휴무) 또는 안 나옴
+        const o = $(grid).datagrid("options"), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
+        const T = (c) => title(c) + " " + c.field;
+        const qtyCol = cols.find((c) => /판매\s*수량/.test(title(c))) || cols.find((c) => /수량|qty/i.test(T(c)) && !/금액|율|%|amt/i.test(T(c)));
+        const menuCol = cols.find((c) => /^소분류$|메뉴\s*명/.test(title(c))) || cols.find((c) => /메뉴|menu|상품명|품목명/i.test(T(c)) && !/코드|code|cd_|분류/i.test(T(c)));
+        const catCol = cols.find((c) => /^중분류$/.test(title(c))) || cols.find((c) => /분류|구분|cat/i.test(T(c)) && c !== menuCol && !/코드|code|cd_/i.test(T(c)));
+        step = "읽기 " + day;
+        if (!qtyCol || !menuCol) return finish(false, `메뉴·수량 칸을 못 찾았어요 (머리글: ${cols.map(title).join(", ").slice(0, 200)})`);
+        const rows = [];
+        $(grid).datagrid("getRows").forEach((r) => { if (isTotal(r)) return; const m = String(r[menuCol.field] ?? "").trim(), q = num(r[qtyCol.field]); if (!m || !(q > 0)) return; rows.push({ c: catCol ? String(r[catCol.field] ?? "").trim() : "", m, q }); });
+        if (!rows.length) { empty.push(day); continue; }
+        await set("menuDay." + day, { at: Date.now(), rows });
+        saved++;
+      }
+      return finish(true, `메뉴 판매 ${saved}일 저장${empty.length ? ` · 비어 있음 ${empty.map((x) => x.slice(5)).join(", ")}` : ""}${days.length ? "" : " · 새로 받을 날 없음"}`, { days: saved });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
   }
 })();

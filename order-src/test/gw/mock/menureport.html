@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>메뉴별매출현황</title><script src="jquery.js"></script></head><body>
+<!-- 가짜 MIS 메뉴별 매출현황 (모양은 추측: 실제와 다르면 mis-sales.js가 salesDiag에 머리글을 남김) -->
+<input id="sDate" class="easyui-datebox" value="2026-10-25"><input id="eDate" class="easyui-datebox" value="2026-10-25">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="dataGrid1"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: [[{ field: "NM_CLS2", title: "중분류" }, { field: "NM_MENU", title: "소분류" }, { field: "QT_SALE", title: "판매수량" }, { field: "AM_SALE", title: "판매금액" }]] }; };
+$("#dataGrid1").data("datagrid", 1);
+// 주말엔 플래터가 많이, 평일엔 런치 세트가
+var BY = {
+  we: [["스테이크", "매드 스테이크 & 치킨 플래터", 40], ["Brunch_Plates", "매드 스테이크 & 치킨 플래터", 12], ["스테이크", "포레스트 스트립 스테이크", 14], ["피자", "갈릭 스노잉 피자", 30]],
+  wd: [["스테이크", "매드 스테이크 & 치킨 플래터", 6], ["Lunch Set", "수비드 페퍼 스테이크", 5], ["스테이크", "포레스트 스트립 스테이크", 6], ["피자", "갈릭 스노잉 피자", 10]]
+};
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var s = $("#sDate").val().replace(/[^0-9]/g, ""), dt = new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)), w = dt.getDay();
+  var src = (w === 0 || w === 6) ? BY.we : BY.wd, rows = src.map(function (r) { return { NM_CLS2: r[0], NM_MENU: r[1], QT_SALE: String(r[2]), AM_SALE: (r[2] * 30000).toLocaleString() }; });
+  rows.push({ NM_CLS2: "합계", NM_MENU: "", QT_SALE: "999" });
+  setTimeout(function () { $("#dataGrid1").data("dg", { rows: rows }); }, 300);
+}
+</script></body></html>
