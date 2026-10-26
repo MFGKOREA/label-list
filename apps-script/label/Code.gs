@@ -402,22 +402,32 @@ function learn_(store, id, name, text, color) {
     sh.appendRow([String(Date.now()), store, id, name, key, toks.join(' '), color]);
     const last = sh.getLastRow();
     if (last > LEARN_KEEP + 500) sh.deleteRows(2, last - 1 - LEARN_KEEP);
-    CacheService.getScriptCache().remove('learn');
+    CacheService.getScriptCache().remove('learn_n');
   } finally {
     lock.releaseLock();
   }
   return { ok: true };
 }
 
+// 학습 기록을 임시 저장소(캐시)에 90KB씩 나눠 담아 둠: 사진마다 시트를 다시 읽지 않게 (6시간, 새 기록이 들어오면 비움)
+const CHUNK = 90000;
 function learnRows_() {
   const cache = CacheService.getScriptCache();
-  const hit = cache.get('learn');
-  if (hit) return JSON.parse(hit);
+  const n = Number(cache.get('learn_n'));
+  if (n > 0) {
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push('learn_' + i);
+    const got = cache.getAll(keys);
+    if (keys.every((k) => got[k] !== undefined && got[k] !== null)) return JSON.parse(keys.map((k) => got[k]).join(''));
+  }
   const sh = learnSheet_();
   const last = sh.getLastRow();
   const rows = last > 1 ? sh.getRange(2, 4, last - 1, 4).getValues().map((r) => [String(r[0]), String(r[1]), String(r[2]), String(r[3])]) : [];
   const json = JSON.stringify(rows);
-  if (json.length < 95000) cache.put('learn', json, 600);
+  const parts = {};
+  let count = 0;
+  for (let i = 0; i < json.length; i += CHUNK) parts['learn_' + count++] = json.slice(i, i + CHUNK);
+  try { cache.putAll(parts, 21600); cache.put('learn_n', String(count), 21600); } catch (err) {} // 캐시가 꽉 차면 다음에 시트에서 다시 읽음
   return rows;
 }
 
@@ -431,13 +441,16 @@ function suggest_(text, color) {
   const docs = rows.map((r) => { const set = {}; r[2].split(' ').forEach((w) => { if (w) set[w] = 1; }); Object.keys(set).forEach((w) => { df[w] = (df[w] || 0) + 1; }); return set; });
   const N = rows.length;
   const idf = (w) => Math.log(1 + N / (1 + (df[w] || 0)));
-  const qw = q.reduce((a, w) => a + idf(w), 0);
+  // 기록의 30% 넘게 나오는 흔한 글자(냉동, 미국산 등)는 품목을 가려 주지 못하니 뺌 (기록이 20줄 이상일 때)
+  const q2 = N >= 20 ? q.filter((w) => (df[w] || 0) / N <= 0.3) : q;
+  if (!q2.length) return [];
+  const qw = q2.reduce((a, w) => a + idf(w), 0);
   const rgb = (c) => { const m = String(c || '').split(',').map(Number); return m.length === 3 && m.every((x) => x >= 0) ? m : null; };
   const qc = rgb(color);
   const best = {};
   rows.forEach((r, i) => {
     let hit = 0;
-    q.forEach((w) => { if (docs[i][w]) hit += idf(w); });
+    q2.forEach((w) => { if (docs[i][w]) hit += idf(w); });
     if (!hit) return;
     let s = hit / qw;
     const rc = rgb(r[3]);
