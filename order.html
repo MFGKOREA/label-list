@@ -1449,6 +1449,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   //  되돌려 보기(그날 이전 날들만 보고 정함): 하루 오차 17.4→16.8% (10/6~), 15.4% (10/13~), 17.7% (10/19~) · 편향 +4.3→+0.5%
   const fcGroup = (d) => { const w = dow(d); return w === 0 || w === 6 || isHoliday(d) ? "we" : w <= 2 ? "mt" : "wtf"; };
   const FC_GROUP_NAME = { mt: "월·화", wtf: "수·목·금", we: "토·일" };
+  // 주말 보정(10/26): 토·일·공휴일 매출만 합 [from, to). 플래터처럼 주말에 몰리는 메뉴 때문에 품목마다 주말 100만원당 사용량이 다름
+  const isWE = (d) => fcGroup(d) === "we";
+  const weSum = (from, to, act) => { let s = 0; for (let d = from; d < to; d = addDays(d, 1)) if (isWE(d)) s += dayGross(d, act).v; return s; };
+  // 품목별 주말 배수 k: 주말 매출 몫에만 곱함 (평일은 그대로). 재고 채점으로 배움(applyScores) · itemCfg.weK로 직접 정할 수도
+  const weMix = (it, win) => { const k = it.weK || 1; if (k === 1 || !(win.gross > 0) || win.weGross == null) return 1; const we = Math.min(Math.max(0, win.weGross), win.gross); return (win.gross - we + we * k) / win.gross; };
   function fcHist() {
     if (fcBiasMemo) return fcBiasMemo;
     const f = db.forecast || {};
@@ -1886,7 +1891,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const g = sumGross(today, end, false), nEff = effDays(today, end);
     const covered = [];
     for (let d = deliv; d < nextDeliv; d = addDays(d, 1)) covered.push(DOW[dow(d)]);
-    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered, wkGross: wkGross(deliv, end), fcVar: fcVar(today, end, false) };
+    return { today, deliv, nextDeliv, end, days, nEff, gross: g.s, est: g.est, covered, wkGross: wkGross(deliv, end), weGross: weSum(today, end, false), fcVar: fcVar(today, end, false) };
   }
   // 주말 여유분: 입고 뒤 토·일 매출(이 발주가 맡는 주말)에 KM이 정한 비율만큼 사용량을 더 잡음 (settings.weekendPlus, 기본 25%)
   const wkGross = (from, toExcl) => { let s = 0; for (let d = from; d < toExcl; d = addDays(d, 1)) if (dow(d) === 0 || dow(d) === 6) s += dayGross(d, false).v; return s; };
@@ -1919,7 +1924,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const deliv = deliveryOf(it, o1), nextDeliv = deliveryOf(it, o2);
     const days = Math.round((parseISO(nextDeliv) - parseISO(today)) / 864e5);
     const g = sumGross(today, nextDeliv, false);
-    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today, wkGross: wkGross(deliv, nextDeliv), fcVar: fcVar(today, nextDeliv, false) };
+    return { today, deliv, nextDeliv, end: nextDeliv, days, nEff: effDays(today, nextDeliv), gross: g.s, est: g.est, covered: [], orderDay: o1, canOrder: o1 === today, wkGross: wkGross(deliv, nextDeliv), weGross: weSum(today, nextDeliv, false), fcVar: fcVar(today, nextDeliv, false) };
   }
 
   // ---------- C: 최종 발주량 ----------
@@ -1937,7 +1942,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       use = wA * useA + (1 - wA) * useB;
     } else use = useA ?? useB ?? (it.rateG != null ? it.rateG * g100 : null);
     if (use == null) return { none: true };
-    use *= it.useK;
+    use *= it.useK * weMix(it, win);
     const spread = useA != null && useB != null && !it.recipeOnly ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
     //  상대오차 = 사용량 계산 오차와 Forecast 오차를 같이 (86 위험 범위와 같은 기준). 일수는 매출이 몰린 만큼 줄여 셈
@@ -2143,6 +2148,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       // 프랩 배치로 쓰는 품목은 한 배치(레시피 한 번 양의 1.5배), 박스째 꺼내는 품목은 1.5박스 양이 될 때까지 묶음
       const thr = Math.max(2, batchRawOf(M, it), prepRawOf(M, it) * 1.5, it.outStep * 1.5);
       let acc = null;
+      const dayPairs = [];
       const flushAcc = () => {
         if (!acc) return; const { d1, d2, actual, pA, pB, pF, g } = acc; acc = null;
         if (pF == null) { if (g > 0) { uG += actual; gG += g; } return; } // 수불·레시피가 없는 품목(세제 등)은 재고로 100만원당 사용량을 배움
@@ -2173,6 +2179,10 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         const pA = it.rateA != null ? Math.max(0, it.fixedA * days + it.rateA * g + bdj) : null;
         const pB = it.rateB != null ? Math.max(0, it.rateB * g + bdj) : null;
         const pF = pA != null && pB != null ? (pA + pB) / 2 : pA ?? pB;
+        if (pF > 0 && g > 0) { // 주말 배수 배우기: 이 구간 매출 중 주말 몫
+          const gW = (weSum(s1, s2, true) - (isWE(s1) ? (1 - leftOf(h1, s1)) * dayGross(s1, true).v : 0) + (isWE(s2) ? (1 - leftOf(h2, s2)) * dayGross(s2, true).v : 0)) / 1e6;
+          dayPairs.push({ we: gW / g, a: actual, p: pF });
+        }
         // 재고가 그대로여도 뜯은 건 안 세는 경우가 있어 1단위까지는 뜯은 걸 쓴 것으로 봄. 2단위 넘게 쓸 만큼 예상인데 그대로면 다시 안 센 값으로 보고 뺌
         if (actual === 0 && pF != null && pF >= thr) { flushAcc(); if (nx && nx.d1 === d2 && nx.actual != null) { nx.d1 = d1; nx.h1 = h1; } return; } // 안 센 값: 다음 쌍이 이 쌍 시작부터 이어받음
         const add = (x, y) => (x == null || y == null ? null : x + y);
@@ -2180,6 +2190,18 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         if (acc.pF != null && acc.pF >= thr && !(it.thaw && nx && nx.d1 === d2 && nx.actual != null && [5, 6, 0].includes(dow(d2)))) flushAcc();
       });
       if (gG > 0) it.rateG = uG / gG;
+      // 주말 배수: (주말 구간 실제÷예상) ÷ (평일 구간 실제÷예상). 주말 구간이 적으면 1 쪽으로 당김(n÷(n+3)), 0.9~1.6
+      //  Forecast 보정과 같은 방식. 평일·주말이 섞인 구간(주말 몫 40~60%)은 안 씀. 주말·평일 구간이 각각 2번 이상일 때만
+      //  줄이는 쪽은 10%까지만 (주말에 다시 안 센 품목이 "안 씀"으로 보여 86 날 수 있음)
+      const sumOf = (xs, f) => xs.reduce((a, x) => a + f(x), 0);
+      const W = dayPairs.filter((x) => x.we >= 0.6), D = dayPairs.filter((x) => x.we <= 0.4);
+      const pW = sumOf(W, (x) => x.p), pD = sumOf(D, (x) => x.p);
+      it.weK = 1; it.weN = W.length;
+      if (W.length >= 2 && D.length >= 2 && pW >= thr && pD >= thr && sumOf(D, (x) => x.a) > 0) {
+        const ratio = (sumOf(W, (x) => x.a) / pW) / (sumOf(D, (x) => x.a) / pD);
+        it.weK = Math.min(1.6, Math.max(0.9, 1 + (ratio - 1) * W.length / (W.length + 3)));
+      }
+      const fixK = num(((db.itemCfg || {})[it.key] || {}).weK); if (fixK > 0) it.weK = fixK;
     });
     // 수불현황이 있는 달은 그 달 전체 사용량으로도 채점 (월말 날짜로)
     M.items.forEach((it) => (it.ledgerScores || []).forEach((l) => {
@@ -2394,7 +2416,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
       const left = leftOf(hh, x);
       const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
-      const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, fcVar: fcVar(x, d, true, left) }, 0, 0);
+      const weGross = (isWE(x) ? left * dayGross(x, true).v : 0) + weSum(addDays(x, 1), d, true);
+      const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, weGross, fcVar: fcVar(x, d, true, left) }, 0, 0);
       if (c.none) return null;
       return { v: Math.max(0, stockOf(it, r) + arr - c.use), from: x, days: k };
     }
@@ -2528,7 +2551,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         const x = addDays(TODAY, -k), r = (db["input." + x] || {})[it.key]; if (!counted(r)) continue;
         const b = num(r.s), f = it.box || 1; if (!(b > 0)) return null;
         const arr = arrBetween(it, x, meatOn(it, x), TODAY, meatOn(it, TODAY) || new Date().getHours() < MEAT_H) / f;
-        const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s, fcVar: fcVar(x, TODAY, true) }, 0, 0), use = c.none ? 0 : c.use / f;
+        const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s, weGross: weSum(x, TODAY, true), fcVar: fcVar(x, TODAY, true) }, 0, 0), use = c.none ? 0 : c.use / f;
         const up = a >= 3 * (b + arr) && a - (b + arr) >= 2, down = a <= b / 3 && b - a >= 2 && b - a > 3 * use + arr;
         return up || down ? `${it.name}: ${k === 1 ? "어제" : mmdd(x)} ${b} → 오늘 ${a}. 숫자 확인해 주세요` : null;
       }
@@ -2576,7 +2599,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
     const left = leftOf(hh, TODAY);
     const gross = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), until, false).s;
-    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross, fcVar: fcVar(TODAY, until, false, left) }, 0, 0); if (r.none || !(r.use > 0)) return null;
+    const weGross = (isWE(TODAY) ? left * dayGross(TODAY, false).v : 0) + weSum(addDays(TODAY, 1), until, false);
+    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross, weGross, fcVar: fcVar(TODAY, until, false, left) }, 0, 0); if (r.none || !(r.use > 0)) return null;
     const have = stockOf(it, v) + arr;
     const p = r.sd > 0 ? 1 - phi((have - r.use) / r.sd) : have < r.use ? 1 : 0;
     if (p < SHOW_P) return null;
