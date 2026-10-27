@@ -109,6 +109,12 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.035em; lin
 /* form */
 form { background: var(--surface); border-radius: 20px; padding: 18px; display: grid; gap: 12px; }
 .row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+/* 보관 방법 버튼: 실온·냉장·냉동은 하나만, 개봉 후 냉장은 따로 켜고 끔 */
+.keep-f { display: grid; gap: 6px; }
+.keep-l { font-size: 13px; color: var(--muted); font-weight: 600; }
+.keep { display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr; gap: 6px; }
+.keep button { -webkit-tap-highlight-color: transparent; font: inherit; font-size: 14px; font-weight: 700; border: 0; border-radius: 10px; padding: 11px 0; background: var(--fill); color: var(--fg); cursor: pointer; white-space: nowrap; }
+.keep button[aria-pressed="true"] { background: var(--brand); color: #fff; }
 .row > * { min-width: 0; }
 label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
 input, select { font: inherit; font-size: 16px; font-weight: 600; color: var(--fg); background: var(--fill); border: 0; border-radius: 11px; padding: 11px 12px; width: 100%; min-width: 0; }
@@ -312,9 +318,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         <span class="name-hint" id="nameHint" hidden></span>
         <span class="name-hint" id="catHint" hidden></span>
       </label>
-      <label>특이사항 (선택)
-        <input id="fMemo" placeholder="예: 냉동보관 / 개봉 후 냉장">
-      </label>
+    </div>
+    <div class="keep-f">
+      <span class="keep-l">보관 방법</span>
+      <div class="keep" id="keep" role="group" aria-label="보관 방법">
+        <button type="button" data-k="실온" aria-pressed="false">실온</button>
+        <button type="button" data-k="냉장" aria-pressed="false">냉장</button>
+        <button type="button" data-k="냉동" aria-pressed="false">냉동</button>
+        <button type="button" data-k="개봉 후 냉장" aria-pressed="false">개봉 후 냉장</button>
+      </div>
+      <input id="fMemo" placeholder="기타 메모 (선택)" aria-label="기타 메모">
     </div>
     <div class="seg" role="group" aria-label="기한 입력 방식">
       <button type="button" id="mDate" aria-pressed="true">유통기한 입력</button>
@@ -1005,8 +1018,26 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("byPack").hidden = m !== "pack";
     updatePreview();
   }
+  // ---- 보관 방법 버튼 + 기타 메모 → memo 한 줄 ("냉장 · 개봉 후 냉장 · 기타") ----
+  const KEEP_ONE = ["실온", "냉장", "냉동"], KEEP_ALL = [...KEEP_ONE, "개봉 후 냉장"];
+  const keepBtns = () => [...document.querySelectorAll("#keep button")];
+  function memoOf() {
+    const on = keepBtns().filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.k);
+    return [...on, $("fMemo").value.trim()].filter(Boolean).join(" · ");
+  }
+  function setMemo(memo) {
+    const parts = String(memo || "").split(/\s*·\s*/).filter(Boolean);
+    keepBtns().forEach((b) => b.setAttribute("aria-pressed", parts.includes(b.dataset.k)));
+    $("fMemo").value = parts.filter((p) => !KEEP_ALL.includes(p)).join(" · ");
+  }
+  $("keep").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-k]"); if (!b) return;
+    const on = b.getAttribute("aria-pressed") !== "true";
+    if (on && KEEP_ONE.includes(b.dataset.k)) keepBtns().forEach((x) => { if (KEEP_ONE.includes(x.dataset.k)) x.setAttribute("aria-pressed", false); });
+    b.setAttribute("aria-pressed", on);
+  });
   function readForm() {
-    const it = { name: $("fName").value.trim(), memo: $("fMemo").value.trim(), mode };
+    const it = { name: $("fName").value.trim(), memo: memoOf(), mode };
     if (mode === "date") { if (!$("fExpiry").value) return null; it.expiry = $("fExpiry").value; }
     else if (mode === "pack") { if (!$("fPack").value) return null; Object.assign(it, { mfg: $("fPack").value, expiry: "", num: 0, unit: "" }); }
     else {
@@ -1028,7 +1059,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     formNew = newId(); modeTouched = false; numTouched = false; formOcr = null; showSug([]);
     showOcr(null);
     $("catHint").hidden = true;
-    $("form").reset();
+    $("form").reset(); setMemo("");
     $("fNum").value = 3;
     $("submit").textContent = "추가";
     $("formTitle").textContent = "품목 추가";
@@ -1038,7 +1069,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   function startEdit(it) {
     editId = it.id;
-    $("fName").value = it.name; $("fMemo").value = it.memo || "";
+    $("fName").value = it.name; setMemo(it.memo);
     if (it.mode === "period") { $("fMfg").value = it.mfg; $("fNum").value = it.num; $("fUnit").value = it.unit; }
     else if (isPack(it)) $("fPack").value = it.mfg;
     else $("fExpiry").value = it.expiry;
