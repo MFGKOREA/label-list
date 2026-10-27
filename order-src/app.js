@@ -2101,8 +2101,8 @@
     const ag = db.misAgent || {}, p = db.salesPush && db.salesPush.kind !== "menu" ? db.salesPush : null;
     const agOn = ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? 20 * 60e3 : 180000);
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    // 매출 조회는 1분이면 끝남 → 3분 넘게 그대로면 멈춘 걸로 보고 다시 누를 수 있게
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 3 * 60e3;
+    // 매출 조회는 15초 넘게 응답 없으면 버튼 잠금 자동 해제 (끼임 방지)
+    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 15000;
     let st, cls = "";
     if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 MIS 매출현황 여는 중…" : "PC가 꺼져 있어 기다리는 중"; cls = "run"; }
     else if (p && p.status === "running" && !stale) { st = "PC에서 매출 읽는 중…"; cls = "run"; }
@@ -2116,10 +2116,11 @@
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
     el.querySelector("#salesGo").addEventListener("click", async () => {
       if (!(await unlock())) return;
-      if (db.salesPush && db.salesPush.kind === "menu" && /pending|running/.test(db.salesPush.status) && Date.now() - (db.salesPush.startAt || db.salesPush.at) < 5 * 60e3) { toast("메뉴 판매 불러오기가 끝난 뒤에 눌러 주세요"); return; }
+      if (db.salesPush && db.salesPush.kind === "menu" && /pending|running/.test(db.salesPush.status) && Date.now() - (db.salesPush.startAt || db.salesPush.at) < 15000) { toast("메뉴 판매 불러오기가 끝난 뒤에 눌러 주세요"); return; }
       const to = addDays(TODAY, -1), from = mondayOf(to);
       setKey("salesPush", { id: Date.now(), at: Date.now(), status: "pending", from, to });
       misFastUntil = Date.now() + 180000;
+      setTimeout(() => { if (!$("v-forecast").hidden) renderSales(); }, 15100);
       toast(agOn ? "PC로 보냈어요 · 1~2분 뒤 채워져요" : "보냈어요 · PC가 켜지면 가져와요");
     });
   }
@@ -2131,7 +2132,7 @@
     el.hidden = false;
     const p = db.salesPush && db.salesPush.kind === "menu" ? db.salesPush : null;
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 5 * 60e3;
+    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 15000;
     const n = Object.keys(db).filter((k) => k.startsWith("menuDay.") && k.slice(8) >= addDays(TODAY, -28)).length;
     let st, cls = "";
     if (p && p.status === "pending" && !stale) { st = "PC가 MIS 메뉴별 매출현황 여는 중…"; cls = "run"; }
@@ -2146,9 +2147,10 @@
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
     el.querySelector("#menuGo").addEventListener("click", async () => {
       if (!(await unlock())) return;
-      if (db.salesPush && /pending|running/.test(db.salesPush.status) && Date.now() - (db.salesPush.startAt || db.salesPush.at) < 3 * 60e3) { toast("Gross 불러오기가 끝난 뒤에 눌러 주세요"); return; }
+      if (db.salesPush && /pending|running/.test(db.salesPush.status) && Date.now() - (db.salesPush.startAt || db.salesPush.at) < 15000) { toast("Gross 불러오기가 끝난 뒤에 눌러 주세요"); return; }
       setKey("salesPush", { id: Date.now(), at: Date.now(), status: "pending", kind: "menu", from: addDays(TODAY, -28), to: addDays(TODAY, -1) });
       misFastUntil = Date.now() + 300000;
+      setTimeout(() => { if (!$("v-forecast").hidden) renderMenuSales(); }, 15100);
       toast("PC로 보냈어요 · 처음엔 4주치라 2~3분 걸려요");
     });
   }
