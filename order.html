@@ -182,11 +182,14 @@ html, body { overflow-x: hidden; }
 .chip.d1 { background: var(--rose); color: var(--rose-ink); }
 .chip.d2 { background: var(--chick); color: var(--chick-ink); }
 .chip.d3 { background: var(--ok-bg); color: var(--ok-ink); }
-.c-bot { display: grid; grid-template-columns: minmax(0, 1fr) 62px 62px 86px; gap: 6px; align-items: stretch; }
+.c-bot { display: grid; grid-template-columns: minmax(0, 1fr) 66px 60px 86px; gap: 6px; align-items: stretch; }
 .c-meta { font-size: 12px; color: var(--muted); line-height: 1.4; align-self: center; min-width: 0; }
 .c-meta span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fld { display: grid; background: var(--fill-2); border-radius: 11px; padding: 5px 8px 4px; min-width: 0; cursor: text; }
 .fld > span { font-size: 10px; font-weight: 600; color: var(--muted); line-height: 1.2; }
+.fld-head { display: flex; justify-content: space-between; align-items: center; width: 100%; min-width: 0; }
+.zero-btn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 9.5px; font-weight: 800; line-height: 1; padding: 1px 4px; border-radius: 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.zero-btn:active { background: var(--accent); color: var(--accent-ink); border-color: transparent; transform: scale(.92); }
 .fld input { width: 100%; min-width: 0; border: 0; background: none; padding: 0; font-size: 17px; font-weight: 600; text-align: right; outline: none; }
 .fld input::placeholder { color: var(--muted); opacity: .6; }
 .fld:focus-within { box-shadow: 0 0 0 2px var(--accent); background: var(--surface); }
@@ -2588,24 +2591,40 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     d.innerHTML = top +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
       // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
-      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t) : new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? Math.floor(e0.v / st + 1e-9) * st : r1(e0.v / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
-      `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
+      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t) : new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? Math.floor(e0.v / st + 1e-9) * st : r1(e0.v / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span class="fld-head"><span class="lbl-txt">재고</span><button type="button" class="zero-btn" tabindex="-1" title="재고 0 입력" aria-label="재고 0">0</button></span><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
+      `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
-    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
+    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); const lt = si.parentElement.querySelector(".lbl-txt") || si.parentElement.firstElementChild; lt.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
+    const zb = d.querySelector(".zero-btn");
+    if (zb) {
+      zb.addEventListener("click", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        si.value = "0";
+        live();
+        const rows = [...document.querySelectorAll("#orderList .cell[data-key]")], nx = rows[rows.indexOf(d) + 1];
+        jump(nx ? { key: nx.dataset.key, f: 0 } : null);
+        si.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
     const jump = (to) => {
       orderFocus = to;
       const el = to && document.querySelector(`#v-main .cell[data-key="${CSS.escape(to.key)}"]`);
-      if (el) el.querySelectorAll("input")[to.f].focus(); else document.activeElement.blur();
+      if (el) {
+        const targetInp = el.querySelectorAll("input")[to.f];
+        if (targetInp) { targetInp.focus(); if (targetInp.select) targetInp.select(); }
+      } else {
+        document.activeElement.blur();
+      }
       // 다시 그리기가 없으면 기억한 칸을 지움 (남아 있으면 나중에 엉뚱한 칸으로 포커스가 감)
       setTimeout(() => { orderFocus = null; }, 50);
       if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
     };
     // 재고·발주 어디서든 엔터 → 다음 품목 재고칸 (발주는 직접 눌러서 입력)
     [si, ii].forEach((el) => el.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
+      if (e.key !== "Enter" && e.keyCode !== 13) return;
       e.preventDefault();
       const rows = [...document.querySelectorAll("#orderList .cell[data-key]")], nx = rows[rows.indexOf(d) + 1];
       jump(nx ? { key: nx.dataset.key, f: 0 } : null);
@@ -2734,7 +2753,14 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       box.appendChild(g); n += list.length;
     });
     $("nores").hidden = n > 0;
-    if (orderFocus) { const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`); if (el) el.querySelectorAll("input")[orderFocus.f].focus(); orderFocus = null; }
+    if (orderFocus) {
+      const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`);
+      if (el) {
+        const targetInp = el.querySelectorAll("input")[orderFocus.f];
+        if (targetInp) { targetInp.focus(); if (targetInp.select) targetInp.select(); }
+      }
+      orderFocus = null;
+    }
     $("cats").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === cat));
   }
 
@@ -2944,15 +2970,27 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       };
       d.innerHTML =
         `<div class="c-top"><span class="c-name">${code ? `<small style="color:var(--muted);font-weight:600;margin-right:5px">${esc(code)}</small>` : ""}${esc(name)}${ex && (ex.note || ex.hot) ? `<small class="pnote">${esc(ex.note || "")}${ex.hot ? `${ex.note ? " · " : ""}<em class="hot">${esc(ex.hot)}</em>` : ""}</small>` : ""}</span>${shelf ? `<span class="chip d${Math.min(shelf, 3)}">${shelf}${shelf > 1 ? "days" : "day"}</span>` : ""}</div>` +
-        `<div class="p-bot"><label class="fld"><span>재고(On Hand)${dd.u ? ` <em class="u">${esc(dd.u)}</em>` : ""}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
+        `<div class="p-bot"><label class="fld"><span class="fld-head"><span class="lbl-txt">재고(On Hand)${dd.u ? ` <em class="u">${esc(dd.u)}</em>` : ""}</span><button type="button" class="zero-btn" tabindex="-1" title="재고 0 입력" aria-label="재고 0">0</button></span><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(name)} 재고"></label>` +
         `<span class="fld ro"${ex && ex.note ? ` title="${esc(ex.note)}"` : ""}><span>예상${dd.u ? " " + esc(dd.u) : ""}</span><b>${ex ? rpu(ex.e / dd.f, dd.u) : "–"}</b></span><span class="needbox">${draw()}</span></div>`;
       const inp = d.querySelector("input");
+      const zb = d.querySelector(".zero-btn");
+      if (zb) {
+        zb.addEventListener("click", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          inp.value = "0";
+          v.s = "0";
+          swapNeed(d.querySelector(".needbox"), draw());
+          inp.dispatchEvent(new Event("change"));
+          const all = [...$("prepList").querySelectorAll("input")], next = all[all.indexOf(inp) + 1];
+          if (next) { next.focus(); if (next.select) next.select(); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else inp.blur();
+        });
+      }
       // 엔터(다음)를 누르면 바로 아래 프랩 재고칸으로 (iOS도 리턴 키가 나오게 type=number)
       inp.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter") return;
+        if (e.key !== "Enter" && e.keyCode !== 13) return;
         e.preventDefault();
         const all = [...$("prepList").querySelectorAll("input")], next = all[all.indexOf(inp) + 1];
-        if (next) { next.focus(); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else inp.blur();
+        if (next) { next.focus(); if (next.select) next.select(); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else inp.blur();
       });
       inp.addEventListener("input", () => { v.s = inp.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); });
       inp.addEventListener("change", () => {
