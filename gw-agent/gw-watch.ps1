@@ -16,7 +16,7 @@ while ($true) {
   try {
     if (-not (Alive)) {
       # 2) 폰 버튼: 시트에서 전송 상태만 읽음 (필요한 두 칸만 글자로 잘라 읽음)
-      $raw = (Invoke-WebRequest -Uri ($API + "?api=1&status=1&t=" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds()) -UseBasicParsing -TimeoutSec 20).Content
+      $raw = ""; try { $raw = (Invoke-WebRequest -Uri ($API + "?api=1&status=1&t=" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds()) -UseBasicParsing -TimeoutSec 20).Content } catch { }  # 인터넷이 끊겨도 아래 항상 켜기는 함
       $pick = { param($k) $m = [regex]::Match($raw, '"' + $k + '":(\{[^{}]*\})'); if ($m.Success) { $m.Groups[1].Value | ConvertFrom-Json } else { $null } }
       $today = (Get-Date).ToString("yyyy-MM-dd")
       $now = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
