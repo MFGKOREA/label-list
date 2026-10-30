@@ -1,8 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const hm = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 async function load() {
-  const c = await chrome.storage.local.get(["id", "pw", "on", "logs", "appKey"]);
-  $("key").placeholder = c.appKey ? "저장됨 (바꿀 때만 입력)" : "가게 키 (없으면 비워 두기)";
+  const c = await chrome.storage.local.get(["id", "pw", "on", "logs"]);
   $("id").value = c.id || ""; $("on").checked = !!c.on; $("pw").placeholder = c.pw ? "저장됨 (바꿀 때만 입력)" : "비밀번호";
   $("log").textContent = (c.logs || []).slice(0, 12).join("\n");
   try {
@@ -16,9 +15,8 @@ async function load() {
 $("save").addEventListener("click", async () => {
   const v = { id: $("id").value.trim(), on: $("on").checked, tries: [] };
   if ($("pw").value) v.pw = $("pw").value;
-  if ($("key").value) v.appKey = $("key").value.trim();
-  $("key").value = "";
-  await chrome.storage.local.set(v); $("pw").value = "";
+  // 가게 키는 안 씀 (10/31 KM) → 예전에 저장된 것도 지움
+  await chrome.storage.local.set(v); await chrome.storage.local.remove("appKey"); $("pw").value = "";
   await chrome.runtime.sendMessage({ q: "ensure" });
   $("st").textContent = v.on ? "저장했어요 · MIS 자동 탭을 열어요" : "저장했어요 · 자동입력 꺼짐";
   setTimeout(load, 1500);
