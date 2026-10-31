@@ -622,3 +622,6 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .pinbtn { border: 0; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--muted); }
 #salesBar { margin: 0 0 8px; }
 #menuBar { margin: 0 0 14px; }
+
+/* 신메뉴 신규 품목: 이름 옆 작은 노란 별 */
+.c-name .star { display: inline-block; margin-left: 4px; font-size: 0.72em; color: #f2b705; vertical-align: 2px; line-height: 1; }
