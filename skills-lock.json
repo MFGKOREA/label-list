@@ -385,6 +385,12 @@
       "skillPath": "skills/hyperframes-registry/SKILL.md",
       "computedHash": "1acf359546af75f92fdcfa7fe685d53f0e85a121f145a4b90f8e4d9e763b8990"
     },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "79629795c6e0e1148e0f52461ff967985842c44012ab6dbab63bd69b7bb56636"
+    },
     "implement": {
       "source": "mattpocock/skills",
       "sourceType": "github",
