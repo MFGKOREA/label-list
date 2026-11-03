@@ -155,6 +155,14 @@ body.typing .dock { display: none; } /* 키보드가 떠 있을 땐 숨김 (입�
 .tr-thumbs { display: flex; gap: 6px; flex-wrap: wrap; } .tr-thumbs button { width: 48px; height: 48px; border: 0; padding: 0; border-radius: 9px; overflow: hidden; background: var(--fill); cursor: pointer; }
 .tr-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tr-li .tr-thumbs { margin-top: 6px; } .tr-li .tr-thumbs button { width: 40px; height: 40px; }
+.tr-jobs { display: grid; gap: 4px; }
+.tr-job { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 800; color: var(--muted); }
+.tr-job.on { color: var(--fg); }
+.tr-job.ok { color: var(--ok); }
+.tr-job.err { color: var(--rose-ink); }
+.tr-job i { font-style: normal; }
+.tr-job.on i::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; border: 2px solid #cfe3da; border-top-color: #3f7a62; animation: spin .8s linear infinite; vertical-align: -1px; }
+.cam { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .asg { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
 .asg .act, .cut .act { display: flex; gap: 6px; flex: none; flex-wrap: wrap; }
 .cut .why { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
@@ -240,7 +248,7 @@ button:focus-visible { outline: 2px solid var(--rose-ink); outline-offset: 2px; 
 .ocr-ch button.on { background: var(--brand); color: #fff; } .ocr-ch button.on small { color: #e6f1ec; }
 .ocr-res b.busy::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border-radius: 50%; border: 2px solid #cfe3da; border-top-color: #3f7a62; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .ocr-res b.busy::before { animation-duration: 2.4s; } }
+@media (prefers-reduced-motion: reduce) { .ocr-res b.busy::before, .tr-job.on i::before { animation: none; } }
 .sug { display: grid; gap: 6px; }
 .sug-h { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .sug-list { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -355,7 +363,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         <div class="sum tr ok"><b id="trOk">0</b><span>전부 일치</span></div>
         <div class="sum tr bad"><b id="trBad">0</b><span>확인 필요</span></div>
       </div>
-      <button type="button" class="add-open" id="trNew">+ 이력제 확인</button>
+      <button type="button" class="add-open" id="trNew">오늘 입고 찍기</button>
       <input class="tr-search" id="trQ" type="search" placeholder="이력번호 검색 (점검 때 명세서 바로 찾기)" autocapitalize="characters">
       <div class="tr-card"><div class="tr-h"><b>축산물이력제 기록</b><em>최근 30일 · 최신 순</em></div><div id="trList"></div></div>
       <div class="tr-note">30일이 지난 기록은 사진과 함께 오래된 것부터 자동으로 지워집니다</div>
@@ -388,15 +396,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
         <div class="tr-card">
           <div class="stepn"><i>1</i>거래명세서<span id="trInvSt"></span></div>
           <button type="button" class="bigshot" id="trInvShot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z M15 3v4h4 M9 12h7 M9 16h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg> 명세서 찍기</button>
+          <div id="trJobs" class="tr-jobs"></div>
           <div id="trPending"></div>
           <div class="tr-thumbs" id="trInvThumbs"></div>
-          <div class="tr-hint" id="trInvHint">오늘 받은 거래명세서를 카메라로 찍어 주세요. 등심·채끝 이력번호가 여러 개면 아래에 나눠 담습니다.</div>
+          <div class="tr-hint" id="trInvHint">명세서, 등심 박스, 채끝 박스를 이어서 찍습니다. 번호는 뒤에서 읽히고, 둘 다 일치하면 자동으로 저장됩니다.</div>
         </div>
         <div id="trCutCards"></div>
       </div>
       <button type="button" class="add-open" id="trSave">저장</button>
       <button type="button" class="tr-del" id="trDel" hidden>이 기록 삭제</button>
-      <input type="file" id="trFile" accept="image/*" capture="environment" hidden>
+      <input type="file" id="trFile" class="cam" accept="image/*" capture="environment">
     </div>
   </div>
   <div class="panel" id="pLabel">
@@ -1381,7 +1390,8 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   // ======== 축산물이력제: 명세서 사진 ↔ 박스 라벨 사진의 이력번호 대조 ========
   const TR_LS = LS + "-trace";
   let trRecs = []; try { trRecs = JSON.parse(localStorage.getItem(TR_LS)) || []; } catch {}
-  let trReady = true, trCur = null, trNewPhotos = [], trShot = "", trSaved = false;
+  let trReady = true, trCur = null, trNewPhotos = [], trShot = "", trSaved = false, trChain = false;
+  let trInFlight = 0, trSeq = 0, trJobs = [], trAutoTimer = 0, trSaving = false, trSaveQueued = false;
   const trPreview = {}; // 방금 올린 사진은 드라이브 썸네일 전에 기기 사진으로 먼저 보여 줌
   const KINDS = ["비프립", "립아이", "안심", "채끝", "등심", "부채살", "살치살", "갈비", "티본", "척아이롤", "목살", "삼겹", "항정", "차돌", "우삼겹", "스테이크"];
   const STEAKS = (typeof TraceNos !== "undefined" && TraceNos.STEAKS) || ["등심", "채끝"];
@@ -1457,7 +1467,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       });
     const t = toISO(today());
     const todo = !rawQ && new Date().getDay() !== 0 && !trRecs.some((r) => r.date === t)
-      ? `<div class="tr-li" data-new="1"><div class="tr-d today">${t.slice(5).replace("-", ".")}<small>오늘</small></div><div><div class="tr-t mu">아직 입고 확인 전</div><div class="tr-m">스테이크 입고 없으면 그냥 두세요</div></div><button type="button" class="tr-go" data-new="1">확인</button></div>` : "";
+      ? `<div class="tr-li" data-new="1"><div class="tr-d today">${t.slice(5).replace("-", ".")}<small>오늘</small></div><div><div class="tr-t mu">아직 입고 확인 전</div><div class="tr-m">누르면 카메라가 명세서부터 이어 열립니다</div></div><button type="button" class="tr-go" data-new="1">찍기</button></div>` : "";
     const cutRow = (r) => STEAKS.map((k) => {
       const c = (r.data.cuts && r.data.cuts[k]) || {};
       const st = TraceNos.compareTrace(c.docNo, c.boxNo);
@@ -1475,20 +1485,25 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       return `<div class="tr-li" data-id="${esc(r.id)}"><div class="tr-d">${r.date.slice(5).replace("-", ".")}<small>${dayKo(r.date)}</small></div>
         <div><div class="tr-t">박스 ${bx}개${r.who ? " · 확인 " + esc(r.who) : ""}</div>
         <div class="kinds">${kindsOf(r).map(([k, st]) => `<span class="kd ${st}">${esc(k)}${st === "ok" ? " ✓" : st === "bad" ? " ✕" : " 확인"}</span>`).join("")}</div></div><span></span></div>`;
-    })()).join("") : `<div class="tr-m" style="padding:8px 2px">${rawQ ? "검색 결과가 없습니다." : "아직 기록이 없습니다. [+ 이력제 확인]으로 시작하세요."}</div>`);
+    })()).join("") : `<div class="tr-m" style="padding:8px 2px">${rawQ ? "검색 결과가 없습니다." : "아직 기록이 없습니다. [오늘 입고 찍기]로 시작하세요."}</div>`);
   }
   $("trList").addEventListener("click", (e) => {
     const ph = e.target.closest("[data-ph]"); if (ph) { openTracePhoto(ph.dataset.ph, ph.dataset.date); return; }
     const row = e.target.closest("[data-new],[data-id]"); if (!row) return;
-    if (row.dataset.new) openTrace(null); else openTrace(trRecs.find((r) => r.id === row.dataset.id));
+    if (row.dataset.new) startTraceShoot(); else openTrace(trRecs.find((r) => r.id === row.dataset.id));
   });
-  $("trNew").onclick = () => openTrace(null);
+  $("trNew").onclick = () => startTraceShoot();
+  function startTraceShoot() {
+    openTrace(null);
+    trChain = true; trShot = "doc";
+    try { $("trFile").click(); } catch (e) {}
+  }
   $("trQ").addEventListener("input", renderTrace);
 
   // ---- 입력 화면 ----
   function blankCut() { return { docNo: "", boxNo: "", boxPhoto: "", choices: [] }; }
   function openTrace(rec) {
-    trSaved = false; trNewPhotos = [];
+    trSaved = false; trNewPhotos = []; trJobs = []; clearTimeout(trAutoTimer);
     if (rec) {
       trCur = JSON.parse(JSON.stringify({ id: rec.id, date: rec.date, who: rec.who, ...rec.data }));
       trCur.doc = trCur.doc || []; trCur.boxes = trCur.boxes || []; trCur.photos = trCur.photos || []; trCur.docPhotos = trCur.docPhotos || [];
@@ -1506,8 +1521,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     renderTrace(); drawTrace(); scrollTo(0, 0);
   }
   function closeTrace(discard) {
+    clearTimeout(trAutoTimer); trSaveQueued = false; trChain = false;
     if (discard && !trSaved) trNewPhotos.forEach((k) => hubPost({ action: "unphoto", store: STORE, id: k }).catch(() => {}));
-    trCur = null; renderTrace(); scrollTo(0, 0);
+    trCur = null; trJobs = []; renderTrace(); scrollTo(0, 0);
   }
   $("trBack").onclick = () => closeTrace(true);
   function drawTrace() {
@@ -1615,9 +1631,50 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       return [{ no: boxNo || "", status: !boxNo ? "unread" : same ? "ok" : "none", match: same ? c.doc.findIndex((d) => d.no === docNo && d.kind === k) : -1, photo: cut.boxPhoto || "", kind: k }];
     });
   }
+  function typingCut() { const el = document.activeElement; return !!(el && el.dataset && el.dataset.cut); }
+  function refreshCuts() {
+    if (typingCut()) { STEAKS.forEach(paintPill); renderJobs(); return; }
+    if (trCur && trCur.cuts) drawCuts();
+    renderJobs();
+  }
+  function renderJobs() {
+    const el = $("trJobs"); if (!el) return;
+    const name = { doc: "명세서", "등심": "등심 박스", "채끝": "채끝 박스" };
+    el.innerHTML = trJobs.map((j) => {
+      const cls = j.state === "done" ? "ok" : j.state === "err" ? "err" : "on";
+      const t = j.state === "done" ? (j.detail || "완료") : j.state === "err" ? "올리지 못함" : "읽는 중";
+      return `<div class="tr-job ${cls}"><span>${name[j.kind] || j.kind}</span><i>${t}</i></div>`;
+    }).join("");
+  }
+  function maybeAutoSave() {
+    clearTimeout(trAutoTimer);
+    if (trSaveQueued && trInFlight === 0 && trCur && !trSaving) { saveTrace(); return; }
+    if (!trCur || !trCur.cuts || trInFlight > 0 || trSaving || typingCut()) return;
+    const v = TraceNos.traceVerdict(trCur.cuts);
+    if (v === "save") {
+      $("trInvHint").textContent = "등심·채끝 모두 일치. 곧 자동 저장됩니다. 고치려면 번호를 누르세요.";
+      trAutoTimer = setTimeout(() => {
+        if (!trCur || trInFlight || trSaving || typingCut()) return;
+        if (TraceNos.traceVerdict(trCur.cuts) === "save") saveTrace();
+      }, 1200);
+    } else if (v === "fix") $("trInvHint").textContent = "번호가 다릅니다. 칸에서 고치거나, 그대로 두려면 저장을 한 번 누르세요.";
+  }
+  function relinkFromBoxes() {
+    const c = trCur; if (!c || !c.cuts) return;
+    STEAKS.forEach((k) => {
+      const cut = c.cuts[k];
+      const box = TraceNos.normTrace(cut.boxNo);
+      if (!box || TraceNos.normTrace(cut.docNo)) return;
+      if (STEAKS.some((o) => TraceNos.normTrace(c.cuts[o].docNo) === box)) return;
+      if (!(c.pending || []).some((p) => p.no === box)) return;
+      cut.docNo = box;
+      c.pending = c.pending.filter((p) => p.no !== box);
+    });
+  }
   $("trCuts").addEventListener("input", (e) => {
     const inp = e.target.closest("input[data-cut]");
     if (!inp || !trCur || !trCur.cuts) return;
+    clearTimeout(trAutoTimer);
     trCur.cuts[inp.dataset.cut][inp.dataset.field] = inp.value.trim();
     paintPill(inp.dataset.cut);
   });
@@ -1627,13 +1684,14 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     const n = TraceNos.normTrace(inp.value);
     if (n) { trCur.cuts[inp.dataset.cut][inp.dataset.field] = n; inp.value = n; }
     paintPill(inp.dataset.cut);
+    maybeAutoSave();
   });
   $("trEdit").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b || !trCur) return;
     if (b.dataset.ph) { openTracePhoto(b.dataset.ph); return; }
     if (trCur.cuts) {
-      if (b.id === "trInvShot") { trShot = "doc"; $("trFile").click(); }
-      else if (b.dataset.boxshot) { trShot = b.dataset.boxshot; $("trFile").click(); }
+      if (b.id === "trInvShot") { trChain = false; trShot = "doc"; $("trFile").click(); }
+      else if (b.dataset.boxshot) { trChain = false; trShot = b.dataset.boxshot; $("trFile").click(); }
       else if (b.dataset.assign) assignDoc(b.dataset.no, b.dataset.assign);
       else if (b.dataset.pick) { trCur.cuts[b.dataset.cut].boxNo = b.dataset.pick; drawCuts(); }
       return;
@@ -1651,27 +1709,37 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   }
   $("pvClose").addEventListener("click", () => { document.querySelector(".pv-f").hidden = false; });
 
-  // 사진 찍기 → 구글 드라이브 OCR → 번호 뽑기
+  // 사진 찍기 → 바로 다음 카메라. 글자 읽기는 뒤에서 동시에 진행.
   async function traceShotCuts(kind, file) {
-    const c = trCur;
-    const btn = kind === "doc" ? $("trInvShot") : $("trCutCards").querySelector(`[data-boxshot="${kind}"]`);
-    const hint = $("trInvHint");
-    let shrunk;
-    try { shrunk = await shrink(file, 1800, 0.82); } catch { hint.textContent = "사진을 열 수 없습니다"; return; }
+    const c = trCur; if (!c) return;
+    const shotId = c.id;
     const tag = kind === "doc" ? "d" : kind === "등심" ? "s" : "c";
-    const key = `${c.id}_${tag}${c.photos.length + 1}`.slice(0, 40);
-    if (btn) { btn.disabled = true; btn.classList.add("busy"); }
-    hint.textContent = "사진에서 번호를 읽는 중… (5~10초)";
+    const key = `${shotId}_${tag}${++trSeq}`.slice(0, 40);
+    const job = { kind: kind, state: "read", detail: "" };
+    trJobs.push(job); renderJobs();
+    trInFlight++;
+    const alive = () => trCur && trCur.id === shotId;
+    let shrunk;
+    try { shrunk = await shrink(file, kind === "doc" ? 1600 : 1200, kind === "doc" ? 0.66 : 0.6); }
+    catch { job.state = "err"; trInFlight--; renderJobs(); if (alive()) $("trInvHint").textContent = "사진을 열 수 없습니다"; maybeAutoSave(); return; }
+    if (!alive()) { trInFlight--; return; }
+    trPreview[key] = shrunk.data;
     let d;
-    try { d = await hubPost({ action: "photo", store: STORE, id: key, data: shrunk.data, ocr: true }); if (!d.photo) throw new Error(); }
-    catch { if (btn) { btn.classList.remove("busy"); btn.disabled = false; } hint.textContent = "사진을 올리지 못했습니다. 인터넷 확인 후 다시 찍어 주세요"; return; }
+    try { d = await hubPost({ action: "photo", store: STORE, id: key, data: shrunk.data, ocr: true, trace: true }); if (!d.photo) throw new Error(); }
+    catch {
+      job.state = "err"; trInFlight--; renderJobs();
+      if (alive()) $("trInvHint").textContent = "사진을 올리지 못했습니다. 인터넷 확인 후 다시 찍어 주세요";
+      maybeAutoSave(); return;
+    }
+    if (!alive()) { trInFlight--; hubPost({ action: "unphoto", store: STORE, id: key }).catch(() => {}); return; }
     trPreview[d.photo] = shrunk.data;
     c.photos.push(key); trNewPhotos.push(key);
     const found = traceNos(d.text);
     if (kind === "doc") {
       c.docPhotos.push(d.photo);
       found.forEach(placeDocNo);
-      hint.textContent = found.length ? `이력번호 ${found.length}개를 읽었어요. 등심·채끝이 아니면 버튼을 눌러 넣어 주세요.` : "번호를 못 찾았어요. 크게 다시 찍거나 칸에 직접 적으세요.";
+      relinkFromBoxes();
+      job.detail = found.length ? `번호 ${found.length}개` : "번호 없음";
     } else {
       const nos = found.map((f) => f.no);
       const cut = c.cuts[kind];
@@ -1680,21 +1748,32 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       if (nos.length === 1) { cut.boxNo = nos[0]; cut.choices = []; }
       else if (nos.length > 1) { cut.boxNo = nos.find((n) => n === docNo) || ""; cut.choices = nos; }
       else cut.choices = [];
-      hint.textContent = nos.length ? `${kind} 박스에서 번호 ${nos.length}개를 읽었어요.` : `${kind} 박스에서 번호를 못 찾았어요. 칸에 직접 적으세요.`;
+      relinkFromBoxes();
+      job.detail = nos.length ? `번호 ${nos.length}개` : "번호 없음";
     }
-    drawCuts();
+    job.state = "done"; trInFlight--;
+    refreshCuts();
+    if (!typingCut() && TraceNos.traceVerdict(c.cuts) === "wait") {
+      $("trInvHint").textContent = found.length ? "번호를 읽었습니다. 틀린 칸은 직접 고치세요." : "번호를 못 찾았어요. 칸에 직접 적거나 다시 찍으세요.";
+    }
+    maybeAutoSave();
   }
   async function traceShot(kind, file) {
     if (trCur && trCur.cuts) return traceShotCuts(kind, file);
-    const c = trCur, btn = kind === "doc" ? $("trDocShot") : $("trBoxShot"), hint = kind === "doc" ? $("trDocHint") : $("trBoxHint");
+    const c = trCur; if (!c) return;
+    const shotId = c.id;
+    const hint = kind === "doc" ? $("trDocHint") : $("trBoxHint");
+    const key = `${shotId}_${kind[0]}${++trSeq}`.slice(0, 40);
     let data;
     try { ({ data } = await shrink(file)); } catch { hint.textContent = "사진을 열 수 없습니다"; return; }
-    const key = `${c.id}_${kind[0]}${c.photos.length + 1}`.slice(0, 40);
-    btn.disabled = true; btn.classList.add("busy"); hint.textContent = "사진에서 번호를 읽는 중… (5~10초)";
+    if (!trCur || trCur.id !== shotId) return;
+    hint.textContent = "읽는 중…";
+    trInFlight++;
     let d;
-    try { d = await hubPost({ action: "photo", store: STORE, id: key, data, ocr: true }); if (!d.photo) throw new Error(); }
-    catch { btn.classList.remove("busy"); drawTrace(); btn.disabled = false; hint.textContent = "사진을 올리지 못했습니다. 인터넷 확인 후 다시 찍어 주세요"; return; }
-    btn.classList.remove("busy"); btn.disabled = false;
+    try { d = await hubPost({ action: "photo", store: STORE, id: key, data, ocr: true, trace: true }); if (!d.photo) throw new Error(); }
+    catch { trInFlight--; if (trCur && trCur.id === shotId) hint.textContent = "사진을 올리지 못했습니다. 인터넷 확인 후 다시 찍어 주세요"; maybeAutoSave(); return; }
+    trInFlight--;
+    if (!trCur || trCur.id !== shotId) { hubPost({ action: "unphoto", store: STORE, id: key }).catch(() => {}); maybeAutoSave(); return; }
     c.photos.push(key); trNewPhotos.push(key);
     const found = traceNos(d.text);
     if (kind === "doc") {
@@ -1708,10 +1787,20 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
       c.boxes.push(hit ? { ...hit, photo: d.photo } : { no: "", status: "unread", match: -1, photo: d.photo });
       drawTrace();
     }
+    maybeAutoSave();
   }
-  $("trDocShot").onclick = () => { trShot = "doc"; $("trFile").click(); };
-  $("trBoxShot").onclick = () => { trShot = "box"; $("trFile").click(); };
-  $("trFile").onchange = () => { const f = $("trFile").files[0]; $("trFile").value = ""; if (f && trCur && trShot) traceShot(trShot, f); trShot = ""; };
+  $("trDocShot").onclick = () => { trChain = false; trShot = "doc"; $("trFile").click(); };
+  $("trBoxShot").onclick = () => { trChain = false; trShot = "box"; $("trFile").click(); };
+  $("trFile").onchange = () => {
+    const f = $("trFile").files && $("trFile").files[0];
+    const kind = trShot;
+    $("trFile").value = "";
+    if (!f || !trCur || !kind) { trShot = ""; return; }
+    const next = trChain && trCur.cuts ? TraceNos.nextTraceShot(kind) : "";
+    trShot = next || "";
+    if (next) { try { $("trFile").click(); } catch (e) {} }
+    traceShot(kind, f);
+  };
   const cleanNo = (v) => (typeof TraceNos !== "undefined" ? TraceNos.normTrace(v) : "");
   $("trDocAddGo").onclick = () => {
     const no = cleanNo($("trDocAdd").value); if (!no) { $("trDocHint").textContent = "12자리, 또는 영문+숫자(예: L 다음 숫자) 번호를 입력하세요."; return; }
@@ -1725,8 +1814,10 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     if (i >= 0) trCur.boxes[i] = { ...m, photo: trCur.boxes[i].photo }; else trCur.boxes.push(m);
     $("trBoxAdd").value = ""; drawTrace();
   };
-  $("trSave").onclick = async () => {
-    const c = trCur; if (!c) return;
+  async function saveTrace() {
+    const c = trCur; if (!c || trSaving) return;
+    if (trInFlight) { trSaveQueued = true; if (c.cuts) $("trInvHint").textContent = "아직 읽는 사진이 있습니다. 끝나는 대로 저장합니다."; return; }
+    clearTimeout(trAutoTimer);
     c.date = $("trDate").value || toISO(today()); c.who = $("trWho").value.trim().toUpperCase();
     if (c.cuts) {
       STEAKS.forEach((k) => {
@@ -1742,15 +1833,16 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     try { localStorage.setItem("label-list-who", c.who); } catch {}
     const data = { doc: c.doc, boxes: c.boxes, photos: c.photos, docPhotos: c.docPhotos };
     if (c.cuts) { data.cuts = c.cuts; data.pending = c.pending; }
-    $("trSave").disabled = true; $("trSave").textContent = "저장 중…";
+    trSaving = true; $("trSave").disabled = true; $("trSave").textContent = "저장 중…";
     try {
       const r = await hubPost({ action: "trace_save", store: STORE, id: c.id, date: c.date, who: c.who, data });
       if (!r || !Array.isArray(r.trace)) throw new Error("예전 구글 코드");
       trRecs = r.trace; try { localStorage.setItem(TR_LS, JSON.stringify(r.trace)); } catch {}
       trSaved = true; closeTrace(false);
-    } catch { (c.cuts ? $("trInvHint") : $("trBoxHint")).textContent = "저장하지 못했습니다. 인터넷 확인 후 다시 눌러 주세요"; }
-    finally { $("trSave").disabled = false; $("trSave").textContent = "저장"; }
-  };
+    } catch { if (trCur === c) (c.cuts ? $("trInvHint") : $("trBoxHint")).textContent = "저장하지 못했습니다. 인터넷 확인 후 다시 눌러 주세요"; }
+    finally { trSaving = false; trSaveQueued = false; if ($("trSave")) { $("trSave").disabled = false; $("trSave").textContent = "저장"; } }
+  }
+  $("trSave").onclick = () => saveTrace();
   $("trDel").onclick = async () => {
     if ($("trDel").dataset.sure !== "1") { $("trDel").dataset.sure = "1"; $("trDel").textContent = "정말 삭제할까요? 한 번 더 누르세요"; return; }
     $("trDel").dataset.sure = ""; $("trDel").textContent = "이 기록 삭제";

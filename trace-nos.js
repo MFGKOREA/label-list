@@ -86,5 +86,25 @@
     return "ok";
   }
 
-  g.TraceNos = { STEAKS: STEAKS, normTrace: normTrace, traceNos: traceNos, compareTrace: compareTrace, kindNear: kindNear };
+  // 한 번 누르면 명세서 → 등심 박스 → 채끝 박스 순으로 카메라를 잇는다.
+  function nextTraceShot(kind) {
+    if (kind === "doc") return "등심";
+    if (kind === "등심") return "채끝";
+    return "";
+  }
+
+  // 두 부위 모두 명세서·박스 번호가 있을 때만 판정. 같으면 자동 저장, 다르면 저장 한 번.
+  function traceVerdict(cuts) {
+    if (!cuts || !cuts["등심"] || !cuts["채끝"]) return "wait";
+    let mismatch = false;
+    for (let i = 0; i < STEAKS.length; i++) {
+      const c = cuts[STEAKS[i]];
+      const a = normTrace(c && c.docNo), b = normTrace(c && c.boxNo);
+      if (!a || !b) return "wait";
+      if (a !== b) mismatch = true;
+    }
+    return mismatch ? "fix" : "save";
+  }
+
+  g.TraceNos = { STEAKS: STEAKS, normTrace: normTrace, traceNos: traceNos, compareTrace: compareTrace, kindNear: kindNear, nextTraceShot: nextTraceShot, traceVerdict: traceVerdict };
 })(typeof globalThis !== "undefined" ? globalThis : this);

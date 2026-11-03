@@ -51,7 +51,7 @@ function doPost(e) {
     if (body.action === 'save') return json_(saveItem(clean_(body.item), store));
     if (body.action === 'delete') return json_(deleteItem(String(body.id).slice(0, 40), store));
     if (body.action === 'clear') return json_(clearItems(store));
-    if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20)));
+    if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20), !!body.trace));
     if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
     if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
     if (body.action === 'learn') return json_(learn_(store, String(body.id || '').slice(0, 40), String(body.name || '').slice(0, 80), String(body.text || '').slice(0, 3000), String(body.color || '').slice(0, 20)));
@@ -244,11 +244,14 @@ function setup() {
 }
 
 function photoFolder_() {
+  // 같은 실행 인스턴스에서는 폴더를 다시 찾지 않는다 (장마다 드라이브 왕복 1번 절약).
+  if (photoFolder_.cached) return photoFolder_.cached;
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty('PHOTO_FOLDER_ID');
-  if (id) { try { return DriveApp.getFolderById(id); } catch (err) {} }
+  if (id) { try { photoFolder_.cached = DriveApp.getFolderById(id); return photoFolder_.cached; } catch (err) {} }
   const folder = DriveApp.createFolder(PHOTO_FOLDER);
   props.setProperty('PHOTO_FOLDER_ID', folder.getId());
+  photoFolder_.cached = folder;
   return folder;
 }
 
@@ -298,20 +301,30 @@ function setPhoto_(store, id, file) {
   if (old && old !== file) { try { DriveApp.getFileById(old).setTrashed(true); } catch (err) {} }
 }
 
-function savePhoto_(store, id, data, ocr, color) {
+function savePhoto_(store, id, data, ocr, color, trace) {
   if (!id) throw new Error('id 없음');
   const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
   if (!m) throw new Error('사진 형식이 올바르지 않습니다');
   const bytes = Utilities.base64Decode(m[2]);
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
   const blob = Utilities.newBlob(bytes, 'image/' + m[1], store + '_' + id + '.jpg');
+  // 사진은 한 번만 올린다. 글자 읽기는 그 파일을 문서로 복사하며 하고, 임시 문서는 바로 지운다.
+  let file;
+  try { file = photoFolder_().createFile(blob); }
+  catch (err) { photoFolder_.cached = null; file = photoFolder_().createFile(blob); }
   let text = '', ocrError = '';
-  if (ocr) { try { text = ocr_(blob); } catch (err) { ocrError = String(err); } }
-  const file = photoFolder_().createFile(blob);
+  if (ocr) {
+    // 드라이브에 올린 파일을 문서로 복사해 읽는다. 글자가 비면 예전 방식(바이트를 다시 올림)으로 한 번 더.
+    try { text = ocrFile_(file.getId()); } catch (err) { text = ''; }
+    if (!String(text || '').trim()) {
+      try { text = ocr_(blob); } catch (err2) { ocrError = String(err2); }
+    }
+  }
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   setPhoto_(store, id, file.getId());
   let suggest = [];
-  if (text) { try { suggest = suggest_(text, color); } catch (err) {} }
+  // 이력제 사진은 품목 추천(학습 시트 검색)을 하지 않는다. 한글표시사항만 추천을 쓴다.
+  if (text && !trace) { try { suggest = suggest_(text, color); } catch (err) {} }
   return { photo: file.getId(), text: text, ocrError: ocrError, suggest: suggest };
 }
 
@@ -320,7 +333,35 @@ function unPhoto_(store, id) {
   return { ok: true };
 }
 
-// 사진 → 구글 문서로 변환하면서 글자 읽기(한국어), 읽은 뒤 임시 문서는 휴지통으로
+// 이미 드라이브에 있는 사진으로 글자 읽기. 바이트를 다시 올리지 않는다.
+function ocrFile_(fileId) {
+  if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
+  const copied = Drive.Files.create
+    ? Drive.Files.copy({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, fileId, { ocrLanguage: 'ko' })
+    : Drive.Files.copy({ title: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, fileId, { ocr: true, ocrLanguage: 'ko' });
+  const id = copied && copied.id;
+  if (!id) throw new Error('글자 읽기 문서를 만들지 못했습니다');
+  try { return ocrPlain_(id); }
+  finally { ocrDrop_(id); }
+}
+
+function ocrPlain_(fileId) {
+  if (Drive.Files.export) {
+    const out = Drive.Files.export(fileId, 'text/plain');
+    if (out && out.getDataAsString) return out.getDataAsString();
+    if (typeof out === 'string') return out;
+  }
+  return DocumentApp.openById(fileId).getBody().getText();
+}
+
+function ocrDrop_(fileId) {
+  try {
+    if (Drive.Files.remove) Drive.Files.remove(fileId);
+    else DriveApp.getFileById(fileId).setTrashed(true);
+  } catch (err) {}
+}
+
+// 사진 바이트로 바로 글자 읽기 (복사 방식이 안 될 때의 대비, 한글표시사항도 이 경로를 쓸 수 있음)
 function ocr_(blob) {
   if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
   let fileId;
@@ -328,15 +369,15 @@ function ocr_(blob) {
   for (let i = 0; ; i++) {
     try {
       if (Drive.Files.create) fileId = Drive.Files.create({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocrLanguage: 'ko' }).id;
-      else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ko' }).id;
+      else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocr: true, ocrLanguage: 'ko' }).id;
       break;
     } catch (err) {
       if (i >= 2 || !/rate limit/i.test(String(err))) throw err;
       Utilities.sleep(1500 * (i + 1));
     }
   }
-  try { return DocumentApp.openById(fileId).getBody().getText(); }
-  finally { try { DriveApp.getFileById(fileId).setTrashed(true); } catch (err) {} }
+  try { return ocrPlain_(fileId); }
+  finally { ocrDrop_(fileId); }
 }
 
 // 매장들이 '제조일로부터 N' 으로 등록한 품목: { 이름키: { name, combos: { '24m': 매장 수 } } }
