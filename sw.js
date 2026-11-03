@@ -1,6 +1,6 @@
 // 한글표시사항 리스트: 앱 화면을 휴대폰에 저장해 두고 바로 띄움 (열 때마다 뒤에서 새 버전 받아 둠)
 // 같은 저장소의 다른 페이지(order.html 등)와 구글 요청은 건드리지 않음
-const CACHE = "label-list-shell-v2";
+const CACHE = "label-list-shell-v3";
 const BASE = new URL("./", self.location).pathname; // /label-list/
 
 self.addEventListener("install", () => self.skipWaiting());
