@@ -37,7 +37,7 @@ body {
   background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.45;
   letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
   padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px));
-  padding-block: 22px 56px;
+  padding-block: 22px calc(92px + env(safe-area-inset-bottom, 0px));
 }
 .wrap { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
 
@@ -89,10 +89,15 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.035em; lin
 
 /* summary tiles */
 /* 탭: 한글표시사항 · 축산물이력제 · (빈칸) · (빈칸) */
-.tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: var(--surface); border-radius: 14px; padding: 4px; }
-.tabs button { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: -0.04em; border: 0; border-radius: 10px; background: #f6f6f6; color: var(--muted); padding: 12px 0 13px; white-space: nowrap; cursor: pointer; }
-.tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); font-weight: 800; box-shadow: inset 0 0 0 1.5px var(--fg); }
-.tabs button:disabled { background: #fafafa; cursor: default; }
+/* 하단 독바: 한글표시사항 · 축산물이력제 · (빈칸) · (빈칸) */
+.dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)); background: rgb(255 255 255 / .92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+.dock button { -webkit-tap-highlight-color: transparent; font: inherit; border: 0; background: none; display: grid; justify-items: center; gap: 3px; padding: 6px 0; color: #a5a5a5; font-size: 11px; font-weight: 700; letter-spacing: -0.03em; white-space: nowrap; cursor: pointer; }
+.dock svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.dock button[aria-selected="true"] { color: var(--fg); font-weight: 800; }
+.dock button[aria-selected="true"] svg { color: #3f7a62; }
+.dock button:disabled { cursor: default; }
+.dock button:disabled i { display: block; width: 20px; height: 20px; margin: 2px; border-radius: 6px; background: #efefef; }
+body.typing .dock { display: none; } /* 키보드가 떠 있을 땐 숨김 (입력칸 가림 방지) */
 .panel { display: contents; }
 .panel[hidden] { display: none; }
 .soon-box { background: var(--surface); border-radius: 18px; padding: 40px 18px; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.6; }
@@ -270,12 +275,12 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     <h1 id="title">한글표시사항 리스트</h1>
     <div class="today" id="today"></div>
   </header>
-  <div class="tabs" role="tablist" aria-label="관리 항목">
-    <button type="button" role="tab" id="tabLabel" aria-selected="true">한글표시사항</button>
-    <button type="button" role="tab" id="tabTrace" aria-selected="false">축산물이력제</button>
-    <button type="button" role="tab" disabled aria-label="준비 중"></button>
-    <button type="button" role="tab" disabled aria-label="준비 중"></button>
-  </div>
+  <nav class="dock" role="tablist" aria-label="관리 항목">
+    <button type="button" role="tab" id="tabLabel" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.2V5a1.5 1.5 0 0 1 1.5-1.5h7.2a1.5 1.5 0 0 1 1.06.44l7.3 7.3a1.5 1.5 0 0 1 0 2.12l-7.2 7.2a1.5 1.5 0 0 1-2.12 0l-7.3-7.3a1.5 1.5 0 0 1-.44-1.06z"/><circle cx="8.2" cy="8.2" r="1.4"/></svg>한글표시사항</button>
+    <button type="button" role="tab" id="tabTrace" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4H7M17 4h1.5A1.5 1.5 0 0 1 20 5.5V7M20 17v1.5a1.5 1.5 0 0 1-1.5 1.5H17M7 20H5.5A1.5 1.5 0 0 1 4 18.5V17M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></svg>축산물이력제</button>
+    <button type="button" role="tab" disabled aria-label="준비 중"><i></i>&nbsp;</button>
+    <button type="button" role="tab" disabled aria-label="준비 중"><i></i>&nbsp;</button>
+  </nav>
   <div class="panel" id="pTrace" hidden>
     <div class="soon-box"><b>축산물이력제</b>준비 중입니다</div>
   </div>
@@ -1246,8 +1251,12 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     $("title").textContent = t === "trace" ? "축산물이력제 리스트" : "한글표시사항 리스트"; // 탭에 맞춰 제목도
     try { localStorage.setItem("label-list-tab", t); } catch {}
   }
-  $("tabLabel").onclick = () => showTab("label");
-  $("tabTrace").onclick = () => showTab("trace");
+  $("tabLabel").onclick = () => { showTab("label"); scrollTo(0, 0); };
+  $("tabTrace").onclick = () => { showTab("trace"); scrollTo(0, 0); };
+  // 키보드가 올라오는 입력칸에 들어가면 독바 숨김
+  const typingEl = (el) => el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && !/^(button|checkbox|radio|file|submit)$/.test(el.type)));
+  document.addEventListener("focusin", (e) => document.body.classList.toggle("typing", typingEl(e.target)));
+  document.addEventListener("focusout", () => setTimeout(() => document.body.classList.toggle("typing", typingEl(document.activeElement)), 0));
   try { if (localStorage.getItem("label-list-tab") === "trace") showTab("trace"); } catch {}
 
   // ---- 홈 화면 추가 방법 (기기에 맞는 탭을 먼저 보여 줌) ----
