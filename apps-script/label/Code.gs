@@ -21,7 +21,7 @@ function doGet(e) {
       if (e.parameter.stats) return json_({ counts: stats_(), online: where_() }); // 매장 선택 화면: 매장별 품목 수·접속 중
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
-      if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 1개월)
+      if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 30일)
       const store = store_(e.parameter.store);
       // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
       // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
@@ -466,9 +466,13 @@ function suggest_(text, color) {
 
 // ---- 축산물이력제 기록 (매장모음 프로젝트에서만 씀) ----
 // '이력제' 탭: 한 줄 = 입고 확인 1번. data 칸에 명세서·박스 번호와 사진 연결(JSON)을 담습니다.
-// 1개월(32일)이 지난 기록은 목록을 읽을 때 사진과 함께 자동으로 지웁니다.
+// 30일이 지난 기록은 저장·조회할 때, 그리고 매일 새벽 트리거에서 오래된 것부터 지웁니다.
 const TRACE_SHEET = '이력제';
-const TRACE_KEEP_DAYS = 32;
+const TRACE_KEEP_DAYS = 30;
+
+function traceCutoff_() {
+  return Utilities.formatDate(new Date(Date.now() - TRACE_KEEP_DAYS * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
 
 function traceSheet_() {
   const ss = spreadsheet_();
@@ -492,7 +496,7 @@ function traceList_(store) {
   const cache = CacheService.getScriptCache();
   const hit = cache.get('tr_' + store);
   if (hit) return JSON.parse(hit);
-  const cut = Utilities.formatDate(new Date(Date.now() - TRACE_KEEP_DAYS * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const cut = traceCutoff_();
   const rows = traceRows_();
   if (rows.some((r) => r[2] && r[2] < cut)) pruneTrace_(cut);
   const out = rows.filter((r) => r[0] === store && r[1] && !(r[2] < cut)).map((r) => {
@@ -510,18 +514,40 @@ function pruneTrace_(cut) {
   lock.waitLock(10000);
   const gone = [];
   try {
-    const sh = traceSheet_();
-    const rows = traceRows_();
-    for (let i = rows.length - 1; i >= 0; i--) {
-      if (rows[i][2] && rows[i][2] < cut) { gone.push(rows[i]); sh.deleteRow(i + 2); }
-    }
+    gone.push.apply(gone, pruneTraceUnlocked_(cut));
   } finally {
     lock.releaseLock();
   }
+  // 사진 삭제는 잠금을 푼 뒤에. unPhoto_ 가 같은 잠금을 다시 잡는다.
   gone.forEach((r) => {
     try { (JSON.parse(r[4] || '{}').photos || []).forEach((k) => unPhoto_(r[0], String(k).slice(0, 40))); } catch (err) {}
     CacheService.getScriptCache().remove('tr_' + r[0]);
   });
+}
+
+// 호출하는 쪽이 이미 잠금을 잡고 있을 때. 날짜가 오래된 줄부터 고르고, 시트에서는 아래 줄부터 지운다.
+function pruneTraceUnlocked_(cut) {
+  const sh = traceSheet_();
+  const rows = traceRows_();
+  const old = [];
+  rows.forEach((r, i) => { if (r[2] && r[2] < cut) old.push({ i: i, r: r }); });
+  old.sort((a, b) => a.r[2] < b.r[2] ? -1 : a.r[2] > b.r[2] ? 1 : a.i - b.i);
+  const gone = old.map((x) => x.r);
+  old.sort((a, b) => b.i - a.i).forEach((x) => sh.deleteRow(x.i + 2));
+  return gone;
+}
+
+// 편집기에서 한 번 실행하면 매일 새벽 4시(스크립트 시간대)에 30일 지난 기록을 지운다.
+function installTracePruneTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'pruneTraceDaily') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('pruneTraceDaily').timeBased().everyDays(1).atHour(4).create();
+  Logger.log('이력제 30일 정리 트리거를 만들었습니다');
+}
+
+function pruneTraceDaily() {
+  pruneTrace_(traceCutoff_());
 }
 
 function traceSave_(store, body) {
@@ -533,6 +559,7 @@ function traceSave_(store, body) {
   const row = [store, id, date, String(body.who || '').slice(0, 10), data, String(Date.now())];
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
+  let gone = [];
   try {
     const sh = traceSheet_();
     const rows = traceRows_();
@@ -540,9 +567,14 @@ function traceSave_(store, body) {
     if (at >= 0) sh.getRange(at + 2, 1, 1, 6).setValues([row]);
     else sh.appendRow(row);
     CacheService.getScriptCache().remove('tr_' + store);
+    gone = pruneTraceUnlocked_(traceCutoff_());
   } finally {
     lock.releaseLock();
   }
+  gone.forEach((r) => {
+    try { (JSON.parse(r[4] || '{}').photos || []).forEach((k) => unPhoto_(r[0], String(k).slice(0, 40))); } catch (err) {}
+    CacheService.getScriptCache().remove('tr_' + r[0]);
+  });
   return traceList_(store);
 }
 
