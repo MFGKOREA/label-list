@@ -21,6 +21,7 @@ function doGet(e) {
       if (e.parameter.stats) return json_({ counts: stats_(), online: where_() }); // 매장 선택 화면: 매장별 품목 수·접속 중
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
+      if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 1개월)
       const store = store_(e.parameter.store);
       // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
       // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
@@ -51,6 +52,8 @@ function doPost(e) {
     if (body.action === 'delete') return json_(deleteItem(String(body.id).slice(0, 40), store));
     if (body.action === 'clear') return json_(clearItems(store));
     if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20)));
+    if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
+    if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
     if (body.action === 'learn') return json_(learn_(store, String(body.id || '').slice(0, 40), String(body.name || '').slice(0, 80), String(body.text || '').slice(0, 3000), String(body.color || '').slice(0, 20)));
     if (body.action === 'unphoto') return json_(unPhoto_(store, String(body.id || '').slice(0, 40)));
     return json_(listItems(store));
@@ -459,5 +462,107 @@ function suggest_(text, color) {
   });
   return Object.keys(best).map((k) => best[k]).filter((x) => x.s >= 0.3)
     .sort((a, b) => b.s - a.s).slice(0, 3).map((x) => ({ name: x.name, score: Math.min(99, Math.round(x.s * 100)) }));
+}
+
+// ---- 축산물이력제 기록 (매장모음 프로젝트에서만 씀) ----
+// '이력제' 탭: 한 줄 = 입고 확인 1번. data 칸에 명세서·박스 번호와 사진 연결(JSON)을 담습니다.
+// 1개월(32일)이 지난 기록은 목록을 읽을 때 사진과 함께 자동으로 지웁니다.
+const TRACE_SHEET = '이력제';
+const TRACE_KEEP_DAYS = 32;
+
+function traceSheet_() {
+  const ss = spreadsheet_();
+  let sh = ss.getSheetByName(TRACE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(TRACE_SHEET);
+    sh.getRange('A:F').setNumberFormat('@');
+    sh.appendRow(['store', 'id', 'date', 'who', 'data', 'at']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function traceRows_() {
+  const sh = traceSheet_();
+  const last = sh.getLastRow();
+  return last > 1 ? sh.getRange(2, 1, last - 1, 6).getValues().map((r) => r.map((v) => cell_(v))) : [];
+}
+
+function traceList_(store) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('tr_' + store);
+  if (hit) return JSON.parse(hit);
+  const cut = Utilities.formatDate(new Date(Date.now() - TRACE_KEEP_DAYS * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const rows = traceRows_();
+  if (rows.some((r) => r[2] && r[2] < cut)) pruneTrace_(cut);
+  const out = rows.filter((r) => r[0] === store && r[1] && !(r[2] < cut)).map((r) => {
+    let data = {};
+    try { data = JSON.parse(r[4] || '{}'); } catch (err) {}
+    return { id: r[1], date: r[2], who: r[3], data: data, at: Number(r[5]) || 0 };
+  });
+  const json = JSON.stringify(out);
+  if (json.length < 95000) cache.put('tr_' + store, json, 21600);
+  return out;
+}
+
+function pruneTrace_(cut) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  const gone = [];
+  try {
+    const sh = traceSheet_();
+    const rows = traceRows_();
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i][2] && rows[i][2] < cut) { gone.push(rows[i]); sh.deleteRow(i + 2); }
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  gone.forEach((r) => {
+    try { (JSON.parse(r[4] || '{}').photos || []).forEach((k) => unPhoto_(r[0], String(k).slice(0, 40))); } catch (err) {}
+    CacheService.getScriptCache().remove('tr_' + r[0]);
+  });
+}
+
+function traceSave_(store, body) {
+  const id = String(body.id || '').slice(0, 40);
+  const date = String(body.date || '');
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('기록 형식이 올바르지 않습니다');
+  const data = JSON.stringify(body.data || {});
+  if (data.length > 45000) throw new Error('기록이 너무 깁니다');
+  const row = [store, id, date, String(body.who || '').slice(0, 10), data, String(Date.now())];
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = traceSheet_();
+    const rows = traceRows_();
+    const at = rows.findIndex((r) => r[0] === store && r[1] === id);
+    if (at >= 0) sh.getRange(at + 2, 1, 1, 6).setValues([row]);
+    else sh.appendRow(row);
+    CacheService.getScriptCache().remove('tr_' + store);
+  } finally {
+    lock.releaseLock();
+  }
+  return traceList_(store);
+}
+
+function traceDelete_(store, id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let photos = [];
+  try {
+    const sh = traceSheet_();
+    const rows = traceRows_();
+    const at = rows.findIndex((r) => r[0] === store && r[1] === id);
+    if (at >= 0) {
+      try { photos = JSON.parse(rows[at][4] || '{}').photos || []; } catch (err) {}
+      sh.deleteRow(at + 2);
+    }
+    CacheService.getScriptCache().remove('tr_' + store);
+  } finally {
+    lock.releaseLock();
+  }
+  photos.forEach((k) => unPhoto_(store, String(k).slice(0, 40)));
+  return traceList_(store);
 }
 
