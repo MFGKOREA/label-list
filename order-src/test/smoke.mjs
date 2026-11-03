@@ -32,12 +32,13 @@ const out = await p.evaluate(() => {
 console.log(JSON.stringify(out, null, 1));
 fs.mkdirSync(path.join(here, "shots"), { recursive: true });
 await p.screenshot({ path: path.join(here, "shots", "main.png") });
-await p.click("#tabPrep"); await p.waitForTimeout(300); await p.screenshot({ path: path.join(here, "shots", "prep.png") });
-await p.click("#tabOrder");
+// 화면 이동은 하단 독으로 (발주/프랩 탭·리포트 버튼·뒤로가기는 독이 대신해서 숨김)
+await p.click("#dock [data-dock=prep]"); await p.waitForTimeout(300); await p.screenshot({ path: path.join(here, "shots", "prep.png") });
+await p.click("#dock [data-dock=order]");
 for (const v of ["forecast", "files", "report", "help"]) {
-  await p.click(`[data-go=${v}]`); await p.waitForTimeout(400);
+  await p.click(v === "help" ? "#v-main [data-go=help]" : `#dock [data-dock=${v}]`); await p.waitForTimeout(400);
   await p.screenshot({ path: path.join(here, "shots", v + ".png") });
-  await p.click(`#v-${v} [data-go=main]`).catch(() => {}); await p.waitForTimeout(200);
+  await p.click("#dock [data-dock=order]"); await p.waitForTimeout(200);
 }
 console.log(errs.length ? "오류:\n" + errs.join("\n") : "오류 없음");
 await b.close();

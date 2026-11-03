@@ -1441,6 +1441,54 @@
     if (t === "tabPrep") renderPrep();
   }));
 
+  // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
+  const dockOn = (k) => document.querySelectorAll("#dock [data-dock]").forEach((b) => { if (b.dataset.dock === k) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  $("dock").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-dock]"); if (!b) return;
+    const k = b.dataset.dock;
+    if (k === "order" || k === "prep") {
+      if ($("v-main").hidden) go("main");
+      $(k === "prep" ? "tabPrep" : "tabOrder").click();
+      window.scrollTo(0, 0); dockOn(k); return;
+    }
+    if (k === "files") { unlock().then((ok) => { if (ok) { go("files"); dockOn("files"); } }); return; } // 데이터 파일은 버튼 비밀번호
+    go(k); dockOn(k);
+  });
+  // 타일·상단 버튼 같은 다른 길로 화면이 바뀌어도 독 표시를 맞춤
+  document.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-go]"); if (!g) return;
+    const to = g.dataset.go; setTimeout(() => { if (!$("v-" + to)?.hidden) dockOn(to === "main" ? ($("pPrep").hidden ? "order" : "prep") : to); }, 0);
+  });
+
+  // ---------- 행간: 2줄 이상인 글만 150% (1줄은 auto) ----------
+  // 같은 글도 화면 폭에 따라 줄 수가 달라서, 그려진 뒤 실제 줄 수를 재서 data-ml을 붙임
+  (() => {
+    const inl = (el) => getComputedStyle(el).display === "inline";
+    function lineMarks() {
+      const todo = [];
+      document.querySelectorAll(".app *, .toast").forEach((el) => {
+        if (/^(SCRIPT|STYLE|SVG|PATH|INPUT|SELECT|OPTION|TEXTAREA|BR)$/i.test(el.tagName)) return;
+        if (!el.offsetParent || inl(el)) return;
+        let text = false;
+        for (const n of el.childNodes) {
+          if (n.nodeType === 3 && n.textContent.trim()) text = true;
+          else if (n.nodeType === 1 && !inl(n)) return;
+        }
+        if (!text) return;
+        const r = document.createRange(); r.selectNodeContents(el);
+        const fs = parseFloat(getComputedStyle(el).fontSize) || 14, tops = [];
+        for (const b of r.getClientRects()) { if (b.height < 1) continue; if (!tops.some((t) => Math.abs(t - b.top) < fs * 0.6)) tops.push(b.top); }
+        todo.push([el, tops.length >= 2]);
+      });
+      todo.forEach(([el, m]) => { if (m !== el.hasAttribute("data-ml")) el.toggleAttribute("data-ml", m); });
+    }
+    let t = 0; const later = () => { clearTimeout(t); t = setTimeout(lineMarks, 150); };
+    new MutationObserver(later).observe(document.body, { childList: true, subtree: true, characterData: true });
+    addEventListener("resize", later);
+    if (document.fonts) document.fonts.ready.then(later);
+    later();
+  })();
+
   // ---------- 메인 상단 ----------
   function renderTop() {
     // 날짜 아래 발주 상태: 일요일 발주 없음, 14:30 전 발주 가능, 지나면 발주 마감
@@ -2693,7 +2741,7 @@
     const x = (i) => L + (W - L - R) * i / 11, y = (v) => T + (H - T - B) * (hi - v) / (hi - lo);
     let g = "";
     for (let v = lo; v <= hi; v += (hi - lo) / 2) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${Math.round(v)}</text>`;
-    slots.forEach((w, i) => { if (i % 2 === 11 % 2 || w === rWeek) g += `<text class="wk${w === rWeek ? " on" : ""}" x="${x(i)}" y="${H - 6}">${isoWeek(w).w}주</text>`; }); // 주차는 한 칸 건너 (고른 주는 항상)
+    const rI = slots.indexOf(rWeek); slots.forEach((w, i) => { if ((i % 2 === 11 % 2 && Math.abs(i - rI) !== 1) || w === rWeek) g += `<text class="wk${w === rWeek ? " on" : ""}" x="${x(i)}" y="${H - 6}">${isoWeek(w).w}주</text>`; }); // 주차는 한 칸 건너 (고른 주는 항상, 바로 옆 주는 글자가 붙어서 뺌)
     if (pts.length > 1) g += `<polyline class="ln" points="${pts.map((p) => `${x(p.i)},${y(p.a)}`).join(" ")}"/>`;
     pts.forEach((p) => {
       const on = p.w === rWeek, i = p.i;
