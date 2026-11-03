@@ -940,6 +940,59 @@
       recent.forEach((r, i) => r.extra.forEach((v, k) => add(blend.theo, k, wOf(i) * v / wsum)));
     }
 
+    // 신메뉴 초기 판매 (11/4 KM): 지금 레시피에 있는데 최근 달 메뉴별 매출현황에 없어서 위 B에 안 잡힌 메뉴(출시 직후)는
+    //  날짜별 메뉴 판매로 Gross 100만원당 판매를 구해 B에 더함. 날짜별 판매 = menuDay(PC가 불러옴), 없으면 menuDayPart(KM이 올린 엑셀에서 그날 판매가 확실한 줄만).
+    //  첫 판매일부터 어제까지, 판매 기록이 있는 날의 Gross(실제, 없으면 보정한 Forecast)로 나눔. 그 달 메뉴별 매출현황이 들어오면 위 3:2:1이 대신함
+    blend.launch = [];
+    (() => {
+      const have = new Set(blend.recipeRate.map((x) => x.recipe.name)), from = addDays(TODAY, -28), days = new Map();
+      Object.keys(db).forEach((k) => {
+        const m = /^menuDay(Part)?\.(\d{4}-\d\d-\d\d)$/.exec(k);
+        if (!m || m[2] < from || m[2] >= TODAY || !Array.isArray((db[k] || {}).rows)) return;
+        if (m[1] && days.has(m[2]) && !days.get(m[2]).part) return; // PC가 받은 그날 전체 판매가 있으면 그걸 씀
+        days.set(m[2], { rows: db[k].rows, part: !!m[1] });
+      });
+      const q = new Map(); // 레시피 이름 → { recipe, q, d0 첫 판매일 }
+      [...days.keys()].sort().forEach((d) => days.get(d).rows.forEach((r) => {
+        if (!(num(r.q) > 0) || (COUPON.test(r.c) && !mapCfg.menu[r.m])) return;
+        const x = resolveMenu(r.m, r.c); if (!x || x.skip || !x.recipe || have.has(x.recipe.name)) return;
+        const e = q.get(x.recipe.name) || { recipe: x.recipe, q: 0, d0: d, cat: r.c }; e.q += num(r.q) * (x.mult || 1); q.set(x.recipe.name, e);
+      }));
+      const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
+      // 기존 메뉴의 중분류 (지난달 메뉴별 매출현황): 신메뉴는 같은 중분류 손님을 나눠 가지므로 그만큼 기존 메뉴를 줄임 (파스타 하나 늘었다고 파스타 손님이 늘진 않음)
+      const lastB = withB[withB.length - 1], catOf = new Map();
+      if (lastB) (mget(lastB.m).sales || { rows: [] }).rows.forEach((s) => { const x = resolveMenu(s.menu, s.cat); if (x && x.recipe && !catOf.has(x.recipe.name)) catOf.set(x.recipe.name, s.cat); });
+      const newByCat = new Map(), nowLine = new Set(((mget(TODAY.slice(0, 7)).line || {}).recipes || []).map((r) => r.name));
+      const grossOn = (d) => { const f = (db.forecast || {})[d] || {}; return num(f.act) > 0 ? num(f.act) : num(f.fc) > 0 ? num(f.fc) * ((fcBias(d) || {}).k || 1) : 0; };
+      q.forEach((e) => {
+        // 일부만 올린 날(menuDayPart)은 그 파일에 있는 메뉴만 그날 Gross를 셈 (없는 메뉴는 그날 판매를 모름)
+        const inDay = (x) => x.rows.some((r) => { const y = resolveMenu(r.m, r.c); return y && y.recipe && y.recipe.name === e.recipe.name; });
+        let g = 0; for (let d = e.d0; d < TODAY; d = addDays(d, 1)) { const x = days.get(d); if (x && (!x.part || inDay(x))) g += grossOn(d); }
+        if (!(g > 0)) return;
+        if (!nowLine.has(e.recipe.name) && e.q < 3) return; // 이번 달 신메뉴가 아니면 3개 넘게 팔렸을 때만 (한두 개는 우연)
+        const pm = perMenu(e.recipe), rate = e.q / (g / 1e6);
+        pm.acc.forEach((v, k) => add(blend.theo, k, v * rate));
+        pm.prepAcc.forEach((v, k) => add(blend.prep, k, v * rate));
+        pm.batchAcc.forEach((v, k) => add(blend.batchX, k, v * rate));
+        blend.recipeRate.push({ recipe: e.recipe, rate, launch: true });
+        blend.launch.push({ name: e.recipe.name, q: e.q, d0: e.d0, gross: g, rate, cat: e.cat });
+        if (e.cat && nowLine.has(e.recipe.name)) newByCat.set(e.cat, (newByCat.get(e.cat) || 0) + rate); // 이번 달 레시피로 새로 나온 메뉴만 (브런치처럼 지난달 파일 뒤에 생긴 메뉴는 그대로 더함)
+      });
+      newByCat.forEach((L, cat) => {
+        const olds = blend.recipeRate.filter((x) => !x.launch && catOf.get(x.recipe.name) === cat), E = olds.reduce((a, x) => a + x.rate, 0);
+        if (!(E > 0)) return;
+        const cut = 1 - Math.max(0.5, (E - L) / E); // 기존 메뉴를 최대 절반까지만 줄임
+        olds.forEach((x) => {
+          const pm = perMenu(x.recipe), d = -x.rate * cut;
+          pm.acc.forEach((v, k) => add(blend.theo, k, v * d));
+          pm.prepAcc.forEach((v, k) => add(blend.prep, k, v * d));
+          pm.batchAcc.forEach((v, k) => add(blend.batchX, k, v * d));
+          x.rate += d;
+        });
+        blend.launch.filter((l) => l.cat === cat).forEach((l) => { l.catCut = cut; });
+      });
+    })();
+
     // 주말 배수 (날짜별 메뉴 판매로): MIS에서 불러온 menuDay.날짜(최근 4주) → 레시피마다 주말·평일 Gross 100만원당 판매
     //  → 품목마다 (주말 100만원당 사용) ÷ (평일 100만원당 사용). 플래터·브런치처럼 주말에 몰리는 메뉴의 재료가 다 같이 올라감
     //  주말 2일·평일 3일 이상 있을 때만. 날이 적으면 1 쪽으로 당김 (주말 일수 n ÷ (n+2)), 0.8~2.0
@@ -992,7 +1045,8 @@
       // B: 가장 최근 판매 달의 메뉴 비율 × 레시피, 이전 달들의 실제÷이론으로 로스 계수
       const lastB = withB[withB.length - 1];
       const tb = lastB && lastB.theo.get(it.key);
-      it.rateB = tb ? blend.theo.get(it.key) || tb / (lastB.gross / 1e6) : null;
+      // 지난달 판매에 없는 신메뉴 전용 재료는 신메뉴 초기 판매(blend.launch)로만 B가 생김
+      it.rateB = tb ? blend.theo.get(it.key) || tb / (lastB.gross / 1e6) : blend.theo.get(it.key) || null;
       it.loss = lossOf(it.key);
       if (it.rateB != null) it.rateB *= it.loss;
       it.weKm = weMenu.has(it.key) ? weMenu.get(it.key) : null; // { we, wd }
