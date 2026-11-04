@@ -655,3 +655,16 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* 독이 대신하는 것: 발주/프랩 탭, 상단 리포트 버튼, 하위 화면의 "< 발주" 뒤로가기 */
 #v-main > .seg, .topbtns .tb.report, .view .nav .back { display: none; }
 .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---------- 스테이지쇼 다듬기 시안 (11/4) ----------
+   한 번만 말하기: 업체는 위 묶음 이름에 있으니 카드에선 뺌. 상태색(빨강)은 진짜 문제에만. 숫자 하나가 주인공 */
+.c-meta > span:first-child:not([class]) { display: none; }
+.need.buy b, .need.need-idle b { font-size: 22px; font-weight: 800; }
+.need.buy span, .need.need-idle span { font-size: 12px; font-weight: 600; opacity: .85; }
+.chip.diff { background: var(--chick); color: var(--chick-ink); }
+.doc.k-master { background: var(--accent-soft); color: var(--accent-text); }
+.xp-detail, .xp-more { color: var(--muted); }
+.banner { align-items: flex-end; }
+.banner .b1 { display: block; font-size: 14px; font-weight: 800; }
+.banner .b2 { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; opacity: .8; }
+.banner .b2 em { font-weight: 700; }

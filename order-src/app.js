@@ -1627,7 +1627,7 @@
     else if (dow(od) === 0) { b.className = "banner soft"; b.innerHTML = "<span>오늘은 일요일이라 발주가 없어요. 월요일 기준으로 미리 볼 수 있어요.</span>"; }
     else {
       b.className = "banner" + (win.est ? " soft" : "");
-      b.innerHTML = `<span>${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고 · <em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
+      b.innerHTML = `<span><b class="b1">${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고</b><small class="b2"><em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</small></span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
     $("cats").innerHTML = vendors.map((c) => {
@@ -1835,9 +1835,9 @@
           // 필요량 = 주말 영업까지 다 하고 이번 입고일(월)에 들어와야 할 양 = 필요(사용+안전재고) − 재고 − 입고예정. 발주 안 해도 되면 0
           need = `<span class="need enough"><b>충분</b><span>필요 0${esc(unit)}</span></span>`;
         }
-        else if (offDay) need = `<span class="need none need-idle lbl"><b>${DOW[dow(win.orderDay)]}요일 발주</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+        else if (offDay) need = `<span class="need none need-idle"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>${DOW[dow(win.orderDay)]}요일 발주</span></span>`;
         else {
-          need = `<span class="need buy lbl">${por(ordToStock(it, r.orderQty))}<b>발주필요</b><span>필요 ${r.orderQty}${esc(it.pk.order || unit)}</span></span>`;
+          need = `<span class="need buy">${por(ordToStock(it, r.orderQty))}<b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>발주필요</span></span>`;
         }
       }
       return need;
@@ -2546,7 +2546,7 @@
     if (h !== db.btnLock.hash) { toast("비밀번호가 달라요"); return false; }
     rememberPin(h); return true;
   }
-  function pinBtn() { return `<button type="button" class="pinbtn" aria-label="버튼 비밀번호 바꾸기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></button>`; }
+  function pinBtn() { return `<button type="button" class="pinbtn" aria-label="버튼 비밀번호 바꾸기"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></button>`; }
   function bindPin(el) { el.querySelector(".pinbtn")?.addEventListener("click", async () => { if (pinOn() && !(await unlock())) return; newPin("새 비밀번호를 넣어주세요"); }); }
   $("apiSave").onclick = async () => {
     API = $("apiIn").value.trim();
