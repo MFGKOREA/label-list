@@ -1856,6 +1856,21 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       recent.forEach((r, i) => r.extra.forEach((v, k) => add(blend.theo, k, wOf(i) * v / wsum)));
     }
 
+    // 메뉴 교체 (11/4 KM): 단종된 메뉴의 판매는 그 자리를 이어받은 메뉴로 옮김. db.menuSwap = { 옛 레시피: { to: 새 레시피(없으면 단종만), from: "YYYY-MM-DD" } }
+    //  예: 프로슈토 반반 피자 2종 → 스모키 치폴레 반반 피자 2종 (11/3부터). 신메뉴 판매 자료가 쌓이기 전까지 옛 메뉴 판매량을 그대로 이어받음.
+    //  그 달 메뉴별 매출현황이 들어오면 옛 메뉴는 지난달 판매에 없으니 저절로 빠짐
+    blend.swaps = []; blend.theo0 = new Map(blend.theo); // theo0: 메뉴 교체·신메뉴 반영 전 (지난달 판매 그대로) → 품목마다 얼마나 바뀌었는지 (newShare)
+    Object.entries(db.menuSwap || {}).forEach(([oldN, s]) => {
+      if (!s || (s.from && s.from > TODAY)) return;
+      const x = blend.recipeRate.find((y) => !y.launch && !y.swap && y.recipe.name === oldN); if (!x || !(x.rate > 0)) return;
+      const to = s.to ? line.find((r) => r.name === s.to) : null;
+      const move = (recipe, r) => { const pm = perMenu(recipe); const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v); pm.acc.forEach((v, k) => add(blend.theo, k, v * r)); pm.prepAcc.forEach((v, k) => add(blend.prep, k, v * r)); pm.batchAcc.forEach((v, k) => add(blend.batchX, k, v * r)); };
+      move(x.recipe, -x.rate);
+      if (to) { move(to, x.rate); blend.recipeRate.push({ recipe: to, rate: x.rate, swap: oldN }); }
+      blend.swaps.push({ from: oldN, to: to ? to.name : null, rate: x.rate });
+      x.rate = 0;
+    });
+
     // 신메뉴 초기 판매 (11/4 KM): 지금 레시피에 있는데 최근 달 메뉴별 매출현황에 없어서 위 B에 안 잡힌 메뉴(출시 직후)는
     //  날짜별 메뉴 판매로 Gross 100만원당 판매를 구해 B에 더함. 날짜별 판매 = menuDay(PC가 불러옴), 없으면 menuDayPart(KM이 올린 엑셀에서 그날 판매가 확실한 줄만).
     //  첫 판매일부터 어제까지, 판매 기록이 있는 날의 Gross(실제, 없으면 보정한 Forecast)로 나눔. 그 달 메뉴별 매출현황이 들어오면 위 3:2:1이 대신함
@@ -1963,6 +1978,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const tb = lastB && lastB.theo.get(it.key);
       // 지난달 판매에 없는 신메뉴 전용 재료는 신메뉴 초기 판매(blend.launch)로만 B가 생김
       it.rateB = tb ? blend.theo.get(it.key) || tb / (lastB.gross / 1e6) : blend.theo.get(it.key) || null;
+      // 메뉴 변화 몫: 메뉴 교체·신메뉴로 B가 바뀐 비율 (늘거나 줄거나). A(지난 수불)는 이 변화를 모르니, 이 몫이 크면 B를 더 믿음 (calc)
+      { const t1 = blend.theo.get(it.key) || 0, t0 = blend.theo0.get(it.key) || 0; it.newShare = Math.max(t0, t1) > 0 ? Math.min(1, Math.abs(t1 - t0) / Math.max(t0, t1)) : 0; }
       it.loss = lossOf(it.key);
       if (it.rateB != null) it.rateB *= it.loss;
       it.weKm = weMenu.has(it.key) ? weMenu.get(it.key) : null; // { we, wd }
@@ -1970,7 +1987,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const aLast = lastB && lastB.actual && lastB.actual.get(it.key);
       if (tb && aLast && (aLast / (tb * it.loss) > 3 || aLast / (tb * it.loss) < 1 / 3)) it.rateB = null;
       // 최근 달 수불현황이 아직 없으면(월 중간) A와 B를 직접 비교해서 3배 넘게 차이 나면 B를 안 씀
-      if (it.rateB != null && it.rateA != null && (it.rateA / it.rateB > 3 || it.rateA / it.rateB < 1 / 3)) it.rateB = null;
+      if (it.rateB != null && it.rateA != null && !(it.newShare > 0.3) && (it.rateA / it.rateB > 3 || it.rateA / it.rateB < 1 / 3)) it.rateB = null; // 메뉴 변화 몫이 크면 A와 달라도 B를 씀
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       it.ledgerScores = [];
@@ -2073,6 +2090,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const mse = (arr) => arr.length >= 2 ? arr.slice(-6).reduce((a, e) => a + e * e, 0) / Math.min(arr.length, 6) : null;
       const ea = mse(it.scoreA.length ? it.scoreA : it.errA), eb = mse(it.scoreB.length ? it.scoreB : it.errB);
       if (ea != null && eb != null && ea + eb > 0) wA = Math.min(0.85, Math.max(0.15, (1 / Math.max(ea, 1e-4)) / (1 / Math.max(ea, 1e-4) + 1 / Math.max(eb, 1e-4))));
+      if (it.newShare > 0.3) wA = Math.min(wA, 1 - it.newShare); // 메뉴 교체·신메뉴로 바뀐 몫은 A가 모름
       use = wA * useA + (1 - wA) * useB;
     } else use = useA ?? useB ?? (it.rateG != null ? it.rateG * g100 : null);
     if (use == null) return { none: true };
