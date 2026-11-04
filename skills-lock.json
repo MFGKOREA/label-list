@@ -643,6 +643,12 @@
       "skillPath": "skills/slideshow/SKILL.md",
       "computedHash": "2cce5d13b634a742a25e62a1d78366ee97d0bf51a708eb4746e44a0579a3b6a7"
     },
+    "stageshow": {
+      "source": "benjitaylor/skills",
+      "sourceType": "github",
+      "skillPath": "stageshow/SKILL.md",
+      "computedHash": "a3c332b76583e2ed7048c8f24eaa9cb3694c8cba2adb43d8a3c0b2f15f84c7c2"
+    },
     "subagent-driven-development": {
       "source": "obra/superpowers",
       "sourceType": "github",
