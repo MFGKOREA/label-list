@@ -39,6 +39,13 @@ assert.deepEqual(nos("002123456789 111122223333"), ["002123456789", "11112222333
 assert.deepEqual(nos("채끝등심 002123456789"), ["002123456789"]);
 assert.deepEqual(nos("2026년 11월 3일 입고\n010-1234-5678\n123-45-67890"), []);
 assert.deepEqual(nos("안심\n410012345678"), ["410012345678:안심"]);
+// 실제 명세서(유통식별번호 확인 명세서): 수량 10 과 번호가 한 줄에 붙어 있음
+assert.deepEqual(nos("품코드 품목 발주수량 유통식별번호 원산지\n002108 냉동_채끝270g_10개단위 발주 10 801001506378 호주산"), ["801001506378:채끝"]);
+assert.deepEqual(nos("002108 냉동_등심 10 801001506378 호주산\n002109 냉동_채끝270g 5 801001506999 미국산"), ["801001506378:등심", "801001506999:채끝"]);
+assert.deepEqual(nos("수량 10 0021 2345 6789"), ["002123456789"]);
+// 표를 칸 단위로 읽은 경우: 품목과 번호가 다른 줄
+assert.deepEqual(nos("품목\n냉동_채끝270g_10개단위 발주\n발주수량\n10\n유통식별번호\n801001506378\n원산지\n호주산"), ["801001506378:채끝"]);
+assert.deepEqual(nos("품목\n냉동_등심\n냉동_채끝\n유통식별번호\n801001506378\n801001506999"), ["801001506378:등심", "801001506999:채끝"]);
 
 assert.equal(compareTrace("002123456789", "0021 2345 6789"), "ok");
 assert.equal(compareTrace("L21806200434001", "L21806200434002"), "bad");
@@ -84,5 +91,7 @@ assert.match(gs, /function installTracePruneTrigger/);
 assert.match(gs, /pruneTrace_\(traceCutoff_\(\)\)/);
 assert.match(gs, /function ocrFile_/);
 assert.match(gs, /!!body\.trace/);
+// v2 드라이브는 ocr 옵션에 문서 형식을 같이 주면 거절함 ("OCR is not supported for ... google-apps.document")
+assert.doesNotMatch(gs, /title: 'ocr_tmp', mimeType: 'application\/vnd\.google-apps\.document' \}, [^)]*ocr: true/);
 
 console.log("trace-nos tests ok");

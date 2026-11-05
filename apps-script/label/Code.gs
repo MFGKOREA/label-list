@@ -315,9 +315,10 @@ function savePhoto_(store, id, data, ocr, color, trace) {
   let text = '', ocrError = '';
   if (ocr) {
     // 드라이브에 올린 파일을 문서로 복사해 읽는다. 글자가 비면 예전 방식(바이트를 다시 올림)으로 한 번 더.
-    try { text = ocrFile_(file.getId()); } catch (err) { text = ''; }
+    let err1 = '';
+    try { text = ocrFile_(file.getId()); } catch (err) { text = ''; err1 = String(err); }
     if (!String(text || '').trim()) {
-      try { text = ocr_(blob); } catch (err2) { ocrError = String(err2); }
+      try { text = ocr_(blob); } catch (err2) { ocrError = String(err2) + (err1 ? ' / 복사 방식: ' + err1 : ''); }
     }
   }
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -336,9 +337,11 @@ function unPhoto_(store, id) {
 // 이미 드라이브에 있는 사진으로 글자 읽기. 바이트를 다시 올리지 않는다.
 function ocrFile_(fileId) {
   if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
+  // v3: 문서 형식으로 복사하면 글자를 읽음 / v2: ocr 옵션이 변환까지 하므로 문서 형식을 따로 적으면 안 됨
+  // (v2 에 mimeType 문서를 같이 주면 "OCR is not supported for ... google-apps.document" 오류)
   const copied = Drive.Files.create
     ? Drive.Files.copy({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, fileId, { ocrLanguage: 'ko' })
-    : Drive.Files.copy({ title: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, fileId, { ocr: true, ocrLanguage: 'ko' });
+    : Drive.Files.copy({ title: 'ocr_tmp' }, fileId, { ocr: true, ocrLanguage: 'ko' });
   const id = copied && copied.id;
   if (!id) throw new Error('글자 읽기 문서를 만들지 못했습니다');
   try { return ocrPlain_(id); }
@@ -369,7 +372,7 @@ function ocr_(blob) {
   for (let i = 0; ; i++) {
     try {
       if (Drive.Files.create) fileId = Drive.Files.create({ name: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocrLanguage: 'ko' }).id;
-      else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: 'application/vnd.google-apps.document' }, blob, { ocr: true, ocrLanguage: 'ko' }).id;
+      else fileId = Drive.Files.insert({ title: 'ocr_tmp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ko' }).id; // v2: 원래 사진 형식 그대로 (10.26 실제로 동작 확인한 방식)
       break;
     } catch (err) {
       if (i >= 2 || !/rate limit/i.test(String(err))) throw err;

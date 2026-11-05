@@ -19,18 +19,23 @@
     return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
   }
 
-  // 띄어쓴 한 줄에 번호가 두 개면 나눈다. 아직 12자리가 안 됐거나, 이어 붙여도 한 번호면 붙인다.
+  // 띄어쓴 숫자 묶음에서 이력번호만 골라낸다. 앞에서부터 이어 붙여 보며 가장 긴 올바른 번호를 잡고,
+  // 맞는 번호가 없으면 그 묶음은 버리고 다음 묶음부터 다시 본다.
+  // 예) 명세서 한 줄 "발주 10 801001506378" → 수량 10 은 버리고 801001506378 만.
   function splitChunks(raw) {
     const bits = String(raw || "").trim().split(/\s+/).filter(Boolean);
     const chunks = [];
-    let cur = "";
-    bits.forEach((b) => {
-      if (!cur) { cur = b; return; }
-      const joined = cur + " " + b;
-      if (!normTrace(cur) || normTrace(joined)) cur = joined;
-      else { chunks.push(cur); cur = b; }
-    });
-    if (cur) chunks.push(cur);
+    for (let i = 0; i < bits.length; ) {
+      let acc = "", hit = -1;
+      for (let j = i; j < bits.length; j++) {
+        acc = acc ? acc + " " + bits[j] : bits[j];
+        if (normTrace(acc)) hit = j;
+        else if (acc.replace(/[^0-9]/g, "").length > 16) break;
+      }
+      if (hit < 0) { i++; continue; }
+      chunks.push(bits.slice(i, hit + 1).join(" "));
+      i = hit + 1;
+    }
     return chunks;
   }
 
@@ -54,7 +59,7 @@
       .replace(/\b20\d{2}[01]\d[0-3]\d\b/g, " ");
     const lines = src.split(/\n+/);
     const out = [];
-    const token = /[A-Za-z|]?[\d\s\-]{11,48}/g;
+    const token = /(?<![A-Za-z0-9])[A-Za-z|]?[\d\s\-]{11,48}/g; // 영문은 앞에 글자·숫자가 안 붙었을 때만 (270g 의 g 제외)
     lines.forEach((line, i) => {
       token.lastIndex = 0;
       let m, first = true;
@@ -63,7 +68,7 @@
           const no = normTrace(chunk);
           if (!no || out.some((o) => o.no === no)) return;
           const at = line.indexOf(chunk.trim().split(/\s+/)[0], m.index);
-          const before = line.slice(Math.max(0, (at >= 0 ? at : m.index) - 24), at >= 0 ? at : m.index);
+          const before = line.slice(Math.max(0, (at >= 0 ? at : m.index) - 40), at >= 0 ? at : m.index);
           const after = line.slice((at >= 0 ? at : m.index) + chunk.trim().length, (at >= 0 ? at : m.index) + chunk.trim().length + 12);
           let near = kindNear(before, list) || kindNear(after, list);
           if ((!near || (!near.kind && !near.ambiguous)) && first) {
@@ -75,6 +80,17 @@
         });
       }
     });
+    // 표를 칸 단위로 읽어 품목과 번호가 다른 줄로 떨어진 명세서: 번호 없는 줄에 적힌 부위를 순서대로 짝짓는다.
+    if (out.length && out.every((o) => !o.kind)) {
+      const seq = [];
+      lines.forEach((line) => {
+        token.lastIndex = 0;
+        if (token.test(line) && splitChunks(line.match(token)[0]).some((c) => normTrace(c))) return;
+        const k = kindNear(line, list);
+        if (k && k.kind) seq.push(k.kind);
+      });
+      if (seq.length === out.length) out.forEach((o, i) => { o.kind = seq[i]; });
+    }
     return out;
   }
 
