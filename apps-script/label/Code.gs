@@ -349,10 +349,13 @@ function ocrFile_(fileId) {
 }
 
 function ocrPlain_(fileId) {
+  // 드라이브 v3 export 는 alt=media 를 같이 줘야 내용을 줌. 안 되면 문서를 직접 열어 읽음(10.26 동작 확인한 방식)
   if (Drive.Files.export) {
-    const out = Drive.Files.export(fileId, 'text/plain');
-    if (out && out.getDataAsString) return out.getDataAsString();
-    if (typeof out === 'string') return out;
+    try {
+      const out = Drive.Files.export(fileId, 'text/plain', { alt: 'media' });
+      if (out && out.getDataAsString) return out.getDataAsString();
+      if (typeof out === 'string' && out) return out;
+    } catch (err) {}
   }
   return DocumentApp.openById(fileId).getBody().getText();
 }
