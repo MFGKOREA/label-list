@@ -1002,6 +1002,36 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const roleText = (r) => r.mode === "period"
     ? [r.mfg && `제조일자 ${fmt(r.mfg)}`, r.num && `제조일로부터 ${r.num}${UNIT[r.unit]}`].filter(Boolean).join(" · ")
     : r.expiry ? `유통기한 ${fmt(r.expiry)}` : "";
+  // ---- 대비책: 구글 글자 읽기가 실패하거나 비어 오면, 휴대폰 안에서 읽기 (그때만 엔진을 처음 한 번 내려받음, 약 5MB) ----
+  let tessLoad = null;
+  const tessWorkers = {};
+  function loadTess() {
+    return tessLoad || (tessLoad = new Promise((ok, fail) => {
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js";
+      sc.onload = () => (window.Tesseract ? ok(window.Tesseract) : fail(new Error("엔진 없음")));
+      sc.onerror = () => { tessLoad = null; fail(new Error("엔진을 내려받지 못함")); };
+      document.head.append(sc);
+    }));
+  }
+  // sparse: 표처럼 흩어진 글자(명세서)는 true, 줄글(라벨)은 false
+  async function localOcr(dataUrl, sparse) {
+    const T = await loadTess();
+    const key = sparse ? "sparse" : "lines";
+    tessWorkers[key] = tessWorkers[key] || T.createWorker("kor+eng", 1).then(async (w) => {
+      await w.setParameters({ preserve_interword_spaces: "1", tessedit_pageseg_mode: sparse ? "11" : "3" });
+      return w;
+    }).catch((e) => { delete tessWorkers[key]; throw e; });
+    const w = await tessWorkers[key];
+    const r = await w.recognize(dataUrl);
+    return (r && r.data && r.data.text) || "";
+  }
+  async function readText(d, dataUrl, sparse, onLocal) {
+    if (d && String(d.text || "").trim()) return d.text;
+    if (onLocal) onLocal();
+    try { return await localOcr(dataUrl, sparse); } catch { return ""; }
+  }
+
   async function takeFormPhoto(file) {
     if (!file) return;
     loadCatalog(); // 사진 글자 속 품목 이름 찾기에 씀
@@ -1014,11 +1044,13 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     try { d = await uploadPhoto(id, data, true, color); }
     catch { showOcr({ img: data, title: "사진을 올리지 못했습니다", err: true, note: "인터넷 확인 후 다시 찍어 주세요" }); return; }
     if (!editId) formPhotoNew = id;
+    const text = await readText(d, data, false, () => showOcr({ img: data, title: "휴대폰에서 날짜를 읽는 중…", note: "처음 한 번은 10초쯤 걸려요", busy: true }));
+    d = { ...d, text, ocrError: text.trim() ? "" : d.ocrError };
     formOcr = { text: d.text || "", color };
     await Promise.race([loadCatalog(), new Promise((z) => setTimeout(z, 1500))]); // 이름 목록이 늦으면 기다리지 않음
     suggestNames(d.text || "", d.suggest || []);
     const r = parseLabel(d.text);
-    if (d.ocrError) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자 읽기는 아직 준비 중이라 날짜는 직접 입력해 주세요" }); return; }
+    if (d.ocrError) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자를 읽지 못했어요. 날짜는 직접 입력해 주세요" }); return; }
     if (r.mode) { setMode(r.mode); modeTouched = true; }
     if (r.mode === "period") {
       if (r.mfg) $("fMfg").value = r.mfg;
@@ -1408,7 +1440,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
   const attr = (s) => esc(s).replace(/"/g, "&quot;");
 
   // 글자 읽기: 사진을 구글 드라이브에 올리며 드라이브 OCR(한국어). 한글 부위명과 영문 묶음번호를 같이 읽는다.
-  // 휴대폰에 테서랙트 파일을 받지 않는다. 번호 고르기는 trace-nos.js.
+  // 평소엔 휴대폰에 테서랙트 파일을 받지 않는다(구글이 읽음). 구글이 실패할 때만 readText 가 내려받아 읽는다. 번호 고르기는 trace-nos.js.
   function traceNos(text) {
     return typeof TraceNos !== "undefined" ? TraceNos.traceNos(text, KINDS) : [];
   }
@@ -1741,7 +1773,9 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     if (!alive()) { trInFlight--; hubPost({ action: "unphoto", store: STORE, id: key }).catch(() => {}); return; }
     trPreview[d.photo] = shrunk.data;
     c.photos.push(key); trNewPhotos.push(key);
-    const found = traceNos(d.text);
+    const text = await readText(d, shrunk.data, true, () => { job.detail = "휴대폰에서 읽는 중"; renderJobs(); });
+    if (!alive()) { trInFlight--; return; }
+    const found = traceNos(text);
     if (kind === "doc") {
       c.docPhotos.push(d.photo);
       found.forEach(placeDocNo);
@@ -1782,7 +1816,7 @@ li.expired .name { text-decoration: line-through; text-decoration-color: var(--m
     trInFlight--;
     if (!trCur || trCur.id !== shotId) { hubPost({ action: "unphoto", store: STORE, id: key }).catch(() => {}); maybeAutoSave(); return; }
     c.photos.push(key); trNewPhotos.push(key);
-    const found = traceNos(d.text);
+    const found = traceNos(await readText(d, data, true, () => { hint.textContent = "휴대폰에서 읽는 중…"; }));
     if (kind === "doc") {
       c.docPhotos.push(d.photo);
       found.forEach((f) => { if (!c.doc.some((x) => x.no === f.no)) c.doc.push(f); });
