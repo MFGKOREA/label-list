@@ -1730,7 +1730,7 @@ li.expired .name { text-decoration: none; }
   // 수불현황에 금액 칸이 있으면 그 금액, 없으면 발주시트 단가 × 사용량(예시). 수원점은 발주앱의 그로스·수불현황을 먼저 채움
   const ORDER_API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const CG_KEY = "label-list-cogs-" + STORE;
-  let cg = null, cgOpen = false, cgOrder = null, cgPick = 0;
+  let cg = null, cgOpen = false, cgOrder = null, cgPick = 0, cgPickKind = "file";
   const cgLoad = () => { try { cg = JSON.parse(localStorage.getItem(CG_KEY)) || {}; } catch { cg = {}; } cg.m = cg.m || {}; return cg; };
   const cgSave = () => { try { localStorage.setItem(CG_KEY, JSON.stringify(cg)); } catch { $("cgSrc").textContent = "이 기기에 저장 공간이 부족해 기억하지 못했어요."; } };
   async function cgHash(pin) {
@@ -1777,6 +1777,7 @@ li.expired .name { text-decoration: none; }
   function cgDrawIn() {
     const col = (k) => {
       const m = cg[k], d = cg.m[m] || {};
+      const ss = d.sales ? `<span class="cg-st ok" data-s="sales">✓ 메뉴 ${d.sales.rows.length}개${d.sales.scale > 1.01 ? ` · ${d.sales.day}일까지 → 한 달로 환산` : ""}</span>` : `<span class="cg-st${d.serr ? " err" : ""}" data-s="sales">${d.serr ? esc(d.serr) : "넣으면 판매량·재고 Loss까지"}</span>`;
       const st = d.rows ? `<span class="cg-st ok">✓ ${d.file ? esc(d.file).slice(0, 18) + " · " : ""}품목 ${d.rows.length}개${d.amt ? "" : " · 금액 없음"}</span>` : `<span class="cg-st${d.err ? " err" : ""}">${d.err ? esc(d.err) : "수불현황을 첨부해 주세요"}</span>`;
       return `<div class="cg-col" data-k="${k}">
         <input type="month" value="${m}" data-f="m" aria-label="${k === "a" ? "지난달" : "이번 달"}">
@@ -1784,12 +1785,15 @@ li.expired .name { text-decoration: none; }
         <input class="cg-g" data-f="g" inputmode="numeric" placeholder="0원" value="${d.gross ? won(d.gross) + "원" : ""}" aria-label="${monthKo(m)} 그로스">
         <span class="cg-l">수불현황</span>
         <button type="button" class="cg-att${d.rows ? " on" : ""}" data-f="file">${d.rows ? "다른 파일로" : "파일 첨부"}</button>
-        ${st}</div>`;
+        ${st.replace('class="cg-st', 'data-s="ledger" class="cg-st')}
+        <span class="cg-l">메뉴별 매출현황</span>
+        <button type="button" class="cg-att${d.sales ? " on" : ""}" data-f="sfile">${d.sales ? "다른 파일로" : "파일 첨부"}</button>
+        ${ss}</div>`;
     };
     $("cgIn").innerHTML = col("a") + col("b");
     const A = cg.m[cg.a] || {}, B = cg.m[cg.b] || {};
     const src = [A, B].map((d) => d.src).filter(Boolean);
-    $("cgSrc").textContent = src.includes("order") ? "수원점 발주앱에서 그로스·수불현황(사용량)을 불러왔어요. 금액은 발주시트 단가 × 사용량으로 계산한 예시입니다. MIS 수불현황 원본을 첨부하면 실제 금액으로 바뀝니다." : "";
+    $("cgSrc").textContent = src.includes("order") ? "수원점 발주앱에서 그로스·수불현황·메뉴별 매출을 불러왔어요. 금액은 발주시트 단가 × 사용량 (MIS 수불현황 원본을 넣으면 실제 금액)." : "";
     $("cgGo").disabled = !(A.gross && B.gross && A.rows && B.rows);
   }
   $("cgIn").addEventListener("change", (e) => {
@@ -1806,17 +1810,18 @@ li.expired .name { text-decoration: none; }
   $("cgIn").addEventListener("blur", (e) => { if (e.target.dataset.f === "g" && e.target.value && !/원$/.test(e.target.value)) e.target.value += "원"; }, true);
   $("cgIn").addEventListener("focus", (e) => { if (e.target.dataset.f === "g") e.target.value = e.target.value.replace(/원$/, ""); }, true);
   $("cgIn").addEventListener("click", (e) => {
-    const b = e.target.closest('[data-f="file"]'); if (!b) return;
-    cgPick = b.closest(".cg-col").dataset.k; $("cgFile").value = ""; $("cgFile").click();
+    const b = e.target.closest('[data-f="file"], [data-f="sfile"]'); if (!b) return;
+    cgPick = b.closest(".cg-col").dataset.k; cgPickKind = b.dataset.f; $("cgFile").value = ""; $("cgFile").click();
   });
   $("cgFile").addEventListener("change", async () => {
     const f = $("cgFile").files[0]; if (!f || !cgPick) return;
     const m = cg[cgPick], d = (cg.m[m] = cg.m[m] || {});
-    const st = $("cgIn").querySelector(`.cg-col[data-k="${cgPick}"] .cg-st`); if (st) st.textContent = "읽는 중…";
+    const sales = cgPickKind === "sfile";
+    const st = $("cgIn").querySelector(`.cg-col[data-k="${cgPick}"] [data-s="${sales ? "sales" : "ledger"}"]`); if (st) st.textContent = "읽는 중…";
     try {
-      const r = await cgParseLedger(f);
-      Object.assign(d, { rows: r.rows, amt: r.amt, file: f.name, src: "file", err: "" });
-    } catch (err) { d.err = String(err.message || err); }
+      if (sales) { const rows = await cgParseSales(f); d.sales = { rows, ...cgScale(m, f.name), file: f.name, src: "file" }; d.serr = ""; }
+      else { const r = await cgParseLedger(f); Object.assign(d, { rows: r.rows, amt: r.amt, file: f.name, src: "file", err: "" }); }
+    } catch (err) { if (sales) d.serr = String(err.message || err); else d.err = String(err.message || err); }
     cgSave(); cgDrawIn();
   });
 
@@ -1839,6 +1844,7 @@ li.expired .name { text-decoration: none; }
           });
           d.amt = false; d.src = "order"; d.file = "발주앱"; d.err = ""; changed = true;
         }
+        if (v.sales && v.sales.rows && (!d.sales || d.sales.src === "order")) { d.sales = { rows: v.sales.rows, ...cgScale(m, v.sales.file || "", v.sales.at), file: "발주앱", src: "order" }; changed = true; }
       });
       if (changed) { cgSave(); cgDrawIn(); }
     } catch { $("cgSrc").textContent = "발주앱 데이터를 불러오지 못했어요. 그로스는 직접 넣고 수불현황을 첨부해 주세요."; }
@@ -1900,6 +1906,78 @@ li.expired .name { text-decoration: none; }
     } catch {}
   }
 
+  // 메뉴별 매출이 한 달 중간까지면(파일 이름·저장일 YYYYMMDD) 한 달로 환산
+  function cgScale(m, name, at) {
+    const dim = new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
+    const hit = String(name || "").match(/(20\d{2})[.\-]?(\d{2})[.\-]?(\d{2})/) || String(at || "").match(/(20\d{2})-(\d{2})-(\d{2})/);
+    if (hit && `${hit[1]}-${hit[2]}` === m && +hit[3] < dim) return { scale: dim / +hit[3], day: +hit[3] };
+    return { scale: 1, day: dim };
+  }
+  // 메뉴별 매출현황: 중분류·메뉴명·판매수량 (발주앱과 같은 방식, 소계 줄은 뺌)
+  async function cgParseSales(file) {
+    const X = await loadXlsx();
+    const wb = X.read(await file.arrayBuffer(), { type: "array" });
+    const F = { cat: ["중분류"], menu: ["소분류", "메뉴명", "메뉴"], qty: ["판매수량", "조회일기준", "수량"] };
+    for (const n of wb.SheetNames) {
+      const rows = X.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null });
+      for (let r = 0; r < Math.min(rows.length, 30); r++) {
+        const row = (rows[r] || []).map(cgClean), col = {};
+        Object.entries(F).forEach(([f, words]) => { for (const w of words) { const j = row.findIndex((c, j) => c && !Object.values(col).includes(j) && c.includes(w)); if (j >= 0) { col[f] = j; break; } } });
+        if (!("menu" in col) || !("qty" in col)) continue;
+        const by = new Map();
+        rows.slice(r + 1).forEach((rw) => {
+          const cat = String(rw[col.cat] ?? "").trim(), menu = String(rw[col.menu] ?? "").trim(), qty = cgNum(rw[col.qty]);
+          if (!menu || !isFinite(qty) || /합계|소계/.test(menu + cat)) return;
+          if (!by.has(cat)) by.set(cat, []); by.get(cat).push({ cat, menu, qty });
+        });
+        const out = [];
+        by.forEach((list) => { const [f0, ...rest] = list, rs = rest.reduce((t, x) => t + x.qty, 0); ((rest.length && (f0.menu === f0.cat || Math.abs(f0.qty - rs) < 0.5)) ? rest : list).forEach((x) => { if (x.qty > 0) out.push(x); }); });
+        if (out.length) return out;
+      }
+    }
+    throw new Error("'메뉴명'과 '판매수량' 칸을 찾지 못했어요");
+  }
+  // 레시피(발주앱): 메뉴 × 판매수량을 원재료까지 풀어 이론 사용량 (단위는 레시피 단위라 두 달 비율로만 씀)
+  const cgN = (s) => String(s || "").replace(/\s+/g, "").replace(/\(.*?\)/g, "").toLowerCase();
+  let cgRec = null;
+  function cgRecipes() {
+    if (cgRec || !cgOrder) return cgRec;
+    const J = (k) => { const v = cgOrder[k]; try { return typeof v === "string" ? JSON.parse(v) : v; } catch { return null; } };
+    const line = new Map(), prep = new Map();
+    const put = (mp, r) => { if (!r || !r.ing) return; [r.name, r.short].filter(Boolean).forEach((n) => mp.set(cgN(n), r)); };
+    Object.keys(cgOrder).filter((k) => /^month\./.test(k)).sort().forEach((k) => { const v = J(k) || {}; ((v.line || {}).recipes || []).forEach((r) => put(line, r)); ((v.prep || {}).recipes || []).forEach((r) => put(prep, r)); });
+    const cr = J("customRecipes") || {}; (cr.line || []).forEach((r) => put(line, r)); (cr.prep || []).forEach((r) => put(prep, r));
+    const map = J("map") || {};
+    cgRec = { line, prep, menu: map.menu || {}, ing: map.ing || {} };
+    return cgRec;
+  }
+  const cgAmt = (ing) => { const w = parseFloat(String(ing.w || "").replace(/,/g, "")); if (w > 0) return w; const v = parseFloat(String(ing.v || "")); return v > 0 ? v : 1; };
+  function cgTheo(sales) {
+    const R = cgRecipes(); if (!R || !sales) return null;
+    const theo = new Map(), via = new Map(), sc = sales.scale || 1;
+    const add = (item, amt, menu) => { const k = cgN(item); theo.set(k, (theo.get(k) || 0) + amt); const v = via.get(k) || new Map(); v.set(menu, (v.get(menu) || 0) + amt); via.set(k, v); };
+    const expand = (ings, mult, menu, depth) => ings.forEach((ing) => {
+      const a = cgAmt(ing), t = R.ing[ing.n];
+      if (t === "skip") return;
+      const pr = t && t.startsWith("prep:") ? R.prep.get(cgN(t.slice(5))) : !t ? R.prep.get(cgN(ing.n)) : null;
+      if (pr && depth < 3) { const tot = pr.ing.reduce((s2, x) => s2 + cgAmt(x), 0) || 1; expand(pr.ing, mult * a / tot, menu, depth + 1); return; }
+      add(t && t.startsWith("item:") ? t.slice(5) : ing.n, mult * a, menu);
+    });
+    let hit = 0;
+    sales.rows.forEach(({ menu, qty }) => {
+      const rn = R.menu[menu]; if (rn === "skip") return;
+      const rec = R.line.get(cgN(rn || menu)) || R.line.get(cgN(menu)); if (!rec) return;
+      hit++; expand(rec.ing, qty * sc, menu, 0);
+    });
+    return { theo, via, hit, n: sales.rows.length };
+  }
+  // 수불현황 품목 → 이론 사용량 키 (이름이 같거나 한쪽이 다른 쪽을 품으면, 가장 긴 것)
+  function cgTheoKey(name, T) {
+    const n = cgN(name), alt = cgN(cgName(name)); if (T.theo.has(n)) return n; if (T.theo.has(alt)) return alt;
+    let best = ""; T.theo.forEach((_, k) => { if (k.length >= 2 && (n.includes(k) || k.includes(alt)) && k.length > best.length) best = k; });
+    return best || null;
+  }
+
   // 분류: 파일에 분류 칸이 있으면 그것, 없으면 이름으로 (주방 품목명 기준)
   const CG_CATS = [
     ["우육", /등심|안심|채끝|설도|부채살|스테이크|소고기|우육|척아이|갈비살|우둔|홍두깨|꽃갈비|LA갈비|소갈비/i],
@@ -1935,8 +2013,31 @@ li.expired .name { text-decoration: none; }
     const catList = [...cats.values()].sort((p, q) => Math.abs(q.d) - Math.abs(p.d));
     // 단가: 금액이 실제 파일 값일 때만 (발주시트 단가는 두 달이 같아서 의미 없음)
     const real = A.amt && B.amt;
+    // 재고 Loss / 단가 / 판매 구성: 레시피로 푼 이론 사용량의 두 달 비율(r)로 나눔
+    //  판매 구성 = a×r/gB − a/gA, 재고 Loss = (실제 사용량 × 지난달 단가 − a×r)/gB, 단가 = 실제 사용량 × 단가 차이/gB
+    const TA = cgTheo(A.sales), TB = cgTheo(B.sales), parts = { loss: 0, price: 0, mix: 0, none: 0 };
+    items.forEach((x) => {
+      const pa = x.qa > 0 ? x.a / x.qa : 0, priceE = real && x.qa > 0 && x.qb > 0 ? x.qb * (x.b / x.qb - pa) : 0;
+      const ka = TA && cgTheoKey(x.name, TA), kb = TB && cgTheoKey(x.name, TB);
+      const ta = ka ? TA.theo.get(ka) : 0, tb = kb ? TB.theo.get(kb) : 0;
+      x.priceTS = priceE / B.gross * 100;
+      if (ta > 0 && tb > 0 && x.qa > 0) {
+        const r = tb / ta; x.r = r;
+        x.mixTS = (x.a * r / B.gross - x.a / A.gross) * 100;
+        x.lossTS = ((x.qb * pa - x.a * r) / B.gross) * 100; x.lossW = x.qb * pa - x.a * r;
+        const va = TA.via.get(ka), vb = TB.via.get(kb); let best = null, bd = 0;
+        new Set([...va.keys(), ...vb.keys()]).forEach((mn) => { const dd = (vb.get(mn) || 0) - (va.get(mn) || 0); if (Math.abs(dd) > Math.abs(bd)) { bd = dd; best = mn; } });
+        x.menu = best;
+      } else { x.mixTS = x.d - x.priceTS; x.lossTS = 0; x.none = true; }
+      parts.price += x.priceTS; if (x.none) parts.none += x.mixTS; else { parts.mix += x.mixTS; parts.loss += x.lossTS; }
+    });
+    const mq = (S) => { const mp = new Map(); ((S && S.rows) || []).forEach((r) => mp.set(r.menu, (mp.get(r.menu) || 0) + r.qty * (S.scale || 1))); return mp; };
+    const MA = mq(A.sales), MB = mq(B.sales);
+    const menus = A.sales && B.sales ? [...new Set([...MA.keys(), ...MB.keys()])].map((mn) => ({ menu: mn, a: MA.get(mn) || 0, b: MB.get(mn) || 0 })).map((x) => ({ ...x, d: x.b - x.a })) : [];
+    items.forEach((x) => { if (x.menu) x.menuQ = [MA.get(x.menu) || 0, MB.get(x.menu) || 0]; });
+    const theoOk = !!(TA && TB && TA.hit && TB.hit);
     const price = real ? items.filter((x) => x.qa > 0 && x.qb > 0 && x.a > 30000 && x.b > 30000).map((x) => ({ ...x, pa: x.a / x.qa, pb: x.b / x.qb })).map((x) => ({ ...x, pc: (x.pb / x.pa - 1) * 100 })).filter((x) => Math.abs(x.pc) >= 8).sort((p, q) => Math.abs(q.pc) - Math.abs(p.pc)).slice(0, 6) : [];
-    return { tsA, tsB, totA, totB, catList, items, skipped, real, price, ga: A.gross, gb: B.gross };
+    return { tsA, tsB, totA, totB, catList, items, skipped, real, price, ga: A.gross, gb: B.gross, parts, theoOk, menus, scB: B.sales && B.sales.scale, dayB: B.sales && B.sales.day, hitA: TA && TA.hit, hitB: TB && TB.hit };
   }
 
   const CG_COL = ["#ef6253", "#f0a12b", "#9aa3b2", "#c9ced6"];
@@ -1944,7 +2045,9 @@ li.expired .name { text-decoration: none; }
     const d = R.tsB - R.tsA, up = d >= 0, a = monthKo(cg.a), b = monthKo(cg.b);
     const pos = R.catList.filter((c) => (up ? c.d > 0 : c.d < 0)).sort((p, q) => Math.abs(q.d) - Math.abs(p.d));
     const top = pos.slice(0, 2), rest = pos.slice(2).reduce((s, c) => s + Math.abs(c.d), 0);
-    const segs = [...top.map((c) => ({ l: c.cat, v: Math.abs(c.d) })), ...(rest > 0 ? [{ l: "기타 분류", v: rest }] : [])];
+    const segs = R.theoOk
+      ? [{ l: "재고 Loss", v: R.parts.loss }, { l: "단가 상승", v: R.parts.price }, { l: "판매 구성", v: R.parts.mix }, { l: "레시피 연결 없음", v: R.parts.none }].filter((x) => (up ? x.v > 0.005 : x.v < -0.005)).map((x) => ({ ...x, v: Math.abs(x.v) }))
+      : [...top.map((c) => ({ l: c.cat, v: Math.abs(c.d) })), ...(rest > 0 ? [{ l: "기타 분류", v: rest }] : [])];
     const sumSeg = segs.reduce((s, x) => s + x.v, 0) || 1;
     // 품목 사유: 수불현황만으로 (사용량 변화 vs 매출 변화, 단가 변화, 새로 씀/안 씀)
     const g = R.gb / R.ga - 1;
@@ -1954,9 +2057,11 @@ li.expired .name { text-decoration: none; }
       if (!x.qa && x.qb) return `${a}엔 없다가 ${b}에 새로 사용 (${qn(x.qb)})`;
       if (x.qa && !x.qb) return `${b}에는 사용 없음`;
       const q = x.qb / x.qa - 1, out = [];
+      if (x.menu && x.menuQ && Math.abs(x.menuQ[1] - x.menuQ[0]) >= 1) out.push(`${x.menu} 판매 ${qn(Math.round(x.menuQ[0]))}→${qn(Math.round(x.menuQ[1]))}`);
+      if (x.r) { const lr = (x.qb / x.qa) / x.r - 1; if (lr > 0.15) out.push(`레시피 이론보다 ${Math.round(lr * 100)}% 더 씀 (로스 의심)`); else if (lr < -0.15) out.push(`레시피 이론보다 ${Math.round(-lr * 100)}% 적게 씀`); }
       if (R.real) { const pc = (x.b / x.qb) / (x.a / x.qa) - 1; if (Math.abs(pc) >= 0.08) out.push(`단가 ${pct(pc)} (${won(x.a / x.qa)}→${won(x.b / x.qb)}원)`); }
       const rel = q - g;
-      out.push(Math.abs(q) < 0.05 ? "사용량 비슷" : `사용량 ${pct(q)} (${qn(x.qa)}→${qn(x.qb)})${rel > 0.1 ? ` · 매출(${pct(g)})보다 많이 씀` : rel < -0.1 ? ` · 매출(${pct(g)})보다 적게 씀` : ""}`);
+      out.push(Math.abs(q) < 0.05 ? "사용량 비슷" : `사용량 ${pct(q)} (${qn(x.qa)}→${qn(x.qb)})${x.r ? "" : rel > 0.1 ? ` · 매출(${pct(g)})보다 많이 씀` : rel < -0.1 ? ` · 매출(${pct(g)})보다 적게 씀` : ""}`);
       return out.join(" · ");
     };
     const row = (x) => `<div class="cg-r"><span class="n">${esc(cgName(x.name))}</span><span class="v">${man(x.a)} → <b>${man(x.b)}</b></span><span class="p${x.d < 0 ? " dn" : ""}">${pp(x.d)}</span><span class="w">${esc(why(x))}</span></div>`;
@@ -1967,17 +2072,24 @@ li.expired .name { text-decoration: none; }
     // 분류 카드: 올린 분류 큰 순 4개 + 내린 분류 큰 순 2개
     const upCards = R.catList.filter((c) => c.d > 0).sort((p, q) => q.d - p.d).slice(0, 4);
     const dnCards = R.catList.filter((c) => c.d < 0).sort((p, q) => p.d - q.d).slice(0, 2);
+    const lossIt = R.items.filter((x) => x.lossW > 0).sort((p, q) => q.lossW - p.lossW).slice(0, 5);
+    const lossSum = R.items.reduce((t, x) => t + (x.lossW || 0), 0);
+    const lossCard = R.theoOk && lossIt.length ? `<div class="cg-card loss"><div class="cg-ch"><div><b>재고 Loss</b><small>${b} 실사 사용량 > 레시피 이론 · 품목별</small></div><span class="cg-d${lossSum < 0 ? " dn" : ""}">${lossSum > 0 ? "−" : "+"}${man(Math.abs(lossSum)).replace("만", "")}<small>만</small></span></div>${lossIt.map((x) => `<div class="cg-r"><span class="n">${esc(cgName(x.name))}</span><span class="v">이론보다 더 씀</span><span class="p">−${man(x.lossW)}</span><span class="w">${esc(x.menu ? `${x.menu} 등 · ` : "")}사용량 ${pct(x.qb / x.qa - 1)}, 레시피 이론 ${pct(x.r - 1)}</span></div>`).join("")}</div>` : "";
+    const mUp = R.menus.filter((x) => x.d > 0).sort((p, q) => q.d - p.d).slice(0, 5), mDn = R.menus.filter((x) => x.d < 0).sort((p, q) => p.d - q.d).slice(0, 3);
+    const mRow = (x) => `<div class="cg-r"><span class="n">${esc(x.menu)}</span><span class="v">${qn(Math.round(x.a))} → <b>${qn(Math.round(x.b))}</b></span><span class="p${x.d < 0 ? " dn" : ""}">${x.d > 0 ? "+" : "−"}${qn(Math.abs(Math.round(x.d)))}</span></div>`;
+    const menuCard = R.menus.length ? `<div class="cg-card info"><div class="cg-ch"><div><b>메뉴 판매 변화</b><small>판매수량 ${a} → ${b}${R.scB > 1.01 ? ` (${b}은 ${R.dayB}일까지 → 한 달 환산)` : ""}</small></div></div>${mUp.map(mRow).join("")}${mDn.map(mRow).join("")}</div>` : "";
     const priceCard = R.price.length ? `<div class="cg-card"><div class="cg-ch"><div><b>단가 변화</b><small>사용 금액 ÷ 사용량, ${a} → ${b}</small></div></div>${R.price.map((x) => `<div class="cg-r"><span class="n">${esc(cgName(x.name))}</span><span class="v">${won(x.pa)} → <b>${won(x.pb)}</b></span><span class="p${x.pc < 0 ? " dn" : ""}">${x.pc > 0 ? "+" : "−"}${Math.abs(Math.round(x.pc))}%</span></div>`).join("")}</div>` : "";
     $("cgOut").innerHTML = `
       <div><div class="cg-k">${a} 대비 TS % ${up ? "상승" : "하락"} 사유</div>
         <div class="cg-big"><span class="a">${R.tsA.toFixed(2)}%</span><span class="ar">→</span><b>${R.tsB.toFixed(2)}%</b><span class="cg-badge${up ? "" : " dn"}">${pp(d)}%p</span></div></div>
       <div><div class="cg-bar">${segs.map((x, i) => `<i style="flex:${x.v / sumSeg};background:${CG_COL[i]}"></i>`).join("")}</div></div>
       <div class="cg-leg">${segs.map((x, i) => `<span><i style="background:${CG_COL[i]}"></i>${esc(x.l)} <b>${x.v.toFixed(2)}%p</b></span>`).join("")}</div>
-      <div class="cg-cards">${upCards.map((c) => card(c, true)).join("")}${dnCards.map((c) => card(c, false)).join("")}${priceCard}</div>
+      <div class="cg-cards">${upCards.map((c) => card(c, true)).join("")}${dnCards.map((c) => card(c, false)).join("")}${lossCard}${menuCard}${priceCard}</div>
       <div class="cg-note">그로스 ${a} ${won(R.ga)}원 → ${b} ${won(R.gb)}원 · 사용 금액 ${man(R.totA)} → ${man(R.totB)}${R.skipped.some((n) => n) ? ` · 금액을 알 수 없는 품목 ${a} ${R.skipped[0]}개, ${b} ${R.skipped[1]}개는 빠짐` : ""}</div>`;
     $("cgOut").hidden = false; $("cgPdf").hidden = false;
   }
-  $("cgGo").onclick = () => {
+  $("cgGo").onclick = async () => {
+    if (!cgOrder) { $("cgGo").textContent = "레시피 불러오는 중…"; try { const d = await (await fetch(ORDER_API + "?api=1&t=" + Date.now())).json(); cgOrder = (d && d.data) || {}; } catch {} $("cgGo").textContent = "분석하기"; }
     const R = cgAnalyze();
     if (!R.items.length) { $("cgSrc").textContent = "금액을 계산할 수 있는 품목이 없어요."; return; }
     cgRender(R);
