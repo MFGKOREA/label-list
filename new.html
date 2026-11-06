@@ -240,6 +240,8 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .todaybar .c { display: grid; align-content: center; gap: 1px; min-width: 0; text-align: left; font-size: 14px; font-weight: 700; line-height: 1.3; border-radius: 11px; padding: 9px 12px 10px; background: var(--fill); color: var(--fg); }
 .todaybar .c .nm { min-width: 0; } /* 이름은 한 줄 통째로 (긴 이름도 단어 중간에서 안 끊김) */
 .todaybar .c b { font-size: 13px; font-weight: 800; margin-left: 0; }
+.todaybar .c.more-c { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
+.todaybar .c.more-c b { color: var(--fg); }
 .todaybar .c.hot b { color: var(--rose-t); }
 .todaybar .c.warm b { color: var(--amber-t); }
 button.c { -webkit-tap-highlight-color: transparent; font: inherit; font-size: 14px; font-weight: 700; border: 0; cursor: pointer; transition: transform .12s ease; }
@@ -701,6 +703,7 @@ li.expired .name { text-decoration: none; }
   let mode = "date";
   let editId = null;
   let pendingDelete = null;
+  let needOpen = false; // 교체 필요 칸 전부 펼침
 
   // ---- date helpers (local dates as YYYY-MM-DD) ----
   const pad = (n) => String(n).padStart(2, "0");
@@ -1452,8 +1455,12 @@ li.expired .name { text-decoration: none; }
 
     // 교체 필요: 유통기한 30일 미만 (지난 품목 포함), 급한 순
     const need = rows.filter((r) => r.n < 30);
+    // 많으면 8칸까지만 보이고 마지막 칸은 [외 N개 더 보기] (눌러서 전부 펼침)
+    const NEED_MAX = 8, needAll = needOpen || need.length <= NEED_MAX, needVis = needAll ? need : need.slice(0, NEED_MAX - 1);
     $("needBox").innerHTML = `<div class="tb-head"><span class="t">교체 필요</span><span class="cnt">${need.length}개</span></div>` + (need.length
-      ? `<div class="tb-list">${need.map((r) => `<button type="button" class="c ${r.n <= 7 ? "hot" : "warm"}" data-jump="${r.it.id}"><span class="nm">${esc(r.it.name)}</span><b>${ddayText(r.n)}</b></button>`).join("")}</div>`
+      ? `<div class="tb-list">${needVis.map((r) => `<button type="button" class="c ${r.n <= 7 ? "hot" : "warm"}" data-jump="${r.it.id}"><span class="nm">${esc(r.it.name)}</span><b>${ddayText(r.n)}</b></button>`).join("")}${
+        !needAll ? `<button type="button" class="c more-c" data-need="1" aria-expanded="false"><span class="nm">외 ${need.length - needVis.length}개</span><b>더 보기</b></button>`
+        : need.length > NEED_MAX ? `<button type="button" class="c more-c" data-need="1" aria-expanded="true"><span class="nm">접기</span><b>↑</b></button>` : ""}</div>`
       : `<span class="none">교체가 필요한 품목이 없습니다</span>`);
     // 자동완성 목록
     const names = [...new Set(items.map((x) => x.name))].sort((a, b) => a.localeCompare(b, "ko"));
@@ -1602,6 +1609,7 @@ li.expired .name { text-decoration: none; }
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpTier(el.dataset.jump); } });
   });
   $("needBox").addEventListener("click", (e) => {
+    if (e.target.closest("[data-need]")) { needOpen = !needOpen; render(); return; }
     const b = e.target.closest("[data-jump]"); if (!b) return;
     const id = b.dataset.jump;
     if ($("q").value) { $("q").value = ""; render(); }
