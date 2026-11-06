@@ -2072,7 +2072,7 @@ li.expired .name { text-decoration: none; }
       });
     const t = toISO(today());
     const todo = !rawQ && new Date().getDay() !== 0 && !trRecs.some((r) => r.date === t)
-      ? `<div class="tr-li" data-new="1"><div class="tr-d today">${t.slice(5).replace("-", ".")}<small>오늘</small></div><div><div class="tr-t mu">아직 입고 확인 전</div><div class="tr-m">누르면 카메라가 명세서부터 이어 열립니다</div></div><button type="button" class="tr-go" data-new="1">찍기</button></div>` : "";
+      ? `<div class="tr-li" data-new="1"><div class="tr-d today">${t.slice(5).replace("-", ".")}<small>오늘</small></div><div><div class="tr-t mu">아직 입고 확인 전</div><div class="tr-m">누르면 명세서·박스 찍는 화면이 열립니다</div></div><button type="button" class="tr-go" data-new="1">찍기</button></div>` : "";
     const cutRow = (r) => STEAKS.map((k) => {
       const c = (r.data.cuts && r.data.cuts[k]) || {};
       const st = TraceNos.compareTrace(c.docNo, c.boxNo);
@@ -2107,9 +2107,7 @@ li.expired .name { text-decoration: none; }
     openTrace(null); trCur.date = v > toISO(today()) ? toISO(today()) : v; $("trDate").value = trCur.date;
   });
   function startTraceShoot() {
-    openTrace(null);
-    trChain = true; trShot = "doc";
-    try { $("trFile").click(); } catch (e) {}
+    openTrace(null); // 카메라는 바로 띄우지 않음: 화면에서 [명세서 찍기]를 눌러 시작
   }
   $("trQ").addEventListener("input", renderTrace);
 
