@@ -237,9 +237,9 @@ button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
 .todaybar .cnt { font-size: 17px; font-weight: 800; color: var(--rose-ink); }
 /* 교체 필요: 같은 폭 2칸으로 줄 맞춤 · 이름은 왼쪽, D-day는 오른쪽 끝에 세로로 맞춤 */
 .tb-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.todaybar .c { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; text-align: left; font-size: 14px; font-weight: 700; line-height: 1.3; border-radius: 10px; padding: 10px 11px; background: var(--fill); color: var(--fg); }
-.todaybar .c .nm { min-width: 0; overflow-wrap: anywhere; }
-.todaybar .c b { flex: none; font-weight: 800; margin-left: 0; }
+.todaybar .c { display: grid; align-content: center; gap: 1px; min-width: 0; text-align: left; font-size: 14px; font-weight: 700; line-height: 1.3; border-radius: 11px; padding: 9px 12px 10px; background: var(--fill); color: var(--fg); }
+.todaybar .c .nm { min-width: 0; } /* 이름은 한 줄 통째로 (긴 이름도 단어 중간에서 안 끊김) */
+.todaybar .c b { font-size: 13px; font-weight: 800; margin-left: 0; }
 .todaybar .c.hot b { color: var(--rose-t); }
 .todaybar .c.warm b { color: var(--amber-t); }
 button.c { -webkit-tap-highlight-color: transparent; font: inherit; font-size: 14px; font-weight: 700; border: 0; cursor: pointer; transition: transform .12s ease; }
