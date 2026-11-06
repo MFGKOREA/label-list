@@ -1,7 +1,7 @@
 ﻿# 발주 GW 자동연동 지킴이 (윈도우, 창 없이 돎)
 #  1) 크롬이 꺼져 있으면 창 없이 다시 켬 → 시계 옆(트레이)에 크롬이 남아 확장이 계속 돎 (10/31 KM: 누가 꺼도 다시 켜지게)
 #  2) 폰에서 [GW 전송]·[Gross 불러오기]를 누르면 크롬이 꺼져 있을 때 바로(5초 안) 켬 (10/31 KM: 버튼 누르면 켜지게)
-#     창 없는 크롬이 바로 닫히는 PC(백그라운드 설정 꺼짐)도 있어서, 버튼으로 켤 땐 최소화된 창으로 켬 → 확장이 처리
+#     11/6: 버튼으로 켤 때도 창 없이 켬 → 확장이 창 하나만 열어 처리 (예전엔 빈 창 + 확장 창 + 크롬이 되살린 창으로 3개까지 떴음)
 #  창 없이 켰는데 바로 닫히면 5분 동안은 1)을 쉬지만 2)는 계속 봄
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12  # 구글은 TLS 1.2 필요 (옛 윈도우 파워셸 기본값 대비)
 $API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec"
@@ -25,7 +25,7 @@ while ($true) {
       $sales = $s -and $s.status -eq "pending" -and ($now - [int64]$s.at) -lt 1800000
       $id = if ($order) { "o" + $p.id } elseif ($sales) { "s" + $s.id } else { "" }
       if ($id -and $id -ne $handled) {
-        Start-Process -FilePath $chrome -ArgumentList "about:blank" -WindowStyle Minimized
+        Start-Process -FilePath $chrome -ArgumentList "--no-startup-window"  # 1.7.0: 창은 확장이 하나만 엶 (빈 창·되살린 창이 같이 뜨지 않게)
         $handled = $id
         Note ("폰 버튼 → 크롬 켬 · " + $(if ($order) { "GW 전송" } else { "Gross 불러오기" }))
         Start-Sleep -Seconds 30
