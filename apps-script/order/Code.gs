@@ -89,7 +89,9 @@ function readAll_() {
 }
 
 // 시트 전체가 아니라 지정한 키의 행만 읽음 (status 폴링을 가볍게 하려고: 전송 상태 몇 개만 필요할 때 씀)
+let broken_ = {}; // readKeys_에서 값이 깨져 못 읽은 키 (덧붙이기 때 빈 목록으로 시작해 기록을 통째로 잃지 않게)
 function readKeys_(keys) {
+  broken_ = {};
   const sh = sheet_();
   const last = sh.getLastRow();
   if (last < 2) return {};
@@ -104,7 +106,7 @@ function readKeys_(keys) {
     const vals = sh.getRange(first, 2, span, 2).getValues(); // [part, value] (키 행은 붙어 있음)
     const parts = [];
     rows.forEach((r) => { parts[Number(vals[r - first][0]) || 0] = String(vals[r - first][1]); });
-    try { out[key] = JSON.parse(parts.join("")); } catch (e) { /* 깨진 값은 건너뜀 */ }
+    try { out[key] = JSON.parse(parts.join("")); } catch (e) { broken_[key] = true; /* 깨진 값은 건너뜀 */ }
   });
   return out;
 }
@@ -224,6 +226,7 @@ function doPost(e) {
       out = { [body.key]: body.value === undefined ? null : body.value };
     } else if (body.action === "append") {
       const cur = readKeys_([body.key])[body.key];
+      if (broken_[body.key]) return json_({ ok: false, error: "기록을 읽지 못해 덧붙이지 않았어요" }); // 11/6: 깨진 값 위에 덧붙이면 1건짜리 목록으로 덮어써짐
       const list = Array.isArray(cur) ? cur : [];
       list.push(body.item);
       write_(body.key, list);

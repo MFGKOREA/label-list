@@ -125,6 +125,7 @@
       });
       savePend();
       Object.keys(pend.add).forEach((k) => { const arr = Array.isArray(remote[k]) ? remote[k].slice() : []; pend.add[k].forEach((it) => { if (!arr.some((x) => JSON.stringify(x) === JSON.stringify(it))) arr.push(it); }); remote[k] = arr; });
+      if (remote["onhand.archive"] || remote.onhand || db.onhand) remote.onhand = mergeLogs(remote["onhand.archive"], remote.onhand, db.onhand);
       db = { ...db, ...remote }; online = true; pulled = true; lsSave();
       if (Object.keys(pend.set).length || Object.keys(pend.add).length) flush();
       return changed;
@@ -154,12 +155,16 @@
       .catch(() => { online = false; toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); })
       .finally(() => { const again = inflight[key] === 2; delete inflight[key]; if (again) send(key); });
   }
+  // 덧붙이기는 한 번에 하나씩 보냄 (11/6: 재고 130개를 한꺼번에 넣은 날마다 시트의 재고 기록이 통째로 사라진 적이 있어 동시 요청을 없앰)
+  let appendQ = Promise.resolve();
   function appendKey(key, item) {
     (db[key] = Array.isArray(db[key]) ? db[key] : []).push(item);
     lsSave(); light(key);
     clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500);
-    if (API) apiCall({ action: "append", key, item }).catch(() => { (pend.add[key] = pend.add[key] || []).push(item); savePend(); toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); });
+    if (API) appendQ = appendQ.then(() => apiCall({ action: "append", key, item }).catch(() => { (pend.add[key] = pend.add[key] || []).push(item); savePend(); toast("시트 저장 실패 · 이 기기에 저장해 두고 다시 보낼게요"); setTimeout(flush, 15000); }));
   }
+  // 재고 기록(onhand)은 시트 값 + 보관본(onhand.archive, 11/6 복원) + 이 기기 값을 합쳐서 씀 (시트에서 또 지워져도 버팀). 같은 시각·품목·값은 하나로
+  const mergeLogs = (...lists) => { const seen = new Set(), out = []; lists.forEach((l) => (Array.isArray(l) ? l : []).forEach((x) => { if (!x || !x.t || !x.k) return; const id = x.t + "|" + x.k + "|" + x.s; if (!seen.has(id)) { seen.add(id); out.push(x); } })); return out.sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0)); };
   let toastT;
   function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms || 2600); }
 
@@ -1298,7 +1303,9 @@
   const MEAT_H = 10;
   // 11/6: 미트카운트는 고기·해동 품목(itemCfg.thaw)만. 샐러드믹스처럼 아침에 입고 뒤 센 품목을 "입고 전"으로 보면 오늘 입고를 또 더함 (입고예정 12+24=36으로 보였음)
   const isMeat = (t, it) => hourOf(t) < MEAT_H && !!it && it.thaw > 0; // 시각을 모르면 10시로 봄 = 미트카운트 아님
-  const logOn = (it, d) => (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(d)).pop();
+  // 입력 기록(onhand)이 없으면 발주 탭 재고 칸에 같이 남긴 센 시각(input.날짜[품목].t, 11/6부터)으로 — 기록이 지워져도 시각은 남음
+  const inputLog = (key, d) => { const r = (db["input." + d] || {})[key]; return r && typeof r.t === "string" && r.t.startsWith(d) && r.s !== "" && r.s != null && isFinite(num(r.s)) ? { t: r.t, k: key, s: num(r.s), v: 2, src: "input" } : undefined; };
+  const logOn = (it, d) => (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(d)).pop() || inputLog(it.key, d);
   const meatOn = (it, d) => { const l = logOn(it, d); return l ? isMeat(l.t, it) : false; };
   // 두 재고 사이 입고: x(또는 그 전날 마감) 뒤 ~ d. 미트카운트로 센 날의 입고는 센 뒤에 들어옴
   function arrBetween(it, x, xMeat, d, dMeat) {
@@ -1341,7 +1348,7 @@
         if (!counted(rows[key])) return;
         if (!byKey.has(key)) byKey.set(key, []);
         const a = byKey.get(key);
-        if (!a.some((l) => l.t.slice(0, 10) === d)) a.push({ t: d + " 10:00", k: key, s: num(rows[key].s), v: 2, src: "input" });
+        if (!a.some((l) => l.t.slice(0, 10) === d)) a.push(inputLog(key, d) || { t: d + " 10:00", k: key, s: num(rows[key].s), v: 2, src: "input" });
       });
     });
     byKey.forEach((l) => l.sort((x, y) => (x.t < y.t ? -1 : 1)));
@@ -1377,7 +1384,7 @@
           let gap = 0; for (let x = addDays(d1, 2); x <= d2; x = addDays(x, 1)) if (dow(x) !== 0) gap++;
           if (!gap && num(a.i) > 0) actual = num(a.s) + num(a.i) - num(b.s);
         }
-        pairs.push({ d1, d2, actual, h1: hourOf(a.t), h2: hourOf(b.t) });
+        pairs.push({ d1, d2, actual, h1: hourOf(a.t), h2: hourOf(b.t), e: num(b.s) }); // e: 끝 재고 (예상 재고 적중 계산용)
       }
       // 채점 구간: 이어진 구간을 예상 사용량이 2단위 넘을 때까지 묶음 (시즈닝·고춧가루처럼 가끔 프랩에 쓰는 품목은 하루 단위로는 0 아니면 통째)
       //  재고가 그대로인 날(사용 0)도 넣고, 음수(입고 없이 늘어남)나 입고를 모르는 구간에서 끊음
@@ -1401,16 +1408,16 @@
       let acc = null;
       const dayPairs = [];
       const flushAcc = () => {
-        if (!acc) return; const { d1, d2, actual, pA, pB, pF, g } = acc; acc = null;
+        if (!acc) return; const { d1, d2, actual, pA, pB, pF, g, e } = acc; acc = null;
         if (pF == null) { if (g > 0) { uG += actual; gG += g; } return; } // 수불·레시피가 없는 품목(세제 등)은 재고로 100만원당 사용량을 배움
         if (!(pF >= thr)) return; // 예상 사용량이 기준(2단위 또는 한 배치)이 안 되면 아직 판단 못 함
         if (pA != null) it.scoreA.push(err(pA, actual));
         if (pB != null) it.scoreB.push(err(pB, actual));
         it.scoreF.push(err(pF, actual));
         it.scoreQ.push((it.outStep || 1) ** 2 / (6 * pF * pF)); // 양 끝 재고가 각각 0~1단위(박스째 꺼내면 0~1박스) 덜 세어질 수 있는 잡음의 분산 (상대값)
-        M.scores.push({ key, name: it.name, start: d1, end: d2, actual, pA, pB, pF });
+        M.scores.push({ key, name: it.name, start: d1, end: d2, actual, pA, pB, pF, e, u: it.box || 1 }); // e: 끝 재고, u: 적중 허용 1단위(박스째 세면 1박스)
       };
-      pairs.forEach(({ d1, d2, actual, h1, h2 }, j) => {
+      pairs.forEach(({ d1, d2, actual, h1, h2, e }, j) => {
         const nx = pairs[j + 1];
         // 입고를 모름 / 음수 / 다음 날 입고 없이 늘어남(이 날 덜 셈) → 여기서 끊고 이 구간은 뺌
         if (actual == null || actual < 0 || (nx && nx.d1 === d2 && nx.actual != null && nx.actual < -0.5)) { flushAcc(); return; }
@@ -1437,7 +1444,7 @@
         // 재고가 그대로여도 뜯은 건 안 세는 경우가 있어 1단위까지는 뜯은 걸 쓴 것으로 봄. 2단위 넘게 쓸 만큼 예상인데 그대로면 다시 안 센 값으로 보고 뺌
         if (actual === 0 && pF != null && pF >= thr) { flushAcc(); if (nx && nx.d1 === d2 && nx.actual != null) { nx.d1 = d1; nx.h1 = h1; } return; } // 안 센 값: 다음 쌍이 이 쌍 시작부터 이어받음
         const add = (x, y) => (x == null || y == null ? null : x + y);
-        acc = acc ? { ...acc, d2, actual: acc.actual + actual, pA: add(acc.pA, pA), pB: add(acc.pB, pB), pF: add(acc.pF, pF), g: acc.g + g } : { d1, d2, actual, pA, pB, pF, g };
+        acc = acc ? { ...acc, d2, actual: acc.actual + actual, pA: add(acc.pA, pA), pB: add(acc.pB, pB), pF: add(acc.pF, pF), g: acc.g + g, e } : { d1, d2, actual, pA, pB, pF, g, e };
         if (acc.pF != null && acc.pF >= thr && !(it.thaw && nx && nx.d1 === d2 && nx.actual != null && [5, 6, 0].includes(dow(d2)))) flushAcc();
       });
       if (gG > 0) it.rateG = uG / gG;
@@ -1929,6 +1936,7 @@
       const e2 = estFor(it, v), s2 = e2 ? e2.v : availOf(it, v);
       const rc = isFinite(s2) ? calc(it, win, s2, inc) : null;
       const rec = { ...(all[it.key] || {}), s: v.s, o: v.o, r: rc && !rc.none ? rc.orderQty : "" };
+      if (isFinite(num(v.s))) { if ((all[it.key] || {}).s !== v.s || !rec.t) rec.t = localStamp(); } else delete rec.t; // 센 시각 (재고 기록이 지워져도 남게)
       if (e2) { rec.pre = e2.from; rec.es = +e2.v.toFixed(2); } else { delete rec.pre; delete rec.es; } // 사전발주 기록
       if (v.s === "" && v.o === "" && !num(rec.i)) delete all[it.key]; else all[it.key] = rec;
       setKey("input." + TODAY, all);
@@ -1958,7 +1966,7 @@
     const w = orderWindowFor(it, TODAY), until = addDays(w.deliv, it.thaw || 0); // 오늘 발주가 들어와서 쓸 수 있는 날 전까지 (해동 품목은 입고 다음 날)
     const days = Math.round((parseISO(until) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
     let arr = 0; const arrs = []; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if ((a.d > TODAY || (a.d === TODAY && meatOn(it, TODAY))) && a.d < until && (k > 0 || a.legacy)) { arr += a.q; arrs.push(a); } });
-    const log = (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(TODAY)).pop();
+    const log = logOn(it, TODAY);
     const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
     const left = leftOf(hh, TODAY);
     const gross = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), until, false).s;
@@ -2919,7 +2927,12 @@
     const ms = [["C 최종", "A·B 결합", acc(list, "pF")], ["A 수불현황", "월 사용량 기준", acc(list, "pA")], ["B 메뉴별 매출현황", "메뉴 판매 × 레시피", acc(list, "pB")]].filter((m) => m[2] != null).map(([n, s, v]) => [n, s, +v.toFixed(1)]);
     // 정확도 막대: 0%부터, 길수록 정확. 가장 긴 방식을 강조
     const bestV = Math.max(...ms.map((m) => m[2]));
-    $("rMethods").innerHTML = ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
+    // 적중률·WAPE (11/6): 작은 품목의 ±1개 차이가 30~50% 오차로 잡혀 평균 상대오차는 60%대가 천장 → 적중(|예상−실제| ≤ max(1단위, 10%))과 양 기준 오차(WAPE = Σ|예상−실제| ÷ Σ실제)를 같이 보여 줌
+    //  예상 재고 기준 (2팀 G 백테스트와 같은 정의): 예상 재고(시작 재고 + 입고 − 예상 사용) vs 실제 끝 재고 → 오차는 |예상 사용 − 실제 사용|과 같음. 허용 = max(1단위(박스째 세면 1박스), 끝 재고의 10%), WAPE = Σ|오차| ÷ Σ끝 재고
+    const hitOf = (l) => { const z = l.filter((x) => x.pF != null && isFinite(x.actual) && isFinite(x.e)); if (!z.length) return null; const hit = z.filter((x) => Math.abs(x.pF - x.actual) <= Math.max(x.u || 1, 0.1 * Math.abs(x.e))).length, ae = z.reduce((t, x) => t + Math.abs(x.pF - x.actual), 0), se = z.reduce((t, x) => t + Math.abs(x.e), 0); return { n: z.length, hit: hit / z.length * 100, wape: se ? ae / se * 100 : null }; };
+    const hw = hitOf(list), hwPrev = pl ? hitOf(pl) : null;
+    const hwRow = hw ? `<div class="cell mrow"><span class="nm">예상 재고 적중 · WAPE<small>오차 ≤ max(1단위, 재고 10%) · ${hw.n}쌍${hwPrev ? ` · 지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
+    $("rMethods").innerHTML = hwRow + ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     // 오차 범위 큰 품목 10개: 발주 카드의 ± 범위(예상 사용량의 몇 %)가 큰 순서. 범위 = 사용량 계산 오차 + Forecast 오차
     const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));
     const wide = M.items.filter((it) => !it.ledgerOnly).map((it) => { const c = calc(it, orderWindowFor(it, TODAY), 0, 0), u0 = c.useAvg ?? c.use; return c.none || !(u0 > 0) || !(c.sd > 0) ? null : { it, sd: c.sd, use: u0, rel: c.sd / u0, u: it.pk.stock || "" }; })
