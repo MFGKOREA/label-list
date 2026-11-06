@@ -471,6 +471,7 @@ li.expired .name { text-decoration: none; }
 .cg-ch + .cg-r { border-top: 0; }
 .cg-r .n { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cg-r .v { color: var(--muted); white-space: nowrap; } .cg-r .v b { color: var(--fg); }
+.cg-r .w { grid-column: 1 / -1; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: -3px; line-height: 1.4; }
 .cg-r .p { font-weight: 800; white-space: nowrap; min-width: 44px; text-align: right; color: var(--rose-t); } .cg-r .p.dn { color: var(--ok-t); }
 .cg-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .cg-pdf { justify-self: center; }
@@ -1945,24 +1946,35 @@ li.expired .name { text-decoration: none; }
     const top = pos.slice(0, 2), rest = pos.slice(2).reduce((s, c) => s + Math.abs(c.d), 0);
     const segs = [...top.map((c) => ({ l: c.cat, v: Math.abs(c.d) })), ...(rest > 0 ? [{ l: "기타 분류", v: rest }] : [])];
     const sumSeg = segs.reduce((s, x) => s + x.v, 0) || 1;
-    const row = (x, k) => `<div class="cg-r"><span class="n">${esc(cgName(x.name))}</span><span class="v">${man(x.a)} → <b>${man(x.b)}</b></span><span class="p${x.d < 0 ? " dn" : ""}">${pp(x.d)}</span></div>`;
-    const card = (c) => {
-      const its = c.items.slice().sort((p, q) => (up ? q.d - p.d : p.d - q.d)).slice(0, 4);
-      const why = c.items.slice().sort((p, q) => Math.abs(q.d) - Math.abs(p.d))[0];
-      return `<div class="cg-card"><div class="cg-ch"><div><b>${esc(c.cat)}</b><small>출고 ${man(c.a)} → ${man(c.b)}${why ? ` · ${esc(cgName(why.name).slice(0, 12))} ${why.d > 0 ? "증가" : "감소"}` : ""}</small></div><span class="cg-d${c.d < 0 ? " dn" : ""}">${pp(c.d)}<small>%p</small></span></div>${its.map(row).join("")}</div>`;
+    // 품목 사유: 수불현황만으로 (사용량 변화 vs 매출 변화, 단가 변화, 새로 씀/안 씀)
+    const g = R.gb / R.ga - 1;
+    const pct = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v * 100)) + "%";
+    const qn = (v) => (Math.round(v * 10) / 10).toLocaleString("ko-KR");
+    const why = (x) => {
+      if (!x.qa && x.qb) return `${a}엔 없다가 ${b}에 새로 사용 (${qn(x.qb)})`;
+      if (x.qa && !x.qb) return `${b}에는 사용 없음`;
+      const q = x.qb / x.qa - 1, out = [];
+      if (R.real) { const pc = (x.b / x.qb) / (x.a / x.qa) - 1; if (Math.abs(pc) >= 0.08) out.push(`단가 ${pct(pc)} (${won(x.a / x.qa)}→${won(x.b / x.qb)}원)`); }
+      const rel = q - g;
+      out.push(Math.abs(q) < 0.05 ? "사용량 비슷" : `사용량 ${pct(q)} (${qn(x.qa)}→${qn(x.qb)})${rel > 0.1 ? ` · 매출(${pct(g)})보다 많이 씀` : rel < -0.1 ? ` · 매출(${pct(g)})보다 적게 씀` : ""}`);
+      return out.join(" · ");
     };
-    const ups = R.items.slice().sort((p, q) => q.d - p.d).filter((x) => x.d > 0).slice(0, 5);
-    const dns = R.items.slice().sort((p, q) => p.d - q.d).filter((x) => x.d < 0).slice(0, 5);
-    const list = (t, xs, cls) => xs.length ? `<div class="cg-card ${cls}"><div class="cg-ch"><div><b>${t}</b><small>금액 ${a} → ${b} · TS 영향(%p)</small></div></div>${xs.map(row).join("")}</div>` : "";
+    const row = (x) => `<div class="cg-r"><span class="n">${esc(cgName(x.name))}</span><span class="v">${man(x.a)} → <b>${man(x.b)}</b></span><span class="p${x.d < 0 ? " dn" : ""}">${pp(x.d)}</span><span class="w">${esc(why(x))}</span></div>`;
+    const card = (c, upc) => {
+      const its = c.items.slice().sort((p, q) => (upc ? q.d - p.d : p.d - q.d)).filter((x) => (upc ? x.d > 0 : x.d < 0)).slice(0, 5);
+      return `<div class="cg-card${upc ? "" : " info"}"><div class="cg-ch"><div><b>${esc(c.cat)}</b><small>출고 ${man(c.a)} → ${man(c.b)}</small></div><span class="cg-d${c.d < 0 ? " dn" : ""}">${pp(c.d)}<small>%p</small></span></div>${its.map(row).join("")}</div>`;
+    };
+    // 분류 카드: 올린 분류 큰 순 4개 + 내린 분류 큰 순 2개
+    const upCards = R.catList.filter((c) => c.d > 0).sort((p, q) => q.d - p.d).slice(0, 4);
+    const dnCards = R.catList.filter((c) => c.d < 0).sort((p, q) => p.d - q.d).slice(0, 2);
     const priceCard = R.price.length ? `<div class="cg-card"><div class="cg-ch"><div><b>단가 변화</b><small>사용 금액 ÷ 사용량, ${a} → ${b}</small></div></div>${R.price.map((x) => `<div class="cg-r"><span class="n">${esc(cgName(x.name))}</span><span class="v">${won(x.pa)} → <b>${won(x.pb)}</b></span><span class="p${x.pc < 0 ? " dn" : ""}">${x.pc > 0 ? "+" : "−"}${Math.abs(Math.round(x.pc))}%</span></div>`).join("")}</div>` : "";
     $("cgOut").innerHTML = `
-      <div><div class="cg-k">${a} 대비 TS % ${up ? "상승" : "하락"} 사유${R.real ? "" : " <span class='cg-badge dn' style='vertical-align:2px'>예시</span>"}</div>
+      <div><div class="cg-k">${a} 대비 TS % ${up ? "상승" : "하락"} 사유</div>
         <div class="cg-big"><span class="a">${R.tsA.toFixed(2)}%</span><span class="ar">→</span><b>${R.tsB.toFixed(2)}%</b><span class="cg-badge${up ? "" : " dn"}">${pp(d)}%p</span></div></div>
       <div><div class="cg-bar">${segs.map((x, i) => `<i style="flex:${x.v / sumSeg};background:${CG_COL[i]}"></i>`).join("")}</div></div>
       <div class="cg-leg">${segs.map((x, i) => `<span><i style="background:${CG_COL[i]}"></i>${esc(x.l)} <b>${x.v.toFixed(2)}%p</b></span>`).join("")}</div>
-      <div class="cg-cards">${R.catList.slice(0, 6).map(card).join("")}${priceCard}</div>
-      <div class="cg-cards">${list("TS % 올린 품목 TOP 5", ups, "loss")}${list("TS % 내린 품목 TOP 5", dns, "info")}</div>
-      <div class="cg-note">그로스 ${a} ${won(R.ga)}원 → ${b} ${won(R.gb)}원 · 사용 금액 ${man(R.totA)} → ${man(R.totB)}${R.skipped.some((n) => n) ? ` · 금액을 알 수 없는 품목 ${a} ${R.skipped[0]}개, ${b} ${R.skipped[1]}개는 빠짐` : ""}${R.real ? "" : " · 예시: 발주시트 단가 × 사용량으로 계산 (MIS 수불현황 원본을 첨부하면 실제 금액으로)"}</div>`;
+      <div class="cg-cards">${upCards.map((c) => card(c, true)).join("")}${dnCards.map((c) => card(c, false)).join("")}${priceCard}</div>
+      <div class="cg-note">그로스 ${a} ${won(R.ga)}원 → ${b} ${won(R.gb)}원 · 사용 금액 ${man(R.totA)} → ${man(R.totB)}${R.skipped.some((n) => n) ? ` · 금액을 알 수 없는 품목 ${a} ${R.skipped[0]}개, ${b} ${R.skipped[1]}개는 빠짐` : ""}</div>`;
     $("cgOut").hidden = false; $("cgPdf").hidden = false;
   }
   $("cgGo").onclick = () => {
