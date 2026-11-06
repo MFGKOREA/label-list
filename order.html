@@ -2280,9 +2280,10 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   const hourOf = (t) => { const m = /\s(\d{1,2}):(\d{2})/.exec(String(t || "")); return m ? +m[1] + +m[2] / 60 : 10; };
   // 미트카운트(10/26 KM): 영업 끝나고 센 재고를 다음 날 새벽에 적음 → 10시 전에 넣은 재고 = 전날 마감 재고(그날 입고 전)
   const MEAT_H = 10;
-  const isMeat = (t) => hourOf(t) < MEAT_H; // 시각을 모르면 10시로 봄 = 미트카운트 아님
+  // 11/6: 미트카운트는 고기·해동 품목(itemCfg.thaw)만. 샐러드믹스처럼 아침에 입고 뒤 센 품목을 "입고 전"으로 보면 오늘 입고를 또 더함 (입고예정 12+24=36으로 보였음)
+  const isMeat = (t, it) => hourOf(t) < MEAT_H && !!it && it.thaw > 0; // 시각을 모르면 10시로 봄 = 미트카운트 아님
   const logOn = (it, d) => (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(d)).pop();
-  const meatOn = (it, d) => { const l = logOn(it, d); return l ? isMeat(l.t) : false; };
+  const meatOn = (it, d) => { const l = logOn(it, d); return l ? isMeat(l.t, it) : false; };
   // 두 재고 사이 입고: x(또는 그 전날 마감) 뒤 ~ d. 미트카운트로 센 날의 입고는 센 뒤에 들어옴
   function arrBetween(it, x, xMeat, d, dMeat) {
     let q = 0; const lo = xMeat ? addDays(x, -1) : x;
@@ -2335,7 +2336,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       if (!it.box) list = list.map((l) => { const r = (db["input." + l.t.slice(0, 10)] || {})[key]; return r && counted(r) ? { ...l, s: num(r.s) } : l; });
       else list = list.map((l) => (l.src === "input" ? { ...l, s: l.s * it.box } : l)); // 발주 탭 재고는 박스 수 → 재고 단위(팩)로
       // 미트카운트(10시 전 입력) = 전날 마감 재고 → 전날 24시에 센 것으로 (그날 입고·매출은 다음 구간)
-      list = list.map((l) => (isMeat(l.t) ? { ...l, t: addDays(l.t.slice(0, 10), -1) + " 24:00" } : l)).sort((x, y) => (x.t < y.t ? -1 : 1));
+      list = list.map((l) => (isMeat(l.t, it) ? { ...l, t: addDays(l.t.slice(0, 10), -1) + " 24:00" } : l)).sort((x, y) => (x.t < y.t ? -1 : 1));
       let uG = 0, gG = 0;
       // 두 재고 사이 실제 사용량 (입고를 모르면 null)
       const pairs = [];
@@ -2711,7 +2712,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const k = Math.round((parseISO(d) - parseISO(x)) / 864e5);
       const r = (db["input." + x] || {})[it.key];
       if (!r || r.s === "" || r.s == null || !isFinite(num(r.s))) continue;
-      const log = logOn(it, x), xm = !!log && isMeat(log.t);
+      const log = logOn(it, x), xm = !!log && isMeat(log.t, it);
       let arr = arrBetween(it, x, xm, d, !!pre);
       (plan || []).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
       const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
@@ -2868,7 +2869,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     d.innerHTML = top +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
       // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
-      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t) : new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? Math.floor(e0.v / st + 1e-9) * st : r1(e0.v / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
+      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? Math.floor(e0.v / st + 1e-9) * st : r1(e0.v / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -2896,7 +2897,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       for (let k = 1; k <= 3; k++) {
         const x = addDays(TODAY, -k), r = (db["input." + x] || {})[it.key]; if (!counted(r)) continue;
         const b = num(r.s), f = it.box || 1; if (!(b > 0)) return null;
-        const arr = arrBetween(it, x, meatOn(it, x), TODAY, meatOn(it, TODAY) || new Date().getHours() < MEAT_H) / f;
+        const arr = arrBetween(it, x, meatOn(it, x), TODAY, meatOn(it, TODAY) || (it.thaw > 0 && new Date().getHours() < MEAT_H)) / f;
         const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s, weGross: weSum(x, TODAY, true), fcVar: fcVar(x, TODAY, true) }, 0, 0), use = c.none ? 0 : c.use / f;
         const up = a >= 3 * (b + arr) && a - (b + arr) >= 2, down = a <= b / 3 && b - a >= 2 && b - a > 3 * use + arr;
         return up || down ? `${it.name}: ${k === 1 ? "어제" : mmdd(x)} ${b} → 오늘 ${a}. 숫자 확인해 주세요` : null;
