@@ -672,3 +672,40 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* GW 자동입력이 안 됐을 때: MIS 입력용 목록 복사 (11/6). 막대가 줄바꿈되며 맨 아래 한 줄로 */
 .misbar:has(.mis-copy) { flex-wrap: wrap; }
 .misbar .mis-copy { order: 3; flex: 1 1 100%; border: 0; border-radius: 12px; padding: 10px 12px; min-height: 44px; background: var(--rose); color: var(--rose-ink); font-size: 14px; font-weight: 800; }
+
+/* 보관 위치 버튼 (11/6): 업체 칩 바로 아래 */
+.chips#cats { margin-bottom: 8px; }
+.locchips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: none; } /* 업체 버튼과 같은 "불 들어옴" */
+/* 업체 줄과 위치 줄을 같은 칸에 맞춤 (11/6 KM: 줄이 안 맞음) — 둘 다 같은 너비 칸으로 */
+.chips#cats, .chips#locs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; overflow: visible; }
+.chips#cats button, .chips#locs button { width: 100%; min-height: 40px; padding: 7px 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips#locs { margin-bottom: 18px; }
+
+/* "발주 필요 N" 글자 없앰 (11/6 KM) — 사전발주 버튼만 오른쪽에 */
+.sect.sect-need { justify-content: flex-end; margin-top: 0; }
+.sect.sect-need > span { display: none; }
+#orderList .group + .group { margin-top: 10px; }
+
+/* 보관 위치 · 순서 화면 (11/6) */
+.locentry { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 0; padding: 14px; border: 0; border-radius: 14px; background: var(--surface); text-align: left; color: var(--fg); }
+.locentry span { display: grid; gap: 2px; }
+.locentry b { font-size: 16px; font-weight: 700; }
+.locentry small { font-size: 12px; color: var(--muted); }
+.locentry .chev { color: var(--muted); }
+#locTabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 8px; }
+#locTabs button { width: 100%; min-height: 40px; text-align: center; }
+.lochint { margin: 0 4px 10px; font-size: 12px; color: var(--muted); }
+.lochint b { color: var(--fg); }
+.lrow { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-block: 6px; background: var(--surface); position: relative; }
+.lrow .grip { width: 40px; height: 44px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; touch-action: none; cursor: grab; }
+.lrow .lnm { min-width: 0; font-size: 14px; font-weight: 700; }
+.lrow .lnm small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
+.lrow .lnm small b { color: var(--rose-ink); font-weight: 700; }
+.lrow.drag { z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); border-radius: 12px; transition: none; }
+.lrow.over-top { box-shadow: inset 0 3px 0 var(--accent); }
+.lrow.over-end { box-shadow: inset 0 -3px 0 var(--accent); }
+.rloc { display: inline-flex; background: var(--fill); border-radius: 10px; padding: 2px; }
+.rloc button { border: 0; background: none; width: 36px; height: 36px; border-radius: 8px; font-size: 14px; font-weight: 800; color: var(--muted); }
+.rloc button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+#v-loc .nav .back { display: flex; } /* 이 화면은 독에 없어서 뒤로가기(파일) 남김 */

@@ -1469,7 +1469,7 @@
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -1501,6 +1501,8 @@
     if (to === "forecast") renderForecast();
     if (to === "files") renderFiles();
     if (to === "report") renderReport();
+    if (to === "loc") renderLocEdit();
+    if (to === "files") locSumUpdate();
   }
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-go]"); if (!b) return;
@@ -1982,6 +1984,42 @@
   function risk86(M, inp) {
     return M.items.filter((i) => !i.ledgerOnly).map((it) => riskOf(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
   }
+  // ---------- 보관 위치 버튼 (11/6 KM): 드라이 · 워크인 · 프리저 — 누르면 그 위치 품목만 ----------
+  //  위치 = itemCfg[품목].loc ("dry" | "walk" | "frz"). 없으면 이름으로 짐작 (냉동·고기·새우 → 프리저, 채소·치즈·크림·소스 냉장 → 워크인, 나머지 드라이)
+  const LOCS = [["dry", "드라이"], ["walk", "워크인"], ["frz", "프리저"]];
+  const guessLoc = (it) => {
+    const n = it.name;
+    if (/냉동|새우|폭립|핑거립|우대갈비|바지락|홍합|오징어|날치알|소시지|떡갈비|판도우|브로컬리컷|감자튀김|양파튀김|어묵|버터라이스|시즐링라이스|부라타|고르곤졸라|잠봉|베이컨|티라미슈|아이스|부채살|채끝|안심|등심|닭가슴살|유린기|생면/.test(n)) return "frz";
+    if (it.vendor === "새싹농산" || /샐러드|치즈|크림|우유|버터|수란|명란|하몽|드레싱|피클|라구|마요|머스타드|감말랭이|바나나|레몬주스|테너|리코타|모짜/.test(n)) return "walk";
+    return "dry";
+  };
+  const locOf = (it) => ((db.itemCfg || {})[it.key] || {}).loc || guessLoc(it);
+  const roOf = (it, idx) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ro != null ? c.ro : 1e4 + idx; };
+  let locTab = "dry", locSaveT = 0, locPatch = {};
+  // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
+  const saveLoc = (k, patch) => { locPatch[k] = { ...(locPatch[k] || {}), ...patch }; db.itemCfg = { ...(db.itemCfg || {}), [k]: { ...((db.itemCfg || {})[k] || {}), ...patch } }; clearTimeout(locSaveT); locSaveT = setTimeout(() => { locPatch = {}; setKey("itemCfg", db.itemCfg); }, 600); };
+  function renderLocEdit() {
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), idx = new Map(all.map((it, i) => [it.key, i]));
+    $("locTabs").innerHTML = LOCS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${all.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+    const list = all.filter((i) => locOf(i) === locTab).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
+    const box = $("locList");
+    box.innerHTML = list.map((it) => { const c = (db.itemCfg || {})[it.key] || {}, L = locOf(it);
+      return `<div class="cell lrow" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${c.loc ? "" : " · <b>추정</b>"}</small></span><span class="rloc">${LOCS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}">${t.slice(0, 1)}</button>`).join("")}</span></div>`; }).join("") || `<div class="empty">이 위치 품목이 없어요</div>`;
+    locSumUpdate();
+  }
+  function locSumUpdate() {
+    const all = model().items.filter((i) => !i.ledgerOnly);
+    const sum = LOCS.map(([k, t]) => `${t} ${all.filter((i) => locOf(i) === k).length}`).join(" · "), guess = all.filter((i) => !((db.itemCfg || {})[i.key] || {}).loc).length;
+    if ($("locSum")) $("locSum").textContent = sum + (guess ? ` · 추정 ${guess}` : " · 모두 확인됨");
+  }
+  // 순서 다시 매김: 지금 화면 순서대로 0,1,2… (이 위치 품목만)
+  const renumber = () => [...$("locList").querySelectorAll(".lrow")].forEach((r, i) => saveLoc(r.dataset.key, { loc: locTab, ro: i }));
+  let locSel = null;
+  function renderLocs(M) {
+    const pool = M.items.filter((i) => !i.ledgerOnly && (!cat || i.vendor === cat));
+    $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${t}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+  }
+
   function renderList() {
     preMemo = new Map(); wipMemo = new Map();
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
@@ -1995,7 +2033,7 @@
     }
     let groups = new Map();
     M.items.filter((i) => !i.ledgerOnly).forEach((it) => {
-      const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : !cat || it.vendor === cat;
+      const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       const v = it.vendor || "업체 미지정";
       if (!groups.has(v)) groups.set(v, []);
@@ -2003,7 +2041,8 @@
     });
     // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
-    groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
+    // 위치 버튼을 켰을 땐(선반 순서로 세는 중) 끌어올리지 않음 — 재고를 넣은 카드가 위로 튀면 순서가 흐트러짐
+    if (!locSel) groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     const nBuy = top.filter(([k]) => k === 0).length;
     const ord = new Map(M.items.map((it, i) => [it, i])); // 같은 순위 안에서는 발주 시트 순서
     top = top.sort((a, b) => a[0] - b[0] || ord.get(a[1]) - ord.get(b[1])).map(([, it]) => it);
@@ -2022,18 +2061,53 @@
     }
     let n = 0;
     groups.forEach((list, v) => {
-      if (v !== "발주 필요") box.insertAdjacentHTML("beforeend", `<div class="sect"><span>${esc(v)} <small>${list.length}</small></span></div>`);
+      if (v === "발주 필요") { const g = document.createElement("div"); g.className = "group"; list.forEach((it) => g.appendChild(rowEl(it, win, inp))); box.appendChild(g); n += list.length; return; }
+      // 업체·위치 머리글은 안 씀 (위 버튼에 이미 있음, 11/6 KM). 버튼을 다 끄면 발주 시트 순서, 위치 버튼을 켜면 그 위치 품목만 선반 순서(보관 위치 · 순서)대로
       const g = document.createElement("div"); g.className = "group";
-      list.forEach((it) => g.appendChild(rowEl(it, win, inp)));
+      const ix = new Map(M.items.map((it, i) => [it.key, i]));
+      (locSel ? [...list].sort((a, b) => roOf(a, ix.get(a.key)) - roOf(b, ix.get(b.key))) : list).forEach((it) => g.appendChild(rowEl(it, win, inp)));
       box.appendChild(g); n += list.length;
     });
     $("nores").hidden = n > 0;
     if (orderFocus) { const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`); if (el) el.querySelectorAll("input")[orderFocus.f].focus(); orderFocus = null; }
     $("cats").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === cat));
+    renderLocs(M);
   }
 
   $("cats").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; cat = cat === b.dataset.c ? null : b.dataset.c; $("q").value = ""; renderList(); });
   $("q").addEventListener("input", renderList);
+  $("locTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; locTab = b.dataset.t; renderLocEdit(); });
+  $("locList").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-loc]"); if (!b) return;
+    const k = b.closest(".lrow").dataset.key, to = b.dataset.loc;
+    if (to === locTab) { saveLoc(k, { loc: to }); renderLocEdit(); return; } // 추정 → 확인
+    const M = model(), n = M.items.filter((i) => !i.ledgerOnly && locOf(i) === to).length;
+    saveLoc(k, { loc: to, ro: n + 1000 }); renderLocEdit(); // 다른 위치 맨 아래로
+  });
+  // 손잡이로 끌어 옮기기 (손가락·마우스 같이). 끄는 동안 행이 손을 따라가고, 놓으면 그 자리에 저장
+  $("locList").addEventListener("pointerdown", (e) => {
+    const h = e.target.closest(".grip"); if (!h) return;
+    e.preventDefault();
+    const row = h.closest(".lrow"), box = $("locList"), y0 = e.clientY, top0 = row.offsetTop;
+    row.classList.add("drag"); h.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      row.style.transform = `translateY(${ev.clientY - y0}px)`;
+      const mid = top0 + row.offsetHeight / 2 + (ev.clientY - y0);
+      const rows = [...box.querySelectorAll(".lrow:not(.drag)")];
+      const before = rows.find((r) => r.offsetTop + r.offsetHeight / 2 > mid);
+      box.querySelectorAll(".lrow").forEach((r) => r.classList.remove("over-top", "over-end"));
+      if (before) before.classList.add("over-top"); else if (rows.length) rows[rows.length - 1].classList.add("over-end");
+      row._before = before || null;
+    };
+    const up = () => {
+      h.removeEventListener("pointermove", move); h.removeEventListener("pointerup", up); h.removeEventListener("pointercancel", up);
+      box.querySelectorAll(".lrow").forEach((r) => r.classList.remove("over-top", "over-end"));
+      row.classList.remove("drag"); row.style.transform = "";
+      if (row._before !== undefined) { if (row._before) box.insertBefore(row, row._before); else box.appendChild(row); renumber(); }
+    };
+    h.addEventListener("pointermove", move); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
+  });
+  $("locs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; locSel = locSel === b.dataset.l ? null : b.dataset.l; $("q").value = ""; renderList(); });
 
   // ---------- 프랩 ----------
   // 프랩 1일 예상: 최근 판매 달의 프랩 사용량 ÷ 그달 Gross × 오늘 Forecast

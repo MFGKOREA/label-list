@@ -44,6 +44,7 @@
         <input id="q" type="search" placeholder="품목 검색" aria-label="품목 검색" autocomplete="off">
       </label>
       <div class="chips" id="cats" role="group" aria-label="업체"></div>
+      <div class="chips locchips" id="locs" role="group" aria-label="보관 위치"></div>
 
       <div id="orderList"></div>
       <div class="group" id="nores" hidden><div class="empty">검색 결과가 없습니다</div></div>
@@ -79,6 +80,18 @@
   </section>
 
   <!-- 데이터 파일 -->
+  <!-- 보관 위치 · 순서 (11/6 KM): 품목마다 드라이·워크인·프리저, 손잡이를 끌어 선반 순서대로 -->
+  <section class="view" id="v-loc" aria-label="보관 위치와 순서" hidden>
+    <div class="nav">
+      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
+      <h2>보관 위치 · 순서</h2>
+      <span class="right"></span>
+    </div>
+    <div class="chips" id="locTabs" role="tablist" aria-label="위치"></div>
+    <p class="hint lochint">손잡이(↕)를 눌러 끌면 순서가 바뀌어요. 위치 버튼을 누르면 그 위치 맨 아래로 가요. <b>추정</b>은 이름으로 짐작한 위치예요.</p>
+    <div class="group" id="locList"></div>
+  </section>
+
   <section class="view" id="v-files" aria-label="데이터 파일" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
@@ -89,6 +102,7 @@
 
     <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
     <div class="group" id="masters"></div>
+    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>월별 데이터</span><small>매달 4개</small></div>
     <div class="months" id="months" role="group" aria-label="월 선택"></div>
