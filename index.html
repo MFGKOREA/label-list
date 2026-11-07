@@ -506,7 +506,8 @@ li.expired .name { text-decoration: none; }
   <nav class="dock" role="tablist" aria-label="관리 항목">
     <button type="button" role="tab" id="tabLabel" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.2V5a1.5 1.5 0 0 1 1.5-1.5h7.2a1.5 1.5 0 0 1 1.06.44l7.3 7.3a1.5 1.5 0 0 1 0 2.12l-7.2 7.2a1.5 1.5 0 0 1-2.12 0l-7.3-7.3a1.5 1.5 0 0 1-.44-1.06z"/><circle cx="8.2" cy="8.2" r="1.4"/></svg>한글표시사항</button>
     <button type="button" role="tab" id="tabTrace" aria-selected="false"><span class="newb">New</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5.5A1.5 1.5 0 0 1 5.5 4H7M17 4h1.5A1.5 1.5 0 0 1 20 5.5V7M20 17v1.5a1.5 1.5 0 0 1-1.5 1.5H17M7 20H5.5A1.5 1.5 0 0 1 4 18.5V17M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></svg>축산물이력제</button>
-    <button type="button" role="tab" id="tabCogs" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg>COGS 분석</button>
+    <button type="button" role="tab" id="cogsBlank" disabled aria-label="준비 중"><i></i>&nbsp;</button>
+    <button type="button" role="tab" id="tabCogs" aria-selected="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg>COGS 분석</button>
     <button type="button" role="tab" disabled aria-label="준비 중"><i></i>&nbsp;</button>
   </nav>
   <div class="panel" id="pTrace" hidden>
@@ -1990,7 +1991,15 @@ li.expired .name { text-decoration: none; }
   const typingEl = (el) => el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && !/^(button|checkbox|radio|file|submit)$/.test(el.type)));
   document.addEventListener("focusin", (e) => document.body.classList.toggle("typing", typingEl(e.target)));
   document.addEventListener("focusout", () => setTimeout(() => document.body.classList.toggle("typing", typingEl(document.activeElement)), 0));
-  try { const lt = localStorage.getItem("label-list-tab"); if (lt === "trace" || lt === "cogs") showTab(lt); } catch {}
+  // COGS 분석은 비공개: 주소 끝에 ?cogs=1 로 한 번 연 기기에서만 칸이 보임 (?cogs=0 이면 다시 숨김)
+  let cogsOn = false;
+  try {
+    const qc = new URLSearchParams(location.search).get("cogs");
+    if (qc === "1") localStorage.setItem("label-list-cogs-on", "1"); else if (qc === "0") localStorage.removeItem("label-list-cogs-on");
+    cogsOn = localStorage.getItem("label-list-cogs-on") === "1";
+  } catch {}
+  $("tabCogs").hidden = !cogsOn; $("cogsBlank").hidden = cogsOn;
+  try { const lt = localStorage.getItem("label-list-tab"); if (lt === "trace" || (lt === "cogs" && cogsOn)) showTab(lt); } catch {}
 
   // ======== 축산물이력제: 명세서 사진 ↔ 박스 라벨 사진의 이력번호 대조 ========
   const TR_LS = LS + "-trace";
