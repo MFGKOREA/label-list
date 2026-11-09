@@ -34,9 +34,8 @@ function spreadsheet_() {
   if (active) return active;
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty("SHEET_ID");
-  if (id) {
-    try { return SpreadsheetApp.openById(id); } catch (e) { /* 지워졌으면 새로 만듦 */ }
-  }
+  // 11/9: 저장된 시트를 잠깐 못 열었을 때 새 빈 시트를 만들어 SHEET_ID를 바꿔 버린 일이 있음(11/8) → 이제는 새로 만들지 않고 오류를 냄
+  if (id) return SpreadsheetApp.openById(id);
   const ss = SpreadsheetApp.create("발주프랩 데이터");
   props.setProperty("SHEET_ID", ss.getId());
   return ss;
