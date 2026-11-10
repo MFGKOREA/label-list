@@ -22,6 +22,8 @@ function doGet(e) {
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
       if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 30일)
+      if (e.parameter.backups) return json_({ backups: backupList_() }); // 복구용 백업 목록 (최근 15일)
+      if (e.parameter.backup) return json_(backupGet_(String(e.parameter.backup), e.parameter.store ? store_(e.parameter.store) : '')); // 그날 백업 (매장 하나 또는 전체)
       const store = store_(e.parameter.store);
       // who(기기 임시 번호)가 오면: 접속 중 인원을 세고, 바뀐 게 없으면 목록 없이 짧게 답함
       // ※ 이름을 'sid'로 하면 구글이 요청을 막으므로 'who'를 씀
@@ -154,6 +156,7 @@ function clearItems(store) {
   try {
     const sh = sheet_(store);
     const last = sh.getLastRow();
+    try { backupBeforeClear_(store); } catch (err) {} // 초기화 직전 목록을 따로 남김 (실수로 지워도 되살리게)
     if (last > 1) sh.getRange(2, 1, last - 1, sh.getLastColumn()).clearContent();
     bump_(store);
   } finally {
@@ -645,3 +648,129 @@ function traceDelete_(store, id) {
   return traceList_(store);
 }
 
+
+
+// ---- 복구용 백업 (매장모음 프로젝트에서만 씀) ----
+// 매일 새벽 모든 매장 목록(매장모음 탭 + 수원·월드타워·용산 전용 프로젝트)과 이력제 기록을
+// 내 드라이브 "한글표시사항 백업" 폴더에 날짜별 파일(backup-YYYY-MM-DD.json)로 저장하고, 15일 지난 파일은 지웁니다.
+// 처음 한 번 편집기에서 installBackupTrigger 를 실행하면 매일 새벽 3시에 돌고, 바로 한 번 백업합니다.
+const BACKUP_FOLDER = '한글표시사항 백업';
+const BACKUP_DAYS = 15;
+const EXTERNAL_STORES = { // 매장모음이 아닌 전용 프로젝트 매장 (앱 index.html 의 STORES 와 같게)
+  suwon: 'https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec',
+  lwt: 'https://script.google.com/macros/s/AKfycbzxRVdyf02wbFZVRRif34GJXUZl70hoebw8__46aoyfr_lvZQT-1N_76H6prSpHdgnH/exec',
+  ys: 'https://script.google.com/macros/s/AKfycbzs4LFJo3Tau13KojH6dUZpyRvdRJXM2BEJWndv8Kc0u8fihga-F3iQSGofaWgut-oWrg/exec',
+};
+
+function backupFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('BACKUP_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (err) {} }
+  const folder = DriveApp.createFolder(BACKUP_FOLDER);
+  props.setProperty('BACKUP_FOLDER_ID', folder.getId());
+  return folder;
+}
+function today_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
+
+// 매장모음 시트의 모든 목록 탭 + 전용 프로젝트 매장 목록
+function snapshot_() {
+  const stores = {};
+  spreadsheet_().getSheets().forEach((sh) => {
+    const name = sh.getName();
+    if (name.indexOf(SHEET_NAME + '_') !== 0) return; // 기본 '목록' 탭은 수원 전용 프로젝트가 따로 있어 뺌
+    const store = name.slice(SHEET_NAME.length + 1);
+    if (/^[a-z0-9]{1,20}$/.test(store)) stores[store] = listItems(store);
+  });
+  Object.keys(EXTERNAL_STORES).forEach((code) => {
+    try {
+      const res = UrlFetchApp.fetch(EXTERNAL_STORES[code] + '?api=1&store=' + code + '&t=' + Date.now(), { muteHttpExceptions: true, followRedirects: true });
+      const d = JSON.parse(res.getContentText());
+      stores[code] = Array.isArray(d) ? d : (d && d.items) || { error: (d && d.error) || '응답 오류' };
+    } catch (err) { stores[code] = { error: String(err) }; }
+  });
+  let trace = [];
+  try { trace = traceRows_(); } catch (err) {}
+  return { at: new Date().toISOString(), stores: stores, trace: trace };
+}
+
+function backupDaily() {
+  const folder = backupFolder_();
+  const name = 'backup-' + today_() + '.json';
+  const text = JSON.stringify(snapshot_());
+  const old = folder.getFilesByName(name);
+  while (old.hasNext()) old.next().setTrashed(true); // 같은 날 다시 돌리면 새 것으로
+  folder.createFile(name, text, 'application/json');
+  pruneBackups_(folder);
+  Logger.log('백업 저장: ' + name + ' (' + Math.round(text.length / 1024) + 'KB)');
+}
+
+// 15일 지난 백업(초기화 직전 백업 포함)은 휴지통으로
+function pruneBackups_(folder) {
+  const cut = new Date(Date.now() - BACKUP_DAYS * 86400000);
+  const cutIso = Utilities.formatDate(cut, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const files = folder.getFiles();
+  while (files.hasNext()) {
+    const f = files.next(), m = f.getName().match(/(\d{4}-\d{2}-\d{2})/);
+    if (m && m[1] < cutIso) f.setTrashed(true);
+  }
+}
+
+// [초기화] 직전 그 매장 목록만 따로 저장: clear-매장-YYYY-MM-DD-HHmmss.json
+function backupBeforeClear_(store) {
+  const items = listItems(store);
+  if (!items.length) return;
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd-HHmmss');
+  backupFolder_().createFile('clear-' + store + '-' + stamp + '.json', JSON.stringify({ at: new Date().toISOString(), stores: { [store]: items } }), 'application/json');
+}
+
+// 백업 목록: [{ name, date, kind: 'daily'|'clear', size }]
+function backupList_() {
+  const out = [], files = backupFolder_().getFiles();
+  while (files.hasNext()) {
+    const f = files.next(), n = f.getName(), m = n.match(/(\d{4}-\d{2}-\d{2})/);
+    if (!m || !/\.json$/.test(n)) continue;
+    out.push({ name: n, date: m[1], kind: n.indexOf('clear-') === 0 ? 'clear' : 'daily', size: f.getSize() });
+  }
+  return out.sort((a, b) => (b.name > a.name ? 1 : -1));
+}
+
+// 그날 백업 내용: date 는 'YYYY-MM-DD'(매일 백업) 또는 백업 파일 이름 그대로
+function backupGet_(date, store) {
+  const name = /^\d{4}-\d{2}-\d{2}$/.test(date) ? 'backup-' + date + '.json' : date;
+  if (!/^[a-z0-9\-]+\.json$/i.test(name)) throw new Error('백업 이름이 올바르지 않습니다');
+  const files = backupFolder_().getFilesByName(name);
+  if (!files.hasNext()) throw new Error('그날 백업이 없습니다');
+  const d = JSON.parse(files.next().getBlob().getDataAsString());
+  if (store) return { at: d.at, store: store, items: (d.stores || {})[store] || [] };
+  const counts = {};
+  Object.keys(d.stores || {}).forEach((k) => { counts[k] = Array.isArray(d.stores[k]) ? d.stores[k].length : -1; });
+  return { at: d.at, counts: counts };
+}
+
+// 편집기에서 한 번 실행: 매일 새벽 3시 백업 트리거 + 지금 바로 한 번 백업
+function installBackupTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'backupDaily') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('backupDaily').timeBased().everyDays(1).atHour(3).create();
+  backupDaily();
+  Logger.log('매일 새벽 3시 백업 트리거를 만들었습니다 (15일 보관)');
+}
+
+// 편집기에서 실행하는 되살리기 (매장모음 탭 매장만): restoreStore('dogok', '2026-11-09')
+function restoreStore(store, date) {
+  store = store_(store);
+  if (EXTERNAL_STORES[store]) throw new Error(store + ' 는 전용 프로젝트 매장이라 여기서 되살릴 수 없습니다');
+  const b = backupGet_(date, store);
+  if (!Array.isArray(b.items)) throw new Error('백업에 이 매장 목록이 없습니다');
+  try { backupBeforeClear_(store); } catch (err) {}
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = sheet_(store), last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, sh.getLastColumn()).clearContent();
+    if (b.items.length) sh.getRange(2, 1, b.items.length, HEAD.length).setValues(b.items.map((it) => HEAD.map((h) => cell_(it[h]))));
+    bump_(store);
+  } finally { lock.releaseLock(); }
+  Logger.log(store + ' 를 ' + date + ' 백업(' + b.items.length + '개)으로 되살렸습니다');
+}
