@@ -2134,11 +2134,19 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   const nextOrderDay = (it, d) => { let x = d; for (let k = 0; k < 8 && !isOrderDay(it, x); k++) x = addDays(x, 1); return x; };
   // 해동이 필요한 품목은 다음 발주분도 입고 다음 날부터 쓸 수 있으니 기간을 해동 일수만큼 늘림
   function orderWindowFor(it, today) {
-    const w = orderWindowBase(it, today), t = it.thaw || 0;
-    if (!t) return w;
-    const end = addDays(w.end, t), g = sumGross(today, end, false);
-    // 주말 여유분은 이 발주분을 쓸 수 있는 날(입고 다음 날)부터: 목요일 발주 해동 품목은 토요일을 수요일 발주가 맡으니 토요일 이중 계산 방지
-    return { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(addDays(w.deliv, t), end), fcVar: fcVar(today, end, false) };
+    let w = orderWindowBase(it, today); const t = it.thaw || 0;
+    if (t) {
+      const end = addDays(w.end, t), g = sumGross(today, end, false);
+      // 주말 여유분은 이 발주분을 쓸 수 있는 날(입고 다음 날)부터: 목요일 발주 해동 품목은 토요일을 수요일 발주가 맡으니 토요일 이중 계산 방지
+      w = { ...w, end, days: w.days + t, gross: g.s, est: g.est, nEff: effDays(today, end), wkGross: wkGross(addDays(w.deliv, t), end), weGross: weSum(today, end, false), fcVar: fcVar(today, end, false) }; // weGross: 늘어난 기간(토요일 등)의 주말 몫도 다시 셈 (11/11, 예전엔 해동 품목의 토요일을 평일 비율로 봄)
+    }
+    // 입고 뒤 구간(11/11): 이번 발주분을 쓸 수 있는 첫날(입고일, 해동 품목은 그 다음 날)부터 기간 끝까지. calc가 "입고 전 부족분은 이번 발주로 못 메움"을 셈할 때 씀
+    const from = addDays(w.deliv, t);
+    if (from > today && from < w.end) {
+      const g = sumGross(from, w.end, false);
+      w = { ...w, post: { today: from, end: w.end, days: Math.round((parseISO(w.end) - parseISO(from)) / 864e5), gross: g.s, est: g.est, nEff: effDays(from, w.end), wkGross: w.wkGross, weGross: weSum(from, w.end, false), fcVar: fcVar(from, w.end, false) } };
+    }
+    return w;
   }
   function orderWindowBase(it, today) {
     const c = vcfg(it);
@@ -2187,18 +2195,32 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     ss += wkPlus;
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
-    const short = need - s - inc;
+    const short0 = need - s - inc;
+    // 입고 전 부족분은 이번 발주로 못 메움 (11/11): 이번 발주분은 입고일(해동 품목은 그 다음 날)부터 쓸 수 있음.
+    //  재고가 그 전에 바닥날 것 같으면 발주량은 "입고 뒤 구간에 쓸 양 + 그 구간 여유분"까지만. 재고가 넉넉하면 예전 식 그대로 (둘 중 작은 쪽)
+    //  usePre·usePost = 입고 전·뒤 예상 사용, preShort = 입고 전에 모자랄 양(못 메움, 카드에 따로 표시), cut = 그래서 발주량에서 뺀 양
+    let short = short0, floorQ = use - s - inc, usePre = null, usePost = null, ssPost = null, needPost = null, preShort = 0, cut = 0;
+    const wp = win.post;
+    if (wp && wp.end === win.end && wp.today > win.today && wp.days > 0) {
+      const cp = calc(it, wp, 0, 0);
+      if (!cp.none) {
+        usePost = cp.use; ssPost = cp.ss; needPost = cp.need; usePre = Math.max(0, use - cp.use);
+        preShort = Math.max(0, usePre - s - inc);
+        if (short0 > needPost) { short = needPost; cut = short0 - needPost; }
+        floorQ = Math.min(floorQ, usePost);
+      }
+    }
     const mult = it.pk.mult || 1;
     // "10개단위 발주"처럼 묶음 단위면 반올림 (반올림해서 0이어도 여유분 빼고 모자라면 1묶음)
     // 묶음 단위는 반올림하되, 예상 사용량(안전재고 뺀 것)만큼은 항상 채움
-    let packs = short <= 0 ? 0 : mult > 1 ? Math.max(Math.round(short / mult), Math.ceil((use - s - inc) / mult - 1e-9), 0) : Math.ceil(short - 1e-9);
+    let packs = short <= 0 ? 0 : mult > 1 ? Math.max(Math.round(short / mult), Math.ceil(floorQ / mult - 1e-9), 0) : Math.ceil(short - 1e-9);
     if (packs > 0 && it.min && packs < it.min) packs = it.min;
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
     // ± 범위(카드·리포트·86 위험)는 평균 사용량 기준 예측 오차만. 프랩 배치가 이번 기간에 드는지 아닌지는 오차가 아니라 덩어리라 여유분(ss)에만 넣음
     const sd = useAvg * relErr;
-    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus, fcRel, sigma };
+    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus, fcRel, sigma, short0, usePre, usePost, ssPost, needPost, preShort, cut };
   }
 
   // ---------- 프랩 배치 계획 ----------
@@ -2854,6 +2876,14 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const c0 = calc(it, win, 0, 0);
     // 작업 중 재고 (꺼내 둔 팩·박스): 발주 계산에 더한 만큼 회색 글씨로
     const wipTxt = () => { const w = wipOf(it, v); return w ? `${w.why} +${r1(w.q / (it.box || 1))}${it.box ? "BOX" : esc(unit)}` : ""; };
+    // 입고 전 부족 안내 (11/11): 이번 발주분은 입고일(해동 품목은 다음 날)부터 쓸 수 있어, 그 전에 모자랄 양은 발주해도 못 메움 → 발주량은 입고 뒤 쓸 양까지만. 잘랐을 때만 한 줄로 알림
+    const cutTxt = () => {
+      if (preMode || offDay || !win.post) return "";
+      const e1 = estFor(it, v), s1 = e1 ? e1.v : availOf(it, v); if (!isFinite(s1)) return "";
+      const r = calc(it, win, s1, inc); if (r.none || !(r.cut > 0.05)) return "";
+      const day = DOW[dow(win.post.today)], q = (x) => `${r1(x / (it.box || 1))}${it.box ? "BOX" : unit}`;
+      return r.preShort > 0.05 ? `${day} 입고 전 ${q(r.preShort)} 모자랄 수 있음(발주로 못 메움)` : `${day} 입고 뒤 쓸 양만 발주`;
+    };
     let tag = "";
     if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
@@ -2875,13 +2905,13 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       return d;
     }
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? `<span class="incnote">입고예정 ${r1(inc)}${esc(unit)}</span>` : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
       // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
       (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? Math.floor(e0.v / st + 1e-9) * st : r1(e0.v / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
-    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const wn = d.querySelector(".wipnote"); if (wn) { const t = wipTxt(); wn.textContent = t; wn.hidden = !t; } const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
+    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const wn = d.querySelector(".wipnote"); if (wn) { const t = wipTxt(); wn.textContent = t; wn.hidden = !t; } const cn = d.querySelector(".cutnote"); if (cn) { const t = cutTxt(); cn.textContent = t; cn.hidden = !t; } const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
     const jump = (to) => {

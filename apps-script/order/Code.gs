@@ -35,7 +35,14 @@ function spreadsheet_() {
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty("SHEET_ID");
   // 11/9: 저장된 시트를 잠깐 못 열었을 때 새 빈 시트를 만들어 SHEET_ID를 바꿔 버린 일이 있음(11/8) → 이제는 새로 만들지 않고 오류를 냄
-  if (id) return SpreadsheetApp.openById(id);
+  //  11/12: 잠깐 못 여는 일(구글 쪽 일시 오류)에 대비해 3번까지 다시 해 봄. 그래도 안 되면 오류 (새 시트는 만들지 않음)
+  if (id) {
+    let lastErr;
+    for (let i = 0; i < 3; i++) {
+      try { return SpreadsheetApp.openById(id); } catch (err) { lastErr = err; if (i < 2) Utilities.sleep(700 * (i + 1)); }
+    }
+    throw lastErr;
+  }
   const ss = SpreadsheetApp.create("발주프랩 데이터");
   props.setProperty("SHEET_ID", ss.getId());
   return ss;
@@ -78,7 +85,9 @@ function readAll_() {
   const parts = {};
   rows.forEach(([key, part, value]) => {
     if (!key) return;
-    (parts[key] = parts[key] || [])[Number(part) || 0] = String(value);
+    const p = Number(part) || 0;
+    if (p === 0 || !parts[key]) parts[key] = []; // part 0 = 새 묶음 시작 (옛 묶음이 위에 남아 있어도 아래쪽 새 묶음을 씀)
+    parts[key][p] = String(value);
   });
   const out = {};
   Object.keys(parts).forEach((key) => {
@@ -103,26 +112,30 @@ function readKeys_(keys) {
     if (!rows.length) return;
     const first = rows[0], span = rows[rows.length - 1] - first + 1;
     const vals = sh.getRange(first, 2, span, 2).getValues(); // [part, value] (키 행은 붙어 있음)
-    const parts = [];
-    rows.forEach((r) => { parts[Number(vals[r - first][0]) || 0] = String(vals[r - first][1]); });
+    let parts = [];
+    rows.forEach((r) => { const p = Number(vals[r - first][0]) || 0; if (p === 0) parts = []; parts[p] = String(vals[r - first][1]); }); // part 0 = 새 묶음 시작
     try { out[key] = JSON.parse(parts.join("")); } catch (e) { broken_[key] = true; /* 깨진 값은 건너뜀 */ }
   });
   return out;
 }
 
+// 11/12: 옛 행을 먼저 지우지 않음 — 새 행을 맨 아래에 먼저 쓰고 그다음 옛 행을 지움.
+//  예전(옛 행 삭제 → 새 행 추가)에는 그 틈에 다음 덧붙이기가 시트를 읽으면 "키 없음 → 빈 목록"에서 시작해
+//  재고 기록(onhand)이 통째로 줄었음(10/31·11/4·11/6). 중간에 멈춰 옛 행·새 행이 같이 남아도 읽을 때 아래쪽(새) 묶음을 씀
 function write_(key, value) {
   const sh = sheet_();
-  const last = sh.getLastRow();
-  if (last >= 2) {
-    const keys = sh.getRange(2, 1, last - 1, 1).getValues();
-    for (let i = keys.length - 1; i >= 0; i--) if (keys[i][0] === key) sh.deleteRow(i + 2);
+  const last = Math.max(1, sh.getLastRow());
+  const old = [];
+  if (last >= 2) sh.getRange(2, 1, last - 1, 1).getValues().forEach((r, i) => { if (r[0] === key) old.push(i + 2); });
+  if (value !== null && value !== undefined) {
+    const json = JSON.stringify(value);
+    const now = new Date();
+    const rows = [];
+    for (let i = 0, p = 0; i < json.length || p === 0; i += CHUNK, p++) rows.push([key, p, json.slice(i, i + CHUNK), now]);
+    if (sh.getMaxRows() < last + rows.length) sh.insertRowsAfter(sh.getMaxRows(), last + rows.length - sh.getMaxRows());
+    sh.getRange(last + 1, 1, rows.length, 4).setValues(rows);
   }
-  if (value === null || value === undefined) return;
-  const json = JSON.stringify(value);
-  const now = new Date();
-  const rows = [];
-  for (let i = 0, p = 0; i < json.length || p === 0; i += CHUNK, p++) rows.push([key, p, json.slice(i, i + CHUNK), now]);
-  sh.getRange(sh.getLastRow() + 1, 1, rows.length, 4).setValues(rows);
+  for (let i = old.length - 1; i >= 0; i--) sh.deleteRow(old[i]); // 옛 행은 모두 새 행보다 위 → 아래에서부터 지우면 번호가 안 밀림
 }
 
 // 객체끼리는 칸별로 합치고, null이면 지움. 배열·숫자·글자는 통째로 바꿈
@@ -246,6 +259,8 @@ function doPost(e) {
     console.error(err); // 자세한 내용은 Apps Script 실행 기록에만
     return json_({ ok: false, error: "저장 중 오류가 났어요" });
   } finally {
+    // 11/12: 잠금을 풀기 전에 시트에 반영 — 안 그러면 다음 요청이 "지워졌는데 아직 안 쓰인" 상태를 읽을 수 있음
+    try { SpreadsheetApp.flush(); } catch (err) { /* 반영 실패는 다음 줄에서 잠금만 풂 */ }
     lock.releaseLock();
   }
 }
