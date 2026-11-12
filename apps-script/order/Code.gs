@@ -26,6 +26,7 @@
 
 const SHEET = "kv";
 const CHUNK = 45000;
+const BUILD = "2026-11-12"; // 배포본 확인용: GET ?api=1&status=1 의 build로 보임 (어느 코드가 배포돼 있는지 밖에서 확인)
 
 // 시트에서 연 스크립트면 그 시트를, script.google.com에서 따로 만든 스크립트면
 // 처음 실행할 때 "발주프랩 데이터" 시트를 내 드라이브에 만들어 계속 씁니다.
@@ -210,7 +211,7 @@ function json_(obj) {
 function doGet(e) {
   if (!e || !e.parameter || !e.parameter.api) return json_({ ok: true, data: {}, locked: !!appKey_() });
   try {
-    if (e.parameter.status) return json_({ ok: true, status: status_(), ver: ver_(), locked: !!appKey_() });
+    if (e.parameter.status) return json_({ ok: true, status: status_(), ver: ver_(), locked: !!appKey_(), build: BUILD });
     if (e.parameter.ver) return json_({ ok: true, ver: ver_() });
     if (!authOk_(e.parameter.k)) return denied_();
     if (e.parameter.backups) return json_({ ok: true, data: { backups: backupList_() } });
