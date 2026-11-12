@@ -1868,7 +1868,13 @@
     if (preMode) {
       const pc = preCalc(it, v, pDay()); return pc.r && pc.r.packs > 0 ? 0 : -1;
     }
-    if (v && num(v.o) > 0) return 3; // 오늘 발주 넣은 품목은 칸 맨 아래로
+    // 오늘 발주 넣은 품목은 칸 아래로: 앱 추천보다 덜 넣은 것(2) → 다 넣은 것(3) 순 (11/12 KM: 섞여 있었음)
+    if (v && num(v.o) > 0) {
+      const w0 = orderWindowFor(it, TODAY), e = estFor(it, v), s0 = e ? e.v : availOf(it, v);
+      if (!isFinite(s0)) return 3;
+      const r0 = calc(it, w0, s0, incNow(it));
+      return !r0.none && r0.packs > 0 && r0.orderQty - num(v.o) > 1e-9 ? 2 : 3;
+    }
     if (!counted(v)) return -1;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return -1; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = availOf(it, v), inc = incNow(it), r = calc(it, w, s, inc);
@@ -2120,7 +2126,9 @@
     if (!locSel && sortSel === "need") groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     const nBuy = top.filter(([k]) => k === 0).length;
     const ord = new Map(M.items.map((it, i) => [it, i])); // 같은 순위 안에서는 발주 시트 순서
-    top = top.sort((a, b) => a[0] - b[0] || ord.get(a[1]) - ord.get(b[1])).map(([, it]) => it);
+    top = top.sort((a, b) => a[0] - b[0] || ord.get(a[1]) - ord.get(b[1]));
+    const topRank = new Map(top.map(([k, it]) => [it, k]));
+    top = top.map(([, it]) => it);
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 ON 버튼)
     box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${nBuy}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
@@ -2143,7 +2151,20 @@
       groups = new Map([["전체", all]]);
     }
     groups.forEach((list, v) => {
-      if (v === "발주 필요") { const g = document.createElement("div"); g.className = "group"; list.forEach((it) => g.appendChild(rowEl(it, win, inp))); box.appendChild(g); n += list.length; return; }
+      if (v === "발주 필요") {
+        // 덜 넣음·발주완료는 작은 머리글로 나눔
+        const LBL = { 2: "덜 넣음", 3: "발주완료" }; let g = null, last = null;
+        list.forEach((it) => {
+          const k = topRank.get(it);
+          if (!g || (k !== last && LBL[k])) {
+            if (g) box.appendChild(g);
+            if (LBL[k]) box.insertAdjacentHTML("beforeend", `<div class="subhead${k === 2 ? " low" : ""}">${LBL[k]} <small>${list.filter((x) => topRank.get(x) === k).length}</small></div>`);
+            g = document.createElement("div"); g.className = "group";
+          }
+          last = k; g.appendChild(rowEl(it, win, inp));
+        });
+        if (g) box.appendChild(g); n += list.length; return;
+      }
       // 업체·위치 머리글은 안 씀 (위 버튼에 이미 있음, 11/6 KM). 버튼을 다 끄면 발주 시트 순서, 위치 버튼을 켜면 그 위치 품목만 선반 순서(보관 위치 · 순서)대로
       const g = document.createElement("div"); g.className = "group";
       const ix = new Map(M.items.map((it, i) => [it.key, i]));

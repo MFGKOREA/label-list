@@ -145,7 +145,8 @@ html, body { overflow-x: hidden; }
 
 /* order item */
 .c-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-.c-name { font-size: 16px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; line-height: normal; }
+.c-name { font-size: 16px; font-weight: 700; min-width: 5.5em; flex: 1 1 auto; overflow-wrap: anywhere; word-break: keep-all; line-height: normal; } /* 11/12: 태그가 길어도 이름이 한 글자씩 끊기지 않게 */
+.c-top .c-tags { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
 .chip { flex: none; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 7px; }
 .chip.ok { background: var(--ok-bg); color: var(--ok-ink); }
 .chip.new { background: var(--chick); color: var(--chick-ink); }
@@ -722,3 +723,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .rloc button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
 #v-loc .nav .back { display: flex; } /* 이 화면은 독에 없어서 뒤로가기(파일) 남김 */
+
+/* 발주 필요 칸 안 작은 머리글 (11/12): 덜 넣음 · 발주완료 */
+.subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
+.subhead.low { color: var(--rose-ink); }
+.subhead small { font-size: 12px; font-weight: 700; opacity: .75; margin-left: 2px; }
