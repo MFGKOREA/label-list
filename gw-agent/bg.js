@@ -1,4 +1,4 @@
-// 배경 (1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
+// 배경 (1.7.2 — 11/12: 자동 창을 최소화하지 않고 작은 창으로 맨 위에. 아래에 깔리면 크롬이 느리게 돌려 멈췄음 / 1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
 //  1.7.0 그대로: 평소엔 창 없음. 폰에서 [GW 전송]·[Gross 불러오기]를 누르면 그때 최소화된 창 하나만 열어 GW 로그인 → 경영정보 → MIS → 입력·저장 → 창 닫음.
 //               한 번 누른 요청은 한 번만 시도. 매장 시간(08~22시)엔 3초마다, 그 밖엔 30초마다 전송 상태만 확인.
 //  1.7.1 고친 것
@@ -64,17 +64,19 @@ async function sweep(reason, all = false) {
   if (kill.length && reason) await log(`${reason} · 남은 자동 창 ${kill.length}개 닫음`, { quiet: true });
 }
 const own = (tabId) => lock(async () => { const { owned = [] } = await get("owned"); if (!owned.includes(tabId)) await put({ owned: [...owned, tabId].slice(-20) }); });
+const WIN_BOX = { width: 520, height: 720, left: 0, top: 0 };
 async function tidy(tabId) { // 자동 탭은 늘 최소화: 혼자 있는 창이면 그 창을, 다른 탭과 같이 있으면 따로 떼어 최소화 (탭마다 한 번만 부름)
   const tab = await chrome.tabs.get(tabId).catch(() => null); if (!tab) return;
   chrome.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
   const w = await chrome.windows.get(tab.windowId, { populate: true }).catch(() => null);
-  if (w && w.tabs.length === 1) { if (w.state !== "minimized") await chrome.windows.update(w.id, { state: "minimized" }).catch(() => {}); }
-  else await chrome.windows.create({ tabId, state: "minimized", focused: false }).catch(() => {});
+  // 1.7.2 (11/12 KM): 창이 최소화·다른 창 아래에 있으면 크롬이 그 탭을 느리게 돌려 자동 입력이 멈춤 → 작은 창을 맨 위로
+  if (w && w.tabs.length === 1) { await chrome.windows.update(w.id, { state: "normal", focused: true, ...WIN_BOX }).catch(() => {}); }
+  else await chrome.windows.create({ tabId, state: "normal", focused: true, ...WIN_BOX }).catch(() => {});
 }
 async function openJob(kind, id, msg) {
   await sweep();
   const manual = kind === "manual";
-  const win = await chrome.windows.create({ url: GW_URL, state: manual ? "normal" : "minimized", focused: manual });
+  const win = await chrome.windows.create({ url: GW_URL, state: "normal", focused: true, ...(manual ? {} : WIN_BOX) });
   const tab = win.tabs[0], now = Date.now();
   chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
   const before = (await chrome.tabs.query({}).catch(() => [])).map((t) => t.id); // 이때 이미 있던 탭(사람이 띄운 MIS 탭 등)은 나중에도 안 건드림
@@ -236,7 +238,7 @@ async function watch(job, now, L) {
       const g = await probe(job.gwTab);
       if ((n.click || 1) < 2 && !g.gone && g.at === "GW" && !g.err && !g.pw) { await bump((j) => { j.n.click = 2; j.stageAt = now; }); await log(`${w} → 경영정보를 다시 누름`); await runFile(job.gwTab, "login.js", false); return; }
       if (!n.direct) {
-        const win = await chrome.windows.create({ url: MIS_URL, state: "minimized", focused: false }).catch(() => null);
+        const win = await chrome.windows.create({ url: MIS_URL, state: "normal", focused: true, ...WIN_BOX }).catch(() => null);
         if (!win) return fail(job, `${w} · MIS 주소도 직접 못 엶`);
         const t = win.tabs[0]; chrome.tabs.update(t.id, { autoDiscardable: false }).catch(() => {});
         await own(t.id);

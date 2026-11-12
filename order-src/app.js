@@ -2076,6 +2076,10 @@
   // 순서 다시 매김: 지금 화면 순서대로 0,1,2… (이 위치 품목만)
   const renumber = () => [...$("locList").querySelectorAll(".lrow")].forEach((r, i) => saveLoc(r.dataset.key, { loc: locTab, ro: i }));
   let locSel = null;
+  // 정렬 (11/12 KM): need = 발주 필요한 것 위로(예전 그대로) · sheet = 발주 시트 순서 그대로 · amt = 발주 금액 큰 순 · name = 가나다. 이 기기에만 기억
+  let sortSel = "need"; try { sortSel = localStorage.getItem("order-sort") || "need"; } catch {}
+  const amtOf = (it, win, v) => { const e = estFor(it, v || {}); let s = e ? e.v : availOf(it, v || {}); if (!isFinite(s)) { const e0 = estStock(it, TODAY); s = e0 ? e0.v : NaN; } if (!isFinite(s)) return -1; /* 안 센 품목은 예상 재고로 */ const r = calc(it, orderWindowFor(it, TODAY), s, incNow(it)); return r.none ? -1 : (r.orderQty || 0) * priceOf(it) + (r.orderQty || 0) * 1e-6; };
+  const priceOf = (it) => { if (it.price) return it.price; const r = ((db["master.order"] || {}).rows || []).find((x) => x.name === it.key || x.name === it.name); return (r && r.price) || 0; };
   function renderLocs(M) {
     const pool = M.items.filter((i) => !i.ledgerOnly && (!cat || i.vendor === cat));
     $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${t}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
@@ -2103,7 +2107,7 @@
     // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
     // 위치 버튼을 켰을 땐(선반 순서로 세는 중) 끌어올리지 않음 — 재고를 넣은 카드가 위로 튀면 순서가 흐트러짐
-    if (!locSel) groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
+    if (!locSel && sortSel === "need") groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     const nBuy = top.filter(([k]) => k === 0).length;
     const ord = new Map(M.items.map((it, i) => [it, i])); // 같은 순위 안에서는 발주 시트 순서
     top = top.sort((a, b) => a[0] - b[0] || ord.get(a[1]) - ord.get(b[1])).map(([, it]) => it);
@@ -2121,6 +2125,13 @@
       requestAnimationFrame(() => drawWeekArc($("preArc"), $("preStrip")));
     }
     let n = 0;
+    // 금액순·가나다순: 업체를 섞어 한 줄로
+    if (!locSel && !q && (sortSel === "amt" || sortSel === "name")) {
+      const all = [...groups.entries()].filter(([v]) => v !== "발주 필요").flatMap(([, l]) => l);
+      const key = new Map(sortSel === "amt" ? all.map((it) => [it, amtOf(it, win, inp[it.key])]) : []);
+      all.sort(sortSel === "amt" ? (a, b) => key.get(b) - key.get(a) : (a, b) => a.name.localeCompare(b.name, "ko"));
+      groups = new Map([["전체", all]]);
+    }
     groups.forEach((list, v) => {
       if (v === "발주 필요") { const g = document.createElement("div"); g.className = "group"; list.forEach((it) => g.appendChild(rowEl(it, win, inp))); box.appendChild(g); n += list.length; return; }
       // 업체·위치 머리글은 안 씀 (위 버튼에 이미 있음, 11/6 KM). 버튼을 다 끄면 발주 시트 순서, 위치 버튼을 켜면 그 위치 품목만 선반 순서(보관 위치 · 순서)대로
@@ -2133,7 +2144,10 @@
     if (orderFocus) { const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`); if (el) el.querySelectorAll("input")[orderFocus.f].focus(); orderFocus = null; }
     $("cats").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === cat));
     renderLocs(M);
+    $("sorts").hidden = !!locSel;
+    $("sorts").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === sortSel));
   }
+  $("sorts").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; sortSel = b.dataset.s; try { localStorage.setItem("order-sort", sortSel); } catch {} renderList(); });
 
   $("cats").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; cat = cat === b.dataset.c ? null : b.dataset.c; $("q").value = ""; renderList(); });
   $("q").addEventListener("input", renderList);

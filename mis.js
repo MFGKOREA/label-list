@@ -81,15 +81,17 @@ const fill = async (auto) => {
   const groups = $("#custBtn input.btn_basic").toArray().map((el) => { const m = /fn_Search\('([^']+)'\)/.exec(el.getAttribute("onclick") || ""); return m ? { code: m[1], name: el.value.trim() } : null; }).filter(Boolean);
   if (!groups.length) return stop("주문그룹 버튼을 못 찾았어요. 매장을 먼저 선택해 주세요.");
   const vendors = new Set([...want.values()].map((w) => w.vendor));
-  // 앱 업체와 이름이 같은 그룹 먼저, 나머지 그룹은 남은 품목이 있을 때만 열어 봄
-  const order = [...groups.filter((x) => vendors.has(x.name)), ...groups.filter((x) => !vendors.has(x.name))];
+  // 11/12 KM: 온세물류·새싹농산(+ 오늘 앱 업체)만 열어 봄 — 예전엔 모든 그룹을 열어 느렸음.
+  //  나머지 그룹은 그 둘에서 못 찾은 품목이 있을 때만 열고, 거기선 잔여 수량을 0으로 지우지 않음(MIS에만 넣은 다른 업체 발주가 지워지지 않게)
+  const MAIN = new Set(["온세물류", "새싹농산", ...vendors]);
+  const order = [...groups.filter((x) => MAIN.has(x.name))], extra = groups.filter((x) => !MAIN.has(x.name));
 
   const list = [...want.values()];
   if (!auto && !origConfirm.call(W, `발주앱 오늘(${TODAY.slice(5)}) 발주 ${list.length}개를 MIS에 넣고 저장할까요?\n\n${list.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return null;
 
   const loadGroup = async (code) => {
     inEvent(() => W.fn_Search(code));
-    for (let t = 0; t < 60; t++) { await sleep(200); clickMessager(); const rows = g.datagrid("getRows") || []; if (rows.length && (rows[0].CD_GROUP == null || String(rows[0].CD_GROUP) === code)) { await sleep(200); return g.datagrid("getRows"); } }
+    for (let t = 0; t < 120; t++) { await sleep(100); clickMessager(); const rows = g.datagrid("getRows") || []; if (rows.length && (rows[0].CD_GROUP == null || String(rows[0].CD_GROUP) === code)) { await sleep(120); return g.datagrid("getRows"); } }
     return g.datagrid("getRows") || [];
   };
 
@@ -105,7 +107,9 @@ const fill = async (auto) => {
   quiet();
   try {
     // 모든 그룹을 열어 봄: 오늘 발주 품목을 넣는 것뿐 아니라, 앱 목록에 없는데 MIS에 수량이 남아 있는 품목(지난 발주·시험 데이터)을 0으로 정리하려면
-    for (const grp of order) {
+    for (const grp of [...order, ...extra]) {
+      const main = MAIN.has(grp.name);
+      if (!main && !left.size) break; // 찾을 품목이 남았을 때만 다른 그룹을 엶
       let rows = await loadGroup(grp.code);
       const here = [];
       left.forEach((w, code) => { const idx = rows.findIndex((r) => String(r.CD_ITEM) === code); if (idx >= 0) here.push({ idx, code, ...w }); });
@@ -115,7 +119,7 @@ const fill = async (auto) => {
       rows.forEach((r, idx) => {
         const code = String(r.CD_ITEM ?? "");
         if (!code || code === "null" || code === "undefined") return;
-        if (num(r.QT_ORDER) > 0 && !want.has(code)) resid.push({ idx, code, name: rowName(r), old: num(r.QT_ORDER) });
+        if (main && num(r.QT_ORDER) > 0 && !want.has(code)) resid.push({ idx, code, name: rowName(r), old: num(r.QT_ORDER) });
       });
       const todo = [
         ...here.filter((h) => num(rows[h.idx].QT_ORDER) !== h.q).map((h) => ({ idx: h.idx, q: h.q })),
