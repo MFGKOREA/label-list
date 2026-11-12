@@ -162,7 +162,7 @@ html, body { overflow-x: hidden; }
 .need.done b { display: inline-flex; align-items: center; gap: 3px; line-height: 1.2; white-space: nowrap; }
 .need.done b .ck { width: 12px; height: 12px; flex: none; }
 .need.done span { line-height: 1.25; white-space: nowrap; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.need.done.low .lack { font-weight: 800; opacity: 1; margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--rose-line); width: calc(100% - 12px); }
+.need.done.low .lack { font-weight: 800; opacity: 1; margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--rose-line); width: calc(100% - 12px); white-space: normal; word-break: keep-all; line-height: 1.3; } /* "예상 −26PK 부족"이 칸보다 길면 두 줄로 (발주 수량은 왼쪽 발주 칸에 있어 이 칸에선 뺌) */
 /* 정렬 버튼 (11/12): 업체·위치 버튼 아래 한 줄 */
 .chips#sorts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin: -8px 0 18px; }
 .chips#sorts button { width: 100%; min-height: 36px; padding: 6px 4px; text-align: center; white-space: nowrap; font-size: 12px; }

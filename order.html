@@ -182,7 +182,7 @@ html, body { overflow-x: hidden; }
 .need.done b { display: inline-flex; align-items: center; gap: 3px; line-height: 1.2; white-space: nowrap; }
 .need.done b .ck { width: 12px; height: 12px; flex: none; }
 .need.done span { line-height: 1.25; white-space: nowrap; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.need.done.low .lack { font-weight: 800; opacity: 1; margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--rose-line); width: calc(100% - 12px); }
+.need.done.low .lack { font-weight: 800; opacity: 1; margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--rose-line); width: calc(100% - 12px); white-space: normal; word-break: keep-all; line-height: 1.3; } /* "예상 −26PK 부족"이 칸보다 길면 두 줄로 (발주 수량은 왼쪽 발주 칸에 있어 이 칸에선 뺌) */
 /* 정렬 버튼 (11/12): 업체·위치 버튼 아래 한 줄 */
 .chips#sorts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin: -8px 0 18px; }
 .chips#sorts button { width: 100%; min-height: 36px; padding: 6px 4px; text-align: center; white-space: nowrap; font-size: 12px; }
@@ -2912,7 +2912,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
           // 앱 예상보다 적게 넣으면 표시 (11/12 KM): "발주완료"는 그대로, 아래 줄에 몇 개 적은지
           const lack = r.packs > 0 ? r.orderQty - num(v.o) : 0;
           need = lack > 1e-9
-            ? `<span class="need done low"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span><span class="lack">예상 −${r1(lack)}${esc(ou)}</span></span>`
+            ? `<span class="need done low"><b>${CK}발주완료</b><span class="lack">예상 −${r1(lack)}${esc(ou)} 부족</span></span>`
             : `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         }
         else if (!r.packs) {
@@ -3150,7 +3150,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     groups.forEach((list, v) => {
       if (v === "발주 필요") {
         // 덜 넣음·발주완료는 작은 머리글로 나눔
-        const LBL = { 2: "덜 넣음", 3: "발주완료" }; let g = null, last = null;
+        const LBL = { 2: "예상 발주량 부족", 3: "발주완료" }; let g = null, last = null;
         list.forEach((it) => {
           const k = topRank.get(it);
           if (!g || (k !== last && LBL[k])) {
