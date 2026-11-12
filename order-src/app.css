@@ -674,6 +674,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* GW 자동입력이 안 됐을 때: MIS 입력용 목록 복사 (11/6). 막대가 줄바꿈되며 맨 아래 한 줄로 */
 .misbar:has(.mis-copy) { flex-wrap: wrap; }
 .misbar .mis-copy { order: 3; flex: 1 1 100%; border: 0; border-radius: 12px; padding: 10px 12px; min-height: 44px; background: var(--rose); color: var(--rose-ink); font-size: 14px; font-weight: 800; }
+.misbar .mis-copy.soft { background: transparent; border: 1px solid currentColor; color: var(--rose-ink); min-height: 36px; padding: 6px 12px; font-weight: 700; opacity: .85; }
 
 /* 보관 위치 버튼 (11/6): 업체 칩 바로 아래 */
 .chips#cats { margin-bottom: 8px; }

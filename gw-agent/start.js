@@ -3,7 +3,10 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const info = await chrome.runtime.sendMessage({ q: "managed" }).catch(() => null);
   if (!info || !info.managed) return;
-  if (document.querySelector('input[type="password"]')) return; // 로그인 화면은 login.js가
+  // 1.7.1: 배경이 "이 화면에서 시작 스크립트가 안 돌았다"고 보면 다시 넣음 → 두 번 돌지 않게 표시
+  if (window.__gwStart) return; window.__gwStart = Date.now();
+  // 로그인 화면은 login.js가. 1.7.1: 보이는 비밀번호 칸만 로그인 화면으로 봄 (숨은 비밀번호 변경 칸이 있으면 조용히 끝나 멈추던 것)
+  if ([...document.querySelectorAll('input[type="password"]')].some((el) => el.offsetParent !== null && !el.disabled)) { window.__gwStart = 0; return; }
   const frames = () => { const out = []; const walk = (w) => { try { void w.document; out.push(w); } catch (e) { return; } for (let i = 0; i < w.frames.length; i++) walk(w.frames[i]); }; walk(window); return out; };
   const q = (sel) => { for (const w of frames()) { try { const el = w.document.querySelector(sel); if (el) return el; } catch (e) {} } return null; };
   const ready = () => !!q("#custBtn input.btn_basic");

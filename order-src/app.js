@@ -1357,6 +1357,7 @@
   }
   // 그 시각에 센 재고 뒤로 그날 남은 매출 비율 (발주 마감 전 입력은 아침에 센 것으로 보고 1)
   const leftOf = (hh, d) => (hh <= ORDER_CUTOFF_H ? 1 : 1 - hourCum(d || TODAY, hh));
+  const ordCnt = (x) => Object.values(db["input." + x] || {}).filter((r) => r && num(r.o) > 0).length;
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
@@ -1397,7 +1398,8 @@
           let arr = 0, unknown = false;
           for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
             // 발주수량 칸이 생기기 전(10/20 전)에 한 발주는 앱이 몰라서 모름으로 (10/20 발주는 샐러드믹스 2·크림치즈 3이 전부라고 확인)
-            const known = db["input." + x] && x >= "2026-10-20";
+            // 11/12(F): 그날 input 키가 있어도 발주 칸이 3품목 미만이면 발주를 MIS에만 넣은 날로 보고 모름 (11/7·11/10·11/11처럼 발주 기록이 빠진 날의 입고를 "없음"으로 채점하던 문제). settings.orderGap = 발주 기록 빠진 날 목록, settings.orderOk = 적게 시켜도 기록이 맞는 날
+            const known = db["input." + x] && x >= "2026-10-20" && (ordCnt(x) >= 3 || x === "2026-10-20" || ((db.settings || {}).orderOk || []).includes(x)) && !((db.settings || {}).orderGap || []).includes(x);
             if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !known && dow(x) !== 0) unknown = true;
             arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
           }
@@ -1684,8 +1686,11 @@
     const by = new Map(); misItems().forEach((w) => { const v = w.vendor || "기타"; if (!by.has(v)) by.set(v, []); by.get(v).push(w); });
     return [...by].map(([v, ws]) => `[${v}] ${ws.length}개\n` + ws.sort((a, b) => a.name.localeCompare(b.name, "ko")).map((w) => `${w.name} ${w.q}${w.unit}`).join("\n")).join("\n\n");
   };
+  let misTick = 0;
   function renderMis() {
     const el = $("misBar"); if (!el) return;
+    clearTimeout(misTick); // 11/12: 기다리는 중이면 30초 뒤 다시 그림 (시트가 안 바뀌어도 시간 기준 상태가 바뀜)
+    if (db.misPush && db.misPush.date === TODAY && /pending|running/.test(db.misPush.status)) misTick = setTimeout(() => { if (!$("v-main").hidden) renderMis(); }, 30e3);
     if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
     el.hidden = false;
     const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, list = misItems();
@@ -1703,8 +1708,11 @@
     else st = agOn ? (ag.mode === "ondemand" ? `PC 대기 중 · 누르면 1~2분 안에 입력` : `PC 자동 대기 중 · ${hhmm(ag.at)} 확인${ag.grid ? "" : " · 주문등록 화면 아님"}`) : `PC 연결 안 됨${ag.at ? ` · 마지막 ${hhmm(ag.at)}` : ""}`;
     const busy = p && p.status === "running" && !stale; // 기다리는 중(pending)이어도 다시 누를 수 있게
     const failed = p && (p.status === "error" || stale); // 안 됐으면 MIS 직접 입력용 목록 복사 버튼
+    // 11/12: 실패·응답 없음이 아니어도 PC 꺼짐·확장 없음이거나 보낸 지 2분 넘게 안 끝나면 작은 [목록 복사]를 미리 보임 (6~13분 기다리지 않고 직접 넣을 수 있게)
+    const slow = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 2 * 60e3;
+    const copyCls = failed ? "" : !agOn || slow ? " soft" : null;
     el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      (failed && list.length ? `<button type="button" class="mis-copy" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
+      (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
       `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button></span>`;
     bindPin(el);
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));

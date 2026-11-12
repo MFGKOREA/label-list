@@ -10,6 +10,7 @@
   for (let t = 0; t < 5 && !visible(pw); t++) { pw = [...document.querySelectorAll('input[type="password"]')].find(visible) || null; if (!pw) await sleep(200); }
   const managed = await chrome.runtime.sendMessage({ q: "managed" }).then((r) => r && r.managed, () => false);
   if (!managed) return;
+  window.__gwLogin = "on"; // 1.7.1: 배경(bg.js)이 이 화면에서 스크립트가 돌았는지·어디까지 갔는지 살펴봄 (on → login / find → clicked / nomenu)
   const onGw = location.host.startsWith("gw.");
   if (!onGw) { if (pw) { say("MIS 로그인 화면 → GW로 다시 들어감"); chrome.runtime.sendMessage({ q: "toGw" }); } return; }
   if (!pw) { if (window === window.top) openMis(); return; }
@@ -28,6 +29,7 @@
   if (btn) btn.click();
   else if (pw.form) (pw.form.requestSubmit ? pw.form.requestSubmit() : pw.form.submit());
   else ["keydown", "keypress", "keyup"].forEach((type) => pw.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true })));
+  window.__gwLogin = "login";
   say("GW 로그인 시도");
 
   async function openMis() {
@@ -48,10 +50,12 @@
       return hits.sort((a, b) => visible(b) - visible(a))[0] || null;
     };
     let el = null;
+    window.__gwLogin = "find";
     for (let t = 0; t < 60 && !el; t++) { el = find(); if (!el) await sleep(250); }
-    if (!el) { say("GW에서 '경영정보' 메뉴를 못 찾음"); return; }
+    if (!el) { window.__gwLogin = "nomenu"; say("GW에서 '경영정보' 메뉴를 못 찾음"); return; }
     const target = el.closest("a, button, li, [onclick]") || el;
     target.click();
+    window.__gwLogin = "clicked";
     say(`GW → 경영정보(MIS) 열기 (${visible(el) ? "보이는 메뉴" : "접힌 메뉴"} · ${target.tagName.toLowerCase()})`);
   }
 })();
