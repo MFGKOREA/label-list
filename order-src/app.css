@@ -155,6 +155,8 @@ html, body { overflow-x: hidden; }
 .need.done { background: var(--ok-bg); color: var(--ok-ink); box-shadow: inset 0 0 0 1.5px var(--ok); }
 .need.done span, .need.enough span { opacity: 1; }
 .need.done b { font-size: 14px; }
+.need.done.low { background: var(--rose); color: var(--rose-ink); box-shadow: inset 0 0 0 1.5px var(--rose-line); }
+.need.done.low .lack { font-weight: 800; opacity: 1; }
 .need.need-idle.lbl b { font-size: 14px; }
 .need em.por { font-style: normal; font-size: 12px; font-weight: 700; opacity: .75; line-height: normal; }
 .c-tags { flex: none; display: flex; align-items: center; gap: 6px; }

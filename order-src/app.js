@@ -1879,7 +1879,13 @@
       else {
         const r = calc(it, win, s, i);
         if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (num(v.o) > 0) need = `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+        else if (num(v.o) > 0) {
+          // 앱 예상보다 적게 넣으면 표시 (11/12 KM): "발주완료"는 그대로, 아래 줄에 몇 개 적은지
+          const lack = r.packs > 0 ? r.orderQty - num(v.o) : 0;
+          need = lack > 1e-9
+            ? `<span class="need done low"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span><span class="lack">${r1(lack)}${esc(ou)} 덜 넣음</span></span>`
+            : `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+        }
         else if (!r.packs) {
           // 필요량 = 주말 영업까지 다 하고 이번 입고일(월)에 들어와야 할 양 = 필요(사용+안전재고) − 재고 − 입고예정. 발주 안 해도 되면 0
           need = `<span class="need enough"><b>충분</b><span>필요 0${esc(unit)}</span></span>`;
