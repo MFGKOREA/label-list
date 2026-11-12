@@ -13,7 +13,7 @@ g.post({ action: "set", key: "big", value: { t: "가".repeat(100000) } });
 const sh = kv(), del = sh.deleteRow.bind(sh); let boom = true;
 sh.deleteRow = (i) => { if (boom) { boom = false; throw new Error("삭제 중 멈춤(시험)"); } return del(i); };
 const r = g.post({ action: "set", key: "big", value: { t: "작음" } });
-ok(r.ok === false, "삭제 중 오류 → 저장 실패로 응답");
+ok(r.ok === true, "옛 행 삭제 중 오류 → 새 값은 썼으니 성공으로 응답");
 ok(kv().rows.filter((x) => x[0] === "big").length > 1, "옛 행과 새 행이 같이 남음");
 all = g.get({ api: "1" }).data;
 ok(all.big && all.big.t === "작음", "그래도 읽으면 새 값 (아래쪽 묶음)");
@@ -28,3 +28,10 @@ const a3 = g.post({ action: "append", key: "onhand", item: { t: "2026-11-12 11:0
 ok(a3.ok === false, "새 행 쓰기 오류 → 실패 응답");
 const a4 = g.post({ action: "append", key: "onhand", item: { t: "2026-11-12 11:02", k: "다음", s: 1 } });
 ok(a4.ok && a4.data.onhand.length === 152, "실패 뒤 다음 덧붙이기: 옛 기록 151건 + 1 (빈 목록에서 시작하지 않음)");
+// 4) 키 이름 constructor 거부, 깨진 값 위 merge 거부
+ok(g.post({ action: "set", key: "constructor", value: 1 }).ok === false, "키 이름 constructor 거부");
+ok(g.post({ action: "append", key: "onhand", item: { t: "z", k: "c", s: 1 } }).ok, "그 뒤에도 덧붙이기 정상");
+// 5) 조각 경계 글자 '=' 피함
+g.post({ action: "set", key: "eq", value: { t: "a".repeat(44990) + "=".repeat(30) + "b".repeat(100) } });
+ok(kv().rows.filter((x) => x[0] === "eq").every((x) => !/^[=+\-@']/.test(String(x[2]))), "조각이 = 로 시작하지 않음");
+ok(g.get({ api: "1" }).data.eq.t.length === 45120, "조각 나눠도 값 그대로");

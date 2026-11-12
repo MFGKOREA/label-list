@@ -82,7 +82,7 @@ function readAll_() {
   const last = sh.getLastRow();
   if (last < 2) return {};
   const rows = sh.getRange(2, 1, last - 1, 3).getValues();
-  const parts = {};
+  const parts = Object.create(null); // 키 이름이 constructor 등이어도 안 깨지게 (11/12)
   rows.forEach(([key, part, value]) => {
     if (!key) return;
     const p = Number(part) || 0;
@@ -103,7 +103,7 @@ function readKeys_(keys) {
   const sh = sheet_();
   const last = sh.getLastRow();
   if (last < 2) return {};
-  const at = {};
+  const at = Object.create(null);
   keys.forEach((k) => { at[k] = []; });
   sh.getRange(2, 1, last - 1, 1).getValues().forEach(([key], i) => { if (key && at[key]) at[key].push(i + 2); });
   const out = {};
@@ -131,11 +131,13 @@ function write_(key, value) {
     const json = JSON.stringify(value);
     const now = new Date();
     const rows = [];
-    for (let i = 0, p = 0; i < json.length || p === 0; i += CHUNK, p++) rows.push([key, p, json.slice(i, i + CHUNK), now]);
-    if (sh.getMaxRows() < last + rows.length) sh.insertRowsAfter(sh.getMaxRows(), last + rows.length - sh.getMaxRows());
+    // 조각 첫 글자가 = + - @ ' 숫자·공백이면 시트가 수식·숫자로 바꿀 수 있어 경계를 한 글자씩 앞으로 당김 (11/12)
+    for (let i = 0, p = 0; i < json.length || p === 0; p++) { let e = Math.min(json.length, i + CHUNK); while (e < json.length && e > i + 1 && /[=+\-@'\s\d]/.test(json[e])) e--; rows.push([key, p, json.slice(i, e), now]); i = e; if (!json.length) break; }
+    if (sh.getMaxRows() < last + rows.length) sh.insertRowsAfter(sh.getMaxRows(), last + rows.length - sh.getMaxRows() + 50); // 여유 50행
     sh.getRange(last + 1, 1, rows.length, 4).setValues(rows);
   }
-  for (let i = old.length - 1; i >= 0; i--) sh.deleteRow(old[i]); // 옛 행은 모두 새 행보다 위 → 아래에서부터 지우면 번호가 안 밀림
+  // 옛 행은 모두 새 행보다 위 → 아래에서부터 지우면 번호가 안 밀림. 새 값을 이미 썼으면 정리 실패는 성공으로 보고 다음 저장 때 정리 (11/12)
+  try { for (let i = old.length - 1; i >= 0; i--) sh.deleteRow(old[i]); } catch (err) { if (value === null || value === undefined) throw err; console.error("옛 행 정리 실패", err); }
 }
 
 // 객체끼리는 칸별로 합치고, null이면 지움. 배열·숫자·글자는 통째로 바꿈
@@ -199,7 +201,7 @@ function status_() {
   return { misPush: pick(all.misPush, ["date", "id", "at", "status", "startAt", "doneAt", "by"]), salesPush: pick(all.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(all.misAgent, ["at", "mode", "grid"]) };
 }
 const ACTIONS_ = { set: 1, append: 1, merge: 1, restore: 1 };
-const KEY_RE_ = /^[\w.\-|:가-힣 ]{1,120}$/; // 시트 키 이름: 글자·숫자·._-|: 공백만, 120자까지
+const KEY_RE_ = /^(?!(__proto__|constructor|prototype|toString|valueOf|hasOwnProperty)$)[\w.\-|:가-힣 ]{1,120}$/; // 시트 키 이름: 글자·숫자·._-|: 공백만, 120자까지
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -244,7 +246,9 @@ function doPost(e) {
       write_(body.key, list);
       out = { [body.key]: list };
     } else if (body.action === "merge") {
-      const merged = merge_(readKeys_([body.key])[body.key], body.patch || {});
+      const curM = readKeys_([body.key])[body.key];
+      if (broken_[body.key]) return json_({ ok: false, error: "기록을 읽지 못해 합치지 않았어요" }); // 11/12: 깨진 값 위에 바뀐 칸만 덮어쓰지 않게
+      const merged = merge_(curM, body.patch || {});
       write_(body.key, merged);
       out = { [body.key]: merged };
     } else if (body.action === "restore") {
@@ -254,6 +258,7 @@ function doPost(e) {
     } else {
       return json_({ ok: false, error: "알 수 없는 요청: " + body.action });
     }
+    try { SpreadsheetApp.flush(); } catch (err) { /* */ } // 버전을 올리기 전에 반영 (다른 읽기가 옛 값을 새 버전으로 캐시하지 않게)
     return json_({ ok: true, data: out, ver: bump_() });
   } catch (err) {
     console.error(err); // 자세한 내용은 Apps Script 실행 기록에만

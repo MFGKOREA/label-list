@@ -2203,7 +2203,9 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const wp = win.post;
     if (wp && wp.end === win.end && wp.today > win.today && wp.days > 0) {
       const cp = calc(it, wp, 0, 0);
-      if (!cp.none) {
+      // 입고 전에 잡힌 프랩 배치는 자르지 않음: 재료가 모자라면 배치가 입고 뒤로 밀릴 뿐 수요가 없어지지 않음 (11/12 검증 E)
+      const batchPre = ba && ba.notes.some((n) => n.d && n.d < wp.today);
+      if (!cp.none && !batchPre) {
         usePost = cp.use; ssPost = cp.ss; needPost = cp.need; usePre = Math.max(0, use - cp.use);
         preShort = Math.max(0, usePre - s - inc);
         if (short0 > needPost) { short = needPost; cut = short0 - needPost; }
@@ -2878,10 +2880,14 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const wipTxt = () => { const w = wipOf(it, v); return w ? `${w.why} +${r1(w.q / (it.box || 1))}${it.box ? "BOX" : esc(unit)}` : ""; };
     // 입고 전 부족 안내 (11/11): 이번 발주분은 입고일(해동 품목은 다음 날)부터 쓸 수 있어, 그 전에 모자랄 양은 발주해도 못 메움 → 발주량은 입고 뒤 쓸 양까지만. 잘랐을 때만 한 줄로 알림
     const cutTxt = () => {
-      if (preMode || offDay || !win.post) return "";
+      if (preMode || offDay || !win.post || num(v.o) > 0) return "";
       const e1 = estFor(it, v), s1 = e1 ? e1.v : availOf(it, v); if (!isFinite(s1)) return "";
       const r = calc(it, win, s1, inc); if (r.none || !(r.cut > 0.05)) return "";
-      const day = DOW[dow(win.post.today)], q = (x) => `${r1(x / (it.box || 1))}${it.box ? "BOX" : unit}`;
+      // 올림·묶음 때문에 발주량이 실제로 안 줄었으면 안 보임
+      const m0 = it.pk.mult || 1, p0 = r.short0 <= 0 ? 0 : m0 > 1 ? Math.max(Math.round(r.short0 / m0), Math.ceil((r.use - s1 - inc) / m0 - 1e-9), 0) : Math.ceil(r.short0 - 1e-9);
+      if (p0 <= r.packs) return "";
+      // 요일은 입고일 (해동 품목은 다음 날부터 씀)
+      const day = DOW[dow(win.deliv)] + (it.thaw ? "요일 입고분은 다음 날부터 써서," : ""), q = (x) => `${r1(x / (it.box || 1))}${it.box ? "BOX" : unit}`;
       return r.preShort > 0.05 ? `${day} 입고 전 ${q(r.preShort)} 모자랄 수 있음(발주로 못 메움)` : `${day} 입고 뒤 쓸 양만 발주`;
     };
     let tag = "";
