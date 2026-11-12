@@ -11,7 +11,18 @@
   setTimeout(() => { window.__misSalesBusy = false; }, T.budget + 150e3);
   const API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
   const STORE = "1345090";
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // 기다리기: 자동 창이 최소화·다른 창 아래에 있으면 크롬이 화면 타이머를 느리게 돌림(0.25초가 1초 이상, 5분 넘으면 1분에 한 번)
+  //  → 워커의 타이머로 잼(워커는 안 느려짐). 워커를 못 만들면(보안 설정 등) 예전처럼 화면 타이머로. 워커가 죽었을 때를 대비해 화면 타이머도 같이 걸어 둠
+  const sleep = (() => {
+    const plain = (ms) => new Promise((r) => setTimeout(r, ms));
+    try {
+      const w = new Worker(URL.createObjectURL(new Blob(["onmessage=function(e){setTimeout(function(){postMessage(e.data[0])},e.data[1])}"], { type: "text/javascript" })));
+      const cb = new Map(); let n = 0, dead = false;
+      w.onmessage = (e) => { const f = cb.get(e.data); if (f) { cb.delete(e.data); f(); } };
+      w.onerror = () => { dead = true; };
+      return (ms) => (dead ? plain(ms) : new Promise((r) => { const id = ++n; cb.set(id, r); w.postMessage([id, ms]); setTimeout(() => { if (cb.delete(id)) r(); }, ms + 2000); }));
+    } catch (e) { return plain; }
+  })();
   const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[,\s원]/g, "")); return isFinite(n) ? n : NaN; };
   // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
   const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
@@ -103,8 +114,8 @@
   };
   let replaced = false; // 그새 다른 요청으로 바뀜(폰에서 다시 누름) → 하던 일을 멈추고 시트는 건드리지 않음
   let progAt = 0, progQ = Promise.resolve();
-  const prog = (text) => { // 진행 상황을 폰에 (12초에 한 번, 조회를 막지 않게 뒤에서)
-    if (Date.now() - progAt < (T.progEvery || 12e3)) return; progAt = Date.now();
+  const prog = (text) => { // 진행 상황을 폰에 (20초에 한 번, 조회를 막지 않게 뒤에서)
+    if (Date.now() - progAt < (T.progEvery || 20e3)) return; progAt = Date.now();
     progQ = progQ.then(() => merge("salesPush", { prog: text, progAt: Date.now() })).then((d) => { if (d && d.salesPush && d.salesPush.id !== job.id) replaced = true; }, () => {});
   };
 

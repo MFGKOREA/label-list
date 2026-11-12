@@ -3500,7 +3500,13 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     try {
       // 누르기 직전 상태를 시트에서 다시 받아 봄 (다른 기기·PC가 그새 바꿨을 수 있음)
       //  (apiCall()을 쓰면 시트 버전만 맞춰져 다른 키 변경을 놓칠 수 있어 따로 받음. 못 받으면 가진 값으로)
-      try { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(), r = j && j.ok && j.data; if (r) { if (r.salesPush) { db.salesPush = r.salesPush; syncBase.salesPush = clone(r.salesPush); } else { delete db.salesPush; delete syncBase.salesPush; } if (r.misAgent) db.misAgent = r.misAgent; } } catch {}
+      //  옛 Apps Script는 값을 고쳐 쓰는 순간(지우고 다시 쓰는 사이) 그 칸이 잠깐 안 보임 → 도는 중인 요청이 안 보이면 한 번 더 받아 봄 (없는 줄 알고 새 요청으로 덮지 않게)
+      try {
+        const peek = async () => { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(); return j && j.ok && j.data; };
+        let r = await peek();
+        if (r && !r.salesPush && spLive(db.salesPush)) { await new Promise((ok) => setTimeout(ok, 1800)); r = (await peek()) || r; }
+        if (r) { if (r.salesPush) { db.salesPush = r.salesPush; syncBase.salesPush = clone(r.salesPush); } else { delete db.salesPush; delete syncBase.salesPush; } if (r.misAgent) db.misAgent = r.misAgent; }
+      } catch {}
       const p = db.salesPush, st = salesState(K);
       if (st.st === "run") { toast("이미 받는 중이에요"); return; }
       salesWant[K] = Date.now();
