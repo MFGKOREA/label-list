@@ -3438,68 +3438,125 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   // ---------- Forecast ----------
   let fcWeekStart = mondayOf(TODAY);
   // ---------- 실제 Gross를 MIS에서 가져오기 (폰 → PC, GW 전송과 같은 길) ----------
-  // [GW에서 가져오기] → 시트 salesPush pending {from, to} → PC 확장이 MIS 매출현황(MiscellaneousReport, 일자별)을 조회 → forecast[날짜].act를 채우고 결과를 salesPush에
-  function renderSales() {
-    const el = $("salesBar"); if (!el) return;
+  // ---------- Gross Sales · 메뉴 판매 불러오기 (11/12 안정화) ----------
+  //  [불러오기] → 시트 salesPush(pending) → PC 확장이 GW·MIS를 열고 mis-sales.js가 조회 → Gross는 forecast[날짜].act, 메뉴 판매는 menuDay.날짜에 넣고 결과를 salesPush에.
+  //  두 버튼이 시트의 한 칸(salesPush)을 같이 씀. 예전 문제:
+  //   · 15초만 지나면 "PC 응답 없음 · 다시 눌러 주세요"가 떴음(정상 작업은 30초~7분) → 다시 누르면 도는 중인 작업을 덮어씀
+  //   · 한쪽이 도는 중에 다른 쪽을 누르면 요청이 서로 덮어써져 뒤에 누른 건 아예 안 돎
+  //   · PC가 꺼져 있을 때 보낸 요청은 30분이 지나면 PC가 켜져도 안 받음("켜지면 가져와요"라고 해 놓고)
+  //  지금: 도는 중엔 그 버튼을 잠그고 진행 상황을 보여 줌 · 다른 쪽을 누르면 같은 요청에 덧붙여(also) PC가 같은 창에서 이어서 처리 ·
+  //        PC가 못 받은 요청은 PC가 살아난 걸 보면 앱이 다시 보냄(두 번까지) · 요청은 통째로 새로 씀(set), 덧붙이기만 merge
+  //  salesPush = { id, at, status, kind("menu"|"now"|없음=gross), from, to, also: { gross|menu: { from, to } }, parts: { gross|menu: { status, text, doneAt } }, cur, prog, re }
+  const SP = Object.assign({ pendMax: 6 * 60e3, runMax: 14 * 60e3, offMax: 6 * 3600e3, bgMax: 29 * 60e3, aliveWait: 5 * 60e3, alive: 20 * 60e3, tick: 20000, redraw: 15000, want: 15 * 60e3 }, window.__spTest || {}); // __spTest: 시험에서 시간을 줄여 씀
+  const agAlive = () => { const ag = db.misAgent || {}; return !!ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? SP.alive : 180000); };
+  const spKind = (p) => (p && p.kind) || "gross";
+  // 요청이 살아 있나: 읽는 중이면 14분(확장이 12분에 닫음), 기다리는 중이면 6분(PC가 꺼져 있으면 6시간까지 기다림)
+  const spLive = (p) => {
+    if (!p || !/pending|running/.test(p.status)) return false;
+    if (p.status === "running") return Date.now() - (p.startAt || p.at) < SP.runMax;
+    return Date.now() - p.at < (agAlive() ? SP.pendMax : SP.offMax);
+  };
+  const salesWant = {}; // 이 기기에서 누른 버튼 (kind → 누른 시각): 덧붙인 요청이 처리 안 된 채 끝나면 따로 다시 보냄
+  const salesReq = (K) => { const to = addDays(TODAY, -1); return K === "menu" ? { from: addDays(TODAY, -28), to } : { from: mondayOf(to), to }; };
+  function salesState(K) {
+    const p = db.salesPush; if (!p) return { st: "idle" };
+    const part = (p.parts || {})[K], mine = spKind(p) === K, queued = !!(p.also || {})[K];
+    if (part) return { st: part.status === "done" ? "ok" : "bad", at: part.doneAt, text: part.text || "" };
+    const live = spLive(p), age = Date.now() - p.at;
+    if (/pending|running/.test(p.status) && (mine || queued)) {
+      if (p.status === "pending") {
+        if (!agAlive()) return age < SP.offMax ? { st: "wait", text: "PC가 꺼져 있어요 · 켜지면 받아요" } : { st: "idle" };
+        if (age < SP.pendMax) return { st: "run", text: mine ? "PC가 GW·MIS 여는 중…" : "앞 작업 다음에 이어서 받아요" };
+        return (p.re || 0) < 2 ? { st: "run", text: "PC가 아직 못 받음 · 곧 다시 보내요" } : { st: "bad", text: "PC가 못 받았어요 · PC 크롬이 켜져 있는지 확인하고 다시 눌러 주세요", dead: true };
+      }
+      if (!live) return { st: "bad", text: "PC 응답 없음 · 다시 눌러 주세요", dead: true };
+      if ((p.cur || spKind(p)) === K) return { st: "run", text: K === "menu" ? `PC에서 날짜별 메뉴 판매 읽는 중…${p.prog ? " " + p.prog : ""}` : "PC에서 매출 읽는 중…" };
+      return { st: "run", text: "앞 작업 다음에 이어서 받아요" };
+    }
+    if (mine && p.status === "done") return { st: "ok", at: p.doneAt, text: p.text || "가져옴" };
+    if (mine && p.status === "error") return { st: "bad", at: p.doneAt, text: p.text || "" };
+    return { st: "idle" };
+  }
+  // 시트의 salesPush를 바로 고침 (다른 키처럼 "바뀐 칸만" 보내면 PC가 그새 쓴 칸과 섞이므로: 새 요청은 통째로, 덧붙이기만 merge)
+  async function salesSend(o) {
+    try {
+      const data = o.set ? await apiCall({ action: "set", key: "salesPush", value: o.set }) : await apiCall({ action: "merge", key: "salesPush", patch: o.merge });
+      db.salesPush = data.salesPush; syncBase.salesPush = clone(data.salesPush); delete pend.set.salesPush; delete pend.base.salesPush; savePend(); lsSave();
+      return true;
+    } catch (e) { toast("PC로 보내지 못했어요 · 인터넷을 확인하고 다시 눌러 주세요"); return false; }
+    finally { if (!$("v-forecast").hidden) renderSales(); }
+  }
+  const salesFresh = (K, re) => {
+    // 다른 종류의 최근 결과(12시간 안)는 들고 감: 한 칸을 같이 쓰므로 안 그러면 다른 버튼의 ✓가 사라짐
+    const prev = db.salesPush || {}, keep = {}, fresh = (x) => x && x.doneAt && Date.now() - x.doneAt < 12 * 3600e3;
+    Object.keys(prev.parts || {}).forEach((k) => { if (k !== K && fresh(prev.parts[k])) keep[k] = prev.parts[k]; });
+    if (!prev.parts && /done|error/.test(prev.status || "") && spKind(prev) !== K && fresh(prev)) keep[spKind(prev)] = { status: prev.status, doneAt: prev.doneAt, text: prev.text || "" };
+    return salesSend({ set: { id: Date.now(), at: Date.now(), status: "pending", ...(K === "menu" ? { kind: "menu" } : {}), ...salesReq(K), ...(re ? { re } : {}), ...(Object.keys(keep).length ? { parts: keep } : {}) } });
+  };
+  let salesBusy = false;
+  async function salesGo(K) {
+    if (salesBusy || !(await unlock())) return;
+    salesBusy = true;
+    try {
+      // 누르기 직전 상태를 시트에서 다시 받아 봄 (다른 기기·PC가 그새 바꿨을 수 있음)
+      //  (apiCall()을 쓰면 시트 버전만 맞춰져 다른 키 변경을 놓칠 수 있어 따로 받음. 못 받으면 가진 값으로)
+      try { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(), r = j && j.ok && j.data; if (r) { if (r.salesPush) { db.salesPush = r.salesPush; syncBase.salesPush = clone(r.salesPush); } else { delete db.salesPush; delete syncBase.salesPush; } if (r.misAgent) db.misAgent = r.misAgent; } } catch {}
+      const p = db.salesPush, st = salesState(K);
+      if (st.st === "run") { toast("이미 받는 중이에요"); return; }
+      salesWant[K] = Date.now();
+      const other = p && spLive(p) && agAlive() && spKind(p) !== K && /^(gross|menu)$/.test(K);
+      const ok = other ? await salesSend({ merge: { also: { [K]: { ...salesReq(K), at: Date.now() } }, ...((p.parts || {})[K] ? { parts: { [K]: null } } : {}) } }) : await salesFresh(K);
+      if (!ok) { delete salesWant[K]; return; }
+      misFastUntil = Date.now() + (K === "menu" || other ? 13 : 6) * 60e3;
+      toast(other ? "앞 작업 다음에 이어서 받아요" : !agAlive() ? "보냈어요 · PC가 켜지면 받아요" : K === "menu" ? "PC로 보냈어요 · 4주치면 5~7분 걸려요" : "PC로 보냈어요 · 1~2분 뒤 채워져요");
+    } finally { salesBusy = false; }
+  }
+  // 못 받은 요청 다시 보내기 · 덧붙인 요청이 처리 안 된 채 끝났으면 따로 보내기 (20초마다, 화면이 어디든)
+  let salesTicking = false;
+  async function salesTick() {
+    if (salesTicking || salesBusy || !API || document.hidden) return;
+    const p = db.salesPush; if (!p) return;
+    salesTicking = true;
+    try {
+      const age = Date.now() - p.at, ag = db.misAgent || {};
+      if (p.status === "pending" && agAlive() && (p.re || 0) < 2 && /^(gross|menu)$/.test(spKind(p))) {
+        // PC가 살아 있는데 6분 넘게 안 받음(PC가 5분 넘게 조용함) 또는 확장이 버리는 29분을 넘김 → 같은 요청을 새로
+        if ((age > SP.pendMax && Date.now() - ag.at > SP.aliveWait) || age > SP.bgMax) {
+          const also = p.also || {}, K = spKind(p);
+          if (await salesFresh(K, (p.re || 0) + 1)) { misFastUntil = Date.now() + 13 * 60e3; for (const k of Object.keys(also)) if (/^(gross|menu)$/.test(k) && k !== K) await salesSend({ merge: { also: { [k]: also[k] } } }); }
+        }
+      } else if (/done|error/.test(p.status)) {
+        // 덧붙였는데 PC가 못 보고 끝남 → 그 종류만 새로 (누른 지 15분 안일 때만)
+        const K = Object.keys(salesWant).find((k) => Date.now() - salesWant[k] < SP.want && !(p.parts || {})[k] && spKind(p) !== k && (p.doneAt || 0) > salesWant[k]);
+        if (K) { delete salesWant[K]; if (await salesFresh(K)) misFastUntil = Date.now() + 13 * 60e3; }
+        Object.keys(salesWant).forEach((k) => { if ((p.parts || {})[k] || (spKind(p) === k && (p.doneAt || 0) > salesWant[k])) delete salesWant[k]; });
+      }
+    } finally { salesTicking = false; }
+  }
+  setInterval(salesTick, SP.tick);
+  const SALES_UI = {
+    gross: { bar: "salesBar", go: "salesGo", title: "Gross Sales 불러오기", idle: () => { const r = salesReq("gross"); return `(${mmdd(r.from)} ~ ${mmdd(r.to)})`; } },
+    menu: { bar: "menuBar", go: "menuGo", title: "메뉴 판매 불러오기", idle: () => `요일별 메뉴 쏠림 → 주말 보정 · 최근 4주 중 ${Object.keys(db).filter((k) => k.startsWith("menuDay.") && k.slice(8) >= addDays(TODAY, -28)).length}일 받음` },
+  };
+  function renderSalesBar(K) {
+    const U = SALES_UI[K], el = $(U.bar); if (!el) return;
     if (!API) { el.hidden = true; return; }
     el.hidden = false;
-    renderMenuSales();
-    const ag = db.misAgent || {}, p = db.salesPush && db.salesPush.kind !== "menu" ? db.salesPush : null;
-    const agOn = ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? 20 * 60e3 : 180000);
-    const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    // 매출 조회는 15초 넘게 응답 없으면 버튼 잠금 자동 해제 (끼임 방지)
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 15000;
-    let st, cls = "";
-    if (p && p.status === "pending" && !stale) { st = agOn ? "PC가 MIS 매출현황 여는 중…" : "PC가 꺼져 있어 기다리는 중"; cls = "run"; }
-    else if (p && p.status === "running" && !stale) { st = "PC에서 매출 읽는 중…"; cls = "run"; }
-    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} ${p.text || "가져옴"}`; cls = "ok"; }
-    else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 못 가져옴 · 눌러서 보기`; cls = "bad"; }
-    else if (stale) { st = "⚠ PC 응답 없음 · 다시 눌러 주세요"; cls = "bad"; }
-    else { const to = addDays(TODAY, -1); st = `(${mmdd(mondayOf(to))} ~ ${mmdd(to)})`; } // 이번 주 월요일 ~ 어제
-    el.innerHTML = `<div class="mis-t"><b>Gross Sales 불러오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="salesGo"${cls === "run" ? " disabled" : ""}>불러오기</button></span>`;
+    const s = salesState(K), hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const one = (t) => String(t || "").split("\n")[0];
+    const st = s.st === "idle" ? U.idle() : s.st === "ok" ? `✓ ${s.at ? hhmm(s.at) + " " : ""}${one(s.text) || "가져옴"}` : s.st === "bad" ? (s.dead ? `⚠ ${s.text}` : `⚠ ${s.at ? hhmm(s.at) + " " : ""}못 가져옴 · 눌러서 보기`) : s.text;
+    const cls = { run: "run", ok: "ok", bad: "bad", wait: "", idle: "" }[s.st], tap = (s.st === "bad" && !s.dead) || (s.st === "ok" && /\n| · /.test(s.text || "") && (s.text || "").length > 28);
+    const html = `<div class="mis-t"><b>${U.title}</b><span class="mis-s ${cls}${tap ? " tap" : ""}">${esc(st)}</span></div>` +
+      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="${U.go}"${s.st === "run" ? " disabled" : ""}>${s.st === "run" ? "받는 중" : "불러오기"}</button></span>`;
+    if (el.__html === html && el.__text === (s.text || "")) return; // 그대로면 다시 그리지 않음 (누르던 버튼이 바뀌어 눌림이 씹히지 않게)
+    el.__html = html; el.__text = s.text || ""; el.innerHTML = html;
     bindPin(el);
-    el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
-    el.querySelector("#salesGo").addEventListener("click", async () => {
-      if (!(await unlock())) return;
-      if (db.salesPush && db.salesPush.kind === "menu" && /pending|running/.test(db.salesPush.status) && Date.now() - (db.salesPush.startAt || db.salesPush.at) < 15000) { toast("메뉴 판매 불러오기가 끝난 뒤에 눌러 주세요"); return; }
-      const to = addDays(TODAY, -1), from = mondayOf(to);
-      setKey("salesPush", { id: Date.now(), at: Date.now(), status: "pending", from, to });
-      misFastUntil = Date.now() + 180000;
-      setTimeout(() => { if (!$("v-forecast").hidden) renderSales(); }, 15100);
-      toast(agOn ? "PC로 보냈어요 · 1~2분 뒤 채워져요" : "보냈어요 · PC가 켜지면 가져와요");
-    });
+    el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(s.text || ""));
+    el.querySelector("#" + U.go).addEventListener("click", () => salesGo(K));
   }
-  // [메뉴 판매 불러오기] → salesPush {kind: "menu", 최근 4주 ~ 어제} → PC가 MIS 메뉴별 매출현황을 하루씩 조회 → menuDay.날짜 (이미 받은 날은 건너뜀)
-  //  날짜별 메뉴 판매로 주말에 몰리는 메뉴(플래터·브런치)를 알고, 레시피로 품목마다 주말 배수를 계산
-  function renderMenuSales() {
-    const el = $("menuBar"); if (!el) return;
-    if (!API) { el.hidden = true; return; }
-    el.hidden = false;
-    const p = db.salesPush && db.salesPush.kind === "menu" ? db.salesPush : null;
-    const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 15000;
-    const n = Object.keys(db).filter((k) => k.startsWith("menuDay.") && k.slice(8) >= addDays(TODAY, -28)).length;
-    let st, cls = "";
-    if (p && p.status === "pending" && !stale) { st = "PC가 MIS 메뉴별 매출현황 여는 중…"; cls = "run"; }
-    else if (p && p.status === "running" && !stale) { st = "PC에서 날짜별 메뉴 판매 읽는 중…"; cls = "run"; }
-    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} ${p.text || "가져옴"}`; cls = "ok"; }
-    else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 못 가져옴 · 눌러서 보기`; cls = "bad"; }
-    else if (stale) { st = "⚠ PC 응답 없음 · 다시 눌러 주세요"; cls = "bad"; }
-    else st = `요일별 메뉴 쏠림 → 주말 보정 · 최근 4주 중 ${n}일 받음`;
-    el.innerHTML = `<div class="mis-t"><b>메뉴 판매 불러오기</b><span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="menuGo"${cls === "run" ? " disabled" : ""}>불러오기</button></span>`;
-    bindPin(el);
-    el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
-    el.querySelector("#menuGo").addEventListener("click", async () => {
-      if (!(await unlock())) return;
-      if (db.salesPush && /pending|running/.test(db.salesPush.status) && Date.now() - (db.salesPush.startAt || db.salesPush.at) < 15000) { toast("Gross 불러오기가 끝난 뒤에 눌러 주세요"); return; }
-      setKey("salesPush", { id: Date.now(), at: Date.now(), status: "pending", kind: "menu", from: addDays(TODAY, -28), to: addDays(TODAY, -1) });
-      misFastUntil = Date.now() + 300000;
-      setTimeout(() => { if (!$("v-forecast").hidden) renderMenuSales(); }, 15100);
-      toast("PC로 보냈어요 · 처음엔 4주치라 2~3분 걸려요");
-    });
-  }
+  function renderSales() { renderSalesBar("gross"); renderSalesBar("menu"); }
+  // 받는 중일 때는 15초마다 다시 그림 (걸린 시간에 따라 글이 바뀜)
+  setInterval(() => { const p = db.salesPush; if (p && /pending|running/.test(p.status) && !$("v-forecast").hidden && !document.hidden) renderSales(); }, SP.redraw);
   function renderForecast() {
     renderSales();
     const sel = $("wSel");

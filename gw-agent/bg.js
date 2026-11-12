@@ -1,4 +1,4 @@
-// 배경 (1.7.2 — 11/12: 자동 창을 최소화하지 않고 작은 창으로 맨 위에. 아래에 깔리면 크롬이 느리게 돌려 멈췄음 / 1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
+// 배경 (1.7.3 — 11/12: 매출 요청은 6시간까지 받고, 새 매출 요청이 오면 옛 창을 바로 닫고, 오류를 적을 때 다른 칸을 안 지움 / 1.7.2 — 11/12: 자동 창을 최소화하지 않고 작은 창으로 맨 위에. 아래에 깔리면 크롬이 느리게 돌려 멈췄음 / 1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
 //  1.7.0 그대로: 평소엔 창 없음. 폰에서 [GW 전송]·[Gross 불러오기]를 누르면 그때 최소화된 창 하나만 열어 GW 로그인 → 경영정보 → MIS → 입력·저장 → 창 닫음.
 //               한 번 누른 요청은 한 번만 시도. 매장 시간(08~22시)엔 3초마다, 그 밖엔 30초마다 전송 상태만 확인.
 //  1.7.1 고친 것
@@ -25,6 +25,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const within = (p, ms, fallback) => Promise.race([p, sleep(ms).then(() => fallback)]);
 const netGet = async (url, ms = 15e3) => { const c = new AbortController(), t = setTimeout(() => c.abort(), ms); try { return await (await fetch(url, { signal: c.signal })).json(); } finally { clearTimeout(t); } };
 const post = (key, value) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25e3); return fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }), signal: c.signal }).catch(() => {}).finally(() => clearTimeout(t)); };
+// 바뀐 칸만 보냄 (1.7.3): 매출 요청(salesPush)에 오류를 적을 때 종류·기간·먼저 끝난 결과(parts)를 지우지 않게
+const postMerge = (key, patch) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25e3); return fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "merge", key, patch }), signal: c.signal }).catch(() => {}).finally(() => clearTimeout(t)); };
 const readStatus = async () => { const v = await netGet(API + "?api=1&status=1&t=" + Date.now()); return (v && (v.status || v.data)) || {}; };
 
 // ---- 저장소 읽고-고쳐-쓰기를 한 줄로 (겹쳐 쓰면 나중 것이 앞의 것을 지움) ----
@@ -104,7 +106,7 @@ async function fail(job, why) {
     if (same && p.status === "pending") await post("misPush", { ...p, status: "error", doneAt: now, text });
   } else if (job.kind === "sales") {
     const sp = d.salesPush || {};
-    if ("s" + sp.id === job.id && /pending|running/.test(sp.status)) await post("salesPush", { ...sp, status: "error", doneAt: now, text: `PC가 ${sec}초 만에 멈춤 · 멈춘 곳: ${why}` });
+    if ("s" + sp.id === job.id && /pending|running/.test(sp.status)) await postMerge("salesPush", { status: "error", doneAt: now, text: `PC가 ${sec}초 만에 멈춤 · 멈춘 곳: ${why}`, cur: null, prog: null });
   }
   return endJob(`안 됨 (${why}) → 창 닫음`);
 }
@@ -317,7 +319,7 @@ async function tickOnce(why) {
   }
   if (!job && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); post("misAgent", { at: now, mode: "ondemand", ver: VER }); } // 폰에 "PC 대기 중"
   const orderWaiting = p.date === ymd() && p.status === "pending" && now - (p.at || 0) < 30 * 60e3;
-  const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 30 * 60e3;
+  const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 6 * 3600e3; // 1.7.3: 매출 요청은 6시간까지 받음 (PC가 꺼져 있다 켜져도. 예전엔 30분이 지나면 버림)
 
   if (!job) {
     const req = orderWaiting ? { kind: "order", id: "o" + p.id, msg: "폰 전송 받음 → GW·MIS 열기" } : salesWaiting ? { kind: "sales", id: "s" + sp.id, msg: "Gross 불러오기 받음 → GW·MIS 열기" } : null;
@@ -349,7 +351,8 @@ async function tickOnce(why) {
   if (job.kind === "sales") {
     const same = "s" + sp.id === job.id;
     if (same && /done|error/.test(sp.status) && (sp.doneAt || 0) > job.openedAt) return endJob(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`);
-    if (age > L.sales) { if (same && /pending|running/.test(sp.status)) await post("salesPush", { ...sp, status: "error", doneAt: now, text: `PC가 12분 안에 못 끝냄 · 멈춘 곳: ${where()}` }); return endJob("매출 시간 초과 → 창 닫음"); }
+    if (!same && sp.id && sp.status === "pending") return endJob("새 매출 요청이 들어옴 → 이 창 닫고 새로"); // 1.7.3: 예전엔 12분을 다 기다린 뒤에야 새 요청을 받음
+    if (age > L.sales) { if (same && /pending|running/.test(sp.status)) await postMerge("salesPush", { status: "error", doneAt: now, text: `PC가 12분 안에 못 끝냄 · 멈춘 곳: ${where()}`, cur: null, prog: null }); return endJob("매출 시간 초과 → 창 닫음"); }
     if (/^fail:/.test(why || "")) return fail(job, String(why).slice(5));
     if (job.stage !== "run") return watch(job, now, L);
   }

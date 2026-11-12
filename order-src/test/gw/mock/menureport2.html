@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>메뉴별매출현황</title><script src="jquery.js"></script></head><body>
+<!-- 가짜 MIS 메뉴별 매출현황 (시험대용): 조회를 진짜 요청($.ajax → q/menu)으로 보냄. 응답 지연·빈 날·늦은 응답은 시험대가 정함 -->
+<input id="sDate" class="easyui-datebox" value="2026-10-25"><input id="eDate" class="easyui-datebox" value="2026-10-25">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="dataGrid1"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: [[{ field: "NM_CLS2", title: "중분류" }, { field: "NM_MENU", title: "소분류" }, { field: "QT_SALE", title: "판매수량" }, { field: "AM_SALE", title: "판매금액" }]] }; };
+$("#dataGrid1").data("datagrid", 1);
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  $.ajax({ url: "q/menu", data: { day: $("#sDate").val() }, dataType: "json", success: function (rows) { $("#dataGrid1").data("dg", { rows: rows }); } });
+}
+</script></body></html>

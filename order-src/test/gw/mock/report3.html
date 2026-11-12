@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>MiscellaneousReport</title><script src="jquery.js"></script></head><body>
+<!-- 가짜 MIS MiscellaneousReport (시험대용, 표가 두 개인 화면): 합계 표가 먼저 채워지고 일자별 표는 요청이 끝난 뒤 -->
+<input id="sDate" class="easyui-datebox" value="2026-10-25"><input id="eDate" class="easyui-datebox" value="2026-10-25">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
+<label><input type="radio" name="opt" value="T" checked>합계</label><label><input type="radio" name="opt" value="D" id="optD">일자별</label>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="sumGrid"></table><table id="dataGrid1"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows;
+  if (cmd === "options") return this.attr("id") === "sumGrid" ? { columns: [[{ field: "NM", title: "구분" }, { field: "AM", title: "금액" }]] } : { columns: [[{ field: "DT_SALE", title: "영업일자" }, { field: "AM_NET", title: "Net Sales" }, { field: "AM_GROSS", title: "Gross Sales" }]] }; };
+$("#sumGrid").data("datagrid", 1); $("#dataGrid1").data("datagrid", 1);
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var daily = document.getElementById("optD").checked;
+  setTimeout(function () { $("#sumGrid").data("dg", { rows: [{ NM: "매출 합계", AM: "123,456" }, { NM: "객수", AM: "77" }] }); }, 80);
+  $.ajax({ url: "q/gross", data: { from: $("#sDate").val(), to: $("#eDate").val(), daily: daily ? 1 : 0 }, dataType: "json", success: function (rows) { $("#dataGrid1").data("dg", { rows: rows }); } });
+}
+</script></body></html>
