@@ -534,8 +534,9 @@ html, body { overflow-x: hidden; }
 .risk86 button { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
 .risk86 button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .risk86 button em { display: block; font-style: normal; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
-.risk86 button small { flex: none; display: grid; justify-items: end; font-size: 18px; font-weight: 800; line-height: normal; color: var(--rose-ink); }
-.risk86 button small::before { content: "86 가능성"; font-size: 12px; font-weight: 700; letter-spacing: -0.03em; opacity: .85; }
+/* 11/12 KM: 퍼센트 대신 "86 위험" + 바닥날 때(시간), 아래 줄에 사유 */
+.risk86 button small { flex: none; display: grid; justify-items: end; gap: 1px; font-size: 14px; font-weight: 800; line-height: normal; color: var(--rose-ink); letter-spacing: -0.03em; white-space: nowrap; }
+.risk86 button small i { font-style: normal; font-size: 12px; font-weight: 800; color: #fff; background: var(--rose-ink); border-radius: 6px; padding: 2px 6px; }
 .cell.flash { box-shadow: inset 0 0 0 2px var(--rose-ink); transition: box-shadow .3s; }
 
 
@@ -3115,7 +3116,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b></div>` +
-        rk.map((x) => `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${esc(x.when)} 부족 · 재고 ${r1(x.have)}${esc(x.it.pk.stock || "")}</em></span><small>${Math.min(99, Math.round(x.p * 100))}%</small></button>`).join("") + `</div>`);
+        rk.map((x) => { const u = esc(unitKo(x.it.pk.stock)); return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)}${u} · ${DOW[dow(x.out)]} 입고까지 ${r1(x.use)}${u} 필요</em></span><small><i>86 위험</i>${esc(x.when)}</small></button>`; }).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
