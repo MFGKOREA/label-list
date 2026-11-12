@@ -71,8 +71,9 @@ async function world(variant, sc) {
       if (!P.job && now - P.beat > (sc.beatEvery || 600e3)) { P.beat = now; post("misAgent", { at: now, mode: "ondemand", ver: "1.7.0" }); }
       if (!P.job) {
         if (sc.pcDeaf) continue; // 켜져 있지만 요청을 못 받는 PC (확장이 멈춤)
+        if (sc.skipFirst && sp.status === "pending" && !P.skipped) { P.skipped = sp.id; P.tried[sp.id] = 1; continue; } // 첫 요청만 놓침 (다음 요청부터는 받음)
         if (!(sp.status === "pending" && now - (sp.at || 0) < P.waitMax) || P.tried[sp.id]) continue;
-        P.tried[sp.id] = 1; P.job = { id: sp.id, openedAt: now, page: null }; P.opened++; log.push(`PC: 요청 ${String(sp.id).slice(-5)} 받음 → 창 엶`);
+        P.tried[sp.id] = 1; P.job = { id: sp.id, openedAt: now, page: null }; P.opened++; post("misAgent", { at: now, mode: "ondemand", ver: "1.7.0", job: "sales", step: "Gross 불러오기 받음 → GW·MIS 열기", stepAt: now }); log.push(`PC: 요청 ${String(sp.id).slice(-5)} 받음 → 창 엶`);
         const job = P.job;
         (async () => {
           await sleep(P.open); // GW 로그인 → MIS 첫 화면까지 걸리는 시간
@@ -196,7 +197,7 @@ const SC = {
     const good = range(from, YDAY).filter((x) => (d.forecast || {})[x] && d.forecast[x].act === String(grossOf(x))).length;
     return { pass: sp.status === "done" && good === 5, note: `${sp.status} · 맞게 들어간 날 ${good}/5 · ${(t / 1000).toFixed(1)}초 · "${String(sp.text).slice(0, 50)}"` };
   } },
-  P: { name: "앱: PC는 켜져 있는데 요청을 못 받음(확장 멈춤) → 두 번 다시 보내고, 그래도 안 되면 분명히 알리나", sc: { pcDeaf: true, spTest: { tick: 600, redraw: 600, pendMax: 2000, aliveWait: 1500, bgMax: 60000 } }, run: async (w) => {
+  P: { name: "앱: PC는 켜져 있는데 요청을 못 받음(확장 멈춤) → 두 번 다시 보내고, 그래도 안 되면 분명히 알리나", sc: { pcDeaf: true, spTest: { tick: 600, redraw: 600, pendMax: 60000, quickMax: 2000, aliveWait: 60000, bgMax: 60000 } }, run: async (w) => {
     const a = await w.openApp(); await a.pressGross(); await sleep(1200); const s1 = await a.gross();
     await sleep(11000); const s2 = await a.gross(), sp = w.full().salesPush;
     return { pass: sp.re === 2 && /못 받았어요/.test(s2.text) && s2.disabled === false && !/응답 없음/.test(s1.text), note: `1초 때 "${s1.text}" · 12초 때 "${s2.text}" (버튼 ${s2.disabled ? "잠김" : "열림"}) · 다시 보낸 횟수 ${sp.re}` };
@@ -204,6 +205,12 @@ const SC = {
   Q: { name: "메뉴: 보고서 화면에 끝나지 않는 요청(세션 확인 등)이 늘 떠 있음", sc: { pages: { "menureport2.html": "menureport4.html" }, menu: (day) => (day === addDays(YDAY, -3) ? { empty: true } : null) }, run: async (w) => {
     const from = addDays(YDAY, -9), days = range(from, YDAY); w.request({ kind: "menu", from, to: YDAY }); const t = await w.waitDone(90e3); const d = w.full(), c = menuCheck(d, days, [addDays(YDAY, -3)]);
     return { pass: d.salesPush.status === "done" && c.ok === 10, note: `${d.salesPush.status} · 맞음 ${c.ok}/10 · ${(t / 1000).toFixed(1)}초 · "${String(d.salesPush.text).slice(0, 60)}"` };
+  } },
+  R: { name: "앱: PC가 첫 요청만 놓침(실제 11/12 21:55 사례) → 앱이 알아채 다시 보내 받아 오나", sc: { limit: 60e3, spTest: { tick: 600, redraw: 600, quickMax: 2500 } }, mk: () => ({ skipFirst: true }), run: async (w) => {
+    const a = await w.openApp(); await a.pressGross(); await sleep(1500); const s1 = await a.gross();
+    const t = await w.waitDone(40e3, (d) => (d.salesPush || {}).status === "done" && !w.P.job); await sleep(1200); const end = await a.gross(), d = w.full();
+    const good = Object.keys(d.forecast || {}).filter((x) => d.forecast[x].act === String(grossOf(x))).length;
+    return { pass: t >= 0 && good >= 1 && d.salesPush.re === 1 && /^✓/.test(end.text), note: `1.5초 때 "${s1.text}" · ${t < 0 ? "40초 안에 안 받음" : (t / 1000).toFixed(0) + "초 만에 받음"} · 다시 보낸 횟수 ${d.salesPush.re || 0} · 끝 "${end.text.slice(0, 36)}" · 받은 날 ${good}` };
   } },
 };
 const out = [];

@@ -2442,9 +2442,12 @@
   //  지금: 도는 중엔 그 버튼을 잠그고 진행 상황을 보여 줌 · 다른 쪽을 누르면 같은 요청에 덧붙여(also) PC가 같은 창에서 이어서 처리 ·
   //        PC가 못 받은 요청은 PC가 살아난 걸 보면 앱이 다시 보냄(두 번까지) · 요청은 통째로 새로 씀(set), 덧붙이기만 merge
   //  salesPush = { id, at, status, kind("menu"|"now"|없음=gross), from, to, also: { gross|menu: { from, to } }, parts: { gross|menu: { status, text, doneAt } }, cur, prog, re }
-  const SP = Object.assign({ pendMax: 6 * 60e3, runMax: 14 * 60e3, offMax: 6 * 3600e3, bgMax: 29 * 60e3, aliveWait: 5 * 60e3, alive: 20 * 60e3, tick: 20000, redraw: 15000, want: 15 * 60e3 }, window.__spTest || {}); // __spTest: 시험에서 시간을 줄여 씀
+  const SP = Object.assign({ pendMax: 6 * 60e3, runMax: 14 * 60e3, offMax: 6 * 3600e3, bgMax: 29 * 60e3, aliveWait: 5 * 60e3, quickMax: 150e3, alive: 20 * 60e3, tick: 20000, redraw: 15000, want: 15 * 60e3 }, window.__spTest || {}); // __spTest: 시험에서 시간을 줄여 씀
   const agAlive = () => { const ag = db.misAgent || {}; return !!ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? SP.alive : 180000); };
   const spKind = (p) => (p && p.kind) || "gross";
+  // PC가 이 요청을 받아 움직이는 중인가: 확장은 창을 열면 바로 단계 기록(misAgent.step·stepAt)을 남김. 요청 뒤로 기록이 없으면 PC가 조용한 것
+  //  (11/12 실제: PC가 켜져 있고 신호도 오는데 요청을 10분 넘게 안 받음 → 새로 보내자 바로 받음)
+  const pcWorking = (p) => { const ag = db.misAgent || {}; return (ag.stepAt || 0) > p.at - 5000 || (!!ag.job && (ag.at || 0) > p.at); };
   // 요청이 살아 있나: 읽는 중이면 14분(확장이 12분에 닫음), 기다리는 중이면 6분(PC가 꺼져 있으면 6시간까지 기다림)
   const spLive = (p) => {
     if (!p || !/pending|running/.test(p.status)) return false;
@@ -2461,7 +2464,7 @@
     if (/pending|running/.test(p.status) && (mine || queued)) {
       if (p.status === "pending") {
         if (!agAlive()) return age < SP.offMax ? { st: "wait", text: "PC가 꺼져 있어요 · 켜지면 받아요" } : { st: "idle" };
-        if (age < SP.pendMax) return { st: "run", text: mine ? "PC가 GW·MIS 여는 중…" : "앞 작업 다음에 이어서 받아요" };
+        if (age < SP.pendMax && !(age > SP.quickMax && !pcWorking(p))) return { st: "run", text: mine ? "PC가 GW·MIS 여는 중…" : "앞 작업 다음에 이어서 받아요" };
         return (p.re || 0) < 2 ? { st: "run", text: "PC가 아직 못 받음 · 곧 다시 보내요" } : { st: "bad", text: "PC가 못 받았어요 · PC 크롬이 켜져 있는지 확인하고 다시 눌러 주세요", dead: true };
       }
       if (!live) return { st: "bad", text: "PC 응답 없음 · 다시 눌러 주세요", dead: true };
@@ -2521,8 +2524,8 @@
     try {
       const age = Date.now() - p.at, ag = db.misAgent || {};
       if (p.status === "pending" && agAlive() && (p.re || 0) < 2 && /^(gross|menu)$/.test(spKind(p))) {
-        // PC가 살아 있는데 6분 넘게 안 받음(PC가 5분 넘게 조용함) 또는 확장이 버리는 29분을 넘김 → 같은 요청을 새로
-        if ((age > SP.pendMax && Date.now() - ag.at > SP.aliveWait) || age > SP.bgMax) {
+        // PC가 살아 있는데: 2분 반이 지나도 받았다는 기록이 없음 / 6분 넘게 안 받고 PC가 5분 넘게 조용함 / 확장이 버리는 29분을 넘김 → 같은 요청을 새로
+        if ((age > SP.quickMax && !pcWorking(p)) || (age > SP.pendMax && Date.now() - ag.at > SP.aliveWait) || age > SP.bgMax) {
           const also = p.also || {}, K = spKind(p);
           if (await salesFresh(K, (p.re || 0) + 1)) { misFastUntil = Date.now() + 13 * 60e3; for (const k of Object.keys(also)) if (/^(gross|menu)$/.test(k) && k !== K) await salesSend({ merge: { also: { [k]: also[k] } } }); }
         }
