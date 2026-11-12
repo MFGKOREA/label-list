@@ -1864,8 +1864,6 @@
   // 사전발주: 고른 날이 앞날이면 오늘 센 품목도 그날까지 예상, 오늘이면 안 센 품목만 예상
   const estFor = (it, v) => (!preMode ? null : pDay() === TODAY && counted(v) ? null : estStock(it, pDay()));
   // 맨 위 "발주 필요" 칸 순서: 0 발주필요 → 1 부족·여유(한 묶음) → 3 발주완료(맨 아래), -1 = 위로 안 올림
-  // 단위를 우리말로 (11/12 KM: "예상 −26팩"): PK → 팩, BOX → 박스, EA → 개, 나머지(kg·단 등)는 그대로
-  const unitKo = (u) => ({ PK: "팩", BOX: "박스", EA: "개", CAN: "캔" })[String(u || "").toUpperCase()] || u || "";
   const pinRank = (it, win, v) => {
     if (preMode) {
       const pc = preCalc(it, v, pDay()); return pc.r && pc.r.packs > 0 ? 0 : -1;
@@ -1909,7 +1907,7 @@
           // 앱 예상보다 적게 넣으면 표시 (11/12 KM): "발주완료"는 그대로, 아래 줄에 몇 개 적은지
           const lack = r.packs > 0 ? r.orderQty - num(v.o) : 0;
           need = lack > 1e-9
-            ? `<span class="need done low"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span><span class="lack">예상 −${r1(lack)}${esc(unitKo(ou))}</span></span>`
+            ? `<span class="need done low"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span><span class="lack">예상 −${r1(lack)}${esc(ou)}</span></span>`
             : `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
         }
         else if (!r.packs) {
@@ -2111,7 +2109,7 @@
     const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b></div>` +
-        rk.map((x) => { const u = esc(unitKo(x.it.pk.stock)); return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)}${u} · ${DOW[dow(x.out)]} 입고까지 ${r1(x.use)}${u} 필요</em></span><small><i>86 위험</i>${esc(x.when)}</small></button>`; }).join("") + `</div>`);
+        rk.map((x) => { const u = esc(x.it.pk.stock || ""); return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)}${u} · ${DOW[dow(x.out)]} 입고까지 ${r1(x.use)}${u} 필요</em></span><small><i>86 위험</i>${esc(x.when)}</small></button>`; }).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
