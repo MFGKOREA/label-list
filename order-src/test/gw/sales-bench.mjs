@@ -100,7 +100,8 @@ async function world(variant, sc) {
     await pg.goto("https://app.test/order.html"); await pg.evaluate(() => localStorage.setItem("order-calc-pin", "h")); await pg.reload(); await sleep(900);
     await pg.click('#dock [data-dock="forecast"]'); await sleep(400);
     const bar = async (id) => ({ text: ((await pg.locator(`#${id} .mis-s`).textContent().catch(() => "")) || "").trim(), disabled: await pg.locator(`#${id} button.btn`).isDisabled().catch(() => null) });
-    return { pg, gross: () => bar("salesBar"), menu: () => bar("menuBar"), pressGross: () => pg.evaluate(() => document.getElementById("salesGo").click()), pressMenu: () => pg.evaluate(() => document.getElementById("menuGo").click()) };
+    const settle = async () => { for (let i = 0; i < 16; i++) { const g = await bar("salesBar"), m = await bar("menuBar"); if (/^[✓⚠]/.test(g.text) && /^[✓⚠]/.test(m.text)) return; await sleep(500); } };
+    return { pg, settle, gross: () => bar("salesBar"), menu: () => bar("menuBar"), pressGross: () => pg.evaluate(() => document.getElementById("salesGo").click()), pressMenu: () => pg.evaluate(() => document.getElementById("menuGo").click()) };
   };
   const close = async () => { stop = true; await pcLoop.catch(() => {}); await ctx.close(); };
   return { gas, P, log, full, request, waitDone, openApp, close, qn, qByDay };
@@ -155,7 +156,7 @@ const SC = {
     const m0 = await a.menu(); if (!m0.disabled) await a.pressMenu();
     const days = range(addDays(YDAY, -27), YDAY);
     const t = await w.waitDone(170e3, (d) => !w.P.job && /done|error/.test((d.salesPush || {}).status) && menuCheck(d, days).ok === 28 && Object.keys(d.forecast || {}).some((x) => d.forecast[x].act === String(grossOf(x))));
-    await sleep(1200); const d = w.full(), c = menuCheck(d, days), g = Object.keys(d.forecast || {}).filter((x) => d.forecast[x].act === String(grossOf(x))).length, eg = await a.gross(), em = await a.menu();
+    await a.settle(); const d = w.full(), c = menuCheck(d, days), g = Object.keys(d.forecast || {}).filter((x) => d.forecast[x].act === String(grossOf(x))).length, eg = await a.gross(), em = await a.menu();
     return { pass: t >= 0 && c.ok === 28 && g >= 1 && w.P.opened === 1 && /^✓/.test(eg.text) && /^✓/.test(em.text), note: `Gross 받은 날 ${g} · 메뉴 맞음 ${c.ok}/28 · 창 ${w.P.opened}번 · ${t < 0 ? "170초 안에 둘 다는 안 끝남" : (t / 1000).toFixed(0) + "초"} · Gross칸 "${eg.text.slice(0, 26)}" · 메뉴칸 "${em.text.slice(0, 30)}"` };
   } },
   I: { name: "앱: PC가 꺼져 있을 때 Gross를 누름 → (확장이 요청을 버리는 30분에 해당하는 시간 뒤) PC 켬", sc: { pcOn: false, waitMax: 8000, beatEvery: 3000, limit: 60e3, spTest: { tick: 700, redraw: 700, pendMax: 3000, bgMax: 7500, aliveWait: 2500, alive: 6000 } }, run: async (w) => {
@@ -211,6 +212,14 @@ const SC = {
     const t = await w.waitDone(40e3, (d) => (d.salesPush || {}).status === "done" && !w.P.job); await sleep(1200); const end = await a.gross(), d = w.full();
     const good = Object.keys(d.forecast || {}).filter((x) => d.forecast[x].act === String(grossOf(x))).length;
     return { pass: t >= 0 && good >= 1 && d.salesPush.re === 1 && /^✓/.test(end.text), note: `1.5초 때 "${s1.text}" · ${t < 0 ? "40초 안에 안 받음" : (t / 1000).toFixed(0) + "초 만에 받음"} · 다시 보낸 횟수 ${d.salesPush.re || 0} · 끝 "${end.text.slice(0, 36)}" · 받은 날 ${good}` };
+  } },
+  S: { name: "앱: PC가 꺼져 있을 때 두 버튼을 1초 간격으로 누름 → PC를 켜면 둘 다 받나 (창 하나)", sc: { pcOn: false, limit: 90e3, spTest: { tick: 700, redraw: 700 } }, run: async (w) => {
+    w.gas.post({ action: "set", key: "misAgent", value: { at: Date.now() - 3600e3, mode: "ondemand", ver: "1.7.0" } });
+    const a = await w.openApp(); await a.pressGross(); await sleep(1000); await a.pressMenu(); await sleep(3500);
+    const g0 = await a.gross(), m0 = await a.menu(), sp0 = w.full().salesPush || {};
+    w.P.on = true; const days = range(addDays(YDAY, -27), YDAY);
+    const t = await w.waitDone(90e3, (d) => !w.P.job && (d.salesPush || {}).status === "done" && menuCheck(d, days).ok === 28); await a.settle(); const d = w.full(), c = menuCheck(d, days), g = Object.keys(d.forecast || {}).filter((x) => d.forecast[x].act === String(grossOf(x))).length, eg = await a.gross(), em = await a.menu();
+    return { pass: t >= 0 && c.ok === 28 && g >= 1 && w.P.opened === 1 && !!(sp0.also || {}).menu && /^✓/.test(eg.text) && /^✓/.test(em.text), note: `꺼진 동안 Gross칸 "${g0.text}" · 메뉴칸 "${m0.text}" · 덧붙음 ${Object.keys(sp0.also || {}).join(",") || "없음"} → 켠 뒤 ${t < 0 ? "90초 안에 안 끝남" : (t / 1000).toFixed(0) + "초"} · Gross ${g}일 · 메뉴 ${c.ok}/28 · 창 ${w.P.opened}번 · 끝 Gross칸 "${eg.text.slice(0, 30)}" 메뉴칸 "${em.text.slice(0, 30)}"` };
   } },
 };
 const out = [];
