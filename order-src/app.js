@@ -1550,6 +1550,16 @@
   }));
 
   // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
+  // 11/12 KM 화면: 아이폰에서 숫자를 입력하고 키보드를 닫으면 하단 독이 키보드가 있던 자리(화면 중간)에 떠서 내용을 가림 (iOS 고정 위치 버그)
+  //  → 키보드가 떠 있는 동안은 독을 숨기고, 입력이 끝나면 화면 위치를 한 번 다시 잡아 독을 바닥으로 돌려놓음
+  (() => {
+    const dk = $("dock"), vv = window.visualViewport;
+    const kbOpen = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && (!vv || window.innerHeight - vv.height > 120); };
+    const sync = () => dk.classList.toggle("kb", kbOpen());
+    document.addEventListener("focusin", () => setTimeout(sync, 250));
+    document.addEventListener("focusout", () => setTimeout(() => { sync(); if (!kbOpen()) window.scrollTo(window.scrollX, window.scrollY); }, 120));
+    if (vv) vv.addEventListener("resize", sync);
+  })();
   const dockOn = (k) => document.querySelectorAll("#dock [data-dock]").forEach((b) => { if (b.dataset.dock === k) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   $("dock").addEventListener("click", (e) => {
     const b = e.target.closest("[data-dock]"); if (!b) return;
