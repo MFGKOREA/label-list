@@ -2092,10 +2092,9 @@
   // 순서 다시 매김: 지금 화면 순서대로 0,1,2… (이 위치 품목만)
   const renumber = () => [...$("locList").querySelectorAll(".lrow")].forEach((r, i) => saveLoc(r.dataset.key, { loc: locTab, ro: i }));
   let locSel = null;
-  // 정렬 (11/12 KM): need = 발주 필요한 것 위로(예전 그대로) · sheet = 발주 시트 순서 그대로 · amt = 발주 금액 큰 순 · name = 가나다. 이 기기에만 기억
+  // 정렬 (11/12 KM): sheet = 발주품목순(발주 시트 순서 그대로) · need = 발주필요순(발주 필요한 것 위로, 예전 그대로). 이 기기에만 기억
   let sortSel = "need"; try { sortSel = localStorage.getItem("order-sort") || "need"; } catch {}
-  const amtOf = (it, win, v) => { const e = estFor(it, v || {}); let s = e ? e.v : availOf(it, v || {}); if (!isFinite(s)) { const e0 = estStock(it, TODAY); s = e0 ? e0.v : NaN; } if (!isFinite(s)) return -1; /* 안 센 품목은 예상 재고로 */ const r = calc(it, orderWindowFor(it, TODAY), s, incNow(it)); return r.none ? -1 : (r.orderQty || 0) * priceOf(it) + (r.orderQty || 0) * 1e-6; };
-  const priceOf = (it) => { if (it.price) return it.price; const r = ((db["master.order"] || {}).rows || []).find((x) => x.name === it.key || x.name === it.name); return (r && r.price) || 0; };
+  if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
   function renderLocs(M) {
     const pool = M.items.filter((i) => !i.ledgerOnly && (!cat || i.vendor === cat));
     $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${t}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
@@ -2143,13 +2142,6 @@
       requestAnimationFrame(() => drawWeekArc($("preArc"), $("preStrip")));
     }
     let n = 0;
-    // 금액순·가나다순: 업체를 섞어 한 줄로
-    if (!locSel && !q && (sortSel === "amt" || sortSel === "name")) {
-      const all = [...groups.entries()].filter(([v]) => v !== "발주 필요").flatMap(([, l]) => l);
-      const key = new Map(sortSel === "amt" ? all.map((it) => [it, amtOf(it, win, inp[it.key])]) : []);
-      all.sort(sortSel === "amt" ? (a, b) => key.get(b) - key.get(a) : (a, b) => a.name.localeCompare(b.name, "ko"));
-      groups = new Map([["전체", all]]);
-    }
     groups.forEach((list, v) => {
       if (v === "발주 필요") {
         // 덜 넣음·발주완료는 작은 머리글로 나눔
