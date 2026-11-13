@@ -1,4 +1,4 @@
-﻿# 발주 GW 자동연동 설치 (매장 PC에서 install.bat 더블클릭 한 번)
+﻿# GW Agent 설치 (매장 PC에서 install.bat 더블클릭 한 번)
 #  1) PC 켜면 크롬이 창 없이 켜짐 (시작프로그램 바로 가기)
 #  2) 지킴이: 누가 크롬을 꺼도 5초 안에 다시 켬 (시작프로그램 + 지금 바로 실행)
 #  3) 절전 안 함 (전원 연결 시)
@@ -11,7 +11,7 @@ $sh = New-Object -ComObject WScript.Shell
 function Ok($m) { Write-Host ("  [OK] " + $m) -ForegroundColor Green }
 function Bad($m) { Write-Host ("  [!!] " + $m) -ForegroundColor Yellow }
 Write-Host ""
-Write-Host "발주 GW 자동연동 설치" -ForegroundColor Cyan
+Write-Host "GW Agent 설치" -ForegroundColor Cyan
 Write-Host ""
 if (-not $chrome) { Bad "크롬을 못 찾았어요. 크롬을 먼저 설치해 주세요."; Read-Host "엔터를 누르면 닫혀요"; exit }
 

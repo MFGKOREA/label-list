@@ -81,4 +81,4 @@ Forecast 탭 [메뉴 판매 불러오기] → salesPush {kind: "menu", 최근 4�
   - 지킴이: 버튼 때도 `--no-startup-window` (빈 창 없이, 창은 확장이 하나만).
 - 앱: 실패(또는 7분 넘게 응답 없음)면 GW 칸에 [MIS 입력용 목록 복사] (업체별 "품목 수량단위").
 - 시험: 가짜 GW·MIS (scratchpad/e2e-17.mjs) — 전송 없을 때 창 0개, 전송 때 최대 1개, 메뉴 없는 GW에서 시간 초과 → error + 창 닫힘. GW→MIS 이동은 시험 도구 한계로 실제 PC에서 확인.
-- 업데이트: gw-agent.zip을 받아 예전 gw-agent 폴더에 덮어쓰기 → chrome://extensions → 발주 GW 자동연동 [새로고침] → 1.7.0 확인. 지킴이도 바뀌어서 install.bat 한 번 더.
+- 업데이트: gw-agent.zip을 받아 예전 gw-agent 폴더에 덮어쓰기 → chrome://extensions → GW Agent [새로고침] → 1.7.0 확인. 지킴이도 바뀌어서 install.bat 한 번 더.

@@ -1,4 +1,4 @@
-// MIS 매출 가져오기: 크롬 확장(발주 GW 자동연동)이 매출 요청 때 MIS 첫 화면에 넣어 줌
+// MIS 매출 가져오기: 크롬 확장(GW Agent)이 매출 요청 때 MIS 첫 화면에 넣어 줌
 //  salesPush.kind = "menu"면 메뉴별 매출현황을 하루씩 조회 → 시트 menuDay.날짜 = [{c 중분류, m 메뉴, q 수량}] (요일별 메뉴 쏠림 → 품목별 주말 배수)
 //  매출정보관리 → 매출현황 → MiscellaneousReport → 조회일(salesPush.from ~ to) · 매장 1345090 · 일자별 → 조회
 //  → 날짜별 Gross를 읽어 시트 forecast[날짜].act에 넣고 결과를 salesPush에 적음 (MIS에는 아무것도 저장하지 않음, 조회만)
