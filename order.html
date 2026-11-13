@@ -1537,7 +1537,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
-  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); };
+  let wholeMemo = new Map(); // 통 단위로 세는 품목 (wholeStep)
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -2832,6 +2833,14 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   const nextOrderDay0 = () => { let d = addDays(TODAY, 1); while (dow(d) === 0) d = addDays(d, 1); return d; };
   const pDay = () => preDay || nextOrderDay0();
   // pre: d에 미트카운트로 센다고 볼 때(그날 입고 전) — 그날 입고는 빼고 봄
+  // 통 단위로 세는 품목인가: 최근 센 값(최대 8번, 3번 이상)의 80% 넘게 정수면 셈 단위(박스로 세면 1박스) · 아니면 0 (kg처럼 소수로 세는 품목)
+  const wholeStep = (it) => {
+    if (wholeMemo.has(it.key)) return wholeMemo.get(it.key);
+    const vals = Object.keys(db).filter((k) => /^input\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(6) <= TODAY).sort().reverse()
+      .map((k) => (db[k] || {})[it.key]).filter((v) => counted(v)).slice(0, 8).map((v) => num(v.s));
+    const st = vals.length >= 3 && vals.filter((x) => Math.abs(x - Math.round(x)) < 1e-9).length / vals.length >= 0.8 ? it.box || 1 : 0;
+    wholeMemo.set(it.key, st); return st;
+  };
   function estStock(it, d, plan, pre) {
     const start = d > TODAY ? TODAY : addDays(d, -1);
     for (let x = start; x >= addDays(TODAY, -7); x = addDays(x, -1)) {
@@ -2847,7 +2856,12 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const weGross = (isWE(x) ? left * dayGross(x, true).v : 0) + weSum(addDays(x, 1), d, true);
       const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, weGross, fcVar: fcVar(x, d, true, left) }, 0, 0);
       if (c.none) return null;
-      return { v: Math.max(0, stockOf(it, r) + arr - c.use), from: x, days: k };
+      // 통 단위로 세는 품목은 예상 재고도 셈 단위로 반올림 (11/13 KM: "안 팔렸는데 0.1씩 줄어듦").
+      //  재고는 밀봉 팩만 세서 뜯은 팩을 다 쓸 때까지 그대로이다가 한 번에 1개 줄어듦 → 0.1씩 깎으면 평균은 맞아도 날마다 틀려 보임.
+      //  11월 예상 재고 386건: 평균 오차 1.43→1.40, 센 값과 딱 맞음 1%→45%, 예상이 실제보다 많음(발주 덜 할 쪽) 83→83 그대로.
+      //  사용 적고 메뉴도 덜 팔린 61건: 오차 0.30→0.24. 실제 메뉴 판매로 깎는 보정도 봤지만 이 경우 오차 0.27·덜 할 위험 4→9로 나빠서 안 씀
+      const v0 = Math.max(0, stockOf(it, r) + arr - c.use), st0 = wholeStep(it);
+      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: k };
     }
     return null;
   }
