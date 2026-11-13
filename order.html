@@ -1600,8 +1600,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     ["mt", "wtf", "we"].forEach((g) => {
       const r = hist.filter((x) => fcGroup(x.d) === g).slice(-12).map((x) => x.act / x.fc).sort((a, b) => a - b);
       let k = 1;
-      // 시트 settings.fcBias = "off"면 보정 안 함
-      if (r.length >= 3 && (db.settings || {}).fcBias !== "off") { const med = Math.min(1.3, Math.max(0.7, r[Math.floor(r.length / 2)])); k = 1 + (med - 1) * r.length / (r.length + 3); if (Math.abs(k - 1) <= 0.05) k = 1; }
+      // 묶음별 요일 배수는 기본으로 끔(11/13: 닻 섞기로 대신. 요일 배수만으로는 보정 없음과 차이 없었음). settings.fcBias = "on"이면 다시 켬
+      if (r.length >= 3 && (db.settings || {}).fcBias === "on") { const med = Math.min(1.3, Math.max(0.7, r[Math.floor(r.length / 2)])); k = 1 + (med - 1) * r.length / (r.length + 3); if (Math.abs(k - 1) <= 0.05) k = 1; }
       groups[g] = { k: Math.round(k * 1000) / 1000, n: r.length };
     });
     return (fcBiasMemo = { hist, groups, n: hist.length });
@@ -1612,13 +1612,22 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     if (!d) return { k: 1, n: h.n, groups: h.groups, label: Object.keys(h.groups).filter((g) => h.groups[g].k !== 1).map((g) => `${FC_GROUP_NAME[g]} ${h.groups[g].k > 1 ? "+" : ""}${Math.round((h.groups[g].k - 1) * 100)}%`).join(" · ") };
     return h.groups[fcGroup(d)];
   }
+  // 닻 섞기(11/13 KM 승인): 점장 Forecast를 같은 요일 최근 실제(dataBase) 쪽으로 25% 당김 = FC^0.75 × 데이터기본^0.25.
+  //  점장 숫자가 평소와 크게 다른 날일수록 실제는 그 사이에 떨어졌음. 되돌려 보기 9/28~11/10(44일): 하루 오차 24.1→20.3%, 3일 합 17.0→12.9%.
+  //  단점: 큰 행사 날은 16~24% 낮게 잡음. settings.fcBlend로 조절(0=끔, 최대 0.5, 기본 0.25).
+  const fcBlendB = () => { const v = num((db.settings || {}).fcBlend); return isFinite(v) ? Math.min(0.5, Math.max(0, v)) : 0.25; };
+  function fcAdj(d) {
+    const fc = num(((db.forecast || {})[d] || {}).fc); if (!(fc > 0)) return fc; // 0(휴무)·빈칸은 그대로
+    const p = fc * fcBias(d).k, b = fcBlendB(), a = b > 0 ? dataBase(d) : null;
+    return a > 0 ? p * Math.pow(a / p, b) : p;
+  }
   // Forecast 하루 오차(상대값, 보정 뒤 남는 오차의 RMS): 평일과 주말을 따로 (최근 28일 기준 평일 0.24, 주말 0.11 — 주말은 점장 Forecast가 훨씬 정확).
   //  4일 미만이면 전체 값으로, 전체도 5일 미만이면 25%
   let fcErrMemo = null;
   function fcErrAll() {
     if (fcErrMemo) return fcErrMemo;
     const rms = (arr) => Math.sqrt(arr.reduce((x, e) => x + e * e, 0) / arr.length);
-    const res = fcHist().hist.slice(-28).map((x) => ({ g: fcGroup(x.d) === "we" ? "we" : "wd", e: x.act / (x.fc * fcBias(x.d).k) - 1 }));
+    const res = fcHist().hist.slice(-28).map((x) => ({ g: fcGroup(x.d) === "we" ? "we" : "wd", e: x.act / fcAdj(x.d) - 1 }));
     const all = res.length >= 5 ? Math.min(0.6, Math.max(0.05, rms(res.map((x) => x.e)))) : 0.25;
     const of = (g) => { const a = res.filter((x) => x.g === g).map((x) => x.e); return a.length >= 4 ? Math.min(0.6, Math.max(0.05, rms(a))) : all; };
     return (fcErrMemo = { all, wd: of("wd"), we: of("we") });
@@ -1988,7 +1997,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const lastB = withB[withB.length - 1], catOf = new Map();
       if (lastB) (mget(lastB.m).sales || { rows: [] }).rows.forEach((s) => { const x = resolveMenu(s.menu, s.cat); if (x && x.recipe && !catOf.has(x.recipe.name)) catOf.set(x.recipe.name, s.cat); });
       const newByCat = new Map(), nowLine = new Set(((mget(TODAY.slice(0, 7)).line || {}).recipes || []).map((r) => r.name));
-      const grossOn = (d) => { const f = (db.forecast || {})[d] || {}; return num(f.act) > 0 ? num(f.act) : num(f.fc) > 0 ? num(f.fc) * ((fcBias(d) || {}).k || 1) : 0; };
+      const grossOn = (d) => { const f = (db.forecast || {})[d] || {}; return num(f.act) > 0 ? num(f.act) : num(f.fc) > 0 ? fcAdj(d) : 0; };
       q.forEach((e) => {
         // 일부만 올린 날(menuDayPart)은 그 파일에 있는 메뉴만 그날 Gross를 셈 (없는 메뉴는 그날 판매를 모름)
         const inDay = (x) => x.rows.some((r) => { const y = resolveMenu(r.m, r.c); return y && y.recipe && y.recipe.name === e.recipe.name; });
@@ -2117,7 +2126,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   function dayGross(d, preferActual) {
     const f = (db.forecast || {})[d] || {};
     if (preferActual && isFinite(num(f.act))) return { v: num(f.act), src: "act" };
-    if (isFinite(num(f.fc))) return { v: num(f.fc) * fcBias(d).k, src: "fc" };
+    if (isFinite(num(f.fc))) return { v: fcAdj(d), src: "fc" };
     // 없으면 데이터 예상 Forecast (같은 요일·공휴일 실적), 그것도 없으면 최근 달 평균
     const de = dataForecast(d);
     if (de) return { v: de, src: "est" };
@@ -2210,8 +2219,10 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     if (ba) use = Math.max(0, use + ba.delta);
     // Forecast 오차: 기간의 날별 오차 합(fcVar, 평일·주말 따로) → 상대값. 없으면 예전처럼 하루 오차 ÷ √일수
     const fcRel = win.fcVar != null && win.gross > 0 ? Math.sqrt(win.fcVar) / win.gross : fcErr() / Math.sqrt(nd);
-    const relErr = Math.sqrt(sigma * sigma / nd + fcRel * fcRel); // 기간 사용량의 상대 오차 (사용량 계산 오차는 날마다 상쇄, Forecast 오차는 날별 합)
-    let ss = Z * Math.sqrt((relErr * useAvg) ** 2 + (ba ? ba.varS : 0));
+    const relErr = Math.sqrt(sigma * sigma / nd + fcRel * fcRel); // 기간 사용량의 상대 오차 (사용량 계산 오차는 날마다 상쇄, Forecast 오차는 날별 합). ±범위(sd)용
+    // 안전재고에는 σ 바닥 0.3 (11/13 KM 승인, G t5): 3~6일 창 품절 30.5→25.4%, 남는 양 +0.7단위. 화면 ±범위는 바닥 없이 그대로
+    const relErrSS = Math.sqrt(Math.max(sigma, 0.3) ** 2 / nd + fcRel * fcRel);
+    let ss = Z * Math.sqrt((relErrSS * useAvg) ** 2 + (ba ? ba.varS : 0));
     const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * Math.min(1, win.wkGross / win.gross) : 0;
     ss += wkPlus;
     let need = use + ss;
@@ -2227,7 +2238,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       // 입고 전에 잡힌 프랩 배치는 자르지 않음: 재료가 모자라면 배치가 입고 뒤로 밀릴 뿐 수요가 없어지지 않음 (11/12 검증 E)
       const batchPre = ba && ba.notes.some((n) => n.d && n.d < wp.today);
       if (!cp.none && !batchPre) {
-        usePost = cp.use; ssPost = cp.ss; needPost = cp.need; usePre = Math.max(0, use - cp.use);
+        usePost = cp.use; ssPost = Math.min(cp.ss, 0.5 * cp.use); needPost = Math.min(cp.need, cp.use + ssPost); usePre = Math.max(0, use - cp.use); // 여유분 상한(11/13 KM 승인, C1): 입고 뒤 여유 ≤ 사용의 절반. 새송이 20→16 등
         preShort = Math.max(0, usePre - s - inc);
         if (short0 > needPost) { short = needPost; cut = short0 - needPost; }
         floorQ = Math.min(floorQ, usePost);
@@ -3353,7 +3364,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const M = model();
     const g = dayGross(TODAY, false);
     $("prepBanner").className = "banner" + (g.src === "fc" ? "" : " soft");
-    $("prepBanner").innerHTML = `<span>오늘 ${DOW[dow(TODAY)]}요일 Forecast${g.src === "fc" ? (fcBias(TODAY).k !== 1 ? ` (보정 ${fcBias(TODAY).k > 1 ? "+" : ""}${Math.round((fcBias(TODAY).k - 1) * 100)}%)` : "") : " (추정)"}</span><span>${won(g.v)}원</span>`;
+    $("prepBanner").innerHTML = `<span>오늘 ${DOW[dow(TODAY)]}요일 Forecast${g.src === "fc" ? ((() => { const raw = num(((db.forecast || {})[TODAY] || {}).fc), pc = raw > 0 ? Math.round((g.v / raw - 1) * 100) : 0; return pc ? ` (보정 ${pc > 0 ? "+" : ""}${pc}%)` : ""; })()) : " (추정)"}</span><span>${won(g.v)}원</span>`;
     const sheet = M.prepSheet;
     const list = sheet.length ? sheet.map((x) => ({ name: x.name, code: x.code || "", shelf: x.shelf, section: x.section || "" }))
       : M.prep.map((p) => ({ name: p.short || p.name, code: p.code || "", shelf: p.shelf }));
