@@ -2119,7 +2119,7 @@
     const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
     if (rk.length) {
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b></div>` +
-        rk.map((x) => { const u = esc(x.it.pk.stock || ""); return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)}${u} · ${r1(Math.max(0.1, x.use - x.have))}${u} 부족 예상</em></span><small><i>86 위험</i>${esc(x.when)}${x.thaw ? ` · ${DOW[dow(x.deliv)]} 입고분 당일 쓰려면 유수해동` : ""}</small></button>`; }).join("") + `</div>`);
+        rk.map((x) => { const u = esc(x.it.pk.stock || ""); return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>재고 ${r1(x.have)}${u} · ${r1(Math.max(0.1, x.use - x.have))}${u} 부족 예상</em></span><small><i>86 위험</i>${esc(x.when)}${x.thaw ? " · 입고당일 해동필요" : ""}</small></button>`; }).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
