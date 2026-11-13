@@ -37,7 +37,7 @@ await new Promise((r) => srv.listen(0, "127.0.0.1", r));
 const port = srv.address().port;
 const rules = ["gw.madforgarlic.com", "mis.madforgarlic.com", "script.google.com", "script.googleusercontent.com", "mfgkorea.github.io"].map((h) => `MAP ${h} 127.0.0.1:${port}`).concat(["MAP * ~NOTFOUND", "EXCLUDE 127.0.0.1", "EXCLUDE localhost"]).join(", ");
 const ctx = await chromium.launchPersistentContext(TMP + "/prof", {
-  executablePath: fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined, headless: true, env: { ...process.env, TZ: "Asia/Seoul" },
+  executablePath: fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined, headless: true, env: { ...process.env, TZ: process.env.E2E_TZ || "Asia/Seoul" },
   args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, `--host-resolver-rules=${rules}`, "--ignore-certificate-errors", "--no-proxy-server"],
 });
 const getSW = async () => ctx.serviceWorkers().find((w) => w.url().startsWith("chrome-extension://")) || (await ctx.waitForEvent("serviceworker", { timeout: 40000 }));
@@ -79,7 +79,7 @@ await sleep(12000);
 ok(pcReqs().length === before3, "상시 수집을 끄면 스스로 요청하지 않음");
 
 // 4) 다 받아 뒀으면 요청 없이 쉼
-store.forecast[Y].act = "88"; store.gwScout = { at: 1, menus: [] }; store.hourShare = { to: T, wd: {} }; store.salesPush = { id: 1, at: Date.now() - 3600e3, status: "done", doneAt: Date.now() - 3500e3 };
+store.forecast[Y].act = "88"; store.gwScout = { at: 1, menus: [] }; store.hourShare = { to: T, wd: {} }; store.misOrderScan = { at: Date.now(), to: Y }; store.salesPush = { id: 1, at: Date.now() - 3600e3, status: "done", doneAt: Date.now() - 3500e3 };
 await setSt({ auto: true, autoSt: { next: 0 } });
 const st4 = await until(async () => { const s = ((await getSt("autoSt")) || {}).autoSt || {}; return s.okAt ? s : null; }, 20000);
 ok(!!st4 && st4.msg === "다 받아 둠" && pcReqs().length === before3, "다 받아 뒀으면 요청 없이 쉼", JSON.stringify(st4));

@@ -16,7 +16,7 @@ import { fileURLToPath } from "url";
 const req = (m) => import(m).catch(() => import("/opt/node22/lib/node_modules/" + m + "/index.mjs"));
 const { chromium } = await req("playwright");
 const HERE = path.dirname(fileURLToPath(import.meta.url)), REPO = path.resolve(HERE, "../../..");
-const NAMES = "ORDER_CUTOFF_H, OPEN_H, CLOSE_H, arrivalsOf, sumGross, dayGross, leftOf, hourOf, hourCum, isMeat, logOn, inputLog, arrBetween, weSum, isWE, stockOf, counted, batchRawOf, prepRawOf, weMix, isOrderDay, deliveryOf, nextOrderDay, fcGroup, isHoliday, addDays, addBiz, delivery, dow, parseISO, num, MEAT_H, effDays, wkGross, weekendPlus, vcfg, countStepOf, riskOf, applyScores, mergeLogs, fcHist".split(", ");
+const NAMES = "ORDER_CUTOFF_H, misTrust, estStock, OPEN_H, CLOSE_H, arrivalsOf, sumGross, dayGross, leftOf, hourOf, hourCum, isMeat, logOn, inputLog, arrBetween, weSum, isWE, stockOf, counted, batchRawOf, prepRawOf, weMix, isOrderDay, deliveryOf, nextOrderDay, fcGroup, isHoliday, addDays, addBiz, delivery, dow, parseISO, num, MEAT_H, effDays, wkGross, weekendPlus, vcfg, countStepOf, riskOf, applyScores, mergeLogs, fcHist".split(", ");
 // 계산 함수를 더 내보낸 사본 (앱에 그 이름이 있을 때만)
 export function extended(htmlPath = REPO + "/order.html") {
   const s = fs.readFileSync(htmlPath, "utf8"), m = /window\.__orderCalc = \{ /.exec(s);
@@ -35,7 +35,7 @@ export function cutKv(data, asOf, { today = "counted", dropMonths = [] } = {}) {
     if ((m = /^input\.(\d{4}-\d\d-\d\d)$/.exec(k))) {
       if (m[1] > asOf || (m[1] === asOf && today === "none")) delete d[k];
       else if (m[1] === asOf && today === "counted") { const o = {}; Object.keys(d[k]).forEach((n) => { const v = d[k][n]; if (v && v.s !== "" && v.s != null) o[n] = { ...v, o: "", r: "" }; }); d[k] = o; }
-    } else if ((m = /^(menuDay|menuDayPart|prepOnhand)\.(\d{4}-\d\d-\d\d)$/.exec(k))) { if (m[2] >= asOf) delete d[k]; }
+    } else if ((m = /^(menuDay|menuDayPart|prepOnhand|misOrder)\.(\d{4}-\d\d-\d\d)$/.exec(k))) { if (m[2] >= asOf) delete d[k]; }
     else if ((m = /^month\.(\d{4}-\d\d)$/.exec(k))) { if (m[1] > asOf.slice(0, 7)) delete d[k]; else if (dropMonths.includes(m[1])) ["gross", "ledger", "sales"].forEach((f) => delete d[k][f]); }
   });
   const lim = today === "none" ? asOf : asOf + " 99";

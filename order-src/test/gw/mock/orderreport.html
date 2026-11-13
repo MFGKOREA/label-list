@@ -8,13 +8,18 @@
 $("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
 $.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
 var COLS = [[{ field: "ORD_DT", title: "주문일자" }, { field: "DLV_DT", title: "입고예정일" }, { field: "ITEM_CD", title: "품목코드" }, { field: "ITEM_NM", title: "품목명" }, { field: "UNIT", title: "단위" }, { field: "ORD_QTY", title: "주문수량" }, { field: "UNIT_PRC", title: "단가" }, { field: "ORD_AMT", title: "금액" }]];
-$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: COLS }; };
+// 쪽 나눔 표: 한 쪽 2줄만 보임 (실제 GW 표처럼). 쪽 크기를 바꿔 1쪽을 다시 고르면 다 보임
+var PG = { size: 2 };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { all: [] }; if (!this.data("dg")) this.data("dg", st);
+  if (cmd === "getRows") return st.all.slice(0, PG.size); if (cmd === "getData") return { total: st.all.length, rows: st.all.slice(0, PG.size) };
+  if (cmd === "options") return { columns: COLS, pagination: true, pageList: [2, 10] };
+  if (cmd === "getPager") return { pagination: function (a) { if (a && typeof a === "object" && a.pageSize) PG.next = a.pageSize; if (a === "select") setTimeout(function () { PG.size = PG.next || PG.size; window.__paged = (window.__paged || 0) + 1; }, 300); } }; };
 $("#oGrid").data("datagrid", 1);
 function fn_Search() {
   if (!window.event) throw new Error("no event");
   var s = $("#sDate").val(), e = $("#eDate").val();
   var all = [["2026-11-07", "2026-11-09", "340001970", "가지", "PK", 2], ["2026-11-07", "2026-11-09", "340002106", "냉동_등심270g_10개단위 발주", "EA", 20],
              ["2026-11-10", "2026-11-12", "340001980", "간마늘(냉장)", "PK", 3], ["2026-11-11", "2026-11-13", "340001970", "가지", "PK", 1], ["2026-10-01", "2026-10-03", "340001970", "가지", "PK", 9]];
-  setTimeout(function () { var rows = all.filter(function (r) { return r[0] >= s && r[0] <= e; }).map(function (r) { return { ORD_DT: r[0], DLV_DT: r[1], ITEM_CD: r[2], ITEM_NM: r[3], UNIT: r[4], ORD_QTY: r[5], UNIT_PRC: "5,800", ORD_AMT: (r[5] * 5800).toLocaleString() }; }); rows.push({ ORD_DT: "합 계", ORD_QTY: 99 }); $("#oGrid").data("dg", { rows: rows }); }, 400);
+  setTimeout(function () { var rows = all.filter(function (r) { return r[0] >= s && r[0] <= e; }).map(function (r) { return { ORD_DT: r[0], DLV_DT: r[1], ITEM_CD: r[2], ITEM_NM: r[3], UNIT: r[4], ORD_QTY: r[5], UNIT_PRC: "5,800", ORD_AMT: (r[5] * 5800).toLocaleString() }; }); rows.push({ ORD_DT: "합 계", ORD_QTY: 99 }); $("#oGrid").data("dg", { all: rows }); }, 400);
 }
 </script></body></html>

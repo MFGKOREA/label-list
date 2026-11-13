@@ -540,7 +540,20 @@
       if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
       step = "읽기";
       const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
-      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, rows: (L.raw(g) || []).slice(0, 3) }; });
+      const totalOf = (g) => { try { const d = $(g).datagrid("getData") || {}; return +d.total || 0; } catch (e) { return 0; } };
+      // 쪽 나눔 표면 한 쪽(보통 20~50줄)만 읽히므로 한 쪽에 다 보이게 바꿔 다시 불러옴 (조회만)
+      for (const g of L.grids()) {
+        try {
+          const o = $(g).datagrid("options"), t = totalOf(g), n0 = (L.raw(g) || []).length;
+          if (!o.pagination || !(t > n0)) continue;
+          step = "전체 쪽 불러오기"; const n = Math.min(5000, t), pg = $(g).datagrid("getPager");
+          pg.pagination({ pageSize: n, pageList: [...new Set([...(o.pageList || []), n])] }); pg.pagination("select", 1);
+          for (let k = 0; k < 100 && (L.raw(g) || []).length < n; k++) await sleep(200);
+          await L.idle(T.q);
+        } catch (e) {}
+      }
+      step = "읽기";
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!o.pagination, rows: (L.raw(g) || []).slice(0, 3) }; });
       await set("orderProbe", { at: Date.now(), from, to, grids: probe });
       if (!hit || !hit.rows.length) return finish(true, `주문현황 ${from.slice(5)}~${to.slice(5)} 조회 결과 없음`, { days: 0 });
       // 열 찾기: 품목코드 · 수량 · 주문일(없으면 입고예정일) · 품목명 · 단위 · 입고(납품)예정일
@@ -555,7 +568,7 @@
         const od = f(/주문\s*일|발주\s*일|ORD_?DT|DT_?ORD|일자/i, /입고|납품|배송|DLV|IN_?DT/i);
         const dd = f(/입고|납품|배송|DLV|IN_?DT/i);
         const name = f(/품목\s*명|상품\s*명|ITEM_?NM|GOODS_?NM|NM_?ITEM|NM_?GOODS/i), unit = f(/단위|UNIT/i, /단가/i);
-        if (code && qty && (od || dd)) { use = { rs, code, qty, od: od || dd, dd, name, unit }; break; }
+        if (code && qty && (od || dd)) { use = { rs, code, qty, od: od || dd, dd, name, unit, all: !(o.pagination && totalOf(g) > rs.length) }; break; }
       }
       if (!use) return finish(false, `주문현황 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
       const by = new Map();
@@ -563,7 +576,13 @@
         by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "", deliv: use.dd && use.dd !== use.od ? toIso(r[use.dd.field]) : null }); });
       step = "시트 저장";
       let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misOrder." + dt, { at: Date.now(), rows }); saved++; }
-      await set("misOrderScan", { at: Date.now(), from, to, days: saved });
+      // 다 읽었고(쪽 나눔 없음) 주문일 칸이 있으면, 기간 안에서 발주가 없던 날도 "발주 없음"으로 남김 (앱이 그날 입고를 '모름' 대신 '없음'으로 앎). 오늘은 아직 더 시킬 수 있어 뺌
+      let empty = 0;
+      if (use.all && use.od !== use.dd && by.size) {
+        const yest = (() => { const d = new Date(Date.now() + 9 * 3600e3 - 864e5); return d.toISOString().slice(0, 10); })();
+        for (let d = from; d <= to && d <= yest; d = new Date(Date.parse(d + "T00:00:00Z") + 864e5).toISOString().slice(0, 10)) if (!by.has(d)) { await set("misOrder." + d, { at: Date.now(), rows: [] }); empty++; }
+      }
+      await set("misOrderScan", { at: Date.now(), from, to, days: saved, empty, all: use.all ? 1 : 0, byDeliv: use.od === use.dd ? 1 : 0 });
       return finish(true, `주문현황 ${from.slice(5)}~${to.slice(5)} · ${saved}일 발주 ${[...by.values()].reduce((a, x) => a + x.length, 0)}줄 저장`, { days: saved });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
@@ -582,7 +601,9 @@
   try {
     while (queue.length && !replaced) {
       const [kind, req] = queue.shift();
-      job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to, force: req.force };
+      // 계획표(gw-plan)에서 덧붙인 일(시간대별·주문현황)은 날짜 없이 옴 → 어제(한국 날짜)까지로 (11/13: 날짜가 없으면 시간대별이 Invalid Date로 멈추던 것)
+      const yest = new Date(Date.now() + 9 * 3600e3 - 864e5).toISOString().slice(0, 10);
+      job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to || (needRange(kind) ? req.to : yest), force: req.force };
       step = "시작"; Object.keys(diag).forEach((k) => delete diag[k]);
       if (kind !== k0) await merge("salesPush", { cur: kind, prog: null }).catch(() => {});
       const r = left() < T.reserve ? { ok: false, text: "시간이 모자라 시작 못 함 · 다시 눌러 주세요", extra: {} } : RUN[kind] ? await RUN[kind]() : { ok: false, text: "모르는 종류라 하지 않음: " + String(kind).slice(0, 20), extra: {} };

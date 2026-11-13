@@ -51,6 +51,9 @@ const HPLAN = [{ id: "h", kind: "hour", key: "hourShare", freshDays: 7 }];
 t("F1 hourShare 없음 → 시간대 요청", P(base(N, { scout: true }), N, {}, HPLAN), (r, q) => r.act === "request" && q.kind === "hour");
 t("F2 hourShare 최신(어제) → 안 함", P(base(N, { scout: true, hourShare: { to: addDay(N_T, -1), wd: {} } }), N, {}, HPLAN), (r) => r.act === "none");
 t("F3 hourShare 8일 전 → 다시", P(base(N, { scout: true, hourShare: { to: addDay(N_T, -8), wd: {} } }), N, {}, HPLAN), (r, q) => r.act === "request" && q.kind === "hour");
+const OPLAN = [{ id: "o", kind: "orders", key: "misOrderScan", freshDays: 2 }];
+t("F4 주문현황 어제까지 읽음 → 안 함", P(base(N, { scout: true, misOrderScan: { at: 1, to: Y } }), N, {}, OPLAN), (r) => r.act === "none");
+t("F5 주문현황 그제까지만 → 오늘 다시 (어제 날짜 없이 보내면 PC가 어제로)", P(base(N, { scout: true, misOrderScan: { at: 1, to: addDay(Y, -1) } }), N, {}, OPLAN), (r, q) => r.act === "request" && q.kind === "orders" && !q.to);
 // 실제 gw-plan.json 검사: 배열이고, 각 항목이 알려진 kind·key를 가짐 (mis-sales.js RUN에 있는 종류만)
-t("Z 실제 gw-plan.json 모양", { act: Array.isArray(SHIPPED) && SHIPPED.every((j) => j && /^(scout|hour|daily|pl|catalog)$/.test(j.kind) && j.key) ? "none" : "bad", why: "" }, (r) => r.act === "none");
+t("Z 실제 gw-plan.json 모양", { act: Array.isArray(SHIPPED) && SHIPPED.every((j) => j && /^(scout|hour|orders|daily|pl|catalog)$/.test(j.kind) && j.key) ? "none" : "bad", why: "" }, (r) => r.act === "none");
 console.log(`${pass}/${n} 통과`); process.exit(pass === n ? 0 : 1);

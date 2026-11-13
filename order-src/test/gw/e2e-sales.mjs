@@ -90,6 +90,8 @@ ok(d["misOrder.2026-11-07"] && d["misOrder.2026-11-07"].rows.length === 2 && d["
 ok(d["misOrder.2026-11-10"] && d["misOrder.2026-11-11"] && !d["misOrder.2026-10-01"], "기간 안 날짜만 (10/1은 안 씀)");
 ok(d.orderProbe && d.orderProbe.grids[0].cols.some((c) => /품목코드/.test(c)) && d.misOrderScan && d.misOrderScan.days === 3, "열 이름 기록·스캔 기록");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "KM 입력(input.날짜)은 안 건드림");
+ok(d.orderProbe.grids[0].paged && d.orderProbe.grids[0].n === 5 && d.misOrderScan.all === 1, "쪽 나눔 표를 한 쪽에 다 불러서 읽음 (2줄 → 5줄, 합계 줄 포함)");
+ok(Array.isArray((d["misOrder.2026-11-08"] || {}).rows) && d["misOrder.2026-11-08"].rows.length === 0 && d.misOrderScan.empty === 9, "기간 안 발주 없는 날은 빈 기록 (11/8 등 9일)");
 await b.close();
-console.log(`합계: 통과 ${26 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${28 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

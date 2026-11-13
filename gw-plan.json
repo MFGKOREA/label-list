@@ -14,5 +14,13 @@
     "from_days": 1,
     "note": "시간대별매출현황을 조회해 요일별 시간대 비율(hourShare)을 다시 만듦. 7일마다. 이 매장만, 조회만",
     "freshDays": 7
+  },
+  {
+    "id": "orders-1",
+    "kind": "orders",
+    "key": "misOrderScan",
+    "label": "주문현황",
+    "note": "이 매장 주문현황(발주 내역)을 어제까지 15일 읽어 misOrder.날짜에 둠. 앱 발주 칸이 빈 날의 입고를 채움. 하루 한 번(어제까지 읽었으면 쉼: freshDays 2 = 읽은 끝날이 이틀 전이면 다시), 이 매장만, 조회만 (주문등록 화면은 안 엶)",
+    "freshDays": 2
   }
 ]
