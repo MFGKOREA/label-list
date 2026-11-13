@@ -1,17 +1,35 @@
 <!doctype html><html><head><meta charset="utf-8"><title>시간대별매출현황</title><script src="jquery.js"></script></head><body>
 시간대별매출현황
-<input id="sDate" class="easyui-datebox" value="2026-11-12"><input id="eDate" class="easyui-datebox" value="2026-11-12">
+<input id="sDate" class="easyui-datebox" value="2026-10-01"><input id="eDate" class="easyui-datebox" value="2026-11-12">
 <input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
-<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<label><input type="radio" name="opt" id="optD" checked>일자별</label>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조 회</span></a>
 <table id="hGrid"></table>
 <script>
 $("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
 $.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
-$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: [[{ field: "HH", title: "시간대" }, { field: "AM_GROSS", title: "Gross Sales" }, { field: "CNT", title: "객수" }]] }; };
+var HF = ["AM_11","AM_12","AM_13","AM_14","AM_15","AM_16","AM_17","AM_18","AM_19","AM_20","AM_21","AM_22","AM_23"];
+var COLS = [[{field:"SALES_DT",title:"기간"},{field:"NM_GUBUN",title:"구분"},{field:"AM_TOT",title:"합계"}]
+  .concat(HF.map(function(f,i){return {field:f,title:"~"+(12+i)+"시"};}))];
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: COLS }; };
 $("#hGrid").data("datagrid", 1);
 function fn_Search() {
   if (!window.event) throw new Error("no event");
-  var rows = [];
-  setTimeout(function () { for (var h = 11; h <= 22; h++) { var g = ((h >= 12 && h <= 13) || (h >= 18 && h <= 20)) ? 500000 : 150000; rows.push({ HH: h + ":00", AM_GROSS: g.toLocaleString(), CNT: 10 }); } rows.push({ HH: "합 계", AM_GROSS: "3,300,000", CNT: 120 }); $("#hGrid").data("dg", { rows: rows }); }, 400);
+  var s = $("#sDate").val(), e = $("#eDate").val();
+  // 요일별로 시간대 쏠림이 다른 가짜 하루 곡선 (평일=저녁 쏠림, 토=점심+저녁, 일=점심 쏠림)
+  function dayRow(iso) {
+    var wd = new Date(iso + "T00:00:00Z").getUTCDay();
+    var shape = wd === 0 ? [3,8,9,7,4,3,3,5,4,2,1,0,0] : wd === 6 ? [3,7,7,6,4,4,5,7,7,3,1,0,0] : [2,6,6,4,3,2,3,6,9,8,4,0,0];
+    var base = 400000, row = { SALES_DT: iso, NM_GUBUN: "Gross", AM_TOT: 0 }, tot = 0;
+    shape.forEach(function (x, i) { var v = x * base; row[HF[i]] = v.toLocaleString(); tot += v; });
+    row.AM_TOT = tot.toLocaleString();
+    return row;
+  }
+  setTimeout(function () {
+    var rows = [], x = new Date(s + "T00:00:00Z"), end = new Date(e + "T00:00:00Z");
+    while (x <= end) { var iso = x.toISOString().slice(0, 10); rows.push(dayRow(iso)); rows.push({ SALES_DT: iso, NM_GUBUN: "Net", AM_TOT: "1" }); x.setUTCDate(x.getUTCDate() + 1); }
+    rows.push({ SALES_DT: "합 계", NM_GUBUN: "Gross", AM_TOT: "9" });
+    $("#hGrid").data("dg", { rows: rows });
+  }, 400);
 }
 </script></body></html>

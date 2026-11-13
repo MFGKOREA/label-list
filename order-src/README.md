@@ -210,3 +210,9 @@
 - 86 위험 카드: 해동 품목은 "입고당일 해동필요" 한 줄(유수해동은 비상 수단이라 해동 하루 모델은 그대로).
 - 판단 시험(auto.test·test_collect)은 고정 계획을 쓰고 실제 gw-plan.json은 따로 모양만 검사 → 계획이 늘어도 시험이 흔들리지 않음. mock: hour-main/hour-menu/hourreport.
 
+## 시간대별 매출 → 비율 자동 갱신 (11/13 실제 화면 확인)
+- GW Agent가 시간대별매출현황을 조회해 실제 열(SALES_DT·NM_GUBUN·AM_11…AM_23)을 읽어 옴을 확인. `mis-sales.js` RUN.hour가 최근 42일 Gross를 요일 묶음(wd/sat/sun) 누적 곡선으로 만들어 `hourShare`에 씀. 86 위험 시각·부분일 매출에 바로 쓰임.
+- 안전장치: 곡선이 0→1 단조 증가가 아니거나 평일 10일 미만이면 `hourShare`를 안 바꾸고 멈춤. 이 매장만, 조회만.
+- 계획 `gw-plan.json`의 hour는 key `hourShare`·`freshDays` 7 → 비율이 7일 넘게 오래됐을 때만 다시 만듦(auto.js·collect.py 공통). 업로드한 엑셀은 8/29~10/22로 이미 쓰던 기간이라 새 정보 아님 — 최신 비율은 GW Agent가 받음.
+- 업로드 메뉴별 매출 일별 파일은 모두 같은 월 누적 보고서라 날짜별로 못 씀(MIS "일자별" 조회 또는 GW Agent 필요).
+

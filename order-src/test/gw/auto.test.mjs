@@ -20,7 +20,7 @@ function base(now, { missG = [], missM = [], pcAgo = 60, scout = true, ...over }
 }
 let pass = 0, n = 0;
 const t = (name, r, check) => { n++; let ok = false; try { ok = !!check(r, r.make ? r.make() : null); } catch (e) { ok = false; } if (ok) pass++; console.log((ok ? "통과  " : "실패  ") + name + (ok ? "" : "\n   " + JSON.stringify({ act: r.act, why: r.why, req: r.make ? r.make() : null }).slice(0, 500))); };
-const N = ms("2026-11-13T10:23"), Y = "2026-11-12"; // 금요일. 어제 = 11/12(목), 그 주 월요일 = 11/9
+const N = ms("2026-11-13T10:23"), Y = "2026-11-12", N_T = "2026-11-13"; // 금요일. 어제 = 11/12(목), 그 주 월요일 = 11/9
 const doneToday = (o) => ({ salesPush: Object.assign({ id: 1, at: ms("2026-11-13T09:00"), status: "done", from: "2026-11-09", to: Y, doneAt: ms("2026-11-13T09:01") }, o) });
 const P = (d, now = N, o = {}, plan = PLAN) => autoPlan(d, now, plan, o);
 t("A 받을 것 없음", P(base(N)), (r) => r.act === "none");
@@ -46,6 +46,11 @@ t("S3 살펴보기를 오늘 해 봤는데 실패 → 오늘은 다시 안 함",
 t("S4 계획에 이상한 종류(대문자·gross)는 무시", P(base(N, { scout: false }), N, {}, [{ kind: "Evil", key: "x" }, { kind: "gross", key: "y" }, { kind: "scout" }]), (r) => r.act === "none");
 t("S5 계획이 배열이 아니어도 멈추지 않음", P(base(N, { missG: [Y] }), N, {}, { bad: 1 }), (r) => r.act === "request");
 t("R 다시 보내기(re)와 새 번호", P(base(N, { missG: [Y] })), (r) => { const a = r.make(N), b = r.make(N + 5000, 1); return b.re === 1 && b.id !== a.id && !a.re; });
+// freshDays: 키가 오래되면 다시, 최신이면 안 함
+const HPLAN = [{ id: "h", kind: "hour", key: "hourShare", freshDays: 7 }];
+t("F1 hourShare 없음 → 시간대 요청", P(base(N, { scout: true }), N, {}, HPLAN), (r, q) => r.act === "request" && q.kind === "hour");
+t("F2 hourShare 최신(어제) → 안 함", P(base(N, { scout: true, hourShare: { to: addDay(N_T, -1), wd: {} } }), N, {}, HPLAN), (r) => r.act === "none");
+t("F3 hourShare 8일 전 → 다시", P(base(N, { scout: true, hourShare: { to: addDay(N_T, -8), wd: {} } }), N, {}, HPLAN), (r, q) => r.act === "request" && q.kind === "hour");
 // 실제 gw-plan.json 검사: 배열이고, 각 항목이 알려진 kind·key를 가짐 (mis-sales.js RUN에 있는 종류만)
 t("Z 실제 gw-plan.json 모양", { act: Array.isArray(SHIPPED) && SHIPPED.every((j) => j && /^(scout|hour|daily|pl|catalog)$/.test(j.kind) && j.key) ? "none" : "bad", why: "" }, (r) => r.act === "none");
 console.log(`${pass}/${n} 통과`); process.exit(pass === n ? 0 : 1);

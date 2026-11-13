@@ -426,14 +426,20 @@
       for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
       const $ = R.jQuery, d = R.document;
       if (!$) return finish(false, "시간대별매출현황 화면에 jQuery가 없어요");
+      // 날짜: from(어제-41) ~ to(어제) → 요일별 곡선을 다시 그릴 만큼 (한 번 조회로 기간 전체가 날짜 행으로 옴)
       step = "조회일";
       const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
       const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
-      if (dbs.length >= 2) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(job.from, like)); $(dbs[1]).datebox("setValue", fmt(job.to, like)); }
-      else if (dbs.length === 1) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(job.to, like)); }
+      if (dbs.length < 2) return finish(false, "시간대별매출현황 조회일 칸을 못 찾았어요");
+      const to = job.to, from = (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 41); return t.toISOString().slice(0, 10); })();
+      const like = $(dbs[0]).datebox("getValue") || "";
+      $(dbs[0]).datebox("setValue", fmt(from, like)); $(dbs[1]).datebox("setValue", fmt(to, like));
       step = "매장";
       const all = [...d.querySelectorAll("input")];
       if (!all.some((i) => String(i.value).includes(STORE))) { const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name)); if (code) { if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE; } }
+      // 일자별 옵션이 있으면 켬 (날짜 행으로 받기)
+      const daily = [...d.querySelectorAll("input[type=radio], input[type=checkbox]")].find((i) => { const l = (i.id && d.querySelector(`label[for="${i.id}"]`)) || i.closest("label"); return /일자별|일별/.test((l && l.textContent) || i.value || ""); });
+      if (daily && !daily.checked) daily.click();
       step = "조회";
       const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
       if (!btn) return finish(false, "시간대별매출현황 조회 버튼을 못 찾았어요");
@@ -442,12 +448,46 @@
       let hit = null;
       for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
       if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
+      if (!hit || !hit.rows.length) return finish(false, "시간대별매출현황 조회 결과가 비어 있어요");
       step = "읽기";
       const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
-      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), rows: (L.raw(g) || []).slice(0, 4) }; });
-      await set("hourProbe", { at: Date.now(), from: job.from, to: job.to, grids: probe, note: "시간대별매출현황 열 이름·앞 4줄 (읽기 맞추는 중)" });
-      const main = probe.find((g) => g.rows.length) || probe[0] || { cols: [] };
-      return finish(true, `시간대별매출현황 열 ${main.cols.length}개 읽음: ${main.cols.map((c) => c.split("=")[1] || c).filter(Boolean).slice(0, 12).join(", ")}`, { cols: main.cols.length });
+      // 날짜(SALES_DT) + 시간칸(AM_11..AM_23)이 다 있는 표를 고름
+      const HF = ["AM_11","AM_12","AM_13","AM_14","AM_15","AM_16","AM_17","AM_18","AM_19","AM_20","AM_21","AM_22","AM_23"]; // AM_11=~12시 … AM_23=~24시
+      const ENDS = [12,13,14,15,16,17,18,19,20,21,22]; // 22시까지 (23·24시는 22로 접음)
+      let rows = null, dcol = null, gub = null, cols = null;
+      for (const g of L.grids()) {
+        const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), rs = L.raw(g) || [];
+        if (!rs.length) continue;
+        const dc = cs.find((c) => /SALES_DT|일자|날짜|date/i.test(c.field + title(c)) && rs.some((r) => /^\d{4}[-./]?\d\d[-./]?\d\d/.test(String(r[c.field] || ""))));
+        const hasHour = HF.filter((f) => cs.some((c) => c.field === f)).length >= 10;
+        const gb = cs.find((c) => /GUBUN|구분/i.test(c.field + title(c)));
+        if (dc && hasHour) { rows = rs; dcol = dc; gub = gb; cols = cs; break; }
+      }
+      if (!rows) return finish(false, `시간대별 날짜·시간칸을 못 찾았어요 (머리글: ${(L.grids()[0] ? ($(L.grids()[0]).datagrid("options").columns || [[]]).flat().map(title).join(",") : "").slice(0,150)})`);
+      // Gross 행만, 날짜별 시간칸을 요일 묶음(wd/sat/sun)으로 모음
+      const toIso = (v) => { const m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(String(v || "")); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
+      const grp = { wd: {}, sat: {}, sun: {} }, cnt = { wd: 0, sat: 0, sun: 0 };
+      let lo = "9999", hi = "0";
+      rows.forEach((r) => {
+        if (gub && !/gross/i.test(String(r[gub.field] || ""))) return;
+        const dt = toIso(r[dcol.field]); if (!dt) return;
+        const tot = HF.reduce((a, f) => a + (num(r[f]) || 0), 0); if (!(tot > 0)) return;
+        const wd = new Date(dt + "T00:00:00Z").getUTCDay(), key = wd === 0 ? "sun" : wd === 6 ? "sat" : "wd";
+        cnt[key]++; if (dt < lo) lo = dt; if (dt > hi) hi = dt;
+        HF.forEach((f, i) => { const end = 12 + i; const e = end > 22 ? 22 : end; grp[key][e] = (grp[key][e] || 0) + (num(r[f]) || 0); });
+      });
+      if (cnt.wd < 10) return finish(false, `시간대별 평일 자료가 적어요 (평일 ${cnt.wd}일) · 기간을 늘려 다시`);
+      const build = (g) => { const per = ENDS.map((e) => g[e] || 0), tot = per.reduce((a, b) => a + b, 0); if (!(tot > 0)) return null; let run = 0; const cum = per.map((v) => { run += v; return Math.round((run / tot) * 1e4) / 1e4; }); cum[cum.length - 1] = 1; return cum; };
+      const cur = {}; ["wd","sat","sun"].forEach((k) => { const c = build(grp[k]); if (c) cur[k] = { n: cnt[k], ends: ENDS, cum: c }; });
+      // 안전장치: 각 곡선이 0→1로 단조 증가인지. 아니면 hourShare를 건드리지 않고 멈춤
+      const okCurve = (c) => c && c.cum.length === ENDS.length && c.cum.every((v, i) => v >= 0 && v <= 1 && (i === 0 || v >= c.cum[i - 1] - 1e-9)) && c.cum[c.cum.length - 1] === 1;
+      if (!okCurve(cur.wd)) return finish(false, "시간대별 곡선이 이상해서 안 바꿨어요 (평일)");
+      step = "저장";
+      const prev = (await get()).hourShare || {};
+      const next = { ...prev, from: lo, to: hi, note: prev.note || "시간대별 매출(Gross) 누적 비율. ends[k]시까지의 누적 비율 cum[k]. wd=월~금, sat, sun", src: "GW Agent 시간대별 조회", at: Date.now() };
+      ["wd","sat","sun"].forEach((k) => { if (okCurve(cur[k])) next[k] = cur[k]; });
+      await set("hourShare", next);
+      return finish(true, `시간대별 비율 새로 만듦 (${lo.slice(5)}~${hi.slice(5)} · 평일 ${cnt.wd}·토 ${cnt.sat}·일 ${cnt.sun}일)`, { from: lo, to: hi, n: cnt.wd + cnt.sat + cnt.sun });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
     }

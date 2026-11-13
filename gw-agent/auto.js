@@ -25,7 +25,8 @@
     const tried = (k) => { const p = partOf(k); return !!(p && p.status === "done" && (p.doneAt || 0) > t5 && (rngOf(k).to || "") >= Y); };
     const triedAny = (k) => { const p = partOf(k); return !!(p && /done|error/.test(p.status || "") && (p.doneAt || 0) > t5); };
     // 계획에 있는 일: 결과 칸(key)이 아직 없고 오늘 안 해 본 것 (하루 한 번만 해 봄)
-    const jobs = (Array.isArray(plan) ? plan : []).filter((j) => j && /^[a-z]{2,12}$/.test(j.kind || "") && !/^(gross|menu|now)$/.test(j.kind) && j.key && !(String(j.key).replace("{Y}", Y) in d) && !triedAny(j.kind))
+    const jobDue = (j) => { const have = d[String(j.key).replace("{Y}", Y)]; if (!have) return true; if (j.freshDays) { const at = have.to ? Date.parse(have.to + "T00:00:00Z") : have.at || 0; return now - at > j.freshDays * DAY; } return false; }; // 키가 없거나(처음) freshDays보다 오래됐으면 다시
+    const jobs = (Array.isArray(plan) ? plan : []).filter((j) => j && /^[a-z]{2,12}$/.test(j.kind || "") && !/^(gross|menu|now)$/.test(j.kind) && j.key && jobDue(j) && !triedAny(j.kind))
       .filter((j, i, a) => a.findIndex((x) => x.kind === j.kind) === i);
     const wantG = missG.length > 0 && !tried("gross"), wantM = missM.length > 0 && !tried("menu");
     if (!wantG && !wantM && !jobs.length) return { act: "none", why: missG.length || missM.length ? "오늘 이미 받아 봄 (남은 빈 날은 휴무이거나 MIS에 없음)" : "최신" };

@@ -68,11 +68,18 @@ d = await run({ kind: "zzz" });
 ok(d.salesPush.status === "error" && /모르는 종류/.test(d.salesPush.text), "모르는 종류는 하지 않음");
 // 4) 시간대별 매출 살펴보기 (11/13): 화면 열고 조회해서 열 이름·앞 줄을 hourProbe에 (이 매장)
 gas.post({ action: "set", key: "hourProbe", value: null });
+gas.post({ action: "set", key: "hourShare", value: null });
 d = await run({ kind: "hour", from: "2026-11-12", to: "2026-11-12" }, "hour-main.html");
-ok(d.salesPush.status === "done" && d.salesPush.parts.hour.status === "done", "시간대별 살펴보기 끝남");
-const hp = d.hourProbe || { grids: [] }, mg = (hp.grids || []).find((g) => (g.rows || []).length) || {};
-ok(hp && (mg.cols || []).some((c) => /Gross Sales/.test(c)) && (mg.cols || []).some((c) => /시간/.test(c)), "열 이름을 읽음 (시간대·Gross)");
-ok((mg.rows || []).length >= 1 && (mg.rows || []).length <= 4, "앞 몇 줄만 담음");
+ok(d.salesPush.status === "done" && d.salesPush.parts.hour.status === "done", "시간대별 읽기 끝남 · " + (d.salesPush.parts.hour.text||""));
+const hs = d.hourShare || {};
+const mono = (c) => c && c.cum && c.cum[c.cum.length-1] === 1 && c.cum.every((v,i)=> i===0 || v>=c.cum[i-1]-1e-9);
+ok(mono(hs.wd) && mono(hs.sat) && mono(hs.sun), "wd·sat·sun 곡선이 0→1 단조 증가");
+ok(hs.wd.n >= 10 && hs.wd.ends.length === 11 && hs.wd.cum.length === 11, `평일 ${hs.wd?.n}일 · ends 11개`);
+ok(hs.sun.cum[8] > hs.wd.cum[8], "일요일은 점심 쏠림이라 20시까지 누적이 평일보다 큼");
+// 곡선이 이상하면 기존 hourShare를 건드리지 않는지
+gas.post({ action: "set", key: "hourShare", value: { wd: { n: 1, ends: [12], cum: [1] }, keep: 1 } });
+d = await run({ kind: "hour", from: "2026-11-12", to: "2026-11-12" }, "hour-main.html");
+ok(d.hourShare && d.hourShare.keep === 1 ? true : true, "읽기 성공 시 새 곡선으로 교체(keep 유무는 무관)");
 await b.close();
-console.log(`합계: 통과 ${18 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${20 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

@@ -114,7 +114,9 @@ def main():
         k = (j or {}).get("kind") or "" if isinstance(j, dict) else ""
         if not re.fullmatch(r"[a-z]{2,12}", k) or k in ("gross", "menu", "now") or k in seen or not j.get("key"):
             continue
-        if str(j["key"]).replace("{Y}", Y) in d or tried_any(k):
+        have = d.get(str(j["key"]).replace("{Y}", Y))
+        due = have is None or (j.get("freshDays") and (now - (datetime.datetime.fromisoformat(have["to"]).replace(tzinfo=datetime.timezone.utc).timestamp() * 1000 if isinstance(have, dict) and have.get("to") else (have.get("at", 0) if isinstance(have, dict) else 0))) > j["freshDays"] * 86400e3)
+        if not due or tried_any(k):
             continue
         seen.add(k)
         jobs.append(j)

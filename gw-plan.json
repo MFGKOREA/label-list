@@ -9,9 +9,10 @@
   {
     "id": "hour-probe-1",
     "kind": "hour",
-    "key": "hourProbe",
+    "key": "hourShare",
     "label": "시간대별 매출 살펴보기",
     "from_days": 1,
-    "note": "시간대별매출현황 화면의 열 이름·앞 몇 줄을 읽어 옴(이 매장). 날짜별·시간대별 Gross 읽기를 맞추는 중"
+    "note": "시간대별매출현황을 조회해 요일별 시간대 비율(hourShare)을 다시 만듦. 7일마다. 이 매장만, 조회만",
+    "freshDays": 7
   }
 ]
