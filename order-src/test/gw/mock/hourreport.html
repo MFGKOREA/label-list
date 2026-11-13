@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>시간대별매출현황</title><script src="jquery.js"></script></head><body>
+시간대별매출현황
+<input id="sDate" class="easyui-datebox" value="2026-11-12"><input id="eDate" class="easyui-datebox" value="2026-11-12">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="hGrid"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: [[{ field: "HH", title: "시간대" }, { field: "AM_GROSS", title: "Gross Sales" }, { field: "CNT", title: "객수" }]] }; };
+$("#hGrid").data("datagrid", 1);
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var rows = [];
+  setTimeout(function () { for (var h = 11; h <= 22; h++) { var g = ((h >= 12 && h <= 13) || (h >= 18 && h <= 20)) ? 500000 : 150000; rows.push({ HH: h + ":00", AM_GROSS: g.toLocaleString(), CNT: 10 }); } rows.push({ HH: "합 계", AM_GROSS: "3,300,000", CNT: 120 }); $("#hGrid").data("dg", { rows: rows }); }, 400);
+}
+</script></body></html>

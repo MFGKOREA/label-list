@@ -6,7 +6,9 @@ import vm from "vm";
 import { fileURLToPath } from "url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 vm.runInThisContext(fs.readFileSync(REPO + "/gw-agent/auto.js", "utf8"));
-const PLAN = JSON.parse(fs.readFileSync(REPO + "/gw-plan.json", "utf8"));
+// 판단 시험은 고정 계획으로 (실제 gw-plan.json이 늘어도 시험이 흔들리지 않게). 실제 파일은 아래에서 따로 검사
+const PLAN = [{ id: "scout-1", kind: "scout", key: "gwScout", label: "MIS 메뉴 살펴보기" }];
+const SHIPPED = JSON.parse(fs.readFileSync(REPO + "/gw-plan.json", "utf8"));
 const ms = (s) => Date.parse(s + ":00+09:00"), addDay = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 function base(now, { missG = [], missM = [], pcAgo = 60, scout = true, ...over } = {}) {
   const T = new Date(now + 9 * 3600e3).toISOString().slice(0, 10), d = { "master.order": { rows: Array.from({ length: 120 }, (_, i) => [i]) }, forecast: {} };
@@ -44,4 +46,6 @@ t("S3 살펴보기를 오늘 해 봤는데 실패 → 오늘은 다시 안 함",
 t("S4 계획에 이상한 종류(대문자·gross)는 무시", P(base(N, { scout: false }), N, {}, [{ kind: "Evil", key: "x" }, { kind: "gross", key: "y" }, { kind: "scout" }]), (r) => r.act === "none");
 t("S5 계획이 배열이 아니어도 멈추지 않음", P(base(N, { missG: [Y] }), N, {}, { bad: 1 }), (r) => r.act === "request");
 t("R 다시 보내기(re)와 새 번호", P(base(N, { missG: [Y] })), (r) => { const a = r.make(N), b = r.make(N + 5000, 1); return b.re === 1 && b.id !== a.id && !a.re; });
+// 실제 gw-plan.json 검사: 배열이고, 각 항목이 알려진 kind·key를 가짐 (mis-sales.js RUN에 있는 종류만)
+t("Z 실제 gw-plan.json 모양", { act: Array.isArray(SHIPPED) && SHIPPED.every((j) => j && /^(scout|hour|daily|pl|catalog)$/.test(j.kind) && j.key) ? "none" : "bad", why: "" }, (r) => r.act === "none");
 console.log(`${pass}/${n} 통과`); process.exit(pass === n ? 0 : 1);

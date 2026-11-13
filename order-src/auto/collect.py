@@ -11,8 +11,8 @@ import argparse, datetime, json, os, re, sys, time, urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 API = os.environ.get("ORDER_API_TEST") or re.search(r'DEFAULT_API = "([^"]+)"', open(os.path.join(HERE, "..", "app.js"), encoding="utf-8").read()).group(1)  # ORDER_API_TEST: 시험에서 가짜 서버 주소
 KST = datetime.timezone(datetime.timedelta(hours=9))
-try:  # 더 받아 올 것 목록 (확장과 같이 봄). 없거나 깨졌으면 매출·메뉴만
-    PLAN = json.load(open(os.path.join(HERE, "..", "..", "gw-plan.json"), encoding="utf-8"))
+try:  # 더 받아 올 것 목록 (확장과 같이 봄). 없거나 깨졌으면 매출·메뉴만. ORDER_PLAN_TEST로 시험에서 바꿔 끼움
+    PLAN = json.loads(os.environ["ORDER_PLAN_TEST"]) if os.environ.get("ORDER_PLAN_TEST") else json.load(open(os.path.join(HERE, "..", "..", "gw-plan.json"), encoding="utf-8"))
     PLAN = PLAN if isinstance(PLAN, list) else []
 except Exception:
     PLAN = []

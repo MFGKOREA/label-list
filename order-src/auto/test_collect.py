@@ -104,7 +104,7 @@ def case(name, now_s, data_kw, mode, want_code, check=None, extra=()):
     srv = serve(sheet)
     with tempfile.TemporaryDirectory() as bk:
         r = subprocess.run([sys.executable, os.path.join(HERE, "collect.py"), "--now", now_s, "--poll", "0.3", "--resend", "1.5", "--wait", "5", "--backup", bk, *extra],
-                           env=dict(os.environ, ORDER_API_TEST="http://127.0.0.1:%d/x" % srv.server_address[1]), capture_output=True, text=True)
+                           env=dict(os.environ, ORDER_API_TEST="http://127.0.0.1:%d/x" % srv.server_address[1], ORDER_PLAN_TEST='[{"id":"scout-1","kind":"scout","key":"gwScout","label":"MIS 메뉴 살펴보기"}]'), capture_output=True, text=True)
     srv.shutdown()
     reqs = [p["value"] for p in sheet.posts if p.get("key") == "salesPush"]
     bad = [p for p in sheet.posts if p.get("key") != "salesPush" or p.get("action") != "set"]

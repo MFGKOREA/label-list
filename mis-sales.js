@@ -398,13 +398,68 @@
     }
   }
 
+  // ---------- 시간대별 매출현황 살펴보기 (11/13, kind "hour") ----------
+  //  실제 화면을 아직 못 봐서, 첫 버전은 "열 이름과 앞 몇 줄"만 읽어 시트 hourProbe에 둔다(이 매장 자료라 값도 둠).
+  //  이걸 보고 날짜별·시간대별 Gross를 뽑는 읽기를 mis-sales.js에 맞춘 뒤, 매일 Forecast 확인과 같이 어제 것을 모은다.
+  //  화면은 열지만 조회만 한다. 저장·확정 단추는 누르지 않는다.
+  async function runHour() {
+    try {
+      step = "시간대별 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const clickTree = (re) => { const hit = byText(re, ".tree-title"); if (!hit) return false; hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); return true; };
+      const HOUR_RE = /^시간\s*대?\s*별\s*매출\s*(현황)?$/;
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /시간\s*대?\s*별\s*매출/.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 3000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(HOUR_RE, ".tree-title")) {
+          if (!byText(/^매출현황$/, ".tree-title")) { clickTree(/^매출정보관리$/); await waitFor(() => byText(/^매출현황$/, ".tree-title"), 3000); }
+          clickTree(/^매출현황$/); await waitFor(() => byText(HOUR_RE, ".tree-title"), 3000);
+        }
+        if (!clickTree(HOUR_RE)) break;
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "시간대별매출현황 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "시간대별매출현황 화면에 jQuery가 없어요");
+      step = "조회일";
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+      if (dbs.length >= 2) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(job.from, like)); $(dbs[1]).datebox("setValue", fmt(job.to, like)); }
+      else if (dbs.length === 1) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(job.to, like)); }
+      step = "매장";
+      const all = [...d.querySelectorAll("input")];
+      if (!all.some((i) => String(i.value).includes(STORE))) { const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name)); if (code) { if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE; } }
+      step = "조회";
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) return finish(false, "시간대별매출현황 조회 버튼을 못 찾았어요");
+      const L = loader($, d);
+      await L.idle(T.q);
+      let hit = null;
+      for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
+      if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
+      step = "읽기";
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), rows: (L.raw(g) || []).slice(0, 4) }; });
+      await set("hourProbe", { at: Date.now(), from: job.from, to: job.to, grids: probe, note: "시간대별매출현황 열 이름·앞 4줄 (읽기 맞추는 중)" });
+      const main = probe.find((g) => g.rows.length) || probe[0] || { cols: [] };
+      return finish(true, `시간대별매출현황 열 ${main.cols.length}개 읽음: ${main.cols.map((c) => c.split("=")[1] || c).filter(Boolean).slice(0, 12).join(", ")}`, { cols: main.cols.length });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- 몰이 (11/12): 맡은 요청을 하고, 그새 폰에서 다른 버튼을 눌러 덧붙인 요청(also)도 같은 창에서 이어서 ----------
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
   const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
   try {

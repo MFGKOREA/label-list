@@ -79,7 +79,7 @@ await sleep(12000);
 ok(pcReqs().length === before3, "상시 수집을 끄면 스스로 요청하지 않음");
 
 // 4) 다 받아 뒀으면 요청 없이 쉼
-store.forecast[Y].act = "88"; store.gwScout = { at: 1, menus: [] }; store.salesPush = { id: 1, at: Date.now() - 3600e3, status: "done", doneAt: Date.now() - 3500e3 };
+store.forecast[Y].act = "88"; store.gwScout = { at: 1, menus: [] }; store.hourProbe = { at: 1, grids: [] }; store.salesPush = { id: 1, at: Date.now() - 3600e3, status: "done", doneAt: Date.now() - 3500e3 };
 await setSt({ auto: true, autoSt: { next: 0 } });
 const st4 = await until(async () => { const s = ((await getSt("autoSt")) || {}).autoSt || {}; return s.okAt ? s : null; }, 20000);
 ok(!!st4 && st4.msg === "다 받아 둠" && pcReqs().length === before3, "다 받아 뒀으면 요청 없이 쉼", JSON.stringify(st4));
