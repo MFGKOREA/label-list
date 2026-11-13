@@ -80,6 +80,16 @@ ok(hs.sun.cum[8] > hs.wd.cum[8], "일요일은 점심 쏠림이라 20시까지 �
 gas.post({ action: "set", key: "hourShare", value: { wd: { n: 1, ends: [12], cum: [1] }, keep: 1 } });
 d = await run({ kind: "hour", from: "2026-11-12", to: "2026-11-12" }, "hour-main.html");
 ok(d.hourShare && d.hourShare.keep === 1 ? true : true, "읽기 성공 시 새 곡선으로 교체(keep 유무는 무관)");
+// 5) 주문현황 (11/13): 날짜별 발주를 misOrder.날짜에. "주문등록"(발주 입력 화면)은 절대 안 엶
+let opened2 = null, entry = 0;
+d = await run({ kind: "orders", from: "2026-11-01", to: "2026-11-12" }, "order-main.html", async (p) => { opened2 = await p.evaluate(() => window.__opened); entry = await p.evaluate(() => window.__entryOpened || 0); });
+console.log("결과:", d.salesPush.status, d.salesPush.text);
+ok(d.salesPush.status === "done" && d.salesPush.parts.orders.status === "done", "주문현황 읽기 끝남");
+ok(entry === 0 && Array.isArray(opened2) && opened2.length === 1 && opened2[0] === "주문현황", `열린 화면은 주문현황 하나뿐 (발주 입력 화면 ${entry}번)`);
+ok(d["misOrder.2026-11-07"] && d["misOrder.2026-11-07"].rows.length === 2 && d["misOrder.2026-11-07"].rows.find((r) => r.code === "340002106").qty === 20 && d["misOrder.2026-11-07"].rows[0].deliv === "2026-11-09", "11/7 발주 2줄 · 수량·입고예정일");
+ok(d["misOrder.2026-11-10"] && d["misOrder.2026-11-11"] && !d["misOrder.2026-10-01"], "기간 안 날짜만 (10/1은 안 씀)");
+ok(d.orderProbe && d.orderProbe.grids[0].cols.some((c) => /품목코드/.test(c)) && d.misOrderScan && d.misOrderScan.days === 3, "열 이름 기록·스캔 기록");
+ok(!Object.keys(d).some((k) => /^input\./.test(k)), "KM 입력(input.날짜)은 안 건드림");
 await b.close();
-console.log(`합계: 통과 ${20 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${26 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

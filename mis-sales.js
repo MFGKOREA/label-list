@@ -493,13 +493,90 @@
     }
   }
 
+  // ---------- 주문현황 (11/13 KM, kind "orders") ----------
+  //  이 매장 주문현황을 기간으로 조회해서 날짜별 발주를 시트 misOrder.날짜 = { at, rows: [{ code, name, qty, unit, deliv }] } 에 둠 (이 매장 자료, 조회만).
+  //  앱은 그날 앱에 발주 기록이 없을 때만 이걸 입고로 씀 → MIS에 직접 넣은 발주도 앎 (10/30·11/2·11/7·11/10·11/11이 빠져 예상 재고 32%가 틀어졌음)
+  //  메뉴 경로: 주문정보관리 › 주문등록(폴더) › 주문현황. "주문등록"은 폴더이자 발주 입력 화면 이름이라 글자로 누르지 않고 펼침으로만 엶
+  async function runOrders() {
+    try {
+      step = "주문현황 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const STAT_RE = /^주문\s*현황$/;
+      const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+      // 접힌 폴더 펴기 (펼침 단추·트리 기능만, 메뉴 이름은 안 누름)
+      const expandAll = async () => { for (let round = 0; round < 6 && !byText(STAT_RE, ".tree-title"); round++) { let did = 0; for (const w of trees()) { let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")]; } catch (e) {} for (const h of hits) { let ok = false; try { const $w = w.jQuery, node = h.closest(".tree-node"), root = $w && $w.fn && $w.fn.tree && node ? $w(h).closest("ul.tree") : null; if (root && root.length) { root.tree("expand", node); ok = true; } } catch (e) {} if (!ok) { try { press(w, h); ok = true; } catch (e) {} } if (ok) did++; } } if (!did) break; await sleep(700); } };
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /주문\s*현황/.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 2000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(STAT_RE, ".tree-title")) await expandAll();
+        const hit = byText(STAT_RE, ".tree-title"); if (!hit) break;
+        hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "주문현황 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "주문현황 화면에 jQuery가 없어요");
+      step = "조회일";
+      const to = job.to, from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 14); return t.toISOString().slice(0, 10); })();
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+      if (dbs.length >= 2) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(from, like)); $(dbs[1]).datebox("setValue", fmt(to, like)); }
+      else if (dbs.length === 1) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(to, like)); }
+      step = "매장";
+      const all = [...d.querySelectorAll("input")];
+      if (!all.some((i) => String(i.value).includes(STORE))) { const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name)); if (code) { if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE; } }
+      step = "조회";
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) return finish(false, "주문현황 조회 버튼을 못 찾았어요");
+      const L = loader($, d);
+      await L.idle(T.q);
+      let hit = null;
+      for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
+      if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
+      step = "읽기";
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, rows: (L.raw(g) || []).slice(0, 3) }; });
+      await set("orderProbe", { at: Date.now(), from, to, grids: probe });
+      if (!hit || !hit.rows.length) return finish(true, `주문현황 ${from.slice(5)}~${to.slice(5)} 조회 결과 없음`, { days: 0 });
+      // 열 찾기: 품목코드 · 수량 · 주문일(없으면 입고예정일) · 품목명 · 단위 · 입고(납품)예정일
+      const toIso = (v) => { const m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(String(v ?? "").trim()); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
+      let use = null;
+      for (const g of L.grids()) {
+        const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), rs = L.raw(g) || [];
+        if (!rs.length) continue;
+        const f = (re, bad) => cs.find((c) => re.test(title(c) + " " + c.field) && !(bad && bad.test(title(c) + " " + c.field)));
+        const code = f(/품목\s*코드|상품\s*코드|ITEM_?CD|GOODS_?CD|PROD_?CD|CD_?ITEM|CD_?GOODS/i);
+        const qty = f(/주문\s*수량|발주\s*수량|ORD_?QTY|QTY_?ORD|수량|QTY/i, /단가|금액|AMT|PRICE|합계/i);
+        const od = f(/주문\s*일|발주\s*일|ORD_?DT|DT_?ORD|일자/i, /입고|납품|배송|DLV|IN_?DT/i);
+        const dd = f(/입고|납품|배송|DLV|IN_?DT/i);
+        const name = f(/품목\s*명|상품\s*명|ITEM_?NM|GOODS_?NM|NM_?ITEM|NM_?GOODS/i), unit = f(/단위|UNIT/i, /단가/i);
+        if (code && qty && (od || dd)) { use = { rs, code, qty, od: od || dd, dd, name, unit }; break; }
+      }
+      if (!use) return finish(false, `주문현황 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
+      const by = new Map();
+      use.rs.forEach((r) => { const dt = toIso(r[use.od.field]), q = num(r[use.qty.field]), c = String(r[use.code.field] ?? "").trim(); if (!dt || !c || !(q > 0) || dt < from || dt > to) return; if (!by.has(dt)) by.set(dt, []);
+        by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "", deliv: use.dd && use.dd !== use.od ? toIso(r[use.dd.field]) : null }); });
+      step = "시트 저장";
+      let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misOrder." + dt, { at: Date.now(), rows }); saved++; }
+      await set("misOrderScan", { at: Date.now(), from, to, days: saved });
+      return finish(true, `주문현황 ${from.slice(5)}~${to.slice(5)} · ${saved}일 발주 ${[...by.values()].reduce((a, x) => a + x.length, 0)}줄 저장`, { days: saved });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- 몰이 (11/12): 맡은 요청을 하고, 그새 폰에서 다른 버튼을 눌러 덧붙인 요청(also)도 같은 창에서 이어서 ----------
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
   const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
   try {
