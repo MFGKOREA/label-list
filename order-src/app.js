@@ -513,6 +513,9 @@
   // db 키: master.order, master.prep, month.YYYY-MM = { gross, ledger, sales, line, prep }, forecast, onhand(log), prepOnhand.YYYY-MM-DD, map
   const months = () => Object.keys(db).filter((k) => k.startsWith("month.")).map((k) => k.slice(6)).sort();
   const mget = (m) => db["month." + m] || {};
+  // 날짜별 메뉴 판매의 소계 줄 빼기 (11/13): MIS 메뉴별 매출현황에는 중분류마다 "[스테이크] 스테이크"처럼 이름이 중분류와 같은 소계 줄이 섞여 옴.
+  //  이 줄이 엉뚱한 레시피에 붙어(Soup → 머시룸 수프, 파스타 → 포 갈릭 스테이크 파스타 …) 10월만 9,800개를 더 셌음. 같은 중분류에 다른 메뉴가 있을 때만 소계로 봄(메뉴가 하나뿐인 중분류는 그대로)
+  const dayRowsOf = (k) => { const rows = (db[k] || {}).rows; if (!Array.isArray(rows)) return []; const multi = new Set(rows.filter((r) => r.c && r.m !== r.c).map((r) => r.c)); return rows.filter((r) => !(r.c && r.c === r.m && multi.has(r.c))); };
   function mset(m, patch) { setKey("month." + m, { ...mget(m), ...patch }); }
   // 최신 레시피 (가장 늦은 달에 올린 것, 같은 이름은 나중 파일이 덮음)
   function latestRecipes(kind) {
@@ -643,7 +646,13 @@
     // 품목 목록: 발주 시트가 있으면 그것, 없으면 최근 수불현황 품목명
     let items;
     const sheet = db["master.order"];
-    const allMonths = months();
+    // 이번 달 파일이 아직 없어도 날짜별 메뉴 판매(PC가 매일 받음)가 실제 Gross 있는 날을 7일 넘게 다 덮으면 계산에 넣음 (11/13).
+    //  → 메뉴별 매출현황을 매달 올리지 않아도 B가 이번 달 판매로 저절로 바뀜. 화면의 월 자료 목록(months)은 그대로
+    const allMonths = (() => {
+      const ms = months(), cur = TODAY.slice(0, 7); if (ms.includes(cur)) return ms;
+      const f = db.forecast || {}, act = Object.keys(f).filter((x) => x.startsWith(cur) && x < TODAY && num(f[x].act) > 0);
+      return act.length >= 7 && act.every((x) => Array.isArray((db["menuDay." + x] || {}).rows)) ? [...ms, cur].sort() : ms;
+    })();
     const lastLedgerMonth = [...allMonths].reverse().find((m) => mget(m).ledger);
     if (sheet && sheet.rows && sheet.rows.length) {
       // 품목코드 칸이 있는 시트에서 코드 없는 줄은 '날짜', '데일리 매출' 같은 메모 줄. 'hide'는 목록에서 뺀 품목 ("업체:소모품"이면 그 업체 전체)
@@ -866,16 +875,34 @@
       const f = futureShare(id); if (f != null) return f;
       const c = shareCfg.find((x) => x.id === id); return c && c.def != null ? c.def : 0.5;
     }
+    // 달별 메뉴 판매 (11/13): 그 달 실제 Gross가 있는 날을 날짜별 메뉴 판매(menuDay, PC가 받음)가 모두 덮으면 날짜별을 더해서 씀.
+    //  월 파일은 받은 날까지만이라(10월 파일 = 10/25에 받아 10/24까지, 11월 파일도 월초분) 한 달 Gross로 나누면 B가 낮게 잡혔고, 그만큼 로스 계수가 달마다 들쭉날쭉했음.
+    //  되돌려 보기(10월까지로 배워 11월 76구간 채점): 사용 오차 28.1→27.6%, 과소 치우침 −3.7→−2.8%. 전체 268구간: WAPE 21.1→20.6%, 크게 모자람 29.1→28.7%, 적중 같음
+    //  날짜별이 한 날이라도 비면 예전처럼 월 파일. 월 파일이 없는 달도 날짜별이 다 있으면 B가 생김
+    const salesMemo = new Map();
+    const salesOf = (m) => {
+      if (salesMemo.has(m)) return salesMemo.get(m);
+      const d = mget(m), f = db.forecast || {};
+      let res = d.sales || null;
+      // 그 달 실제 Gross가 있는 날 전부. 월 Gross(수불현황과 같이 올린 값)가 따로 있으면 그 합과 3% 안으로 맞을 때만 (메뉴와 Gross의 기간이 같아야 B가 맞음)
+      const act = Object.keys(f).filter((x) => x.startsWith(m) && num(f[x].act) > 0), dg = num(d.gross), actSum = act.reduce((a, x) => a + num(f[x].act), 0);
+      if (act.length && act.every((x) => Array.isArray((db["menuDay." + x] || {}).rows)) && !(dg > 0 && Math.abs(actSum / dg - 1) > 0.03)) {
+        const agg = new Map();
+        act.forEach((x) => dayRowsOf("menuDay." + x).forEach((r) => { const q = num(r.q); if (!(q > 0) || !r.m) return; const key = (r.c || "") + "\u0001" + r.m; agg.set(key, (agg.get(key) || 0) + q); }));
+        res = { ...(d.sales || {}), rows: [...agg].map(([key, qty]) => { const [cat, menu] = key.split("\u0001"); return { cat, menu, qty }; }), daily: act.length };
+      }
+      salesMemo.set(m, res); return res;
+    };
     // 그 달 메뉴 판매로 한 품목의 레시피 사용량 (캐시 없이, 비율을 바꿔 가며 계산)
     const theoItem = (m, key) => {
-      const d = mget(m); if (!d.sales) return 0; const acc = new Map();
-      d.sales.rows.forEach((s) => { if (COUPON.test(s.cat) && !mapCfg.menu[s.menu]) return; const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return; expand(variantOf("line", r.recipe.name, m) || r.recipe, s.qty * (r.mult || 1), acc, 0, null, null, m); });
+      const sl = salesOf(m); if (!sl) return 0; const acc = new Map();
+      sl.rows.forEach((s) => { if (COUPON.test(s.cat) && !mapCfg.menu[s.menu]) return; const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return; expand(variantOf("line", r.recipe.name, m) || r.recipe, s.qty * (r.mult || 1), acc, 0, null, null, m); });
       return acc.get(key) || 0;
     };
     shareCfg.forEach((c) => {
       const it = items.find((i) => i.key === c.item); if (!it) return;
       allMonths.forEach((m) => {
-        const d = mget(m); if (!d.ledger || !d.sales) return;
+        const d = mget(m); if (!d.ledger || !salesOf(m)) return;
         const a = asOfUsage(d, it); if (!(a > 0)) return;
         shareOverride = { [c.id]: 0 }; const t0 = theoItem(m, it.key);
         shareOverride = { [c.id]: 1 }; const t1 = theoItem(m, it.key);
@@ -896,9 +923,10 @@
       if (d.ledger) d.ledger.rows.forEach((r) => { const a = asOf(r); const it = a ? a.it : ledgerItem(r); if (it && r.usage > 0) actual.set(it.key, (actual.get(it.key) || 0) + r.usage * (a ? a.f : 1)); });
       let theo = null, prepUse = null, menuQty = 0, menuMapped = 0;
       const recQ = new Map(), extra = new Map();
-      if (d.sales && line.length) {
+      const sl = salesOf(m);
+      if (sl && line.length) {
         theo = new Map(); prepUse = new Map();
-        d.sales.rows.forEach((s) => {
+        sl.rows.forEach((s) => {
           if (COUPON.test(s.cat) && !mapCfg.menu[s.menu]) return; // 연결 안 한 쿠폰은 메뉴 수에도 안 셈
           menuQty += s.qty;
           const r = resolveMenu(s.menu, s.cat); if (!r || r.skip) return;
@@ -912,7 +940,7 @@
         Object.values(db.prepCfg || {}).forEach((c) => {
           const sp = c.shortOf && ((db.prepCfg || {})[c.shortOf] || {}).split; const it = sp && items.find((i) => i.key === c.item);
           if (!it) return;
-          const n = d.sales.rows.reduce((a, r) => { const x = resolveMenu(r.menu, r.cat); return a + (x && x.recipe && x.recipe.name.startsWith(sp.from) ? r.qty * (x.mult || 1) : 0); }, 0);
+          const n = sl.rows.reduce((a, r) => { const x = resolveMenu(r.menu, r.cat); return a + (x && x.recipe && x.recipe.name.startsWith(sp.from) ? r.qty * (x.mult || 1) : 0); }, 0);
           const need = (prepUse.get(c.shortOf) || 0) + (prepUse.get(c.shortOf + "|ea") || 0) * (sp.portion || 110);
           const halves = Math.max(0, need - n * sp.g) / (sp.portion || 110);
           if (halves) { theo.set(it.key, (theo.get(it.key) || 0) + halves / (c.per || 2)); extra.set(it.key, (extra.get(it.key) || 0) + halves / (c.per || 2)); }
@@ -963,6 +991,23 @@
       const x = blend.recipeRate.find((y) => !y.launch && !y.swap && y.recipe.name === oldN); if (!x || !(x.rate > 0)) return;
       const to = s.to ? line.find((r) => r.name === s.to) : null;
       const move = (recipe, r) => { const pm = perMenu(recipe); const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v); pm.acc.forEach((v, k) => add(blend.theo, k, v * r)); pm.prepAcc.forEach((v, k) => add(blend.prep, k, v * r)); pm.batchAcc.forEach((v, k) => add(blend.batchX, k, v * r)); };
+      // 11/13: 새 메뉴가 출시일(from) 뒤 제 판매가 7일 넘게 쌓였으면 옛 메뉴 몫은 넘기지 않고 지우기만 함.
+      //  날짜별 판매로 새 메뉴의 제 판매가 이미 B에 있는데 옛 몫까지 더해 스모키 치폴레 반반 피자 2종이 1.8~2.1배로 잡혔음(꿀 +127%, 깐쪽파 +24% 과다).
+      //  이때 새 메뉴 판매율은 출시일 뒤 Gross로만 나눔(그 전 날은 팔 수 없었음). 최근 달에만 팔린 새 메뉴일 때만
+      const own = to && blend.recipeRate.find((y) => !y.launch && !y.swap && y.recipe.name === to.name && y.rate > 0);
+      const lastB2 = withB[withB.length - 1];
+      if (own && s.from && lastB2) {
+        const f2 = db.forecast || {}, since = Object.keys(f2).filter((x) => x.startsWith(lastB2.m) && x >= s.from && x < TODAY && num(f2[x].act) > 0);
+        const onlyLast = withB.slice(-3).filter((r) => r.recQ.has(to.name)).length === 1 && lastB2.recQ.has(to.name);
+        if (since.length >= 7) {
+          const gSince = since.reduce((a, x) => a + num(f2[x].act), 0);
+          if (onlyLast && gSince > 0 && lastB2.gross > gSince) { const k = lastB2.gross / gSince; move(to, own.rate * (k - 1)); own.rate *= k; }
+          move(x.recipe, -x.rate);
+          blend.swaps.push({ from: oldN, to: to.name, rate: 0, own: true });
+          x.rate = 0;
+          return;
+        }
+      }
       move(x.recipe, -x.rate);
       if (to) { move(to, x.rate); blend.recipeRate.push({ recipe: to, rate: x.rate, swap: oldN }); }
       blend.swaps.push({ from: oldN, to: to ? to.name : null, rate: x.rate });
@@ -979,7 +1024,7 @@
         const m = /^menuDay(Part)?\.(\d{4}-\d\d-\d\d)$/.exec(k);
         if (!m || m[2] < from || m[2] >= TODAY || !Array.isArray((db[k] || {}).rows)) return;
         if (m[1] && days.has(m[2]) && !days.get(m[2]).part) return; // PC가 받은 그날 전체 판매가 있으면 그걸 씀
-        days.set(m[2], { rows: db[k].rows, part: !!m[1] });
+        days.set(m[2], { rows: dayRowsOf(k), part: !!m[1] });
       });
       const q = new Map(); // 레시피 이름 → { recipe, q, d0 첫 판매일 }
       [...days.keys()].sort().forEach((d) => days.get(d).rows.forEach((r) => {
@@ -990,7 +1035,7 @@
       const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
       // 기존 메뉴의 중분류 (지난달 메뉴별 매출현황): 신메뉴는 같은 중분류 손님을 나눠 가지므로 그만큼 기존 메뉴를 줄임 (파스타 하나 늘었다고 파스타 손님이 늘진 않음)
       const lastB = withB[withB.length - 1], catOf = new Map();
-      if (lastB) (mget(lastB.m).sales || { rows: [] }).rows.forEach((s) => { const x = resolveMenu(s.menu, s.cat); if (x && x.recipe && !catOf.has(x.recipe.name)) catOf.set(x.recipe.name, s.cat); });
+      if (lastB) (salesOf(lastB.m) || { rows: [] }).rows.forEach((s) => { const x = resolveMenu(s.menu, s.cat); if (x && x.recipe && !catOf.has(x.recipe.name)) catOf.set(x.recipe.name, s.cat); });
       const newByCat = new Map(), nowLine = new Set(((mget(TODAY.slice(0, 7)).line || {}).recipes || []).map((r) => r.name));
       const grossOn = (d) => { const f = (db.forecast || {})[d] || {}; return num(f.act) > 0 ? num(f.act) : num(f.fc) > 0 ? fcAdj(d) : 0; };
       q.forEach((e) => {
@@ -1033,7 +1078,7 @@
       if (W.length < 2 || D.length < 3) return;
       const g = (xs) => xs.reduce((a, d) => a + num(fc[d].act), 0) / 1e6, gW = g(W), gD = g(D);
       const q = new Map(); // 레시피 이름 → { recipe, w, d }
-      ds.forEach((d) => db["menuDay." + d].rows.forEach((r) => {
+      ds.forEach((d) => dayRowsOf("menuDay." + d).forEach((r) => {
         if (COUPON.test(r.c) && !mapCfg.menu[r.m]) return;
         const x = resolveMenu(r.m, r.c); if (!x || x.skip || !x.recipe) return;
         const e = q.get(x.recipe.name) || { recipe: x.recipe, w: 0, d: 0 }; e[isWE(d) ? "w" : "d"] += num(r.q) * (x.mult || 1); q.set(x.recipe.name, e);
@@ -1105,7 +1150,7 @@
       it.isNew = it.rateA == null && it.rateB != null;
     });
     const shares = shareCfg.map((c) => ({ ...c, now: shareOf(c.id, null), byMonth: allMonths.filter((m) => shareFit.has(c.id + "|" + m)).map((m) => ({ m, v: shareFit.get(c.id + "|" + m) })) }));
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf };
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf, salesOf };
     applyScores(cache);
     return cache;
   }
@@ -2253,7 +2298,7 @@
     if (cfg.split || cfg.shortOf) {
       const sp = cfg.split || ((db.prepCfg || {})[cfg.shortOf] || {}).split; if (!sp) return null;
       const dp = cfg.split ? p.name : cfg.shortOf;
-      const sales = (mget(lastB.m).sales || { rows: [] }).rows;
+      const sales = ((M.salesOf ? M.salesOf(lastB.m) : mget(lastB.m).sales) || { rows: [] }).rows;
       const n = sales.reduce((a, r) => { const x = M.resolveMenu(r.menu, r.cat); return a + (x && x.recipe && x.recipe.name.startsWith(sp.from) ? r.qty * (x.mult || 1) : 0); }, 0);
       const need = (lastB.prepUse.get(dp) || 0) + (lastB.prepUse.get(dp + "|ea") || 0) * (sp.portion || 110);
       const supply = n * sp.g;

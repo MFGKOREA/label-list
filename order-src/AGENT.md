@@ -36,6 +36,7 @@
 - `python3 order-src/auto/collect.py [--dry]` — 자동 수집. 끝 코드 0 최신/받음 · 2 건너뜀 · 3 시트 비정상 · 4 못 받음. 시험 `python3 order-src/auto/test_collect.py`(가짜 시트·가짜 PC).
 - `node order-src/auto/learn.mjs [--log] [--final] [--dry]` — 어제 채점(Forecast 오차, 예상 재고 적중·WAPE, 한쪽으로 쏠린 품목). `--log`면 학습 기록에 하루 한 줄.
 - `order-src/test/bt/asof.mjs` — 앱을 "그날 그 시각"으로 여는 도구. 규칙 실험은 저장소 밖 복사본에서 하고, 이 도구로 지난 발주일들을 되돌려 본다.
+- 규칙 비교: `node order-src/test/bt/compare.mjs <kv.json> <기준.html> <고친.html> [--split YYYY-MM-DD]` (같은 채점 구간, 시간 분리).
 - 배포 전 시험: `node order-src/test/smoke.mjs`, `node order-src/test/regress.mjs`, `node order-src/test/gas/atomic.mjs`, `node order-src/test/gw/sales-bench.mjs`, `node order-src/test/gw/e2e-sales.mjs`(GW 쪽을 건드렸을 때).
 - 시트 읽기: `<DEFAULT_API>?api=1`(전체), `&status=1`(요청 상태만). 쓰기: POST `{action: set|merge|append, key, …}`, 헤더 `Content-Type: text/plain;charset=utf-8`. 주소는 `order-src/app.js`의 `DEFAULT_API`.
 
@@ -73,6 +74,9 @@ KM에게 먼저 묻는다:
 - 서버 쓰기는 "새 행 먼저, 옛 행 삭제" 순서여야 한다. 반대로 하면 그 사이에 읽은 쪽이 빈 값으로 덮어쓴다.
 - PC 확장은 켜져 있어도 요청을 놓칠 때가 있다. 2분 반 동안 움직임이 없으면 한 번 다시 보낸다. 두 번을 넘기지 않는다.
 - 여러 작업자를 한꺼번에 돌리면 사용량 한도에 걸려 아무것도 못 끝낸다. 한 번에 하나씩, 결과가 나올 때마다 저장한다.
+- 월 메뉴 파일은 받은 날까지만 담겨 있다(10월 파일 = 10/24까지). 메뉴 수와 Gross는 같은 날들로 나눠야 B가 맞다. 날짜별 메뉴 판매가 다 있으면 그걸 쓴다(`salesOf`). MIS 메뉴 보고서의 "[중분류] 중분류" 줄은 소계다.
+- 메뉴 교체(menuSwap)는 새 메뉴 판매가 쌓이기 전까지만 옛 판매를 넘긴다. 둘 다 세면 2배가 된다.
+- 계산 규칙을 바꿀 땐 `order-src/test/bt/compare.mjs`로 같은 채점 구간끼리 비교하고, `--split`으로 시간 분리 시험도 본다. regress.mjs는 시계만 과거로 돌리고 뒤 자료까지 보므로 날짜별 자료를 쓰는 규칙에는 맞지 않는다.
 - 확장을 다시 깔게 하면 몇 주씩 안 깔린다. 바뀔 것은 GitHub Pages에서 받아 오는 쪽(계획·읽는 스크립트)에 두고 확장은 고정한다.
 - 시트 상태 응답(`status=1`)에는 정해진 칸만 온다. 요청에 새 칸을 넣어도 확장은 거기서 못 본다(자기가 보낸 요청은 번호를 따로 기억).
 - 한 줄 주석(`//`)을 한 줄짜리 함수 안에 넣으면 뒤가 통째로 주석이 된다. `/* */`를 쓴다.
