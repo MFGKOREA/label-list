@@ -1886,7 +1886,8 @@
       const r0 = calc(it, w0, s0, incNow(it));
       return !r0.none && r0.packs > 0 && r0.orderQty - num(v.o) > 1e-9 ? 2 : 3;
     }
-    if (!counted(v)) return -1;
+    // 센 값이 없어도 예상 재고(est)로 채운 칸이면 그 값으로 발주 필요를 가름 (11/13 KM: 예상 재고 채운 뒤 발주 필요순이 안 먹힘)
+    if (!counted(v) && !(v && v.est && v.s !== "" && v.s != null && isFinite(num(v.s)))) return -1;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return -1; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = availOf(it, v), inc = incNow(it), r = calc(it, w, s, inc);
     if (r.none) return -1;
