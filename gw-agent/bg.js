@@ -1,4 +1,6 @@
-// 배경 (1.7.3 — 11/12: 매출 요청은 6시간까지 받고, 새 매출 요청이 오면 옛 창을 바로 닫고, 오류를 적을 때 다른 칸을 안 지움 / 1.7.2 — 11/12: 자동 창을 최소화하지 않고 작은 창으로 맨 위에. 아래에 깔리면 크롬이 느리게 돌려 멈췄음 / 1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
+// 배경 (1.8.0 — 11/13 KM "크롬이 켜져 있으면 상시 연동": 폰에서 누르지 않아도 PC가 스스로 어제 매출·메뉴 판매와 계획(gw-plan.json)에 있는 것을 받아 옴 → 아래 "상시 수집")
+//  1.8.0 원칙: 비밀번호를 다루는 이 확장은 얇게 두고 다시 깔 일을 없앰. 무엇을 받을지(gw-plan.json)와 어떻게 읽을지(mis-sales.js)는 GitHub Pages에서 받아 와 스스로 늘어남
+// (1.7.3 — 11/12: 매출 요청은 6시간까지 받고, 새 매출 요청이 오면 옛 창을 바로 닫고, 오류를 적을 때 다른 칸을 안 지움 / 1.7.2 — 11/12: 자동 창을 최소화하지 않고 작은 창으로 맨 위에. 아래에 깔리면 크롬이 느리게 돌려 멈췄음 / 1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
 //  1.7.0 그대로: 평소엔 창 없음. 폰에서 [GW 전송]·[Gross 불러오기]를 누르면 그때 최소화된 창 하나만 열어 GW 로그인 → 경영정보 → MIS → 입력·저장 → 창 닫음.
 //               한 번 누른 요청은 한 번만 시도. 매장 시간(08~22시)엔 3초마다, 그 밖엔 30초마다 전송 상태만 확인.
 //  1.7.1 고친 것
@@ -8,7 +10,7 @@
 //   ③ 단계(stage)마다 시간 제한과 다시 하기: GW 화면(gw) → MIS 탭 열림(open) → 주문등록 화면(mis) → 전송 받음(start) → 입력(run).
 //      3초마다 탭 상태를 직접 살펴(probe) 스크립트가 안 돌았으면 다시 넣고, 새 탭이 안 생기면 경영정보를 다시 누르고, 그래도 없으면 MIS 주소를 직접 엶.
 //   ④ 안 되면 6분을 기다리지 않고 바로 misPush를 error로 올림. 글에 "멈춘 곳"과 "무엇을 기다리다 멈췄는지"를 적음(주소는 GW·MIS 구분만, 아이디·비밀번호·주소 뒤 값은 안 적음).
-importScripts("common.js");
+importScripts("common.js", "auto.js");
 const get = (k) => chrome.storage.local.get(k);
 const put = (o) => chrome.storage.local.set(o);
 const VER = chrome.runtime.getManifest().version;
@@ -27,6 +29,8 @@ const netGet = async (url, ms = 15e3) => { const c = new AbortController(), t = 
 const post = (key, value) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25e3); return fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }), signal: c.signal }).catch(() => {}).finally(() => clearTimeout(t)); };
 // 바뀐 칸만 보냄 (1.7.3): 매출 요청(salesPush)에 오류를 적을 때 종류·기간·먼저 끝난 결과(parts)를 지우지 않게
 const postMerge = (key, patch) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25e3); return fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "merge", key, patch }), signal: c.signal }).catch(() => {}).finally(() => clearTimeout(t)); };
+// 쓰고 응답(ok)까지 확인 (상시 수집의 요청은 적힌 걸 확인해야 다음으로 감)
+const postOk = async (key, value) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25e3); try { const j = await (await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }), signal: c.signal })).json(); return !!(j && j.ok); } catch (e) { return false; } finally { clearTimeout(t); } };
 const readStatus = async () => { const v = await netGet(API + "?api=1&status=1&t=" + Date.now()); return (v && (v.status || v.data)) || {}; };
 
 // ---- 저장소 읽고-고쳐-쓰기를 한 줄로 (겹쳐 쓰면 나중 것이 앞의 것을 지움) ----
@@ -93,7 +97,8 @@ async function endJob(reason) {
   if (job) for (const id of [...(job.tabs || []), ...(job.extra || [])]) await chrome.tabs.remove(id).catch(() => {});
   await sweep();
   await log(reason);
-  post("misAgent", { at: Date.now(), mode: "ondemand", ver: VER });
+  const { auto } = await get("auto");
+  post("misAgent", { at: Date.now(), mode: "ondemand", ver: VER, auto: auto === false ? 0 : 1 });
 }
 // 안 되면 바로 폰에 알림: misPush(또는 salesPush)를 error로 올리고 창 닫음. 그새 입력이 시작됐으면 그대로 둠. 시트에 못 닿으면 다음 확인 때 다시
 async function fail(job, why) {
@@ -317,13 +322,14 @@ async function tickOnce(why) {
     await log("자동 창이 닫혀 있음 → 작업 끝");
     return;
   }
-  if (!job && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); post("misAgent", { at: now, mode: "ondemand", ver: VER }); } // 폰에 "PC 대기 중"
+  if (!job && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); const { auto } = await get("auto"); post("misAgent", { at: now, mode: "ondemand", ver: VER, auto: auto === false ? 0 : 1 }); } // 폰에 "PC 대기 중" (auto: 상시 수집 켜짐)
   const orderWaiting = p.date === ymd() && p.status === "pending" && now - (p.at || 0) < 30 * 60e3;
   const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 6 * 3600e3; // 1.7.3: 매출 요청은 6시간까지 받음 (PC가 꺼져 있다 켜져도. 예전엔 30분이 지나면 버림)
 
   if (!job) {
     const req = orderWaiting ? { kind: "order", id: "o" + p.id, msg: "폰 전송 받음 → GW·MIS 열기" } : salesWaiting ? { kind: "sales", id: "s" + sp.id, msg: "Gross 불러오기 받음 → GW·MIS 열기" } : null;
-    if (!req || tried[req.id]) return; // 같은 요청은 한 번만 (안 되면 폰에 ⚠, 다시 누르면 새 요청)
+    if (!req) return autoCheck(now, L); // 기다리는 요청이 없음 → 스스로 받아 올 게 있나 (1.8.0)
+    if (tried[req.id]) return; // 같은 요청은 한 번만 (안 되면 폰에 ⚠, 다시 누르면 새 요청)
     await put({ tried: Object.fromEntries([...Object.entries(tried), [req.id, now]].slice(-10)) });
     try { await openJob(req.kind, req.id, req.msg); }
     catch (e) { // 창을 못 엶 → 바로 알림 (예전엔 아무 말 없이 끝)
@@ -350,7 +356,14 @@ async function tickOnce(why) {
   }
   if (job.kind === "sales") {
     const same = "s" + sp.id === job.id;
-    if (same && /done|error/.test(sp.status) && (sp.doneAt || 0) > job.openedAt) return endJob(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`);
+    if (same && /done|error/.test(sp.status) && (sp.doneAt || 0) > job.openedAt) {
+      // 1.8.0: 스스로 보낸 요청이었으면 설정 창에 보일 상태를 고침 (됐으면 1분 뒤 다시 확인해 "다 받아 둠"으로, 안 됐으면 정해 둔 30분 뒤에 다시)
+      const { autoSt = {} } = await get("autoSt");
+      if ("s" + autoSt.reqId === job.id) await put({ autoSt: { ...autoSt, msg: sp.status === "done" ? "스스로 받음" : "스스로 받다가 못 받음 · 조금 뒤 다시", doneAt: now, ...(sp.status === "done" ? { next: now + 60e3 } : {}) } });
+      return endJob(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`);
+    }
+    // 1.8.0: 스스로 받던 중에 폰에서 [GW 전송]이 오면 발주가 먼저 (받던 것은 멈추고, 30분 뒤 스스로 다시 받음)
+    if (orderWaiting && same && /pending|running/.test(sp.status)) { const { autoSt = {} } = await get("autoSt"); if ("s" + autoSt.reqId === job.id) { await postMerge("salesPush", { status: "error", doneAt: now, text: "발주 전송이 먼저라 멈춤 · 조금 뒤 스스로 다시 받아요", cur: null, prog: null }); return endJob("발주 전송이 들어옴 → 스스로 받던 매출은 멈추고 양보"); } }
     if (!same && sp.id && sp.status === "pending") return endJob("새 매출 요청이 들어옴 → 이 창 닫고 새로"); // 1.7.3: 예전엔 12분을 다 기다린 뒤에야 새 요청을 받음
     if (age > L.sales) { if (same && /pending|running/.test(sp.status)) await postMerge("salesPush", { status: "error", doneAt: now, text: `PC가 12분 안에 못 끝냄 · 멈춘 곳: ${where()}`, cur: null, prog: null }); return endJob("매출 시간 초과 → 창 닫음"); }
     if (/^fail:/.test(why || "")) return fail(job, String(why).slice(5));
@@ -358,12 +371,49 @@ async function tickOnce(why) {
   }
 }
 
+// ---- 상시 수집 (1.8.0): 크롬이 켜져 있는 동안 PC가 스스로 ----
+//  30분마다 시트를 한 번 읽어, 어제까지의 실제 매출·메뉴 판매가 비었거나 계획(gw-plan.json)에 아직 안 한 일이 있으면 스스로 요청(salesPush)을 적음
+//  → 그 뒤는 폰 버튼과 같은 길(창 하나 열어 GW·MIS에서 받아 오고 닫음). 다 받아 뒀으면 3시간 쉼. 하루 4번까지만 스스로 요청(MIS가 막혔을 때 계속 두드리지 않게)
+//  요청하지 않는 때(발주 시간대 12:30~14:45, 발주 전송 중, 밤, 다른 요청이 도는 중, 시트 비정상)는 auto.js에. 끄기: 확장 설정의 [상시 수집]
+const AUTO = { every: 30 * 60e3, idle: 3 * 3600e3, retry: 5 * 60e3, max: 4 };
+const PLAN_URL = "https://mfgkorea.github.io/label-list/gw-plan.json";
+async function autoCheck(now, L) {
+  const { auto, autoSt = {} } = await get(["auto", "autoSt"]);
+  if (auto === false || now < (autoSt.next || 0)) return;
+  const day = ymd(new Date(now)), st = autoSt.day === day ? { ...autoSt } : { day, n: 0 };
+  st.at = now; st.next = now + (L.autoEvery || AUTO.every);
+  if (!L.autoAnyTime) { // 쉬는 시간대면 시트를 읽지도 않고 그 시간이 끝날 때 다시 봄 (밤새 30분마다 시트 전체를 받지 않게)
+    const dt = new Date(now), hm = dt.getHours() * 60 + dt.getMinutes(), at = (h, m, plus) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + (plus || 0), h, m, 0).getTime();
+    const rest = hm >= 12 * 60 + 30 && hm <= 14 * 60 + 45 ? ["쉼: 발주 시간대(12:30~14:45)", at(14, 46)] : hm < 6 * 60 ? ["쉼: 밤", at(6, 0)] : hm > 23 * 60 + 30 ? ["쉼: 밤", at(6, 0, 1)] : null;
+    if (rest) { st.msg = rest[0]; st.next = rest[1]; await put({ autoSt: st }); return; }
+  }
+  await put({ autoSt: st }); // 먼저 적어 둠: 시트를 읽는 동안 다음 확인이 겹쳐도 한 번만
+  let d, plan = [];
+  try { const v = await netGet(API + "?api=1&t=" + now, 45e3); if (!v || !v.ok || !v.data) throw new Error("x"); d = v.data; }
+  catch (e) { st.msg = "시트를 못 읽음 (인터넷 확인)"; st.next = now + AUTO.retry; await put({ autoSt: st }); return; }
+  try { const p = await netGet(PLAN_URL + "?t=" + now, 8e3); if (Array.isArray(p)) plan = p; } catch (e) {} // 계획을 못 받으면 매출·메뉴만
+  const r = autoPlan(d, now, plan, { pc: true, forceTime: !!L.autoAnyTime });
+  let go = false;
+  if (r.act === "request") {
+    if (st.n >= (L.autoMax || AUTO.max)) { st.msg = `오늘 ${st.n}번 요청했지만 다 못 받음 · 내일 다시`; st.next = now + AUTO.idle; }
+    else {
+      const req = r.make(now);
+      if (await postOk("salesPush", req)) { st.n++; st.reqId = req.id; st.reqAt = now; st.msg = `스스로 받는 중: ${r.label}`; go = true; await log(`상시 수집 · ${r.label} → 스스로 요청`, { quiet: true }); }
+      else { st.msg = "요청을 시트에 못 적음"; st.next = now + AUTO.retry; }
+    }
+  } else if (r.act === "none") { st.msg = r.why === "최신" ? "다 받아 둠" : r.why; st.okAt = now; st.next = now + (L.autoIdle || AUTO.idle); }
+  else st.msg = "쉼: " + r.why;
+  await put({ autoSt: st });
+  if (go) { fast(); setTimeout(() => tick("auto"), 500); }
+}
+
 chrome.runtime.onStartup.addListener(async () => {
   await lock(() => chrome.storage.local.remove("job")); await put({ owned: [] });
+  { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 60e3 } }); } // 크롬이 막 켜졌으면 1분 뒤에 첫 확인
   await sweep("크롬 시작", true); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 4000); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 12000);
   tick("start");
 });
-chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked"]); await sweep("확장 설치·업데이트"); tick("start"); });
+chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); });
 chrome.alarms.create("watch", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); });
 let fastOn = false;

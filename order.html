@@ -3535,7 +3535,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         // PC가 살아 있는데: 2분 반이 지나도 받았다는 기록이 없음 / 6분 넘게 안 받고 PC가 5분 넘게 조용함 / 확장이 버리는 29분을 넘김 → 같은 요청을 새로
         if ((age > SP.quickMax && !pcWorking(p)) || (age > SP.pendMax && Date.now() - ag.at > SP.aliveWait) || age > SP.bgMax) {
           const also = p.also || {}, K = spKind(p);
-          if (await salesFresh(K, (p.re || 0) + 1)) { misFastUntil = Date.now() + 13 * 60e3; for (const k of Object.keys(also)) if (/^(gross|menu)$/.test(k) && k !== K) await salesSend({ merge: { also: { [k]: also[k] } } }); }
+          if (await salesFresh(K, (p.re || 0) + 1)) { misFastUntil = Date.now() + 13 * 60e3; for (const k of Object.keys(also)) if (/^[a-z]{2,12}$/.test(k) && k !== "now" && k !== K) await salesSend({ merge: { also: { [k]: also[k] } } }); } /* 11/13: 덧붙은 다른 일(메뉴 살펴보기 등)도 같이 다시 보냄 */
         }
       } else if (/done|error/.test(p.status)) {
         // 덧붙였는데 PC가 못 보고 끝남 → 그 종류만 새로 (누른 지 15분 안일 때만)
@@ -3547,7 +3547,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   }
   setInterval(salesTick, SP.tick);
   const SALES_UI = {
-    gross: { bar: "salesBar", go: "salesGo", title: "Gross Sales 불러오기", idle: () => { const r = salesReq("gross"); return `(${mmdd(r.from)} ~ ${mmdd(r.to)})`; } },
+    // 11/13: PC 확장 1.8.0의 상시 수집이 켜져 있으면(misAgent.auto) 누르지 않아도 PC가 스스로 받아 옴 → 그 상태를 보여 줌
+    gross: { bar: "salesBar", go: "salesGo", title: "Gross Sales 불러오기", idle: () => { const r = salesReq("gross"), ag = db.misAgent || {}; return `${ag.auto ? (agAlive() ? "상시 연동 중 · PC가 스스로 받아요 " : "상시 연동 · PC 꺼짐 ") : ""}(${mmdd(r.from)} ~ ${mmdd(r.to)})`; } },
     menu: { bar: "menuBar", go: "menuGo", title: "메뉴 판매 불러오기", idle: () => `요일별 메뉴 쏠림 → 주말 보정 · 최근 4주 중 ${Object.keys(db).filter((k) => k.startsWith("menuDay.") && k.slice(8) >= addDays(TODAY, -28)).length}일 받음` },
   };
   function renderSalesBar(K) {

@@ -343,11 +343,69 @@
     }
   }
 
+  // ---------- MIS 메뉴 살펴보기 (11/13, kind "scout") ----------
+  //  왼쪽 메뉴의 "이름만" 읽어 시트 gwScout에 둠 (화면을 열거나 자료를 읽지 않음). 어느 화면에서 발주·입고 내역을 받을 수 있는지 알아보는 첫 단계
+  //  접힌 폴더는 펼침 단추(.tree-hit)나 트리 기능(expand)으로만 폄. 메뉴 이름(.tree-title)은 누르지 않음 = 화면이 열리지 않음
+  async function runScout() {
+    try {
+      step = "메뉴 찾기";
+      const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+      for (let k = 0; k < 75 && !trees().length; k++) await sleep(200);
+      if (!trees().length) return finish(false, "MIS 왼쪽 메뉴를 못 찾음");
+      const read = () => {
+        const out = [];
+        trees().forEach((w, fr) => {
+          const els = [...w.document.querySelectorAll(".tree-title")], anc = (e) => { let n = 0; for (let x = e.parentElement; x && x !== w.document.body; x = x.parentElement) n++; return n; };
+          const min = Math.min(...els.map(anc)), even = els.every((e) => (anc(e) - min) % 2 === 0);
+          els.forEach((e) => {
+            const t = (e.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60); if (!t) return;
+            const node = e.closest(".tree-node"), o = { t };
+            if (node) { const hit = !!node.querySelector(".tree-hit"); o.d = Math.max(0, node.querySelectorAll(".tree-indent").length - (hit ? 0 : 1)); if (hit || node.querySelector(".tree-folder")) o.f = 1; }
+            else o.d = (anc(e) - min) / (even ? 2 : 1);
+            if (fr) o.fr = fr;
+            out.push(o);
+          });
+        });
+        return out;
+      };
+      step = "폴더 펴기";
+      // 접힌 폴더를 한 겹씩 폄 (펴면 아래 폴더가 새로 보임). 더 펼 게 없거나, 펴도 두 번 연속 늘지 않으면 그만
+      let how = "dom", last = read().length, same = 0;
+      for (let round = 0; round < 12 && left() > T.reserve && !replaced; round++) {
+        let did = 0;
+        for (const w of trees()) {
+          let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")].slice(0, 80); } catch (e) {}
+          for (const h of hits) {
+            let ok = false;
+            try { const $w = w.jQuery, node = h.closest(".tree-node"), root = $w && $w.fn && $w.fn.tree && node ? $w(h).closest("ul.tree") : null; if (root && root.length) { root.tree("expand", node); ok = true; how = "tree"; } } catch (e) {}
+            if (!ok) { try { press(w, h); ok = true; if (how === "dom") how = "hit"; } catch (e) {} }
+            if (ok) did++;
+          }
+        }
+        if (!did) break;
+        await sleep(700);
+        const n = read().length; same = n === last ? same + 1 : 0; last = n;
+        prog(`메뉴 ${n}개`);
+        if (same >= 2) break;
+      }
+      const menus = read().slice(0, 1500);
+      if (!menus.length) return finish(false, "MIS 메뉴 이름을 못 읽음");
+      step = "시트 저장";
+      await set("gwScout", { at: Date.now(), n: menus.length, how, menus });
+      return finish(true, `MIS 메뉴 ${menus.length}개 이름을 읽음`, { n: menus.length });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- 몰이 (11/12): 맡은 요청을 하고, 그새 폰에서 다른 버튼을 눌러 덧붙인 요청(also)도 같은 창에서 이어서 ----------
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기" };
+  // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout() };
+  const needRange = (k) => /^(gross|menu)$/.test(k);
   const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
   try {
     while (queue.length && !replaced) {
@@ -355,7 +413,7 @@
       job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to, force: req.force };
       step = "시작"; Object.keys(diag).forEach((k) => delete diag[k]);
       if (kind !== k0) await merge("salesPush", { cur: kind, prog: null }).catch(() => {});
-      const r = left() < T.reserve ? { ok: false, text: "시간이 모자라 시작 못 함 · 다시 눌러 주세요", extra: {} } : kind === "menu" ? await runMenu() : await runGross();
+      const r = left() < T.reserve ? { ok: false, text: "시간이 모자라 시작 못 함 · 다시 눌러 주세요", extra: {} } : RUN[kind] ? await RUN[kind]() : { ok: false, text: "모르는 종류라 하지 않음: " + String(kind).slice(0, 20), extra: {} };
       await progQ.catch(() => {});
       if (replaced) break;
       done[kind] = r;
@@ -363,7 +421,7 @@
       const d1 = await merge("salesPush", { parts: { [kind]: { status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, ...r.extra } }, cur: null, prog: null }).catch(() => null);
       const q = (d1 && d1.salesPush) || (await get().catch(() => ({}))).salesPush || {};
       if (q.id !== base.id) { replaced = true; break; }
-      Object.keys(q.also || {}).forEach((k) => { if (/^(gross|menu)$/.test(k) && !done[k] && !queue.some(([x]) => x === k) && q.also[k] && q.also[k].from && q.also[k].to) queue.push([k, q.also[k]]); });
+      Object.keys(q.also || {}).forEach((k) => { if (RUN[k] && k !== "now" && !done[k] && !queue.some(([x]) => x === k) && q.also[k] && (!needRange(k) || (q.also[k].from && q.also[k].to))) queue.push([k, q.also[k]]); });
     }
     if (!replaced) {
       const kinds = Object.keys(done), okAll = kinds.every((k) => done[k].ok), first = done[k0] || { text: "", extra: {} };

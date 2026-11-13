@@ -19,12 +19,13 @@ await ctx.route("https://script.google.com/**", async (r) => {
 });
 await ctx.route("https://mis.test/**", (r) => r.fulfill({ path: HERE + "/mock/" + new URL(r.request().url()).pathname.slice(1) }));
 await ctx.route("https://mfgkorea.github.io/label-list/mis-sales.js*", (r) => r.fulfill({ path: REPO + "/mis-sales.js", contentType: "text/javascript" }));
-const run = async (job) => {
+const run = async (job, page = "sales-main.html", peek) => {
   gas.post({ action: "set", key: "salesPush", value: { id: Date.now(), at: Date.now(), status: "pending", ...job } });
   const p = await ctx.newPage(); p.on("pageerror", (e) => console.log("page err", e.message)); p.on("dialog", (d) => d.accept());
-  await p.goto("https://mis.test/sales-main.html"); await p.waitForTimeout(300);
+  await p.goto("https://mis.test/" + page); await p.waitForTimeout(300);
   await p.evaluate(() => { const s = document.createElement("script"); s.src = "https://mfgkorea.github.io/label-list/mis-sales.js?quiet=1&t=" + Date.now(); document.body.appendChild(s); });
   for (let i = 0; i < 120 && /pending|running/.test(gas.get({ api: "1" }).data.salesPush.status); i++) await p.waitForTimeout(500);
+  if (peek) await peek(p);
   await p.close();
   return gas.get({ api: "1" }).data;
 };
@@ -45,6 +46,26 @@ gas.post({ action: "set", key: "forecast", value: { "2026-10-20": { fc: "3000000
 d = await run({ from: "2026-10-20", to: "2026-10-24" });
 console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(d.salesPush.status === "done" && d.forecast["2026-10-24"].act === "16366000", "Gross 불러오기 그대로 됨");
+// 3) MIS 메뉴 살펴보기 (11/13): 접힌 폴더를 펴서 이름만 읽음. 메뉴 이름은 누르지 않음(화면이 열리면 안 됨), 자료는 안 읽음
+let opened = null;
+d = await run({ kind: "scout" }, "scout-main.html", async (p) => { opened = await p.evaluate(() => window.__opened); });
+console.log("결과:", d.salesPush.status, d.salesPush.text);
+const sc = d.gwScout || { menus: [] }, at = (t) => sc.menus.filter((m) => m.t === t);
+ok(d.salesPush.status === "done" && d.salesPush.parts.scout.status === "done", "살펴보기 끝남");
+ok(sc.menus.length === 16 && sc.n === 16, `메뉴 이름 ${sc.menus.length}개 (접힌 3겹까지 16개)`);
+ok(at("주문정보관리")[0].d === 0 && at("주문정보관리")[0].f === 1 && at("입고내역조회")[0].d === 2 && !at("입고내역조회")[0].f && at("공지사항")[0].d === 0 && at("주문등록").length === 2, "깊이·폴더 표시가 맞음 (같은 이름 폴더와 화면도 따로)");
+ok(Array.isArray(opened) && opened.length === 0, "화면은 하나도 열지 않음");
+ok(Object.keys(d).filter((k) => !/^(salesPush|gwScout|forecast|menuDay\.|salesDiag)/.test(k)).length === 0, "쓴 칸은 gwScout뿐");
+// 3-2) 예전 모양 메뉴(펼침 단추 없음)는 보이는 대로 읽음
+d = await run({ kind: "scout" }, "sales-main.html");
+ok(d.salesPush.status === "done" && d.gwScout.menus.length === 4 && d.gwScout.menus.map((m) => m.d).join("") === "0122", "펼침 단추가 없는 메뉴도 이름·깊이를 읽음");
+// 3-3) 매출을 받으면서 살펴보기를 덧붙임 (한 창에서 이어서)
+gas.post({ action: "set", key: "gwScout", value: null });
+d = await run({ from: "2026-10-20", to: "2026-10-24", also: { scout: { at: 1 } } });
+ok(d.salesPush.status === "done" && d.salesPush.parts.gross.status === "done" && d.salesPush.parts.scout.status === "done" && d.gwScout.menus.length === 4, "매출 뒤에 살펴보기를 이어서 함");
+// 3-4) 모르는 종류는 하지 않고 그렇게 적음
+d = await run({ kind: "zzz" });
+ok(d.salesPush.status === "error" && /모르는 종류/.test(d.salesPush.text), "모르는 종류는 하지 않음");
 await b.close();
-console.log(`합계: 통과 ${7 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${15 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

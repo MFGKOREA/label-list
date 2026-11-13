@@ -9,15 +9,16 @@
   .row { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; font-weight: 700; }
   button { font: inherit; font-weight: 700; border: 0; border-radius: 999px; padding: 10px 16px; background: #222; color: #fff; cursor: pointer; }
   button.ghost { background: #f0f0f0; color: #222; }
-  #st { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #f4f4f4; font-size: 12.5px; }
+  #st { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #f4f4f4; font-size: 12.5px; white-space: pre-line; }
   #log { margin-top: 8px; font-size: 11px; color: #707070; max-height: 140px; overflow: auto; white-space: pre-line; }
 </style></head>
 <body>
   <h1>발주 GW 자동연동</h1>
-  <p>매장 시간(08~22시)엔 작은 대기 창에 MIS를 열어 두고, 폰에서 GW 전송·Gross 불러오기를 누르면 바로 처리해요(10초 안팎). 그 밖엔 창 없이 기다려요. 아이디·비밀번호는 이 PC 크롬 안에만 저장돼요.</p>
+  <p>폰에서 GW 전송·매출 불러오기를 누르면 작은 창 하나를 열어 처리하고 닫아요. 상시 수집을 켜 두면 크롬이 켜져 있는 동안 어제 매출·메뉴 판매를 스스로 받아 와요(발주 시간대 12:30~14:45에는 쉼). 아이디·비밀번호는 이 PC 크롬 안에만 저장돼요.</p>
   <label>GW 아이디<input type="text" id="id" autocomplete="off"></label>
   <label>비밀번호<input type="password" id="pw" autocomplete="new-password" placeholder="저장됨이면 비워 둬도 돼요"></label>
   <div class="row"><input type="checkbox" id="on"> <span>자동입력 켜기</span></div>
+  <div class="row"><input type="checkbox" id="auto"> <span>상시 수집 (스스로 받아 오기)</span></div>
   <button id="save">저장</button> <button class="ghost" id="open">MIS 직접 열어 보기</button>
   <div id="st">확인 중…</div>
   <div id="log"></div>

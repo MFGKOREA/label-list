@@ -1,19 +1,21 @@
 const $ = (id) => document.getElementById(id);
 const hm = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 async function load() {
-  const c = await chrome.storage.local.get(["id", "pw", "on", "logs"]);
-  $("id").value = c.id || ""; $("on").checked = !!c.on; $("pw").placeholder = c.pw ? "저장됨 (바꿀 때만 입력)" : "비밀번호";
+  const c = await chrome.storage.local.get(["id", "pw", "on", "logs", "auto", "autoSt"]);
+  $("id").value = c.id || ""; $("on").checked = !!c.on; $("auto").checked = c.auto !== false;
+  const as = c.autoSt || {}, autoLine = c.auto === false ? "\n상시 수집 꺼짐" : !c.on ? "" : `\n상시 수집: ${as.msg || "곧 첫 확인"}${as.at ? ` · ${hm(as.at)} 확인` : ""}${as.next && as.next > Date.now() ? ` · 다음 ${hm(as.next)}` : ""}`; $("pw").placeholder = c.pw ? "저장됨 (바꿀 때만 입력)" : "비밀번호";
   $("log").textContent = (c.logs || []).slice(0, 12).join("\n");
   try {
     const v = await (await fetch(API + "?api=1&status=1&t=" + Date.now())).json(), d = (v && (v.status || v.data)) || {};
     const a = d.misAgent || {}, p = d.misPush || {};
     const fresh = a.at && Date.now() - a.at < (a.mode === "ondemand" ? 20 * 60e3 : 180000);
     $("st").textContent = (!fresh ? `대기 꺼짐${a.at ? ` · 마지막 ${hm(a.at)}` : ""} (자동입력 켜기 확인)` : a.mode === "ondemand" ? `✓ 대기 중 · ${hm(a.at)} 확인 · 폰 전송 때만 창이 열려요` : `✓ MIS 입력 창 열림 · ${hm(a.at)} 확인${a.grid ? "" : " · 주문등록 화면 아님"}`) +
-      (p.date ? `\n마지막 전송 ${p.date.slice(5)} ${p.status === "done" ? "저장 완료" : p.status === "error" ? "확인 필요" : p.status}` : "");
-  } catch (e) { $("st").textContent = "시트에 연결 못 함 (인터넷 확인)"; }
+      (p.date ? `\n마지막 전송 ${p.date.slice(5)} ${p.status === "done" ? "저장 완료" : p.status === "error" ? "확인 필요" : p.status}` : "") + autoLine;
+  } catch (e) { $("st").textContent = "시트에 연결 못 함 (인터넷 확인)" + autoLine; }
 }
 $("save").addEventListener("click", async () => {
-  const v = { id: $("id").value.trim(), on: $("on").checked, tries: [] };
+  const v = { id: $("id").value.trim(), on: $("on").checked, auto: $("auto").checked, tries: [] };
+  if (v.auto) { const { autoSt = {} } = await chrome.storage.local.get("autoSt"); v.autoSt = { ...autoSt, next: Date.now() + 20e3 }; } // 켜면 20초 뒤 첫 확인
   if ($("pw").value) v.pw = $("pw").value;
   // 가게 키는 안 씀 (10/31 KM) → 예전에 저장된 것도 지움
   await chrome.storage.local.set(v); await chrome.storage.local.remove("appKey"); $("pw").value = "";

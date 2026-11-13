@@ -10,7 +10,7 @@ KST = datetime.timezone(datetime.timedelta(hours=9))
 ms = lambda s: int(datetime.datetime.fromisoformat(s).replace(tzinfo=KST).timestamp() * 1000)
 
 
-def base(now, miss_g=(), miss_m=(), pc_ago=60, **over):
+def base(now, miss_g=(), miss_m=(), pc_ago=60, scout=True, **over):
     T = datetime.datetime.fromtimestamp(now / 1000, KST).date()
     days = [(T - datetime.timedelta(days=i)).isoformat() for i in range(1, 60)]
     d = {"master.order": {"rows": [[i] for i in range(120)]}, "forecast": {x: {"fc": "100", "act": "" if x in miss_g else "90"} for x in days}}
@@ -21,6 +21,8 @@ def base(now, miss_g=(), miss_m=(), pc_ago=60, **over):
         d["pad%d" % i] = 1
     d["misAgent"] = {"at": now - pc_ago * 1000, "mode": "ondemand", "ver": "1.7.0"}
     d["misPush"] = {"date": T.isoformat(), "status": "done", "at": now - 3600e3}
+    if scout:
+        d["gwScout"] = {"at": 1, "menus": []}
     d.update(over)
     return d
 
@@ -81,12 +83,14 @@ def pc(mode):
             for k in kinds:
                 rng = p if (p.get("kind") or "gross") == k else p["also"][k]
                 p["parts"][k] = {"status": "error" if mode == "error" else "done", "doneAt": t, "text": "가짜"}
-                if mode in ("ok", "ignore_first"):
+                if mode in ("ok", "ignore_first") and k == "scout":
+                    sheet.d["gwScout"] = {"at": t, "menus": [{"d": 0, "t": "가"}]}
+                elif mode in ("ok", "ignore_first"):
                     x = rng["from"]
                     while x <= rng["to"]:
                         if k == "gross":
                             sheet.d["forecast"].setdefault(x, {})["act"] = "88"
-                        else:
+                        elif k == "menu":
                             sheet.d.setdefault("menuDay." + x, {"at": t, "rows": [{"m": "a", "q": 1}]})
                         x = (datetime.date.fromisoformat(x) + datetime.timedelta(days=1)).isoformat()
             p.update(status="error" if mode == "error" else "done", doneAt=t, text="가짜")
@@ -116,7 +120,7 @@ def main():
     R = [
         case("A 받을 것 없음 → 쓰지 않음", N, {}, None, 0, lambda q, o: not q),
         case("B 어제 매출·메뉴 없음 + PC 켜짐 → 한 번 요청해 받음", N, {"miss_g": [Y], "miss_m": [Y]}, "ok", 0,
-             lambda q, o: len(q) == 1 and q[0]["from"] == "2026-11-09" and q[0]["to"] == Y and q[0]["status"] == "pending" and q[0]["also"]["menu"]["from"] == Y and "kind" not in q[0] and q[0]["by"] == "auto"),
+             lambda q, o: len(q) == 1 and q[0]["from"] == "2026-11-09" and q[0]["to"] == Y and q[0]["status"] == "pending" and q[0]["also"]["menu"]["from"] == Y and "kind" not in q[0] and q[0]["src"] == "auto"),
         case("C PC 꺼짐 → 요청 안 함", N, {"miss_g": [Y], "pc_ago": 3600}, "ok", 2, lambda q, o: not q),
         case("D 시트가 빔 → 아무것도 안 씀", N, {"miss_g": [Y], "forecast": {}}, "ok", 3, lambda q, o: not q),
         case("E PC가 첫 요청을 놓침 → 한 번 다시 보내 받음", N, {"miss_g": [Y]}, "ignore_first", 0, lambda q, o: len(q) == 2 and q[1].get("re") == 1 and q[1]["id"] != q[0]["id"]),
@@ -135,6 +139,10 @@ def main():
         case("N 휴무로 끝남(받았지만 그날은 빈 채) → 성공으로 봄", N, {"miss_g": [Y]}, "closed", 0, lambda q, o: len(q) == 1),
         case("O 오늘 받은 다른 버튼의 ✓는 들고 감", N, dict({"miss_m": [Y]}, **done_today(parts={"gross": {"status": "done", "doneAt": ms("2026-11-13T09:01"), "text": "g"}})), "ok", 0,
              lambda q, o: len(q) == 1 and q[0]["parts"]["gross"]["text"] == "g" and q[0]["kind"] == "menu"),
+        case("S1 계획: MIS 메뉴 살펴보기가 아직 없음 → 그것만 요청해 받음", N, {"scout": False}, "ok", 0, lambda q, o: len(q) == 1 and q[0].get("kind") == "scout" and "from" not in q[0] and "also" not in q[0]),
+        case("S2 계획 + 어제 매출 → 매출이 먼저, 살펴보기는 덧붙임", N, {"scout": False, "miss_g": [Y]}, "ok", 0, lambda q, o: len(q) == 1 and "kind" not in q[0] and "scout" in q[0]["also"] and "menu" not in q[0]["also"]),
+        case("S3 살펴보기를 오늘 해 봤는데 실패 → 오늘은 다시 안 함", N, dict({"scout": False}, **done_today(parts={"scout": {"status": "error", "doneAt": ms("2026-11-13T09:05")}})), "ok", 0, lambda q, o: not q),
+        case("S4 살펴보기만 요청했는데 PC가 오류 → 못 받음", N, {"scout": False}, "error", 4, lambda q, o: len(q) == 1),
         case("P --dry → 쓰지 않음", N, {"miss_g": [Y]}, "ok", 0, lambda q, o: not q and "요청" in o, extra=["--dry"]),
     ]
     print("%d/%d 통과" % (sum(R), len(R)))

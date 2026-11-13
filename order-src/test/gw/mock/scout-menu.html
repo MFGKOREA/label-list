@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<ul class="tree" id="t"></ul>
+<script>
+// EasyUI 트리와 같은 모양: 폴더는 접혀 있고, 펼침 단추(.tree-hit)를 눌러야 아래 메뉴를 그때 받아 옴(0.15초). 메뉴 이름을 누르면 화면이 열림(시험에서는 열리면 안 됨)
+var DATA = [
+  { t: "주문정보관리", c: [{ t: "주문등록", c: [{ t: "주문등록" }, { t: "주문내역조회" }] }, { t: "입고관리", c: [{ t: "입고내역조회" }, { t: "입고확정" }] }] },
+  { t: "매출정보관리", c: [{ t: "매출현황", c: [{ t: "MiscellaneousReport" }, { t: "메뉴별매출현황" }, { t: "시간대별매출현황" }] }] },
+  { t: "재고정보관리", c: [{ t: "수불현황" }, { t: "재고실사등록" }] },
+  { t: "공지사항" }
+];
+function nodeEl(n, d) {
+  var li = document.createElement("li"), div = document.createElement("div"); div.className = "tree-node";
+  var folder = !!n.c, k = folder ? d : d + 1;
+  for (var i = 0; i < k; i++) { var s = document.createElement("span"); s.className = "tree-indent"; div.appendChild(s); }
+  if (folder) { var h = document.createElement("span"); h.className = "tree-hit tree-collapsed"; h.onclick = function (e) { e.stopPropagation(); if (h.className.indexOf("tree-collapsed") < 0) { h.className = "tree-hit tree-collapsed"; if (li.lastChild.tagName === "UL") li.lastChild.style.display = "none"; return; } h.className = "tree-hit tree-expanded"; if (li.lastChild.tagName === "UL") { li.lastChild.style.display = ""; return; } setTimeout(function () { var ul = document.createElement("ul"); n.c.forEach(function (c) { ul.appendChild(nodeEl(c, d + 1)); }); li.appendChild(ul); }, 150); }; div.appendChild(h); }
+  var ic = document.createElement("span"); ic.className = "tree-icon " + (folder ? "tree-folder" : "tree-file"); div.appendChild(ic);
+  var t = document.createElement("span"); t.className = "tree-title"; t.textContent = n.t; t.onclick = function () { parent.openTab(n.t); }; div.appendChild(t);
+  li.appendChild(div); return li;
+}
+DATA.forEach(function (n) { document.getElementById("t").appendChild(nodeEl(n, 0)); });
+</script></body></html>

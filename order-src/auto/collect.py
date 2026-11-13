@@ -11,6 +11,11 @@ import argparse, datetime, json, os, re, sys, time, urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 API = os.environ.get("ORDER_API_TEST") or re.search(r'DEFAULT_API = "([^"]+)"', open(os.path.join(HERE, "..", "app.js"), encoding="utf-8").read()).group(1)  # ORDER_API_TEST: 시험에서 가짜 서버 주소
 KST = datetime.timezone(datetime.timedelta(hours=9))
+try:  # 더 받아 올 것 목록 (확장과 같이 봄). 없거나 깨졌으면 매출·메뉴만
+    PLAN = json.load(open(os.path.join(HERE, "..", "..", "gw-plan.json"), encoding="utf-8"))
+    PLAN = PLAN if isinstance(PLAN, list) else []
+except Exception:
+    PLAN = []
 MIN = 60e3
 OFF = 0.0  # 시험에서 시계를 옮길 때(--now)
 
@@ -84,10 +89,6 @@ def main():
     miss_g = [x for x in span if not has_act(x)]
     miss_m = [x for x in span if ("menuDay." + x) not in d]
     print("기준 %s %s · 어제 %s · 매출 빈 날 %s · 메뉴 빈 날 %s" % (T, kst.strftime("%H:%M"), md(Y), ", ".join(map(md, miss_g)) or "없음", ", ".join(map(md, miss_m)) or "없음"))
-    if not miss_g and not miss_m:
-        print("최신: 받을 것 없음")
-        return 0
-
     sp = d.get("salesPush") or {}
     ag = d.get("misAgent") or {}
     mp = d.get("misPush") or {}
@@ -102,10 +103,26 @@ def main():
         t5 = datetime.datetime.combine(kst.date(), datetime.time(5), KST).timestamp() * 1000
         return bool(p and p.get("status") == "done" and (p.get("doneAt") or 0) > t5 and (rng.get("to") or "") >= Y)
 
+    def tried_any(k):  # 계획에 있는 일은 되든 안 되든 하루 한 번만 해 봄
+        p = parts.get(k) or ({"status": sp.get("status"), "doneAt": sp.get("doneAt")} if kind == k and not parts else None)
+        t5 = datetime.datetime.combine(kst.date(), datetime.time(5), KST).timestamp() * 1000
+        return bool(p and p.get("status") in ("done", "error") and (p.get("doneAt") or 0) > t5)
+
+    # 계획에 있는 일: 결과 칸(key)이 아직 없고 오늘 안 해 본 것 (gw-agent/auto.js와 같은 규칙)
+    jobs, seen = [], set()
+    for j in PLAN:
+        k = (j or {}).get("kind") or "" if isinstance(j, dict) else ""
+        if not re.fullmatch(r"[a-z]{2,12}", k) or k in ("gross", "menu", "now") or k in seen or not j.get("key"):
+            continue
+        if str(j["key"]).replace("{Y}", Y) in d or tried_any(k):
+            continue
+        seen.add(k)
+        jobs.append(j)
+
     want_g = bool(miss_g) and not tried("gross")
     want_m = bool(miss_m) and not tried("menu")
-    if not want_g and not want_m:
-        print("오늘 이미 받아 봄: 남은 빈 날은 휴무이거나 MIS에 없는 날")
+    if not want_g and not want_m and not jobs:
+        print("오늘 이미 받아 봄: 남은 빈 날은 휴무이거나 MIS에 없는 날" if miss_g or miss_m else "최신: 받을 것 없음")
         return 0
 
     age = now - (sp.get("at") or 0)
@@ -128,17 +145,25 @@ def main():
     mon = day(Y, -datetime.date.fromisoformat(Y).weekday())
     g = {"from": min([mon] + miss_g), "to": Y}
     m = {"from": min(miss_m), "to": Y} if miss_m else None
-    keep = {k: v for k, v in parts.items() if v and v.get("doneAt") and now - v["doneAt"] < 12 * 60 * MIN and not (k == "gross" and want_g) and not (k == "menu" and want_m)}
+    keep = {k: v for k, v in parts.items() if v and v.get("doneAt") and now - v["doneAt"] < 12 * 60 * MIN and not (k == "gross" and want_g) and not (k == "menu" and want_m) and k not in seen}
 
     def make(re_n=0):
         t = int(nowms())
-        r = {"id": t, "at": t, "status": "pending", "by": "auto"}
+        r = {"id": t, "at": t, "status": "pending", "src": "auto"}  # src: 누가 요청했나 (by는 PC가 받을 때 자기 표시로 바꿈)
+        also, rest = {}, list(jobs)
         if want_g:
             r.update(g)
             if want_m:
-                r["also"] = {"menu": dict(m, at=t)}
-        else:
+                also["menu"] = dict(m, at=t)
+        elif want_m:
             r.update(m, kind="menu")
+        else:
+            j = rest.pop(0)
+            r.update(j.get("args") or {}, kind=j["kind"])
+        for j in rest:
+            also[j["kind"]] = dict(j.get("args") or {}, at=t)
+        if also:
+            r["also"] = also
         if re_n:
             r["re"] = re_n
         if keep:
@@ -146,7 +171,7 @@ def main():
         return r
 
     req = make()
-    print("요청: %s%s" % ("매출 %s~%s" % (md(g["from"]), md(g["to"])) if want_g else "", (" + " if want_g else "") + "메뉴 %s~%s" % (md(m["from"]), md(m["to"])) if want_m else ""))
+    print("요청: " + " + ".join((["매출 %s~%s" % (md(g["from"]), md(g["to"]))] if want_g else []) + (["메뉴 %s~%s" % (md(m["from"]), md(m["to"]))] if want_m else []) + [j.get("label") or j["kind"] for j in jobs]))
     if a.dry:
         print("(--dry: 시트에 쓰지 않음)")
         return 0
@@ -183,13 +208,17 @@ def main():
     got_g = [x for x in miss_g if str((fc2.get(x) or {}).get("act") or "").strip() not in ("", "0")]
     got_m = [x for x in miss_m if ("menuDay." + x) in f]
     ps = p.get("parts") or {}
-    for k, name in (("gross", "매출"), ("menu", "메뉴")):
+    for k, name in [("gross", "매출"), ("menu", "메뉴")] + [(j["kind"], j.get("label") or j["kind"]) for j in jobs]:
         if ps.get(k):
             print("%s: %s · %s" % (name, ps[k].get("status"), ps[k].get("text") or ""))
     print("결과(%s, %d초): 매출 받은 날 %s · 메뉴 받은 날 %s" % (p.get("status"), time.time() - t0, ", ".join(map(md, got_g)) or "없음", ", ".join(map(md, got_m)) or "없음"))
     ok_g = not want_g or (ps.get("gross") or {}).get("status") == "done" or (not ps and p.get("status") == "done")
     ok_m = not want_m or (ps.get("menu") or {}).get("status") == "done" or (not ps and p.get("status") == "done" and not want_g)
-    if p.get("status") != "done" or not ok_g or not ok_m:
+    # 계획에 있는 일이 안 됐어도 매출·메뉴가 됐으면 성공으로 봄 (내일 다시 해 봄). 그것만 요청했는데 안 됐으면 못 받음
+    if not want_g and not want_m and not any((ps.get(j["kind"]) or {}).get("status") == "done" for j in jobs) and p.get("status") != "done":
+        print("못 받음: %s" % (p.get("text") or "PC 응답 없음"))
+        return 4
+    if (want_g or want_m) and (p.get("status") not in ("done", "error") or not ok_g or not ok_m):
         print("못 받음: %s" % (p.get("text") or "PC 응답 없음"))
         return 4
     return 0
