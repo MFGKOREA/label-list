@@ -36,8 +36,17 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
 await new Promise((r) => srv.listen(0, "127.0.0.1", r));
 const port = srv.address().port;
 const rules = ["gw.madforgarlic.com", "mis.madforgarlic.com", "script.google.com", "script.googleusercontent.com", "mfgkorea.github.io"].map((h) => `MAP ${h} 127.0.0.1:${port}`).concat(["MAP * ~NOTFOUND", "EXCLUDE 127.0.0.1", "EXCLUDE localhost"]).join(", ");
+// 확장은 지금 시각으로 쉰다(빠른 확인은 8~22시, 12:30~14:45·밤엔 요청 안 함). 그래서 시험이 도는 시각에 따라 실패했다(11/14: '플레이크'가 아니라 시계 탓).
+//  E2E_TZ가 없으면 지금 그 지역 시각이 9~12시 또는 15~21시인 시간대를 골라 늘 같은 조건에서 돌린다
+const pickTZ = () => {
+  if (process.env.E2E_TZ) return process.env.E2E_TZ;
+  const zones = ["Asia/Seoul", "Asia/Shanghai", "Asia/Kolkata", "Asia/Dubai", "Europe/Moscow", "Europe/Berlin", "Europe/London", "America/Sao_Paulo", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Pacific/Honolulu", "Pacific/Auckland", "Australia/Sydney"];
+  const hourIn = (z) => { const p = new Intl.DateTimeFormat("en-US", { timeZone: z, hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date()); const h = +p.find((x) => x.type === "hour").value, m = +p.find((x) => x.type === "minute").value; return h + m / 60; };
+  return zones.find((z) => { const h = hourIn(z); return (h >= 9 && h < 12) || (h >= 15 && h < 21); }) || "Asia/Seoul";
+};
+const TZ = pickTZ();
 const ctx = await chromium.launchPersistentContext(TMP + "/prof", {
-  executablePath: fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined, headless: true, env: { ...process.env, TZ: process.env.E2E_TZ || "Asia/Seoul" },
+  executablePath: fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined, headless: true, env: { ...process.env, TZ },
   args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, `--host-resolver-rules=${rules}`, "--ignore-certificate-errors", "--no-proxy-server"],
 });
 const getSW = async () => ctx.serviceWorkers().find((w) => w.url().startsWith("chrome-extension://")) || (await ctx.waitForEvent("serviceworker", { timeout: 40000 }));
@@ -48,7 +57,7 @@ const setSt = (o) => sw((o) => chrome.storage.local.set(o), o), getSt = (k) => s
 const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const r = await fn(); if (r) return r; await sleep(500); } return null; };
 const pcReqs = () => writes.filter((w) => w.key === "salesPush" && w.action === "set" && w.value && w.value.src === "pc");
 let fails = 0, n = 0; const ok = (c, m, extra) => { n++; console.log((c ? "통과 " : "실패 ") + m + (c || !extra ? "" : "\n   " + extra)); if (!c) fails++; };
-console.log(`# 확장 ${ver} · 오늘 ${T} · 어제 ${Y} · 가짜 서버 127.0.0.1:${port}`);
+console.log(`# 확장 ${ver} · 시험 시간대 ${TZ} · 오늘 ${T} · 어제 ${Y} · 가짜 서버 127.0.0.1:${port}`);
 const LIM = { autoEvery: 4000, autoIdle: 4000, autoAnyTime: true }; // 시험: 4초마다 확인, 발주 시간대·밤에도
 
 // 1) 스스로 요청: 어제 매출이 비었고 계획에 메뉴 살펴보기가 있음 → 한 요청에 둘 다, 그리고 창을 열어 일을 시작
