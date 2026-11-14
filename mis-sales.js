@@ -560,7 +560,8 @@
         } catch (e) {}
       }
       step = "읽기";
-      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!o.pagination, rows: (L.raw(g) || []).slice(0, 3) }; });
+      // 열 이름만 남김. 원본 줄(rows)은 저장하지 않는다 — 주문자(NM_USER) 같은 직원 이름이 들어 있어서다(11/14 보안). misOrder엔 품목명만 저장
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!o.pagination }; });
       await set("orderProbe", { at: Date.now(), from, to, grids: probe });
       if (!hit || !hit.rows.length) return finish(true, `주문현황 ${from.slice(5)}~${to.slice(5)} 조회 결과 없음`, { days: 0 });
       // 열 찾기: 품목코드 · 수량 · 주문일(없으면 입고예정일) · 품목명 · 단위 · 입고(납품)예정일
