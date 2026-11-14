@@ -1709,6 +1709,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     if (sheet && sheet.rows && sheet.rows.length) {
       const hide = new Set(db.hide || []);
       allMonths.forEach((m) => (mget(m).ledger ? mget(m).ledger.rows : []).forEach((r) => {
+        // 수불현황의 합계·소계 줄은 품목이 아님 (11/14 검증: "합계"가 수불 전용 품목으로 들어와 10월 사용 7,327로 잡혀 있었음)
+        if (/^\s*(합\s*계|소\s*계|총\s*계|계)\s*$/.test(String(r.name || ""))) return;
         if (hide.has(r.name) || (itemCfg[r.name] || {}).as || ledgerItem(r)) return;
         const it = { name: r.name, code: r.code, group: r.group, vendor: "", unit: r.unit || "", spec: r.spec || "", min: 0, loc: "", key: r.group || r.name, members: [r.name], ledgerOnly: true };
         it.pk = packOf(it, conv[it.code]); withCfg(it);
