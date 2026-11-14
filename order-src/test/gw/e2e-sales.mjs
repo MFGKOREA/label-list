@@ -46,6 +46,7 @@ gas.post({ action: "set", key: "forecast", value: { "2026-10-20": { fc: "3000000
 d = await run({ from: "2026-10-20", to: "2026-10-24" });
 console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(d.salesPush.status === "done" && d.forecast["2026-10-24"].act === "16366000", "Gross 불러오기 그대로 됨");
+ok(d.forecast["2026-10-24"].total === "16866000" && d.forecast["2026-10-24"].net === "14878182" && d.salesPush.totalCol === "Total Sales" && d.salesPush.netCol === "Net Sales", "같은 화면에서 Total Sales·순매출도 읽어 forecast.total/net에 (PL 보드가 그록봇 수집분과 합침, 발주앱은 안 씀)");
 // 3) MIS 메뉴 살펴보기 (11/13): 접힌 폴더를 펴서 이름만 읽음. 메뉴 이름은 누르지 않음(화면이 열리면 안 됨), 자료는 안 읽음
 let opened = null;
 d = await run({ kind: "scout" }, "scout-main.html", async (p) => { opened = await p.evaluate(() => window.__opened); });
@@ -93,5 +94,5 @@ ok(!Object.keys(d).some((k) => /^input\./.test(k)), "KM 입력(input.날짜)은 
 ok(d.orderProbe.grids[0].paged && d.orderProbe.grids[0].n === 5 && d.misOrderScan.all === 1, "쪽 나눔 표를 한 쪽에 다 불러서 읽음 (2줄 → 5줄, 합계 줄 포함)");
 ok(Array.isArray((d["misOrder.2026-11-08"] || {}).rows) && d["misOrder.2026-11-08"].rows.length === 0 && d.misOrderScan.empty === 9, "기간 안 발주 없는 날은 빈 기록 (11/8 등 9일)");
 await b.close();
-console.log(`합계: 통과 ${28 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${29 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

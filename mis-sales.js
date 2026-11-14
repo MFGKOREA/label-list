@@ -218,8 +218,11 @@
       if (!(dateCol && grossCol)) await sleep(250);
     }
     if (!dateCol || !grossCol) return finish(false, `날짜·Gross 칸을 못 찾았어요 (머리글: ${(cols || []).map(title).join(", ").slice(0, 200)})`);
-    const got = {}, dup = [];
-    rows.forEach((r) => { if (isTotal(r)) return; const dt = toIso(r[dateCol.field]), v = num(r[grossCol.field]); if (!dt || dt < job.from || dt > job.to || !(v > 0)) return; if (dt in got) dup.push(dt); got[dt] = Math.round(v); });
+    // 이 매장 Total Sales·순매출 칸도 같은 화면에서 읽어 둠 (Gross 옆, 11/14 KM). PL 보드가 그록봇 전 매장 수집분과 합쳐 씀. 발주 계산엔 안 씀
+    const totalCol = cols.find((c) => /total\s*sales/i.test(title(c) + " " + c.field)) || cols.find((c) => /토탈\s*세일즈/.test(title(c)));
+    const netCol = cols.find((c) => /net\s*sales/i.test(title(c) + " " + c.field)) || cols.find((c) => /순\s*매출/.test(title(c)));
+    const got = {}, tot = {}, net = {}, dup = [];
+    rows.forEach((r) => { if (isTotal(r)) return; const dt = toIso(r[dateCol.field]), v = num(r[grossCol.field]); if (!dt || dt < job.from || dt > job.to || !(v > 0)) return; if (dt in got) dup.push(dt); got[dt] = Math.round(v); if (totalCol) { const x = num(r[totalCol.field]); if (x > 0) tot[dt] = Math.round(x); } if (netCol) { const x = num(r[netCol.field]); if (x > 0) net[dt] = Math.round(x); } });
     if (dup.length) return finish(false, `같은 날짜가 두 번 나와요 (${[...new Set(dup)].map((d) => d.slice(5)).join(", ")}) · 옵션이 '일자별'인지 확인`);
     if (!Object.keys(got).length) return finish(false, `${title(grossCol)} 값이 없어요 (${job.from} ~ ${job.to})`);
     // 11/12 KM: kind "now" = 오늘 지금까지 Gross만 보기. 영업 중 값이라 Forecast 실제 칸(학습)에는 넣지 않고 결과 글에만 적음
@@ -241,8 +244,12 @@
       patch[dt] = fc0[dt] ? { act: String(v) } : { fc: "", act: String(v) }; n++;
     });
     if (n) await merge("forecast", patch);
+    // 이 매장 Total Sales·순매출을 forecast.<날짜>.total/net 에 (발주앱은 안 읽음. PL 보드·그록봇이 이 매장분으로 가져감)
+    const tpatch = {}; let tn = 0;
+    Object.keys(got).forEach((dt) => { const cur = fc0[dt] || {}, e = {}; if (tot[dt] && num(cur.total) !== tot[dt]) e.total = String(tot[dt]); if (net[dt] && num(cur.net) !== net[dt]) e.net = String(net[dt]); if (Object.keys(e).length) { tpatch[dt] = e; tn++; } });
+    if (tn) await merge("forecast", tpatch);
     const parts = [filled.length ? `채움 ${filled.join(", ")}` : "", diff.length ? `고침 ${diff.join(", ")}` : ""].filter(Boolean);
-    return finish(true, `${Object.keys(got).length}일 확인${parts.length ? " · " + parts.join(" · ") : " · 모두 같음"}`, { col: title(grossCol), days: Object.keys(got).length });
+    return finish(true, `${Object.keys(got).length}일 확인${parts.length ? " · " + parts.join(" · ") : " · 모두 같음"}${totalCol ? ` · Total Sales ${tn}일` : " · Total Sales 칸 없음"}`, { col: title(grossCol), totalCol: totalCol ? title(totalCol) : null, netCol: netCol ? title(netCol) : null, days: Object.keys(got).length });
   } catch (e) {
     return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
   }
