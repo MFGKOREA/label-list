@@ -381,6 +381,7 @@ const HR = { mins: [5, 20, 35, 50], from: 8 * 60 + 30, to: 22 * 60 + 30, gap: 8 
 function hrDue(now, st) {
   const d = new Date(now), hm = d.getHours() * 60 + d.getMinutes();
   if (hm < HR.from || hm > HR.to) return false; // 영업시간 밖에는 쉼
+  if (st.fg && now - (st.at || 0) >= 60e3) return true; // 숨은 탭에서 화면이 안 그려졌을 때: 1분 뒤 화면에 보이게 한 번
   if (now - (st.at || 0) < HR.gap) return false;
   if (HR.mins.indexOf(d.getMinutes()) >= 0) return true; // :05·:20·:35·:50
   return now - (st.at || 0) > HR.late; // 밀린 차례는 18분이 지나면 따라잡음
@@ -393,15 +394,15 @@ async function hrWindowId() { // 사람이 보는 보통 창에 뒤 탭으로 (�
 async function hrStart(why, now) {
   const { hrSt = {} } = await get("hrSt");
   if (hrSt.run) return;
-  const wid = await hrWindowId(), opt = { url: HR_URL, active: false };
+  const wid = await hrWindowId(), fg = !!hrSt.fg, opt = { url: HR_URL, active: fg }; // fg: 숨은 탭에서 화면이 안 그려질 때만 화면에 보이게(한 번)
   if (wid != null) opt.windowId = wid;
   let tab;
   try { tab = await chrome.tabs.create(opt); }
   catch (e) { await hrEnd({ error: "no_tab", detail: String((e && e.message) || e) }); return; }
   chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
   await own(tab.id);
-  await put({ hrTab: tab.id, hrSt: { ...hrSt, run: { at: now, tab: tab.id, why }, msg: "HR 읽는 중", next: 0 } });
-  await log(`플젝 HR 덤프 시작 (${why})`, { quiet: true });
+  await put({ hrTab: tab.id, hrSt: { ...hrSt, run: { at: now, tab: tab.id, why, fg }, msg: fg ? "HR 읽는 중 (화면에 보이게 한 번)" : "HR 읽는 중", next: 0 } });
+  await log(`플젝 HR 덤프 시작 (${why}${fg ? " · 화면에 보이게" : ""})`, { quiet: true });
 }
 // 끝(성공·실패) 한 곳: 시트에 적고, 탭 닫고, 다음 차례를 정함
 async function hrEnd(res) {
@@ -409,13 +410,14 @@ async function hrEnd(res) {
   const at = Date.now(), day = ymd(new Date(at));
   if (res.error) { // 실패는 지난 값을 지우지 않고 까닭만 덧붙임 (시트 hrStatus.err)
     await postMerge("hrStatus", { err: { at: at, date: day, error: res.error, detail: String(res.detail || "").slice(0, 300) } });
-    const gap = res.error === "login_required" ? HR.loginGap : HR.errGap;
-    await put({ hrSt: { at: at, okAt: hrSt.okAt || 0, run: null, ok: false, error: res.error, msg: `HR ${res.error === "login_required" ? "로그인 필요 (매장 PC에서 HR 로그인 또는 설정에 아이디·비밀번호)" : res.error} · ${Math.round(gap / 60e3)}분 뒤 다시`, next: at + gap } });
+    const soft = res.error === "no_menu" || res.error === "no_page", shown = !!(hrSt.run && hrSt.run.fg);
+    const gap = res.error === "login_required" ? HR.loginGap : soft && !shown ? 60e3 : HR.errGap;
+    await put({ hrSt: { at: at, okAt: hrSt.okAt || 0, run: null, ok: false, error: res.error, fg: soft && !shown ? 1 : 0, msg: `HR ${res.error === "login_required" ? "로그인 필요 (매장 PC에서 HR 로그인 또는 설정에 아이디·비밀번호)" : res.error}${soft && !shown ? " · 1분 뒤 화면에 보이게 한 번 더" : " · " + Math.round(gap / 60e3) + "분 뒤 다시"}`, next: at + gap } });
     await log(`플젝 HR 덤프 안 됨: ${res.error} ${res.detail || ""}`, { quiet: true });
   } else {
     const data = res.data || {};
     if (!(await postOk("hrStatus", data))) { await put({ hrSt: { at: at, run: null, ok: false, msg: "시트에 못 적음 (인터넷 확인)", next: at + HR.errGap } }); await log("플젝 HR 덤프를 시트에 못 적음", { quiet: true }); }
-    else { await put({ hrSt: { at: data.at || at, okAt: data.at || at, run: null, ok: true, msg: `HR ${data.date || ""} · 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, next: 0 } }); await log(`플젝 HR 덤프 저장: ${data.date || ""} 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, { quiet: true }); }
+    else { await put({ hrSt: { at: data.at || at, okAt: data.at || at, run: null, ok: true, fg: 0, msg: `HR ${data.date || ""} · 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, next: 0 } }); await log(`플젝 HR 덤프 저장: ${data.date || ""} 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, { quiet: true }); }
   }
   if (id != null) { await chrome.tabs.remove(id).catch(() => {}); await lock(async () => { const { owned = [] } = await get("owned"); await put({ owned: owned.filter((x) => x !== id) }); }); } // 시트에 적은 뒤에 탭을 닫음
   await chrome.storage.local.remove("hrTab");
