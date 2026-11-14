@@ -1884,12 +1884,18 @@
   const nextOrderDay0 = () => { let d = addDays(TODAY, 1); while (dow(d) === 0) d = addDays(d, 1); return d; };
   const pDay = () => preDay || nextOrderDay0();
   // pre: d에 미트카운트로 센다고 볼 때(그날 입고 전) — 그날 입고는 빼고 봄
-  // 통 단위로 세는 품목인가: 최근 센 값(최대 8번, 3번 이상)의 80% 넘게 정수면 셈 단위(박스로 세면 1박스) · 아니면 0 (kg처럼 소수로 세는 품목)
+  // 재고를 어떤 단위로 세나: 최근 센 값(최대 8번, 3번 이상)의 80% 넘게 통 단위(박스로 세면 박스, 아니면 1)면 그 단위.
+  //  아니면 0.5 단위(고기 자투리: 채끝·부채살·새우·버터 등, 11/14 KM "미트 카운팅은 100g도 0.5로"). 둘 다 아니면 0 (kg처럼 소수로 세는 품목)
   const wholeStep = (it) => {
     if (wholeMemo.has(it.key)) return wholeMemo.get(it.key);
     const vals = Object.keys(db).filter((k) => /^input\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(6) <= TODAY).sort().reverse()
       .map((k) => (db[k] || {})[it.key]).filter((v) => counted(v)).slice(0, 8).map((v) => num(v.s));
-    const st = vals.length >= 3 && vals.filter((x) => Math.abs(x - Math.round(x)) < 1e-9).length / vals.length >= 0.8 ? it.box || 1 : 0;
+    let st = 0;
+    if (vals.length >= 3) {
+      const frac = (g) => vals.filter((x) => Math.abs(x / g - Math.round(x / g)) < 1e-9).length / vals.length;
+      if (frac(1) >= 0.8) st = it.box || 1; // 통 단위(박스 또는 1EA)
+      else if (!it.box && frac(0.5) >= 0.8) st = 0.5; // 0.5 단위로 세는 품목
+    }
     wholeMemo.set(it.key, st); return st;
   };
   // x일 센 값에서 d일 아침(그날 매출 전)까지: 시작 재고+입고(base) · 지금 계산 사용량(use, Gross × 사용률) · 센 뒤 그날 남은 몫(left)
