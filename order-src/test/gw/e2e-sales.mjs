@@ -93,6 +93,18 @@ ok(d.orderProbe && d.orderProbe.grids[0].cols.some((c) => /품목코드/.test(c)
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "KM 입력(input.날짜)은 안 건드림");
 ok(d.orderProbe.grids[0].paged && d.orderProbe.grids[0].n === 5 && d.misOrderScan.all === 1, "쪽 나눔 표를 한 쪽에 다 불러서 읽음 (2줄 → 5줄, 합계 줄 포함)");
 ok(Array.isArray((d["misOrder.2026-11-08"] || {}).rows) && d["misOrder.2026-11-08"].rows.length === 0 && d.misOrderScan.empty === 9, "기간 안 발주 없는 날은 빈 기록 (11/8 등 9일)");
+// 6) 입고현황 (11/14 KM): 날짜별 실제 받은 양을 misRecv.날짜에. "입고등록"(입고 입력 화면)은 절대 안 엶, 직원 이름(입고자)은 저장 안 함
+let opened3 = null, rentry = 0;
+d = await run({ kind: "recv", from: "2026-11-01", to: "2026-11-12" }, "recv-main.html", async (p) => { opened3 = await p.evaluate(() => window.__opened); rentry = await p.evaluate(() => window.__recvEntryOpened || 0); });
+console.log("결과:", d.salesPush.status, d.salesPush.text);
+ok(d.salesPush.status === "done" && d.salesPush.parts.recv.status === "done", "입고현황 읽기 끝남");
+ok(rentry === 0 && Array.isArray(opened3) && opened3.length === 1 && opened3[0] === "입고현황", `열린 화면은 입고현황 하나뿐 (입고 입력 화면 ${rentry}번)`);
+const r9 = (d["misRecv.2026-11-09"] || {}).rows || [];
+ok(r9.length === 2 && r9.find((r) => r.code === "340002106").qty === 10 && r9.find((r) => r.code === "340002106").unit === "EA", "11/9 입고 2줄 · 주문수량(20)이 아니라 입고수량(10)");
+ok(((d["misRecv.2026-11-12"] || {}).rows || []).length === 1 && d["misRecv.2026-11-12"].rows[0].code === "340001980" && d.misRecvScan.neg === 1, "11/12: 늦게 온 간마늘은 받은 날로 · 반품(−1)은 뺌");
+ok(!JSON.stringify(d).includes("홍길동") && d.recvProbe && d.recvProbe.grids[0].cols.some((c) => /입고수량/.test(c)) && !d.recvProbe.grids[0].rows, "직원 이름은 어디에도 없음 · 열 이름만 기록");
+ok(Array.isArray((d["misRecv.2026-11-10"] || {}).rows) && d["misRecv.2026-11-10"].rows.length === 0 && d.misRecvScan.empty === 10 && d.misRecvScan.days === 2 && d.misRecvScan.all === 1 && !d["misRecv.2026-10-01"], "받은 게 없는 날은 빈 기록(10일) · 기간 밖(10/1)은 안 씀");
+ok(!Object.keys(d).some((k) => /^input\./.test(k)), "입고현황 읽기도 KM 입력(input.날짜)은 안 건드림");
 await b.close();
-console.log(`합계: 통과 ${29 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${36 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

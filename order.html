@@ -1538,9 +1538,9 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
   let wholeMemo = new Map(); // 통 단위로 세는 품목 (wholeStep)
-  let keyItem = new Map(), misTrustMemo = null; // 품목 키 → 품목 (MIS 품목코드 it.codes) · 주문현황 믿을 수 있나 (misTrust)
+  let keyItem = new Map(), misTrustMemo = null, recvTrustMemo = null; // 품목 키 → 품목 (MIS 품목코드 it.codes) · 주문현황 믿을 수 있나 (misTrust) · 입고현황 믿을 수 있나 (recvTrust)
   let menuUseMemo = new Map(), menuWMemo = new Map(); // 날짜별 메뉴 역산 사용량 · 품목별 메뉴 역산 비율 (menuW)
-  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; menuUseMemo = new Map(); menuWMemo = new Map(); };
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; recvTrustMemo = null; menuUseMemo = new Map(); menuWMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -2464,7 +2464,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   //  11/12(F): 그날 input 키가 있어도 발주 칸이 3품목 미만이면 발주를 MIS에만 넣은 날로 보고 모름 (11/7·11/10·11/11처럼 발주 기록이 빠진 날의 입고를 "없음"으로 채점하던 문제)
   const orderKnown = (it, x) => (misOn(x) && (it.codes || []).length) || (db["input." + x] && x >= "2026-10-20" && (ordCnt(x) >= 3 || x === "2026-10-20" || ((db.settings || {}).orderOk || []).includes(x)) && !((db.settings || {}).orderGap || []).includes(x));
   // x일에 센 뒤 d일까지 들어온 입고 중 앱이 모르는 발주일이 있나 (일요일 제외)
-  const unknownArr = (it, x, d) => { for (let y = addDays(x, -7); y < d; y = addDays(y, 1)) if (isOrderDay(it, y) && deliveryOf(it, y) > x && deliveryOf(it, y) <= d && !orderKnown(it, y) && dow(y) !== 0) return true; return false; };
+  const unknownArr = (it, x, d) => { if (recvCovers(it, x, d)) return false; for (let y = addDays(x, -7); y < d; y = addDays(y, 1)) if (isOrderDay(it, y) && deliveryOf(it, y) > x && deliveryOf(it, y) <= d && !orderKnown(it, y) && dow(y) !== 0) return true; return false; };
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
@@ -2502,11 +2502,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         let actual = null;
         if (a.v === 2) {
           // 두 재고 사이(d1 다음날 ~ d2)에 들어온 입고 = 앱에 넣은 발주의 입고일로 계산. 그 사이 발주한 날 중 앱을 안 쓴 날(일요일 제외)이 있으면 모름 → 뺌
-          let arr = 0, unknown = false;
-          for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
+          let arr = 0, unknown = false; const rc = recvCovers(it, d1, d2);
+          for (let x = addDays(d1, -7); x <= d2 && !unknown; x = addDays(x, 1)) { // x = d2: 그날 받은 입고(입고현황)까지. 발주 입고는 시킨 다음 날부터라 d2에 시킨 건 안 들어옴
             // 발주수량 칸이 생기기 전(10/20 전)에 한 발주는 앱이 몰라서 모름으로 (10/20 발주는 샐러드믹스 2·크림치즈 3이 전부라고 확인). 규칙은 orderKnown
             const known = orderKnown(it, x);
-            if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !known && dow(x) !== 0) unknown = true;
+            if (!rc && isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !known && dow(x) !== 0) unknown = true;
             arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
           }
           if (!unknown) actual = num(a.s) + arr - num(b.s);
@@ -2868,7 +2868,33 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     return (misTrustMemo = { on: n >= 20 && hit / n >= 0.8, deliv: dn >= 10 && dhit / dn >= 0.6, n, hit, dn, dhit });
   };
   const misOn = (x) => misTrust().on && Array.isArray((db["misOrder." + x] || {}).rows);
+  // 입고현황(misRecv.날짜, 11/14 KM): MIS에서 실제로 받은 날·양 (PC가 어제까지 31일을 매일 다시 읽음, 받은 게 없던 날은 빈 기록).
+  //  받은 기록이 있는 날은 그날로 잡힌 발주 입고(앱 발주·주문현황·예전 익일 칸) 대신 받은 양을 씀 → 늦게 온·덜 온 입고를 앎 (11/14 되돌려 보기: 오차의 68%가 입고 낀 구간)
+  //  품목코드가 연결된 품목만. 스스로 확인(recvTrust): 앱 발주가 들어올 날 앞뒤 하루 안에 입고현황이 그 품목을 받은 비율 60% 넘고(20건 이상), 받은 양÷시킨 양 가운데값이 0.5~2배일 때만(열·단위를 잘못 읽었을 때 막음)
+  //  RECV_USE: 실제 입고 자료로 예상 재고를 되돌려 본 뒤에 켬 (그 전엔 PC가 읽어 쌓기만 함)
+  const RECV_USE = false;
+  const recvRowsOf = (key, y) => { const m = db["misRecv." + y]; const cs = (keyItem.get(key) || {}).codes; if (!m || !Array.isArray(m.rows) || !cs || !cs.length) return null; return m.rows.filter((r) => r && cs.includes(String(r.code)) && num(r.qty) > 0); };
+  const recvTrust = () => {
+    if (recvTrustMemo) return recvTrustMemo;
+    let n = 0, hit = 0; const rat = [];
+    Object.keys(db).filter((k) => /^input\.\d{4}-\d\d-\d\d$/.test(k)).forEach((k) => { const x = k.slice(6); Object.entries(db[k] || {}).forEach(([key, r]) => {
+      const it = keyItem.get(key); if (!r || !(num(r.o) > 0) || !it || !(it.codes || []).length) return;
+      const dd = deliveryOf(it, x); if (!Array.isArray((db["misRecv." + dd] || {}).rows)) return;
+      n++; let got = 0; for (let j = -1; j <= 1; j++) got += (recvRowsOf(key, addDays(dd, j)) || []).reduce((a, m) => a + ordToStock(it, num(m.qty)), 0);
+      if (got > 0) { hit++; rat.push(got / ordToStock(it, num(r.o))); }
+    }); });
+    rat.sort((a, b) => a - b); const med = rat.length ? rat[rat.length >> 1] : null;
+    return (recvTrustMemo = { on: n >= 20 && hit / n >= 0.6 && med > 0.5 && med < 2, n, hit, med });
+  };
+  const recvOn = (it, y) => RECV_USE && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on;
+  const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
   const arrivalsOf = (it, x) => {
+    const out = arrivalsOrd(it, x); if (!RECV_USE) return out;
+    const kept = out.filter((a) => !recvOn(it, a.d)); // 받은 기록이 있는 날로 잡힌 발주 입고는 빼고
+    if (recvOn(it, x)) (recvRowsOf(it.key, x) || []).forEach((m) => kept.push({ d: x, q: ordToStock(it, num(m.qty)), recv: true })); // 그날 실제로 받은 양
+    return kept;
+  };
+  const arrivalsOrd = (it, x) => {
     const r = (db["input." + x] || {})[it.key];
     const out = [];
     if (r && num(r.o) > 0) out.push({ d: deliveryOf(it, x), q: ordToStock(it, num(r.o)) });

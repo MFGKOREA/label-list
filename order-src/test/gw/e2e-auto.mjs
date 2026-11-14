@@ -73,7 +73,9 @@ await sleep(6000);
 ok(pcReqs().length === 1, "받는 중에는 또 요청하지 않음 (" + pcReqs().length + "번)");
 
 // 2) 발주가 먼저: 스스로 받던 중에 폰에서 [GW 전송] → 받던 것을 멈추고 발주 창으로
-store.misPush = { date: T, id: 777, at: Date.now(), status: "pending", n: 3 };
+// 발주 전송 날짜는 PC(확장) 시계의 날짜 — 시험 시간대가 한국과 날짜가 다를 때(한국 자정 뒤 등) T를 쓰면 확장이 "오늘 것 아님"으로 봄 (11/15 고침)
+const localDay = await sw(() => { const d = new Date(), p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; });
+store.misPush = { date: localDay || T, id: 777, at: Date.now(), status: "pending", n: 3 };
 const e2 = await until(() => (store.salesPush && store.salesPush.status === "error" && /발주 전송이 먼저/.test(store.salesPush.text || "") ? store.salesPush : null), 20000);
 ok(!!e2, "발주 전송이 오면 스스로 받던 매출을 멈춤", JSON.stringify(pick(store.salesPush, ["status", "text"])));
 const j2 = await until(async () => { const { job } = (await getSt("job")) || {}; return job && job.kind === "order" ? job : null; }, 20000);
@@ -88,7 +90,7 @@ await sleep(12000);
 ok(pcReqs().length === before3, "상시 수집을 끄면 스스로 요청하지 않음");
 
 // 4) 다 받아 뒀으면 요청 없이 쉼
-store.forecast[Y].act = "88"; store.gwScout = { at: 1, menus: [] }; store.hourShare = { to: T, wd: {} }; store.misOrderScan = { at: Date.now(), to: Y }; store.salesPush = { id: 1, at: Date.now() - 3600e3, status: "done", doneAt: Date.now() - 3500e3 };
+store.forecast[Y].act = "88"; store.gwScout = { at: 1, menus: [] }; store.hourShare = { to: T, wd: {} }; store.misOrderScan = { at: Date.now(), to: Y }; store.misRecvScan = { at: Date.now(), to: Y }; store.salesPush = { id: 1, at: Date.now() - 3600e3, status: "done", doneAt: Date.now() - 3500e3 };
 await setSt({ auto: true, autoSt: { next: 0 } });
 const st4 = await until(async () => { const s = ((await getSt("autoSt")) || {}).autoSt || {}; return s.okAt ? s : null; }, 20000);
 ok(!!st4 && st4.msg === "다 받아 둠" && pcReqs().length === before3, "다 받아 뒀으면 요청 없이 쉼", JSON.stringify(st4));

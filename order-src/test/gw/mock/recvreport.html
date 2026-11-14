@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>입고현황</title><script src="jquery.js"></script></head><body>
+입고현황
+<input id="sDate" class="easyui-datebox" value="2026-11-13"><input id="eDate" class="easyui-datebox" value="2026-11-13">
+<input id="cdStore" value="1345090" disabled>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="rGrid"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+// 열: 입고일자 · 입고예정일 · 주문일자 · 품목코드 · 품목명 · 단위 · 주문수량 · 입고수량 · 단가 · 금액 · 입고자(직원 이름 — 저장되면 안 됨)
+var COLS = [[{ field: "DT_IN", title: "입고일자" }, { field: "DT_GI", title: "입고예정일" }, { field: "DT_ORDER", title: "주문일자" }, { field: "CD_ITEM", title: "품목코드" }, { field: "NM_ITEM", title: "품목명" }, { field: "CD_UNIT", title: "단위" },
+  { field: "QT_ORDER", title: "주문수량" }, { field: "QT_IN", title: "입고수량" }, { field: "UM_ITEM", title: "단가" }, { field: "AM_IN", title: "금액" }, { field: "NM_USER", title: "입고자" }]];
+var PG = { size: 2 };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { all: [] }; if (!this.data("dg")) this.data("dg", st);
+  if (cmd === "getRows") return st.all.slice(0, PG.size); if (cmd === "getData") return { total: st.all.length, rows: st.all.slice(0, PG.size) };
+  if (cmd === "options") return { columns: COLS, pagination: true, pageList: [2, 10] };
+  if (cmd === "getPager") return { pagination: function (a) { if (a && typeof a === "object" && a.pageSize) PG.next = a.pageSize; if (a === "select") setTimeout(function () { PG.size = PG.next || PG.size; }, 300); } }; };
+$("#rGrid").data("datagrid", 1);
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var s = $("#sDate").val(), e = $("#eDate").val();
+  // [입고일, 입고예정일, 주문일, 코드, 이름, 단위, 주문수량, 입고수량] — 11/9 등심은 20 시켜 10만 옴, 11/10 예정이던 간마늘은 11/12에 옴, 반품 −1
+  var all = [["2026-11-09", "2026-11-09", "2026-11-07", "340001970", "가지", "PK", 2, 2], ["2026-11-09", "2026-11-09", "2026-11-07", "340002106", "냉동_등심270g_10개단위 발주", "EA", 20, 10],
+             ["2026-11-12", "2026-11-10", "2026-11-08", "340001980", "간마늘(냉장)", "PK", 3, 3], ["2026-11-12", "2026-11-12", "2026-11-10", "340001970", "가지", "PK", 1, -1], ["2026-10-01", "2026-10-01", "2026-09-29", "340001970", "가지", "PK", 9, 9]];
+  setTimeout(function () { var rows = all.filter(function (r) { return r[0] >= s && r[0] <= e; }).map(function (r) { return { DT_IN: r[0], DT_GI: r[1], DT_ORDER: r[2], CD_ITEM: r[3], NM_ITEM: r[4], CD_UNIT: r[5], QT_ORDER: r[6], QT_IN: r[7], UM_ITEM: "5,800", AM_IN: (r[7] * 5800).toLocaleString(), NM_USER: "홍길동" }; }); rows.push({ DT_IN: "합 계", QT_IN: 99 }); $("#rGrid").data("dg", { all: rows }); }, 400);
+}
+</script></body></html>

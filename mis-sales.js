@@ -597,13 +597,108 @@
     }
   }
 
+  // ---------- 입고현황 (11/14 KM, kind "recv") ----------
+  //  이 매장 입고현황을 기간으로 조회해서 날짜별로 실제 받은 양을 시트 misRecv.날짜 = { at, rows: [{ code, name, qty, unit }] } 에 둠 (이 매장 자료, 조회만).
+  //  앱은 발주(주문)만 알고 실제로 받은 날·양을 몰라 예상 재고 오차의 약 2/3가 입고 구간에서 났음(11/14 되돌려 보기) → 받은 날·양으로 입고를 바로잡는 데 씀
+  //  메뉴 경로: 매입정보관리 › 입고관리(폴더) › 입고현황. 옆의 "입고등록"은 입고 입력 화면이라 절대 누르지 않음(폴더는 펼침 단추로만 엶)
+  //  원본 줄은 저장하지 않음(입고자 같은 직원 이름이 있을 수 있음). 열 이름만 recvProbe에, 품목코드·품목명·수량·단위만 misRecv에
+  async function runRecv() {
+    try {
+      step = "입고현황 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const STAT_RE = /^입고\s*현황$/;
+      const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+      const expandAll = async () => { for (let round = 0; round < 6 && !byText(STAT_RE, ".tree-title"); round++) { let did = 0; for (const w of trees()) { let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")]; } catch (e) {} for (const h of hits) { let ok = false; try { const $w = w.jQuery, node = h.closest(".tree-node"), root = $w && $w.fn && $w.fn.tree && node ? $w(h).closest("ul.tree") : null; if (root && root.length) { root.tree("expand", node); ok = true; } } catch (e) {} if (!ok) { try { press(w, h); ok = true; } catch (e) {} } if (ok) did++; } } if (!did) break; await sleep(700); } };
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /입고\s*현황/.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 2000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(STAT_RE, ".tree-title")) await expandAll();
+        const hit = byText(STAT_RE, ".tree-title"); if (!hit) break;
+        hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "입고현황 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "입고현황 화면에 jQuery가 없어요");
+      step = "조회일";
+      // 어제까지 31일 (처음 읽을 때 예상 재고 되돌려 보기 기간까지 덮게, 매일 다시 읽어 늦게 등록된 입고도 반영)
+      const to = job.to, from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 30); return t.toISOString().slice(0, 10); })();
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+      if (dbs.length >= 2) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(from, like)); $(dbs[1]).datebox("setValue", fmt(to, like)); }
+      else if (dbs.length === 1) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(to, like)); }
+      step = "매장";
+      const all = [...d.querySelectorAll("input")];
+      if (!all.some((i) => String(i.value).includes(STORE))) { const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name)); if (code) { if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE; } }
+      step = "조회";
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) return finish(false, "입고현황 조회 버튼을 못 찾았어요");
+      const L = loader($, d);
+      await L.idle(T.q);
+      let hit = null;
+      for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
+      if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
+      step = "읽기";
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const totalOf = (g) => { try { const d = $(g).datagrid("getData") || {}; return +d.total || 0; } catch (e) { return 0; } };
+      for (const g of L.grids()) {
+        try {
+          const o = $(g).datagrid("options"), t = totalOf(g), n0 = (L.raw(g) || []).length;
+          if (!o.pagination || !(t > n0)) continue;
+          step = "전체 쪽 불러오기"; const n = Math.min(5000, t), pg = $(g).datagrid("getPager");
+          pg.pagination({ pageSize: n, pageList: [...new Set([...(o.pageList || []), n])] }); pg.pagination("select", 1);
+          for (let k = 0; k < 100 && (L.raw(g) || []).length < n; k++) await sleep(200);
+          await L.idle(T.q);
+        } catch (e) {}
+      }
+      step = "읽기";
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!o.pagination }; });
+      await set("recvProbe", { at: Date.now(), from, to, grids: probe });
+      if (!hit || !hit.rows.length) return finish(true, `입고현황 ${from.slice(5)}~${to.slice(5)} 조회 결과 없음`, { days: 0 });
+      // 열 찾기: 품목코드 · 입고수량(없으면 수량, 주문수량은 아님) · 입고일(예정일·주문일은 아님) · 품목명 · 단위
+      const toIso = (v) => { const m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(String(v ?? "").trim()); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
+      let use = null;
+      for (const g of L.grids()) {
+        const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), rs = L.raw(g) || [];
+        if (!rs.length) continue;
+        const f = (re, bad) => cs.find((c) => re.test(title(c) + " " + c.field) && !(bad && bad.test(title(c) + " " + c.field)));
+        const code = f(/품목\s*코드|상품\s*코드|ITEM_?CD|GOODS_?CD|PROD_?CD|CD_?ITEM|CD_?GOODS/i);
+        const qty = f(/입고\s*수량|입고량|IN_?QTY|QTY_?IN|QT_?IN\b|QT_?IN_|GR_?QTY|QT_?GR|RCV_?QTY|QT_?RCV/i, /단가|금액|AMT|PRICE|합계|예정/i) || f(/수량|QTY|QT_/i, /주문|발주|ORD|단가|금액|AMT|PRICE|합계|예정/i);
+        const dt = f(/입고\s*일|IN_?DT|DT_?IN\b|DT_?IN_|GR_?DT|DT_?GR|RCV_?DT|DT_?RCV/i, /예정|주문|발주|ORD|DT_?GI/i) || f(/일자|날짜|DATE|DT_/i, /예정|주문|발주|ORD|DT_?GI/i);
+        const name = f(/품목\s*명|상품\s*명|ITEM_?NM|GOODS_?NM|NM_?ITEM|NM_?GOODS/i), unit = f(/단위|UNIT/i, /단가/i);
+        if (code && qty && dt) { use = { rs, code, qty, dt, name, unit, all: !(o.pagination && totalOf(g) > rs.length) }; break; }
+      }
+      if (!use) return finish(false, `입고현황 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
+      const by = new Map(); let neg = 0;
+      use.rs.forEach((r) => { const dt = toIso(r[use.dt.field]), q = num(r[use.qty.field]), c = String(r[use.code.field] ?? "").trim(); if (!dt || !c || dt < from || dt > to) return; if (q < 0) { neg++; return; } if (!(q > 0)) return; if (!by.has(dt)) by.set(dt, []);
+        by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "" }); });
+      step = "시트 저장";
+      let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misRecv." + dt, { at: Date.now(), rows }); saved++; }
+      // 다 읽었으면(쪽 나눔에 안 잘림) 기간 안에서 받은 게 없던 날도 "입고 없음"으로 남김 (앱이 그날 입고를 '모름' 대신 '없음'으로 앎). 오늘은 아직 받을 수 있어 뺌
+      let empty = 0;
+      if (use.all && by.size) {
+        const yest = (() => { const d = new Date(Date.now() + 9 * 3600e3 - 864e5); return d.toISOString().slice(0, 10); })();
+        for (let d = from; d <= to && d <= yest; d = new Date(Date.parse(d + "T00:00:00Z") + 864e5).toISOString().slice(0, 10)) if (!by.has(d)) { await set("misRecv." + d, { at: Date.now(), rows: [] }); empty++; }
+      }
+      await set("misRecvScan", { at: Date.now(), from, to, days: saved, empty, all: use.all ? 1 : 0, neg, cols: { code: use.code.field, qty: use.qty.field, dt: use.dt.field } });
+      return finish(true, `입고현황 ${from.slice(5)}~${to.slice(5)} · ${saved}일 입고 ${[...by.values()].reduce((a, x) => a + x.length, 0)}줄 저장`, { days: saved });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- 몰이 (11/12): 맡은 요청을 하고, 그새 폰에서 다른 버튼을 눌러 덧붙인 요청(also)도 같은 창에서 이어서 ----------
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
   const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
   try {
