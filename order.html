@@ -1539,7 +1539,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   let fcBiasMemo = null, dataFcMemo = new Map();
   let wholeMemo = new Map(); // 통 단위로 세는 품목 (wholeStep)
   let keyItem = new Map(), misTrustMemo = null; // 품목 키 → 품목 (MIS 품목코드 it.codes) · 주문현황 믿을 수 있나 (misTrust)
-  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; };
+  let menuUseMemo = new Map(), menuWMemo = new Map(); // 날짜별 메뉴 역산 사용량 · 품목별 메뉴 역산 비율 (menuW)
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; menuUseMemo = new Map(); menuWMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -2424,6 +2425,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   // 그 시각에 센 재고 뒤로 그날 남은 매출 비율 (발주 마감 전 입력은 아침에 센 것으로 보고 1)
   const leftOf = (hh, d) => (hh <= ORDER_CUTOFF_H ? 1 : 1 - hourCum(d || TODAY, hh));
   const ordCnt = (x) => Object.values(db["input." + x] || {}).filter((r) => r && num(r.o) > 0).length;
+  // 그날 발주를 앱이 다 아나: 주문현황(misOrder)을 읽은 날(코드 있는 품목) · 발주 칸이 3품목 넘게 찬 날 · settings.orderOk, 단 settings.orderGap은 모름
+  //  11/12(F): 그날 input 키가 있어도 발주 칸이 3품목 미만이면 발주를 MIS에만 넣은 날로 보고 모름 (11/7·11/10·11/11처럼 발주 기록이 빠진 날의 입고를 "없음"으로 채점하던 문제)
+  const orderKnown = (it, x) => (misOn(x) && (it.codes || []).length) || (db["input." + x] && x >= "2026-10-20" && (ordCnt(x) >= 3 || x === "2026-10-20" || ((db.settings || {}).orderOk || []).includes(x)) && !((db.settings || {}).orderGap || []).includes(x));
+  // x일에 센 뒤 d일까지 들어온 입고 중 앱이 모르는 발주일이 있나 (일요일 제외)
+  const unknownArr = (it, x, d) => { for (let y = addDays(x, -7); y < d; y = addDays(y, 1)) if (isOrderDay(it, y) && deliveryOf(it, y) > x && deliveryOf(it, y) <= d && !orderKnown(it, y) && dow(y) !== 0) return true; return false; };
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
@@ -2463,10 +2469,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
           // 두 재고 사이(d1 다음날 ~ d2)에 들어온 입고 = 앱에 넣은 발주의 입고일로 계산. 그 사이 발주한 날 중 앱을 안 쓴 날(일요일 제외)이 있으면 모름 → 뺌
           let arr = 0, unknown = false;
           for (let x = addDays(d1, -7); x < d2 && !unknown; x = addDays(x, 1)) {
-            // 발주수량 칸이 생기기 전(10/20 전)에 한 발주는 앱이 몰라서 모름으로 (10/20 발주는 샐러드믹스 2·크림치즈 3이 전부라고 확인)
-            // 11/12(F): 그날 input 키가 있어도 발주 칸이 3품목 미만이면 발주를 MIS에만 넣은 날로 보고 모름 (11/7·11/10·11/11처럼 발주 기록이 빠진 날의 입고를 "없음"으로 채점하던 문제). settings.orderGap = 발주 기록 빠진 날 목록, settings.orderOk = 적게 시켜도 기록이 맞는 날
-            //  주문현황(misOrder)을 읽은 날은 MIS 발주를 다 아는 날 (코드가 있는 품목만)
-            const known = (misOn(x) && (it.codes || []).length) || (db["input." + x] && x >= "2026-10-20" && (ordCnt(x) >= 3 || x === "2026-10-20" || ((db.settings || {}).orderOk || []).includes(x)) && !((db.settings || {}).orderGap || []).includes(x));
+            // 발주수량 칸이 생기기 전(10/20 전)에 한 발주는 앱이 몰라서 모름으로 (10/20 발주는 샐러드믹스 2·크림치즈 3이 전부라고 확인). 규칙은 orderKnown
+            const known = orderKnown(it, x);
             if (isOrderDay(it, x) && deliveryOf(it, x) > d1 && deliveryOf(it, x) <= d2 && !known && dow(x) !== 0) unknown = true;
             arrivalsOf(it, x).forEach((v) => { if (v.d > d1 && v.d <= d2) arr += v.q; });
           }
@@ -2864,27 +2868,84 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     const st = vals.length >= 3 && vals.filter((x) => Math.abs(x - Math.round(x)) < 1e-9).length / vals.length >= 0.8 ? it.box || 1 : 0;
     wholeMemo.set(it.key, st); return st;
   };
+  // x일 센 값에서 d일 아침(그날 매출 전)까지: 시작 재고+입고(base) · 지금 계산 사용량(use, Gross × 사용률) · 센 뒤 그날 남은 몫(left)
+  function estWin(it, x, d, plan, pre) {
+    const r = (db["input." + x] || {})[it.key], k = Math.round((parseISO(d) - parseISO(x)) / 864e5);
+    const log = logOn(it, x), xm = !!log && isMeat(log.t, it);
+    let arr = arrBetween(it, x, xm, d, !!pre);
+    (plan || []).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
+    const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
+    const left = leftOf(hh, x);
+    const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
+    const weGross = (isWE(x) ? left * dayGross(x, true).v : 0) + weSum(addDays(x, 1), d, true);
+    const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, weGross, fcVar: fcVar(x, d, true, left) }, 0, 0);
+    return c.none ? null : { base: stockOf(it, r) + arr, use: c.use, left, k };
+  }
+  // 메뉴 역산 (11/14 KM): 날짜별 메뉴 판매(menuDay, PC가 아침마다 전날 것을 받음) × 레시피 = 그날 품목 사용량(로스 전). 메뉴 판매가 없는 날은 null
+  const menuUseOn = (key, x) => {
+    if (!menuUseMemo.has(x)) {
+      const k = "menuDay." + x; let u = null;
+      if (Array.isArray((db[k] || {}).rows)) {
+        const M = model(); u = new Map();
+        dayRowsOf(k).forEach((r) => {
+          if (COUPON.test(r.c || "") && !((M.mapCfg || {}).menu || {})[r.m]) return; // 연결 안 한 쿠폰은 B와 같이 뺌
+          const z = M.resolveMenu(r.m, r.c); if (!z || z.skip || !z.recipe) return;
+          const q = num(r.q) * (z.mult || 1);
+          M.perMenu(z.recipe, x.slice(0, 7)).acc.forEach((v, kk) => { if (v) u.set(kk, (u.get(kk) || 0) + q * v); });
+        });
+      }
+      menuUseMemo.set(x, u);
+    }
+    const u = menuUseMemo.get(x); return u ? u.get(key) || 0 : null;
+  };
+  // x일 센 뒤(그날 남은 몫 left)부터 d일 전날까지 메뉴 역산 사용량 × 로스(실제 ÷ 레시피). 하루라도 메뉴 판매가 없으면 null (그때는 지금 계산만)
+  const menuUseSpan = (it, x, left, d) => { let u = 0; for (let y = x; y < d; y = addDays(y, 1)) { const m = menuUseOn(it.key, y); if (m == null) return null; u += (y === x ? left : 1) * m; } return u * (it.loss || 1); };
+  // 품목별 메뉴 역산 비율 w: 예상 재고 사용량 = (1−w) × 지금 계산 + w × 메뉴 역산 (100%가 아니라 계산식 중 하나로)
+  //  그 품목의 지난 예상 재고 구간(어제까지 끝난 최근 8개, 입고를 아는 구간, 28일 안)에서 w = 0·¼·½·¾·1 중 센 값과 가장 맞은 것. 5구간 미만이거나 레시피 연결(B)이 없으면 0
+  //  되돌려 보기(10/27~11/12 센 날 1011건, 그날 전 구간만으로 배움): 평균 오차 1.87→1.83 · 반 단위 안 47.2→48.9% · 덜 시킬 위험 296→283 · 더 시킬 쪽 238→234
+  //  스테이크·폭립 66건: 반 단위 안 16.7→31.8% · 덜 시킬 위험 30→24 (등심·안심·채끝·우대갈비는 1개 단위라 메뉴와 잘 맞음. 부채살·버터라이스는 안 맞아 w가 0 쪽으로)
+  const menuW = (it) => {
+    if (menuWMemo.has(it.key)) return menuWMemo.get(it.key);
+    let res = { w: 0, n: 0 };
+    if (it.rateB != null && (model().blend.theo.get(it.key) || 0) > 0) {
+      const st0 = wholeStep(it), rnd = (v) => (st0 ? Math.round(v / st0) * st0 : v), wins = [];
+      const days = Object.keys(db).filter((k) => /^input\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(6) < TODAY && k.slice(6) >= addDays(TODAY, -28)).map((k) => k.slice(6)).sort().reverse();
+      for (const d of days) {
+        if (wins.length >= 8) break;
+        const v = (db["input." + d] || {})[it.key]; if (!counted(v)) continue;
+        for (let x = addDays(d, -1); x >= addDays(d, -7); x = addDays(x, -1)) {
+          if (!counted((db["input." + x] || {})[it.key])) continue;
+          if (!unknownArr(it, x, d)) { const e = estWin(it, x, d), um = e ? menuUseSpan(it, x, e.left, d) : null; if (e && um != null) wins.push({ a: stockOf(it, v), base: e.base, use: e.use, um }); }
+          break;
+        }
+      }
+      if (wins.length >= 5) {
+        let best = 0.5, be = Infinity;
+        [0, 0.25, 0.5, 0.75, 1].forEach((w) => { const e = wins.reduce((t, z) => t + Math.abs(rnd(Math.max(0, z.base - ((1 - w) * z.use + w * z.um))) - z.a), 0); if (e < be - 1e-9) { be = e; best = w; } });
+        res = { w: best, n: wins.length };
+      } else res = { w: 0, n: wins.length }; // 구간이 적으면 지금 계산 그대로 (½로 두면 첫 주에 더 시킬 쪽이 늘었음)
+    }
+    menuWMemo.set(it.key, res); return res;
+  };
   function estStock(it, d, plan, pre) {
     const start = d > TODAY ? TODAY : addDays(d, -1);
     for (let x = start; x >= addDays(TODAY, -7); x = addDays(x, -1)) {
-      const k = Math.round((parseISO(d) - parseISO(x)) / 864e5);
-      const r = (db["input." + x] || {})[it.key];
-      if (!r || r.est || r.s === "" || r.s == null || !isFinite(num(r.s))) continue;
-      const log = logOn(it, x), xm = !!log && isMeat(log.t, it);
-      let arr = arrBetween(it, x, xm, d, !!pre);
-      (plan || []).forEach((a) => { if (a.d > x && a.d <= d) arr += a.q; });
-      const hh = log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : 10;
-      const left = leftOf(hh, x);
-      const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
-      const weGross = (isWE(x) ? left * dayGross(x, true).v : 0) + weSum(addDays(x, 1), d, true);
-      const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, weGross, fcVar: fcVar(x, d, true, left) }, 0, 0);
-      if (c.none) return null;
+      if (!counted((db["input." + x] || {})[it.key])) continue;
+      const e = estWin(it, x, d, plan, pre);
+      if (!e) return null;
+      // 지난 날(센 날 ~ 어제) 사용량은 메뉴 역산과 섞음: 그 사이 날들의 메뉴 판매가 다 있을 때만.
+      //  앞날(입고일 등)까지 볼 때는 지난 몫만 고치고 오늘부터는 지금 계산 그대로 → 오늘 예상 재고와 86 위험·입고일 예상이 같은 출발점
+      const mw = menuW(it), end = d > TODAY ? TODAY : d;
+      let use = e.use, used = 0;
+      if (mw.w > 0 && x < end) {
+        const um = menuUseSpan(it, x, e.left, end), ep = um == null ? null : end === d ? e : estWin(it, x, end, null, pre);
+        if (ep) { use = e.use + mw.w * (um - ep.use); used = mw.w; }
+      }
       // 통 단위로 세는 품목은 예상 재고도 셈 단위로 반올림 (11/13 KM: "안 팔렸는데 0.1씩 줄어듦").
       //  재고는 밀봉 팩만 세서 뜯은 팩을 다 쓸 때까지 그대로이다가 한 번에 1개 줄어듦 → 0.1씩 깎으면 평균은 맞아도 날마다 틀려 보임.
       //  11월 예상 재고 386건: 평균 오차 1.43→1.40, 센 값과 딱 맞음 1%→45%, 예상이 실제보다 많음(발주 덜 할 쪽) 83→83 그대로.
-      //  사용 적고 메뉴도 덜 팔린 61건: 오차 0.30→0.24. 실제 메뉴 판매로 깎는 보정도 봤지만 이 경우 오차 0.27·덜 할 위험 4→9로 나빠서 안 씀
-      const v0 = Math.max(0, stockOf(it, r) + arr - c.use), st0 = wholeStep(it);
-      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: k };
+      const v0 = Math.max(0, e.base - use), st0 = wholeStep(it);
+      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: e.k, menuW: used };
     }
     return null;
   }

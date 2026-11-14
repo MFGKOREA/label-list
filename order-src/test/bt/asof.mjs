@@ -16,7 +16,7 @@ import { fileURLToPath } from "url";
 const req = (m) => import(m).catch(() => import("/opt/node22/lib/node_modules/" + m + "/index.mjs"));
 const { chromium } = await req("playwright");
 const HERE = path.dirname(fileURLToPath(import.meta.url)), REPO = path.resolve(HERE, "../../..");
-const NAMES = "ORDER_CUTOFF_H, misTrust, estStock, OPEN_H, CLOSE_H, arrivalsOf, sumGross, dayGross, leftOf, hourOf, hourCum, isMeat, logOn, inputLog, arrBetween, weSum, isWE, stockOf, counted, batchRawOf, prepRawOf, weMix, isOrderDay, deliveryOf, nextOrderDay, fcGroup, isHoliday, addDays, addBiz, delivery, dow, parseISO, num, MEAT_H, effDays, wkGross, weekendPlus, vcfg, countStepOf, riskOf, applyScores, mergeLogs, fcHist".split(", ");
+const NAMES = "ORDER_CUTOFF_H, misTrust, misOn, ordCnt, unknownArr, menuW, estStock, dayRowsOf, COUPON, wholeStep, OPEN_H, CLOSE_H, arrivalsOf, sumGross, dayGross, leftOf, hourOf, hourCum, isMeat, logOn, inputLog, arrBetween, weSum, isWE, stockOf, counted, batchRawOf, prepRawOf, weMix, isOrderDay, deliveryOf, nextOrderDay, fcGroup, isHoliday, addDays, addBiz, delivery, dow, parseISO, num, MEAT_H, effDays, wkGross, weekendPlus, vcfg, countStepOf, riskOf, applyScores, mergeLogs, fcHist".split(", ");
 // 계산 함수를 더 내보낸 사본 (앱에 그 이름이 있을 때만)
 export function extended(htmlPath = REPO + "/order.html") {
   const s = fs.readFileSync(htmlPath, "utf8"), m = /window\.__orderCalc = \{ /.exec(s);
