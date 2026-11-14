@@ -1933,7 +1933,9 @@
       let use = e.use, used = 0;
       if (mw.w > 0 && x < end) {
         const um = menuUseSpan(it, x, e.left, end), ep = um == null ? null : end === d ? e : estWin(it, x, end, null, pre);
-        if (ep) { use = e.use + mw.w * (um - ep.use); used = mw.w; }
+        // 그 사이 관련 메뉴가 하나도 안 팔렸으면(um 0) 지난 몫은 0 = 재고가 센 날 그대로 (11/14 KM "어제 메뉴 판매가 0개면 예상 재고는 어제와 같음").
+        //  되돌려 보기: 메뉴 0 구간(입고 앎) 150건 중 실제로 그대로 87%, 하루 구간 93%. 메뉴와 맞는 품목(w>0)에만: 부채살처럼 메뉴와 상관없이 주는 품목(w 0)에 쓰면 덜 시킬 위험이 늘었음
+        if (ep) { const past = um > 0 ? (1 - mw.w) * ep.use + mw.w * um : 0; use = e.use - ep.use + past; used = um > 0 ? mw.w : 1; }
       }
       // 통 단위로 세는 품목은 예상 재고도 셈 단위로 반올림 (11/13 KM: "안 팔렸는데 0.1씩 줄어듦").
       //  재고는 밀봉 팩만 세서 뜯은 팩을 다 쓸 때까지 그대로이다가 한 번에 1개 줄어듦 → 0.1씩 깎으면 평균은 맞아도 날마다 틀려 보임.
