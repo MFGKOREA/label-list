@@ -1770,6 +1770,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     // 레시피 1건이 쓰는 품목별 재고단위 (프랩은 Yield로 원재료까지 풀기)
     const yieldOf = (p) => { const s = String(p.yield || ""); const m = /([\d.,]+)\s*(kg|g|l|ml)\b/i.exec(s); if (!m) return null; const v = num(m[1]); const u = m[2].toLowerCase(); return u === "kg" || u === "l" ? v * 1000 : v; };
     const perMenuCache = new Map();
+    const splitFrom = Object.values(db.prepCfg || {}).map((c) => c && c.split && c.split.from).filter(Boolean); // 자투리를 내는 메뉴 (커팅비프)
     // "22 g | 1 TB"처럼 무게와 계량(TB·tsp·cup·스쿱)이 같이 적힌 줄 → 1TB 무게 (tbG 설정이 없을 때 씀)
     let tbGMemo = null;
     const pairTbG = () => {
@@ -1851,7 +1852,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const mm = hasVariant(m) || (m && shareCfg.length) ? m : null, ck = recipe.name + (mm ? "|" + mm : "");
       if (perMenuCache.has(ck)) return perMenuCache.get(ck);
       const acc = new Map(), prepAcc = new Map(), batchAcc = new Map();
-      expand(variantOf("line", recipe.name, mm) || recipe, 1, acc, 0, prepAcc, batchAcc, mm);
+      const rc = variantOf("line", recipe.name, mm) || recipe;
+      expand(rc, 1, acc, 0, prepAcc, batchAcc, mm);
+      // 자투리를 내는 메뉴(prepCfg의 split.from = 크리스피 갈릭 스테이크&립): "채끝 컷 150g"은 채끝 270g 1개를 통째로 잘라 쓰고 남은 조각은 커팅비프로 감
+      //  → 재고에서는 1개가 나감 (11/14 KM "270 채끝을 잘라서 나가, 짜투리가 남겠지"). 컷 재료만 1개 단위로 올림 (0.56 → 1)
+      if (splitFrom.some((f) => recipe.name.startsWith(f))) (rc.ing || []).forEach((ing) => { if (!/컷|cut/i.test(ing.n)) return; const t = resolveIng(ing.n); if (t && t.kind === "item" && acc.get(t.id) > 0) acc.set(t.id, Math.ceil(acc.get(t.id) - 1e-9)); });
       const v = { acc, prepAcc, batchAcc }; perMenuCache.set(ck, v); return v;
     }
     // 레시피 자기 재료 중 품목만 (프랩 안의 프랩은 그 프랩 배치에서 셈): 1회(1X)당 재고단위
@@ -2111,6 +2116,29 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       weMenu.days = { we: W.length, wd: D.length };
     })();
 
+    // B 비율의 반: 최근 28영업일 날짜별 메뉴 판매 × 레시피 ÷ 그 날들 Gross (11/14 KM "월별 메뉴 / 월별 그로스보다 데일리로 나누면 더 정확?")
+    //  되돌려 보기(10/1~11/13, 날짜마다 그날 전 자료만, 실제 Gross를 안다고 놓고 레시피 사용량만): 앞으로 3일 오차 월별 23.0% → 반반 21.2%, 7일 19.8% → 17.8% (68품목 중 55개 나아짐).
+    //  최근 28일만 쓰면 평균은 비슷(21.2% · 17.7%)하지만 나아지는 품목이 49개로 적어 반반. 커팅비프 부족분(부채살)도 28일을 묶어서
+    const rollB = (() => {
+      const fc = db.forecast || {};
+      const ds = Object.keys(db).filter((k) => /^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(8) < TODAY && Array.isArray((db[k] || {}).rows) && num((fc[k.slice(8)] || {}).act) > 0).map((k) => k.slice(8)).sort().slice(-28);
+      if (ds.length < 14) return null;
+      const u = new Map(), need = new Map(), sup = new Map(), cuts = cutCfgs(), add = (mp, k, v) => mp.set(k, (mp.get(k) || 0) + v);
+      let G = 0;
+      ds.forEach((d) => {
+        G += num(fc[d].act);
+        dayRowsOf("menuDay." + d).forEach((r) => {
+          if (COUPON.test(r.c || "") && !(mapCfg.menu || {})[r.m]) return;
+          const z = resolveMenu(r.m, r.c); if (!z || z.skip || !z.recipe) return;
+          const q = num(r.q) * (z.mult || 1), pm = perMenu(z.recipe, d.slice(0, 7));
+          pm.acc.forEach((v, k) => { if (v) add(u, k, q * v); });
+          cuts.forEach((c) => { const n = (pm.prepAcc.get(c.prep) || 0) + (pm.prepAcc.get(c.prep + "|ea") || 0) * c.portion; if (n) add(need, c.item, q * n); if (z.recipe.name.startsWith(c.from)) add(sup, c.item, q * c.g); });
+        });
+      });
+      cuts.forEach((c) => { const h = Math.max(0, (need.get(c.item) || 0) - (sup.get(c.item) || 0)) / c.portion / c.per; if (h) add(u, c.item, h); });
+      const out = new Map(); u.forEach((v, k) => out.set(k, v / (G / 1e6))); out.days = ds.length; return out;
+    })();
+
     // 품목별 계산 재료
     items.forEach((it) => {
       // A: 최근 3개월, 최근 달 비중 3:2:1
@@ -2127,13 +2155,15 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         const det = a * c - b * b;
         if (Math.abs(det) > 1e-9) { const fx = (e * c - b * f) / det, rt = (a * f - b * e) / det; if (fx >= 0 && rt > 0) { it.fixedA = fx; it.rateA = rt; } }
       }
-      // B: 가장 최근 판매 달의 메뉴 비율 × 레시피, 이전 달들의 실제÷이론으로 로스 계수
+      // B: 가장 최근 판매 달의 메뉴 비율 × 레시피, 이전 달들의 실제÷이론으로 로스 계수 (반은 최근 28영업일 날짜별 판매 rollB, 아래)
       const lastB = withB[withB.length - 1];
       const tb = lastB && lastB.theo.get(it.key);
       // 지난달 판매에 없는 신메뉴 전용 재료는 신메뉴 초기 판매(blend.launch)로만 B가 생김
       it.rateB = tb ? blend.theo.get(it.key) || tb / (lastB.gross / 1e6) : blend.theo.get(it.key) || null;
       // 메뉴 변화 몫: 메뉴 교체·신메뉴로 B가 바뀐 비율 (늘거나 줄거나). A(지난 수불)는 이 변화를 모르니, 이 몫이 크면 B를 더 믿음 (calc)
       { const t1 = blend.theo.get(it.key) || 0, t0 = blend.theo0.get(it.key) || 0; it.newShare = Math.max(t0, t1) > 0 ? Math.min(1, Math.abs(t1 - t0) / Math.max(t0, t1)) : 0; }
+      // 반은 최근 28영업일 날짜별 메뉴 판매로 (rollB). 메뉴 교체·신메뉴로 바뀐 몫이 큰 품목(newShare > 0.3)은 달 비율 그대로 (지난 판매가 옛 메뉴라서)
+      if (it.rateB != null && rollB && rollB.get(it.key) > 0 && !(it.newShare > 0.3)) it.rateB = 0.5 * it.rateB + 0.5 * rollB.get(it.key);
       it.loss = lossOf(it.key);
       if (it.rateB != null) it.rateB *= it.loss;
       it.weKm = weMenu.has(it.key) ? weMenu.get(it.key) : null; // { we, wd }
@@ -2890,16 +2920,37 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         dayRowsOf(k).forEach((r) => {
           if (COUPON.test(r.c || "") && !((M.mapCfg || {}).menu || {})[r.m]) return; // 연결 안 한 쿠폰은 B와 같이 뺌
           const z = M.resolveMenu(r.m, r.c); if (!z || z.skip || !z.recipe) return;
-          const q = num(r.q) * (z.mult || 1);
-          M.perMenu(z.recipe, x.slice(0, 7)).acc.forEach((v, kk) => { if (v) u.set(kk, (u.get(kk) || 0) + q * v); });
+          const q = num(r.q) * (z.mult || 1), pm = M.perMenu(z.recipe, x.slice(0, 7));
+          pm.acc.forEach((v, kk) => { if (v) u.set(kk, (u.get(kk) || 0) + q * v); });
+          // 커팅비프: 플래터·샐러드·파스타·피자가 쓰는 g(필요)과 크리스피 스테이크&립이 내는 자투리 g(공급). 모자란 만큼 부채살 1/2 컷 (menuUseSpan에서 구간으로 묶어 계산)
+          cutCfgs().forEach((c) => {
+            const need = (pm.prepAcc.get(c.prep) || 0) + (pm.prepAcc.get(c.prep + "|ea") || 0) * c.portion;
+            if (need) u.set("\u0001need\u0001" + c.item, (u.get("\u0001need\u0001" + c.item) || 0) + q * need);
+            if (z.recipe.name.startsWith(c.from)) u.set("\u0001sup\u0001" + c.item, (u.get("\u0001sup\u0001" + c.item) || 0) + q * c.g);
+          });
         });
       }
       menuUseMemo.set(x, u);
     }
     const u = menuUseMemo.get(x); return u ? u.get(key) || 0 : null;
   };
+  // 커팅비프 설정 (prepCfg): 부족분을 채우는 품목(부채살)·자투리를 내는 메뉴(from)·한 개당 자투리 g·1포션 g·1개 = 몇 컷(per)
+  function cutCfgs() {
+    return Object.values(db.prepCfg || {}).filter((c) => c && c.shortOf && c.item && ((db.prepCfg || {})[c.shortOf] || {}).split)
+      .map((c) => { const sp = db.prepCfg[c.shortOf].split; return { prep: c.shortOf, item: c.item, per: c.per || 2, from: sp.from, g: sp.g || 0, portion: sp.portion || 110 }; });
+  }
   // x일 센 뒤(그날 남은 몫 left)부터 d일 전날까지 메뉴 역산 사용량 × 로스(실제 ÷ 레시피). 하루라도 메뉴 판매가 없으면 null (그때는 지금 계산만)
-  const menuUseSpan = (it, x, left, d) => { let u = 0; for (let y = x; y < d; y = addDays(y, 1)) { const m = menuUseOn(it.key, y); if (m == null) return null; u += (y === x ? left : 1) * m; } return u * (it.loss || 1); };
+  //  부채살(커팅비프 부족분)은 구간 안의 필요 g − 자투리 g을 묶어서(자투리는 다음 날에도 씀) 1/2 컷 수 ÷ 2 (달 단위 B와 같은 식)
+  const menuUseSpan = (it, x, left, d) => {
+    let u = 0, need = 0, sup = 0; const cut = cutCfgs().find((c) => c.item === it.key);
+    for (let y = x; y < d; y = addDays(y, 1)) {
+      const m = menuUseOn(it.key, y); if (m == null) return null;
+      const w = y === x ? left : 1; u += w * m;
+      if (cut) { need += w * menuUseOn("\u0001need\u0001" + it.key, y); sup += w * menuUseOn("\u0001sup\u0001" + it.key, y); }
+    }
+    if (cut) u += Math.max(0, need - sup) / cut.portion / cut.per;
+    return u * (it.loss || 1);
+  };
   // 품목별 메뉴 역산 비율 w: 예상 재고 사용량 = (1−w) × 지금 계산 + w × 메뉴 역산 (100%가 아니라 계산식 중 하나로)
   //  그 품목의 지난 예상 재고 구간(어제까지 끝난 최근 8개, 입고를 아는 구간, 28일 안)에서 w = 0·¼·½·¾·1 중 센 값과 가장 맞은 것. 5구간 미만이거나 레시피 연결(B)이 없으면 0
   //  되돌려 보기(10/27~11/12 센 날 1011건, 그날 전 구간만으로 배움): 평균 오차 1.87→1.83 · 반 단위 안 47.2→48.9% · 덜 시킬 위험 296→283 · 더 시킬 쪽 238→234
