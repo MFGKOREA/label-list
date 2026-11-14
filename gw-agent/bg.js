@@ -403,23 +403,22 @@ async function hrStart(why, now) {
   await put({ hrTab: tab.id, hrSt: { ...hrSt, run: { at: now, tab: tab.id, why }, msg: "HR 읽는 중", next: 0 } });
   await log(`플젝 HR 덤프 시작 (${why})`, { quiet: true });
 }
-// 끝(성공·실패) 한 곳: 탭 닫고, 시트에 적고, 다음 차례를 정함
+// 끝(성공·실패) 한 곳: 시트에 적고, 탭 닫고, 다음 차례를 정함
 async function hrEnd(res) {
   const { hrSt = {} } = await get("hrSt"), id = hrSt.run ? hrSt.run.tab : null;
-  if (id != null) { await chrome.tabs.remove(id).catch(() => {}); await lock(async () => { const { owned = [] } = await get("owned"); await put({ owned: owned.filter((x) => x !== id) }); }); }
-  await chrome.storage.local.remove("hrTab");
   const at = Date.now(), day = ymd(new Date(at));
   if (res.error) { // 실패는 지난 값을 지우지 않고 까닭만 덧붙임 (시트 hrStatus.err)
     await postMerge("hrStatus", { err: { at: at, date: day, error: res.error, detail: String(res.detail || "").slice(0, 300) } });
     const gap = res.error === "login_required" ? HR.loginGap : HR.errGap;
     await put({ hrSt: { at: at, okAt: hrSt.okAt || 0, run: null, ok: false, error: res.error, msg: `HR ${res.error === "login_required" ? "로그인 필요 (매장 PC에서 HR 로그인 또는 설정에 아이디·비밀번호)" : res.error} · ${Math.round(gap / 60e3)}분 뒤 다시`, next: at + gap } });
     await log(`플젝 HR 덤프 안 됨: ${res.error} ${res.detail || ""}`, { quiet: true });
-    return;
+  } else {
+    const data = res.data || {};
+    if (!(await postOk("hrStatus", data))) { await put({ hrSt: { at: at, run: null, ok: false, msg: "시트에 못 적음 (인터넷 확인)", next: at + HR.errGap } }); await log("플젝 HR 덤프를 시트에 못 적음", { quiet: true }); }
+    else { await put({ hrSt: { at: data.at || at, okAt: data.at || at, run: null, ok: true, msg: `HR ${data.date || ""} · 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, next: 0 } }); await log(`플젝 HR 덤프 저장: ${data.date || ""} 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, { quiet: true }); }
   }
-  const data = res.data || {};
-  if (!(await postOk("hrStatus", data))) { await put({ hrSt: { at: at, run: null, ok: false, msg: "시트에 못 적음 (인터넷 확인)", next: at + HR.errGap } }); await log("플젝 HR 덤프를 시트에 못 적음", { quiet: true }); return; }
-  await put({ hrSt: { at: data.at || at, okAt: data.at || at, run: null, ok: true, msg: `HR ${data.date || ""} · 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, next: 0 } });
-  await log(`플젝 HR 덤프 저장: ${data.date || ""} 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, { quiet: true });
+  if (id != null) { await chrome.tabs.remove(id).catch(() => {}); await lock(async () => { const { owned = [] } = await get("owned"); await put({ owned: owned.filter((x) => x !== id) }); }); } // 시트에 적은 뒤에 탭을 닫음
+  await chrome.storage.local.remove("hrTab");
 }
 async function hrTick(now) {
   const { hron, hrSt = {}, job } = await get(["hron", "hrSt", "job"]);
@@ -512,8 +511,8 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       return reply({ managed: !!run && tid != null && tid === run.tab, ver: VER });
     }
     if (m.q === "hrSay") { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, msg: "HR · " + String(m.msg || "").slice(0, 80) } }); return reply({}); }
-    if (m.q === "hrData") { await hrEnd({ data: m.data || {} }); return reply({}); }
-    if (m.q === "hrFail") { await hrEnd({ error: String(m.error || "error").slice(0, 40), detail: String(m.detail || "") }); return reply({}); }
+    if (m.q === "hrData") { await hrEnd({ data: m.data || {} }); try { reply({}); } catch (e) {} return; }
+    if (m.q === "hrFail") { await hrEnd({ error: String(m.error || "error").slice(0, 40), detail: String(m.detail || "") }); try { reply({}); } catch (e) {} return; }
     if (m.q === "hrNow") { // 팝업 [HR 지금] — 시간대와 상관없이 한 번
       const { hrSt = {}, job } = await get(["hrSt", "job"]);
       if (job) return reply({ busy: true });
