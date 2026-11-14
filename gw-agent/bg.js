@@ -1,3 +1,5 @@
+// 배경 (1.10.0 — 11/14 KM: 플젝 HR 출퇴근·스케줄 변경 신청을 매장 PC가 읽어 시트(hrStatus)에 남김 → 아래 "플젝 HR 덤프")
+//          영업시간(08:30~22:30)에 15분마다(:05·:20·:35·:50) 사람이 쓰는 창 뒤 탭 하나로 조용히 읽고 닫음. 감시 시각(09:10·12:00·13:00·16:10·17:10·18:10·20:10·22:10) 직전 값이 남음
 // 배경 (1.8.0 — 11/13 KM "크롬이 켜져 있으면 상시 연동": 폰에서 누르지 않아도 PC가 스스로 어제 매출·메뉴 판매와 계획(gw-plan.json)에 있는 것을 받아 옴 → 아래 "상시 수집")
 //  1.8.0 원칙: 비밀번호를 다루는 이 확장은 얇게 두고 다시 깔 일을 없앰. 무엇을 받을지(gw-plan.json)와 어떻게 읽을지(mis-sales.js)는 GitHub Pages에서 받아 와 스스로 늘어남
 // (1.7.3 — 11/12: 매출 요청은 6시간까지 받고, 새 매출 요청이 오면 옛 창을 바로 닫고, 오류를 적을 때 다른 칸을 안 지움 / 1.7.2 — 11/12: 자동 창을 최소화하지 않고 작은 창으로 맨 위에. 아래에 깔리면 크롬이 느리게 돌려 멈췄음 / 1.7.1, 11/11 — 1.7.0이 "MIS 새 탭을 자동 탭으로"에서 6분 멈추던 문제)
@@ -61,12 +63,12 @@ async function noteWait(txt) { // 지금 무엇을 기다리는지 (바뀔 때�
 async function sweep(reason, all = false) {
   // 자동으로 열었던 탭 기록(owned) + 최소화된 창의 GW·MIS 탭 → 닫음. 사람이 띄워 둔 보통 창은 안 건드림 (지금 작업 탭과 그 탭이 연 탭은 남김)
   //  all: 크롬이 막 켜졌을 때 — 그땐 사람이 쓰던 창이 없으니 되살아난 GW·MIS 탭을 다 닫음
-  const { owned = [], job } = await get(["owned", "job"]), keep = new Set(job ? [...(job.tabs || []), ...(job.extra || [])] : []);
+  const { owned = [], job, hrTab } = await get(["owned", "job", "hrTab"]), keep = new Set([...(job ? [...(job.tabs || []), ...(job.extra || [])] : []), ...(hrTab != null ? [hrTab] : [])]); // HR 덤프 탭은 건드리지 않음
   const tabs = await chrome.tabs.query({}).catch(() => []);
   const wins = new Map((await chrome.windows.getAll().catch(() => [])).map((w) => [w.id, w]));
   const kill = tabs.filter((t) => !keep.has(t.id) && !keep.has(t.openerTabId) && (owned.includes(t.id) || (GWMIS.test(t.url || t.pendingUrl || "") && (all || (wins.get(t.windowId) || {}).state === "minimized"))));
   for (const t of kill) await chrome.tabs.remove(t.id).catch(() => {});
-  await lock(async () => { const { owned: o = [], job: j } = await get(["owned", "job"]); const k = new Set(j ? [...(j.tabs || []), ...(j.extra || [])] : []); await put({ owned: o.filter((id) => k.has(id)) }); });
+  await lock(async () => { const { owned: o = [], job: j, hrTab: h } = await get(["owned", "job", "hrTab"]); const k = new Set([...(j ? [...(j.tabs || []), ...(j.extra || [])] : []), ...(h != null ? [h] : [])]); await put({ owned: o.filter((id) => k.has(id)) }); });
   if (kill.length && reason) await log(`${reason} · 남은 자동 창 ${kill.length}개 닫음`, { quiet: true });
 }
 const own = (tabId) => lock(async () => { const { owned = [] } = await get("owned"); if (!owned.includes(tabId)) await put({ owned: [...owned, tabId].slice(-20) }); });
@@ -371,6 +373,67 @@ async function tickOnce(why) {
   }
 }
 
+// ---- 플젝 HR 덤프 (1.10.0): 크롬이 켜져 있는 동안 PC가 플젝 HR 출퇴근·스케줄 변경 신청을 시트에 남김 ----
+//  hr.js(hr.pljec.cloud에 들어가는 스크립트)가 읽어서 보내 주면 시트 kv의 hrStatus에 적고 탭을 닫는다.
+//  사람이 쓰는 창 뒤에 탭 하나를 열어 조용히 읽는다(창을 띄우지 않음). 발주·매출 자동 창이 도는 중이면 양보.
+const HR_URL = "https://hr.pljec.cloud/";
+const HR = { mins: [5, 20, 35, 50], from: 8 * 60 + 30, to: 22 * 60 + 30, gap: 8 * 60e3, late: 18 * 60e3, budget: 4 * 60e3, errGap: 15 * 60e3, loginGap: 60 * 60e3 };
+function hrDue(now, st) {
+  const d = new Date(now), hm = d.getHours() * 60 + d.getMinutes();
+  if (hm < HR.from || hm > HR.to) return false; // 영업시간 밖에는 쉼
+  if (now - (st.at || 0) < HR.gap) return false;
+  if (HR.mins.indexOf(d.getMinutes()) >= 0) return true; // :05·:20·:35·:50
+  return now - (st.at || 0) > HR.late; // 밀린 차례는 18분이 지나면 따라잡음
+}
+async function hrWindowId() { // 사람이 보는 보통 창에 뒤 탭으로 (최소화된 창이면 다른 창)
+  try { const w = await chrome.windows.getLastFocused({ populate: false }); if (w && w.id != null && w.state === "normal") return w.id; } catch (e) {}
+  const all = await chrome.windows.getAll({ populate: false }).catch(() => []), n = all.filter((w) => w.state === "normal").sort((a, b) => (b.id || 0) - (a.id || 0))[0];
+  return n ? n.id : null;
+}
+async function hrStart(why, now) {
+  const { hrSt = {} } = await get("hrSt");
+  if (hrSt.run) return;
+  const wid = await hrWindowId(), opt = { url: HR_URL, active: false };
+  if (wid != null) opt.windowId = wid;
+  let tab;
+  try { tab = await chrome.tabs.create(opt); }
+  catch (e) { await hrEnd({ error: "no_tab", detail: String((e && e.message) || e) }); return; }
+  chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
+  await own(tab.id);
+  await put({ hrTab: tab.id, hrSt: { ...hrSt, run: { at: now, tab: tab.id, why }, msg: "HR 읽는 중", next: 0 } });
+  await log(`플젝 HR 덤프 시작 (${why})`, { quiet: true });
+}
+// 끝(성공·실패) 한 곳: 탭 닫고, 시트에 적고, 다음 차례를 정함
+async function hrEnd(res) {
+  const { hrSt = {} } = await get("hrSt"), id = hrSt.run ? hrSt.run.tab : null;
+  if (id != null) { await chrome.tabs.remove(id).catch(() => {}); await lock(async () => { const { owned = [] } = await get("owned"); await put({ owned: owned.filter((x) => x !== id) }); }); }
+  await chrome.storage.local.remove("hrTab");
+  const at = Date.now(), day = ymd(new Date(at));
+  if (res.error) { // 실패는 지난 값을 지우지 않고 까닭만 덧붙임 (시트 hrStatus.err)
+    await postMerge("hrStatus", { err: { at: at, date: day, error: res.error, detail: String(res.detail || "").slice(0, 300) } });
+    const gap = res.error === "login_required" ? HR.loginGap : HR.errGap;
+    await put({ hrSt: { at: at, okAt: hrSt.okAt || 0, run: null, ok: false, error: res.error, msg: `HR ${res.error === "login_required" ? "로그인 필요 (매장 PC에서 HR 로그인 또는 설정에 아이디·비밀번호)" : res.error} · ${Math.round(gap / 60e3)}분 뒤 다시`, next: at + gap } });
+    await log(`플젝 HR 덤프 안 됨: ${res.error} ${res.detail || ""}`, { quiet: true });
+    return;
+  }
+  const data = res.data || {};
+  if (!(await postOk("hrStatus", data))) { await put({ hrSt: { at: at, run: null, ok: false, msg: "시트에 못 적음 (인터넷 확인)", next: at + HR.errGap } }); await log("플젝 HR 덤프를 시트에 못 적음", { quiet: true }); return; }
+  await put({ hrSt: { at: data.at || at, okAt: data.at || at, run: null, ok: true, msg: `HR ${data.date || ""} · 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, next: 0 } });
+  await log(`플젝 HR 덤프 저장: ${data.date || ""} 출퇴근 ${data.n || 0}건 · 신청 ${data.reqN || 0}건`, { quiet: true });
+}
+async function hrTick(now) {
+  const { hron, hrSt = {}, job } = await get(["hron", "hrSt", "job"]);
+  if (hron === false) return; // 팝업에서 끄면 안 함
+  if (hrSt.run) { // 도는 중: 너무 오래 걸리면 정리 (탭이 죽었거나 화면이 멈춘 경우)
+    if (now - hrSt.run.at > HR.budget) await hrEnd({ error: "timeout", detail: `${Math.round((now - hrSt.run.at) / 60e3)}분 안에 안 끝나 창을 닫음` });
+    return;
+  }
+  if (job) return; // 발주·매출 자동 창이 도는 중이면 양보
+  if (now < (hrSt.next || 0)) return;
+  if (!hrDue(now, hrSt)) return;
+  await hrStart("정기", now);
+}
+
 // ---- 상시 수집 (1.8.0): 크롬이 켜져 있는 동안 PC가 스스로 ----
 //  30분마다 시트를 한 번 읽어, 어제까지의 실제 매출·메뉴 판매가 비었거나 계획(gw-plan.json)에 아직 안 한 일이 있으면 스스로 요청(salesPush)을 적음
 //  → 그 뒤는 폰 버튼과 같은 길(창 하나 열어 GW·MIS에서 받아 오고 닫음). 다 받아 뒀으면 3시간 쉼. 하루 4번까지만 스스로 요청(MIS가 막혔을 때 계속 두드리지 않게)
@@ -391,6 +454,10 @@ async function autoCheck(now, L) {
   let d, plan = [];
   try { const v = await netGet(API + "?api=1&t=" + now, 45e3); if (!v || !v.ok || !v.data) throw new Error("x"); d = v.data; }
   catch (e) { st.msg = "시트를 못 읽음 (인터넷 확인)"; st.next = now + AUTO.retry; await put({ autoSt: st }); return; }
+  { // 시트에 급한 HR 요청(hrPush)이 적혀 있으면 바로 한 번 (감시가 30분을 기다리지 않게)
+    const ask = d.hrPush || {}, hs = (await get("hrSt")).hrSt || {};
+    if (ask.id && (ask.at || 0) > (hs.reqId || 0) && now - (ask.at || 0) < 20 * 60e3) { await put({ hrSt: { ...hs, reqId: ask.id } }); hrStart("요청", now); }
+  }
   try { const p = await netGet(PLAN_URL + "?t=" + now, 8e3); if (Array.isArray(p)) plan = p; } catch (e) {} // 계획을 못 받으면 매출·메뉴만
   const r = autoPlan(d, now, plan, { pc: true, forceTime: !!L.autoAnyTime });
   let go = false;
@@ -408,14 +475,15 @@ async function autoCheck(now, L) {
 }
 
 chrome.runtime.onStartup.addListener(async () => {
-  await lock(() => chrome.storage.local.remove("job")); await put({ owned: [] });
+  await lock(() => chrome.storage.local.remove(["job", "hrTab"])); await put({ owned: [] });
+  { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null } }); } // 새로 켜졌으면 HR 덤프는 다음 차례에
   { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 60e3 } }); } // 크롬이 막 켜졌으면 1분 뒤에 첫 확인
   await sweep("크롬 시작", true); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 4000); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 12000);
-  tick("start");
+  tick("start"); hrTick(Date.now());
 });
-chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); });
+chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); });
 chrome.alarms.create("watch", { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); });
+chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); hrTick(Date.now()); });
 let fastOn = false;
 function fast() { // 매장 시간이거나 작업 중이면 3초마다 (배경이 잠들면 30초 알람이 다시 깨움)
   if (fastOn) return; fastOn = true;
@@ -439,6 +507,19 @@ async function settle(misId, stage) {
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   (async () => {
     const tid = sender.tab ? sender.tab.id : null;
+    if (m.q === "hrManaged") { // HR 탭: 이 확장이 연 탭에서만 움직이게 (사람이 연 탭은 그대로)
+      const { hrSt = {} } = await get("hrSt"), run = hrSt.run;
+      return reply({ managed: !!run && tid != null && tid === run.tab, ver: VER });
+    }
+    if (m.q === "hrSay") { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, msg: "HR · " + String(m.msg || "").slice(0, 80) } }); return reply({}); }
+    if (m.q === "hrData") { await hrEnd({ data: m.data || {} }); return reply({}); }
+    if (m.q === "hrFail") { await hrEnd({ error: String(m.error || "error").slice(0, 40), detail: String(m.detail || "") }); return reply({}); }
+    if (m.q === "hrNow") { // 팝업 [HR 지금] — 시간대와 상관없이 한 번
+      const { hrSt = {}, job } = await get(["hrSt", "job"]);
+      if (job) return reply({ busy: true });
+      if (!hrSt.run) { await put({ hrSt: { ...hrSt, next: 0 } }); await hrStart("직접", Date.now()); }
+      return reply({});
+    }
     if (m.q === "managed") {
       await q.catch(() => {}); // 새 탭 넘겨받기가 끝난 뒤에 대답 (예전엔 넘겨받기 전에 물으면 "아님"으로 듣고 조용히 끝남)
       let { on, job } = await get(["on", "job"]);

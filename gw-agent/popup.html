@@ -15,11 +15,15 @@
 <body>
   <h1>GW Agent</h1>
   <p>폰에서 GW 전송·매출 불러오기를 누르면 작은 창 하나를 열어 처리하고 닫아요. 상시 수집을 켜 두면 크롬이 켜져 있는 동안 어제 매출·메뉴 판매를 스스로 받아 와요(발주 시간대 12:30~14:45에는 쉼). 아이디·비밀번호는 이 PC 크롬 안에만 저장돼요.</p>
+  <p>플젝 HR 출퇴근·스케줄 변경 신청은 영업시간(08:30~22:30)에 15분마다 읽어 시트에 남겨요. HR 세션이 끊기면 아래 HR 아이디·비밀번호가 있을 때만 스스로 로그인하고, 없으면 시트에 "로그인 필요"만 남겨요.</p>
   <label>GW 아이디<input type="text" id="id" autocomplete="off"></label>
   <label>비밀번호<input type="password" id="pw" autocomplete="new-password" placeholder="저장됨이면 비워 둬도 돼요"></label>
   <div class="row"><input type="checkbox" id="on"> <span>자동입력 켜기</span></div>
   <div class="row"><input type="checkbox" id="auto"> <span>상시 수집 (스스로 받아 오기)</span></div>
-  <button id="save">저장</button> <button class="ghost" id="open">MIS 직접 열어 보기</button>
+  <label>플젝 HR 아이디<input type="text" id="hrid" autocomplete="off" placeholder="회사 메일 주소"></label>
+  <label>플젝 HR 비밀번호<input type="password" id="hrpw" autocomplete="new-password" placeholder="저장됨이면 비워 둬도 돼요"></label>
+  <div class="row"><input type="checkbox" id="hron"> <span>플젝 HR 출퇴근·스케줄 덤프</span></div>
+  <button id="save">저장</button> <button class="ghost" id="open">MIS 직접 열어 보기</button> <button class="ghost" id="hrnow">HR 지금 읽기</button>
   <div id="st">확인 중…</div>
   <div id="log"></div>
   <script src="common.js"></script>
