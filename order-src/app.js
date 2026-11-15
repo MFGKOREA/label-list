@@ -1865,8 +1865,10 @@
   // 입고현황(misRecv.날짜, 11/14 KM): MIS에서 실제로 받은 날·양 (PC가 어제까지 31일을 매일 다시 읽음, 받은 게 없던 날은 빈 기록).
   //  받은 기록이 있는 날은 그날로 잡힌 발주 입고(앱 발주·주문현황·예전 익일 칸) 대신 받은 양을 씀 → 늦게 온·덜 온 입고를 앎 (11/14 되돌려 보기: 오차의 68%가 입고 낀 구간)
   //  품목코드가 연결된 품목만. 스스로 확인(recvTrust): 앱 발주가 들어올 날 앞뒤 하루 안에 입고현황이 그 품목을 받은 비율 60% 넘고(20건 이상), 받은 양÷시킨 양 가운데값이 0.5~2배일 때만(열·단위를 잘못 읽었을 때 막음)
-  //  RECV_USE: 실제 입고 자료로 예상 재고를 되돌려 본 뒤에 켬 (그 전엔 PC가 읽어 쌓기만 함)
-  const RECV_USE = false;
+  //  RECV_USE (11/15 켬): 첫 수집 10/15~11/14 31일·1,083줄. 스스로 확인 526건 중 524건 맞음, 받은 양÷시킨 양 가운데값 1.0. 앱 발주 입고 640건 중 624건이 예정일 그날 옴(늦음 12·이름 3·없음 1)
+  //   되돌려 보기(그날 기준 1,850건): 평균 오차 1.587→1.587 · 덜 시킬 위험 520→517 · 맞음 48.5→48.4%. 재고 채점(사용량 학습) 377구간 적중 49.1→50.9% · 사용 오차 30.8→29.9%, 11/5 뒤 시간 분리 같음
+  //   → 입고 날짜는 거의 맞았고, 입고 구간 오차는 그날 센 뒤에 들어온 입고(시각) 쪽. 앱이 모르던 입고 862개 중 815개는 주문현황을 읽기 전(10/15~10/29)
+  const RECV_USE = true;
   const recvRowsOf = (key, y) => { const m = db["misRecv." + y]; const cs = (keyItem.get(key) || {}).codes; if (!m || !Array.isArray(m.rows) || !cs || !cs.length) return null; return m.rows.filter((r) => r && cs.includes(String(r.code)) && num(r.qty) > 0); };
   const recvTrust = () => {
     if (recvTrustMemo) return recvTrustMemo;
@@ -1880,7 +1882,7 @@
     rat.sort((a, b) => a - b); const med = rat.length ? rat[rat.length >> 1] : null;
     return (recvTrustMemo = { on: n >= 20 && hit / n >= 0.6 && med > 0.5 && med < 2, n, hit, med });
   };
-  const recvOn = (it, y) => RECV_USE && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on;
+  const recvOn = (it, y) => RECV_USE && y < TODAY && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on; // 어제까지만 (오늘 것은 아직 다 안 들어왔을 수 있음, 앞날 기록은 쓰지 않음)
   const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
   const arrivalsOf = (it, x) => {
     const out = arrivalsOrd(it, x); if (!RECV_USE) return out;
