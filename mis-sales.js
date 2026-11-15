@@ -739,7 +739,9 @@
       const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total/i.test(String(v ?? "").trim()));
       const to = job.to, from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 27); return t.toISOString().slice(0, 10); })();
       const have = await get();
-      const days = []; for (let x = from; x <= to && days.length < 31; ) { if (job.force || !have["setDay." + x]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      // 첫 판(11/15 15:2x)이 treegrid 줄을 못 읽고 28일을 빈 기록 { at, rows: [] }로 남겼음 → tot 칸이 없는 예전 기록은 다시 읽음
+      const fresh = (v) => v && typeof v === "object" && "tot" in v;
+      const days = []; for (let x = from; x <= to && days.length < 31; ) { if (job.force || !fresh(have["setDay." + x])) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
       days.reverse(); // 최근 날부터 (창 시간이 모자라면 옛날 쪽이 다음으로 밀림)
       const L = loader($, d);
       const heads = (g) => (optsOf(g).columns || []).map((row) => row.map((c) => `${c.field || ""}=${title(c)}${c.colspan ? "*" + c.colspan : ""}`));

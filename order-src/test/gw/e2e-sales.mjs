@@ -106,14 +106,15 @@ ok(!JSON.stringify(d).includes("홍길동") && d.recvProbe && d.recvProbe.grids[
 ok(Array.isArray((d["misRecv.2026-11-10"] || {}).rows) && d["misRecv.2026-11-10"].rows.length === 0 && d.misRecvScan.empty === 10 && d.misRecvScan.days === 2 && d.misRecvScan.all === 1 && !d["misRecv.2026-10-01"], "받은 게 없는 날은 빈 기록(10일) · 기간 밖(10/1)은 안 씀");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "입고현황 읽기도 KM 입력(input.날짜)은 안 건드림");
 // 7) Set판매현황 (11/15 KM 승인): 실제 화면은 매장마다 한 줄 · 세트마다 수량 칸(treegrid). 이 매장 줄의 세트별 수량·고객수만 setDay.날짜에. 다른 화면은 안 엶, 금액·다른 매장은 저장 안 함
-gas.post({ action: "set", key: "setDay.2026-11-11", value: { at: 1, rows: [{ s: "x", q: 1 }] } });
+gas.post({ action: "set", key: "setDay.2026-11-11", value: { at: 1, tot: 1, rows: [{ s: "x", q: 1 }] } });
+gas.post({ action: "set", key: "setDay.2026-11-13", value: { at: 1, rows: [] } }); // 첫 판이 남긴 빈 기록(tot 없음) → 다시 읽어야 함
 let opened4 = null;
 d = await run({ kind: "sets", from: "2026-11-11", to: "2026-11-14" }, "sets-main.html", async (p) => { opened4 = await p.evaluate(() => window.__opened); });
 console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(d.salesPush.status === "done" && d.salesPush.parts.sets.status === "done", "Set판매현황 읽기 끝남");
 ok(Array.isArray(opened4) && opened4.length === 1 && opened4[0] === "Set판매현황", "열린 화면은 Set판매현황 하나뿐 (접힌 매출분석 폴더는 펼침 단추로만)");
 const s13 = d["setDay.2026-11-13"] || {}, s14 = d["setDay.2026-11-14"] || {}, qOf = (x, k) => ((x.rows || []).find((r) => r.s === k) || {}).q;
-ok(s13.cust === 180 && s13.tot === 7 && qOf(s13, "MGGGR") === 4 && qOf(s13, "MTDB") === 2 && qOf(s13, "ROMANTIC") === 1 && !(s13.rows || []).some((r) => r.s === "PREMIUM"), "11/13 이 매장 줄: 고객수 180 · 세트 7 (골고루 4 · 미트 더블 2 · 로맨틱 1, 0인 세트는 뺌)");
+ok(s13.cust === 180 && s13.tot === 7 && qOf(s13, "MGGGR") === 4 && qOf(s13, "MTDB") === 2 && qOf(s13, "ROMANTIC") === 1 && !(s13.rows || []).some((r) => r.s === "PREMIUM"), "11/13 이 매장 줄: 고객수 180 · 세트 7 (골고루 4 · 미트 더블 2 · 로맨틱 1, 0인 세트는 뺌) · 첫 판의 빈 기록은 다시 읽어 덮음");
 ok(s14.cust === 420 && qOf(s14, "MGGGR") === 11 && qOf(s14, "PREMIUM") === 1, "11/14 토요일: 고객수 420 · 골고루 11 · 프리미엄 1 (treegrid 자식 줄에서 읽음)");
 ok(Array.isArray((d["setDay.2026-11-12"] || {}).rows) && d["setDay.2026-11-12"].rows.length === 0 && d["setDay.2026-11-11"].rows[0].s === "x", "이 매장 세트가 없는 날(11/12)은 빈 기록 · 이미 있던 날(11/11)은 다시 안 읽음");
 ok(!JSON.stringify(d).includes("다른매장") && ![s13, s14].some((x) => JSON.stringify(x).includes("50") || /,000/.test(JSON.stringify(x))) && !JSON.stringify(d).includes("MG수원"), "다른 매장 줄·금액·매장명은 저장 안 함");
