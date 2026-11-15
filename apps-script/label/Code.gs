@@ -22,6 +22,7 @@ function doGet(e) {
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
       if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 30일)
+      if (e.parameter.pushstat) return json_(pushStat_()); // 알림 점검: 매장별 등록 폰 수·마지막 오류 (토큰은 안 보여줌)
       if (e.parameter.backups) return json_({ backups: backupList_() }); // 복구용 백업 목록 (최근 15일)
       if (e.parameter.backup) return json_(backupGet_(String(e.parameter.backup), e.parameter.store ? store_(e.parameter.store) : '')); // 그날 백업 (매장 하나 또는 전체)
       const store = store_(e.parameter.store);
@@ -841,7 +842,10 @@ function pushSend_(store, title, body, tag, skip) {
   UrlFetchApp.fetchAll(reqs).forEach((res, i) => {
     const code = res.getResponseCode();
     if (code === 200) sent++;
-    else if (code === 404 || /UNREGISTERED|INVALID_ARGUMENT/.test(res.getContentText())) pushDrop_(rows[i].token);
+    else {
+      CacheService.getScriptCache().put('push_err', new Date().toISOString() + ' ' + code + ' ' + res.getContentText().slice(0, 300), 21600);
+      if (code === 404 || /UNREGISTERED|INVALID_ARGUMENT/.test(res.getContentText())) pushDrop_(rows[i].token);
+    }
   });
   return sent;
 }
@@ -991,4 +995,12 @@ function adminRun_(fn) {
 function setupSelfUpdate() {
   const res = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + '/deployments/' + SELF_DEPLOY_ID, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
   Logger.log(res.getResponseCode() === 200 ? '스스로 배포 준비 완료' : '아직 안 됨: ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 300));
+}
+
+function pushStat_() {
+  const counts = {};
+  pushRows_().forEach((r) => { counts[r.store] = (counts[r.store] || 0) + 1; });
+  let auth = '';
+  try { fcmAuth_(); auth = 'ok'; } catch (err) { auth = String(err.message || err).slice(0, 200); }
+  return { counts: counts, lastError: CacheService.getScriptCache().get('push_err') || '', fcmAuth: auth };
 }
