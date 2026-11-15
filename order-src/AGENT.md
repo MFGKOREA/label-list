@@ -23,6 +23,7 @@
 | 크롬이 켜져 있는 동안 | 상시 수집: 매장 PC 확장(GW Agent 1.8.0부터)이 30분마다 스스로 빈 자료와 계획(`gw-plan.json`)을 받아 옴 | `gw-agent/auto.js`, `mis-sales.js` |
 | 매일 10:23 · 15:23 | 자동 수집(뒷받침): PC가 못 받은 것이 있으면 요청 → 채점 → 학습 기록 한 줄 | `auto/collect.py`, `auto/learn.mjs --log` |
 | 매일 05:52 | 아침 보고 (읽기만) | 앱 계산 그대로 |
+| 매일 10:05 · 16:05 · 20:05 | 폰 알림(11/15 KM "먼저 할 4가지 바로 진행"): 10·16시 = 86 위험(지금부터 내일 문 닫을 때까지 바닥날 품목), 20시 = 내일 해동(해동 품목의 내일 예상 사용) + 내일 86. 알릴 게 있을 때만 예약 작업 푸시 (읽기만) | `auto/alert.mjs` |
 | 매주 월 08:52 | 주간 점검: 한 주 기록을 보고 원인을 찾아 고치고 배포 | 아래 3장 도구 전부 |
 | 매달 5일 08:52 | 월간 점검: 지난달 파일(수불·메뉴별 매출·레시피)이 들어왔는지, 새 메뉴 연결 | 주간 점검과 같음 |
 
@@ -35,6 +36,7 @@
 - `gw-agent/auto.js`(판단) · `gw-plan.json`(더 받아 올 것) · `mis-sales.js`(읽는 법). 시험 `node order-src/test/gw/auto.test.mjs`, `node order-src/test/gw/e2e-auto.mjs`(진짜 확장).
 - `python3 order-src/auto/collect.py [--dry]` — 자동 수집. 끝 코드 0 최신/받음 · 2 건너뜀 · 3 시트 비정상 · 4 못 받음. 시험 `python3 order-src/auto/test_collect.py`(가짜 시트·가짜 PC).
 - `node order-src/auto/learn.mjs [--log] [--final] [--dry]` — 어제 채점(Forecast 오차, 예상 재고 적중·WAPE, 한쪽으로 쏠린 품목). `--log`면 학습 기록에 하루 한 줄.
+- `node order-src/auto/alert.mjs [--kind auto|86|thaw] [--at 2026-11-14T16:05] [--kv 파일]` — 폰 알림 한두 줄(86 위험·내일 해동). 끝 코드 10 알릴 것 있음 · 0 없음 · 3 시트 비정상. `--at`으로 지난 시각을 열어 시험(그날 뒤 자료는 잘라냄).
 - `order-src/test/bt/asof.mjs` — 앱을 "그날 그 시각"으로 여는 도구. 규칙 실험은 저장소 밖 복사본에서 하고, 이 도구로 지난 발주일들을 되돌려 본다.
 - 규칙 비교: `node order-src/test/bt/compare.mjs <kv.json> <기준.html> <고친.html> [--split YYYY-MM-DD]` (같은 채점 구간, 시간 분리).
 - 입고현황: `node order-src/test/bt/recv.mjs <kv.json> [--make 켠.html]` — 가짜 입고현황으로 쓰는 길 확인, 진짜 자료가 있으면 스스로 확인 결과. 켠 html로 `est.mjs` 비교.
