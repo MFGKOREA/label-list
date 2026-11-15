@@ -11,6 +11,19 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/tools/guard.py\"; [ -f \"$f\" ] || f=\"$(git rev-parse --show-toplevel 2>/dev/null)/tools/guard.py\"; [ -f \"$f\" ] || exit 0; exec python3 \"$f\" --hook",
+            "timeout": 30,
+            "statusMessage": "보안 지킴이: 커밋·푸시 전 검사"
+          }
+        ]
+      }
     ]
   }
 }

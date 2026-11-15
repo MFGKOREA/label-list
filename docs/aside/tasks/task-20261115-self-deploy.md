@@ -40,7 +40,7 @@ A. https://console.cloud.google.com/apis/library?project=mg-label 에서 **사�
    - **Apps Script API**
    - **Google Drive API** ← 사진 글자 읽기(Drive 고급 서비스)에 필요
 B. https://console.cloud.google.com/apis/credentials/consent?project=mg-label → **OAuth 동의 화면**
-   - 사용자 유형 **외부**, 앱 이름 `한글표시사항 매장모음`, 지원·개발자 이메일 = sinoo.kr.io@gmail.com, 범위는 비워 두고 저장
+   - 사용자 유형 **외부**, 앱 이름 `한글표시사항 매장모음`, 지원·개발자 이메일 = (KM 계정), 범위는 비워 두고 저장
    - 게시 상태 **프로덕션으로 푸시** (테스트로 두면 7일마다 권한이 풀림). "확인되지 않은 앱" 경고는 괜찮음
 C. 매장모음 Apps Script → 톱니 **프로젝트 설정 → Google Cloud Platform(GCP) 프로젝트 → 프로젝트 변경** → `121073203096` → 프로젝트 설정
 D. 함수 칸에서 **`setupSelfUpdate`** 실행 → 권한 허용("확인되지 않은 앱"이면 고급 → 이동) → 로그 `스스로 배포 준비 완료`
