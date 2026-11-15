@@ -101,7 +101,7 @@ ok(d.salesPush.status === "done" && d.salesPush.parts.recv.status === "done", "�
 ok(rentry === 0 && Array.isArray(opened3) && opened3.length === 1 && opened3[0] === "입고현황", `열린 화면은 입고현황 하나뿐 (입고 입력 화면 ${rentry}번)`);
 const r9 = (d["misRecv.2026-11-09"] || {}).rows || [];
 ok(r9.length === 2 && r9.find((r) => r.code === "340002106").qty === 10 && r9.find((r) => r.code === "340002106").unit === "EA", "11/9 입고 2줄 · 주문수량(20)이 아니라 입고수량(10)");
-ok(((d["misRecv.2026-11-12"] || {}).rows || []).length === 1 && d["misRecv.2026-11-12"].rows[0].code === "340001980" && d.misRecvScan.neg === 1, "11/12: 늦게 온 간마늘은 받은 날로 · 반품(−1)은 뺌");
+ok(((d["misRecv.2026-11-12"] || {}).rows || []).length === 2 && d["misRecv.2026-11-12"].rows.find((r) => r.code === "340001980").qty === 3 && d["misRecv.2026-11-12"].rows.find((r) => r.code === "340001970" && r.qty === -1 && r.ret === 1) && d.misRecvScan.neg === 1, "11/12: 늦게 온 간마늘은 받은 날로 · 반품(−1)은 마이너스 줄로 남김");
 ok(!JSON.stringify(d).includes("홍길동") && d.recvProbe && d.recvProbe.grids[0].cols.some((c) => /입고수량/.test(c)) && !d.recvProbe.grids[0].rows, "직원 이름은 어디에도 없음 · 열 이름만 기록");
 ok(Array.isArray((d["misRecv.2026-11-10"] || {}).rows) && d["misRecv.2026-11-10"].rows.length === 0 && d.misRecvScan.empty === 10 && d.misRecvScan.days === 2 && d.misRecvScan.all === 1 && !d["misRecv.2026-10-01"], "받은 게 없는 날은 빈 기록(10일) · 기간 밖(10/1)은 안 씀");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "입고현황 읽기도 KM 입력(input.날짜)은 안 건드림");

@@ -1869,14 +1869,14 @@
   //   되돌려 보기(그날 기준 1,850건): 평균 오차 1.587→1.587 · 덜 시킬 위험 520→517 · 맞음 48.5→48.4%. 재고 채점(사용량 학습) 377구간 적중 49.1→50.9% · 사용 오차 30.8→29.9%, 11/5 뒤 시간 분리 같음
   //   → 입고 날짜는 거의 맞았고, 입고 구간 오차는 그날 센 뒤에 들어온 입고(시각) 쪽. 앱이 모르던 입고 862개 중 815개는 주문현황을 읽기 전(10/15~10/29)
   const RECV_USE = true;
-  const recvRowsOf = (key, y) => { const m = db["misRecv." + y]; const cs = (keyItem.get(key) || {}).codes; if (!m || !Array.isArray(m.rows) || !cs || !cs.length) return null; return m.rows.filter((r) => r && cs.includes(String(r.code)) && num(r.qty) > 0); };
+  const recvRowsOf = (key, y) => { const m = db["misRecv." + y]; const cs = (keyItem.get(key) || {}).codes; if (!m || !Array.isArray(m.rows) || !cs || !cs.length) return null; return m.rows.filter((r) => r && cs.includes(String(r.code)) && num(r.qty) !== 0); }; // 반품은 마이너스 (11/15)
   const recvTrust = () => {
     if (recvTrustMemo) return recvTrustMemo;
     let n = 0, hit = 0; const rat = [];
     Object.keys(db).filter((k) => /^input\.\d{4}-\d\d-\d\d$/.test(k)).forEach((k) => { const x = k.slice(6); Object.entries(db[k] || {}).forEach(([key, r]) => {
       const it = keyItem.get(key); if (!r || !(num(r.o) > 0) || !it || !(it.codes || []).length) return;
       const dd = deliveryOf(it, x); if (!Array.isArray((db["misRecv." + dd] || {}).rows)) return;
-      n++; let got = 0; for (let j = -1; j <= 1; j++) got += (recvRowsOf(key, addDays(dd, j)) || []).reduce((a, m) => a + ordToStock(it, num(m.qty)), 0);
+      n++; let got = 0; for (let j = -1; j <= 1; j++) got += (recvRowsOf(key, addDays(dd, j)) || []).reduce((a, m) => a + Math.max(0, ordToStock(it, num(m.qty))), 0);
       if (got > 0) { hit++; rat.push(got / ordToStock(it, num(r.o))); }
     }); });
     rat.sort((a, b) => a - b); const med = rat.length ? rat[rat.length >> 1] : null;
@@ -1892,7 +1892,7 @@
     });
     ordMaxMemo.set(it.key, m); return m;
   };
-  const recvPlausible = (it, y) => { const cap = 5 * ordMaxOf(it); return !(cap > 0) || (recvRowsOf(it.key, y) || []).every((m) => ordToStock(it, num(m.qty)) <= cap); };
+  const recvPlausible = (it, y) => { const cap = 5 * ordMaxOf(it); return !(cap > 0) || (recvRowsOf(it.key, y) || []).every((m) => Math.abs(ordToStock(it, num(m.qty))) <= cap); }; // 반품 줄도 같은 기준
   const recvOn = (it, y) => RECV_USE && y < TODAY && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on && recvPlausible(it, y); // 어제까지만 (오늘 것은 아직 다 안 들어왔을 수 있음, 앞날 기록은 쓰지 않음)
   const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
   const arrivalsOf = (it, x) => {

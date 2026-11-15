@@ -675,8 +675,9 @@
       }
       if (!use) return finish(false, `입고현황 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
       const by = new Map(); let neg = 0;
-      use.rs.forEach((r) => { const dt = toIso(r[use.dt.field]), q = num(r[use.qty.field]), c = String(r[use.code.field] ?? "").trim(); if (!dt || !c || dt < from || dt > to) return; if (q < 0) { neg++; return; } if (!(q > 0)) return; if (!by.has(dt)) by.set(dt, []);
-        by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "" }); });
+      // 반품(마이너스 수량)도 그날 줄로 남김 (ret: 1). 앱은 그날 들어온 양에서 뺌 (11/15 KM: 버터갈릭시즈닝 40 잘못 시켜 반품)
+      use.rs.forEach((r) => { const dt = toIso(r[use.dt.field]), q = num(r[use.qty.field]), c = String(r[use.code.field] ?? "").trim(); if (!dt || !c || dt < from || dt > to || !q) return; if (q < 0) neg++; if (!by.has(dt)) by.set(dt, []);
+        by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "", ...(q < 0 ? { ret: 1 } : {}) }); });
       step = "시트 저장";
       let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misRecv." + dt, { at: Date.now(), rows }); saved++; }
       // 다 읽었으면(쪽 나눔에 안 잘림) 기간 안에서 받은 게 없던 날도 "입고 없음"으로 남김 (앱이 그날 입고를 '모름' 대신 '없음'으로 앎). 오늘은 아직 받을 수 있어 뺌
