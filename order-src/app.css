@@ -518,9 +518,15 @@ html, body { overflow-x: hidden; }
 .risk86 .r-top { display: flex; align-items: baseline; gap: 8px; color: var(--rose-ink); }
 .risk86 .r-top b { font-size: 16px; font-weight: 800; }
 .risk86 .r-top span { font-size: 12px; font-weight: 600; }
-.risk86 button { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
-.risk86 button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.risk86 button em { display: block; font-style: normal; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+/* 11/15 KM "화면 짤려": 줄이 글 길이만큼 넓어져 오른쪽(세어서 확인·시간)이 화면 밖으로 나갔음 → 칸 폭에 맞추고 글은 줄바꿈 */
+.risk86 { grid-template-columns: minmax(0, 1fr); }
+.risk86 button { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
+.risk86 button > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.risk86 button em .nw { white-space: nowrap; }
+.risk86 button em { display: block; font-style: normal; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; text-wrap: pretty; }
+/* 11/15 KM "몇 팩 부족한지 진하게" */
+.risk86 button em b { font-size: 13px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }
+.risk86 button small .thaw { font-size: 11px; font-weight: 700; }
 /* 11/12 KM: 퍼센트 대신 "86 위험" + 바닥날 때(시간), 아래 줄에 사유 */
 .risk86 button small { flex: none; display: grid; justify-items: end; gap: 1px; font-size: 14px; font-weight: 800; line-height: normal; color: var(--rose-ink); letter-spacing: -0.03em; white-space: nowrap; }
 .risk86 button small i { font-style: normal; font-size: 12px; font-weight: 800; color: #fff; background: var(--rose-ink); border-radius: 6px; padding: 2px 6px; }
