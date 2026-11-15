@@ -2350,39 +2350,39 @@
   // 재고는 보통 런치 전 아침에 세고 14:30 발주 마감 전에 입력 → 마감 전 입력은 오늘 영업 전체가 남은 것으로 봄
   const OPEN_H = 10.5, CLOSE_H = 20.5, SHOW_P = 0.6, ORDER_CUTOFF_H = 14.5; // 영업 10:30~20:30, 런치는 15시 전 (시간대별 비율은 시트 hourShare, 없으면 비례)
   const phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
-  function riskOf(it, v, atH) { // atH: 센 시각 대신 쓸 시각 (예상 재고로 볼 때 = 문 열 때)
+  function riskOf(it, v, atH, d0 = TODAY) { // atH: 센 시각 대신 쓸 시각 (예상 재고로 볼 때 = 문 열 때). d0: 이 날 문 열 때부터 봄 (밤엔 내일, 11/15 KM)
     if (!v || v.s === "" || !isFinite(num(v.s))) return null;
-    const w = orderWindowFor(it, TODAY), until = addDays(w.deliv, it.thaw || 0); // 오늘 발주가 들어와서 쓸 수 있는 날 전까지 (해동 품목은 입고 다음 날)
-    const days = Math.round((parseISO(until) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
-    let arr = 0; const arrs = []; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if ((a.d > TODAY || (a.d === TODAY && meatOn(it, TODAY))) && a.d < until && (k > 0 || a.legacy)) { arr += a.q; arrs.push(a); } });
-    const log = logOn(it, TODAY);
+    const w = orderWindowFor(it, d0), until = addDays(w.deliv, it.thaw || 0); // 오늘 발주가 들어와서 쓸 수 있는 날 전까지 (해동 품목은 입고 다음 날)
+    const days = Math.round((parseISO(until) - parseISO(d0)) / 864e5), off = Math.round((parseISO(d0) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
+    let arr = 0; const arrs = []; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(d0, -k)).forEach((a) => { if ((a.d > d0 || (a.d === d0 && meatOn(it, d0))) && a.d < until && (k > 0 || a.legacy)) { arr += a.q; arrs.push(a); } });
+    const log = logOn(it, d0);
     const hh = atH != null ? atH : log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
-    const left = leftOf(hh, TODAY);
-    const gross = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), until, false).s;
-    const weGross = (isWE(TODAY) ? left * dayGross(TODAY, false).v : 0) + weSum(addDays(TODAY, 1), until, false);
-    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross, weGross, fcVar: fcVar(TODAY, until, false, left) }, 0, 0); if (r.none || !(r.use > 0)) return null;
+    const left = leftOf(hh, d0);
+    const gross = left * dayGross(d0, false).v + sumGross(addDays(d0, 1), until, false).s;
+    const weGross = (isWE(d0) ? left * dayGross(d0, false).v : 0) + weSum(addDays(d0, 1), until, false);
+    const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross, weGross, fcVar: fcVar(d0, until, false, left) }, 0, 0); if (r.none || !(r.use > 0)) return null;
     const have = availOf(it, v) + arr;
     // 86 확률은 입고마다 따로 봄 (11/15 KM: 버터라이스 토 14시 40개 → 일요일 점심에 바닥. 앱은 월 입고 40을 미리 더해 80 vs 쓸 양 50으로 보고 안 띄웠음 — 바닥 시각은 "일 디너 18:00"으로 알고 있었는데)
     //  창 끝까지 한 번(가진 것+모든 입고 vs 전체 사용) + 중간 입고가 들어오는 날 아침마다(가진 것+그 전 입고 vs 그날 아침까지 사용, 오차는 사용 비율만큼) → 가장 높은 것
     //  되돌려 보기(센 날 16일 1,856건): 띄움 하루 2.8→3.6건. 새로 뜬 13건 중 그 뒤 0을 센 것 4(가지·크림치즈), 버터라이스 11/14(실제 일요일 바닥). 예전 44건 중 뒤에 0 센 것 0
     const pOf = (h, u, f) => (r.sd > 0 ? 1 - phi((h - u) / (r.sd * f)) : h < u ? 1 : 0);
     let p = pOf(have, r.use, 1), hB = have, uB = r.use, byD = null; // hB·uB·byD: 가장 위험한 때(그 입고 전)의 가진 양·쓸 양 — 화면 숫자도 그때 것으로 (월 입고를 더한 "55개 · 0.1 부족" 대신 "15개 · 11 부족")
-    [...new Set(arrs.map((a) => a.d))].filter((c) => c > TODAY && c < until).forEach((c) => {
-      const g = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), c, false).s, f = gross > 0 ? g / gross : 0;
+    [...new Set(arrs.map((a) => a.d))].filter((c) => c > d0 && c < until).forEach((c) => {
+      const g = left * dayGross(d0, false).v + sumGross(addDays(d0, 1), c, false).s, f = gross > 0 ? g / gross : 0;
       const h = availOf(it, v) + arrs.filter((a) => a.d < c).reduce((t, a) => t + a.q, 0);
       if (f > 0) { const pc = pOf(h, r.use * f, f); if (pc > p) { p = pc; hB = h; uB = r.use * f; byD = c; } }
     });
     if (p < SHOW_P) return null;
     // 언제 바닥나는지: 날마다 매출 비율로 사용량을 나누고(입고는 그날 아침에 더함), 그날 안에서는 영업시간에 비례해 시각으로 (런치 = 15시 전)
-    let stock = availOf(it, v), when = `${DOW[dow(until)]} 입고 전`, at = days + 1; // at: 오늘부터 바닥날 때까지 (일 단위, 정렬용)
-    for (let d = TODAY; d < until && gross > 0; d = addDays(d, 1)) {
+    let stock = availOf(it, v), when = `${DOW[dow(until)]} 입고 전`, at = off + days + 1; // at: 오늘 0시부터 바닥날 때까지 (일 단위, 정렬·알림용. 밤에 내일부터 봐도 오늘 기준)
+    for (let d = d0; d < until && gross > 0; d = addDays(d, 1)) {
       arrs.forEach((a) => { if (a.d === d) stock += a.q; });
-      const first = d === TODAY, gd = (first ? left : 1) * dayGross(d, false).v, ud = r.use * gd / gross;
+      const first = d === d0, gd = (first ? left : 1) * dayGross(d, false).v, ud = r.use * gd / gross;
       if (!(ud > 0)) continue;
       if (stock - ud < 0) {
         // 그날 매출 누적 비율로 시각을 구함 (오늘 센 뒤라면 센 시각부터 남은 매출 중 비율)
         const c0 = first && left < 1 ? hourCum(d, hh) : 0, hr = Math.min(CLOSE_H, Math.max(OPEN_H, hourAt(d, c0 + Math.max(0, stock) / ud * (1 - c0))));
-        const hrR = Math.round(hr); at = Math.round((parseISO(d) - parseISO(TODAY)) / 864e5) + hr / 24; when = `${first ? "오늘" : DOW[dow(d)]} ${hrR < 15 ? "런치" : "디너"} ${String(hrR).padStart(2, "0")}:00`; break;
+        const hrR = Math.round(hr); at = Math.round((parseISO(d) - parseISO(TODAY)) / 864e5) + hr / 24; when = `${d === TODAY ? "오늘" : d === addDays(TODAY, 1) ? "내일" : DOW[dow(d)]} ${hrR < 15 ? "런치" : "디너"} ${String(hrR).padStart(2, "0")}:00`; break;
       }
       stock -= ud;
     }
@@ -2392,7 +2392,12 @@
   //  최근 3일 안 센 재고 → 오늘 아침 예상 재고(estStock: 그 사이 실제 매출·받은 입고)로 같은 계산(문 열 때부터 오늘 영업 전부). 화면엔 "예상"으로
   //  riskOf는 재고칸 단위로 받으니 박스로 세는 품목은 예상(팩)을 박스로 바꿔 넘김 (11/15 고침: 예전엔 팩 수를 박스 수로 읽어 박스 크기 배만큼 많게 봄)
   const riskEst = (it, v) => { if (counted(v) || (v && v.est)) return null; const e = estStock(it, TODAY); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H); return r ? { ...r, est: true, from: e.from } : null; };
-  const risk1 = (it, v) => riskOf(it, v) || riskEst(it, v);
+  // 밤 (11/15 KM "저녁 9시면 영업이 끝난 시간인데 아직 당일 86위험 떠있는건 이해가 안가. 밤에는 다음날 기준"):
+  //  영업 끝(CLOSE_H 20:30) 뒤엔 오늘 바닥 시각이 모두 지난 시각(계산이 20:30까지로 자름) → 내일 문 열 때 예상 재고(오늘 센 값 − 오늘 남은 사용 + 내일 아침 입고)로
+  //  내일 발주가 들어오기 전까지 봄 = 내일 아침에 열어 본 것과 같은 계산. 시간대별 매출(11/12까지): 21시까지 평일 98.1% · 토 98.7% · 일 99.9%가 끝남. 자정이 지나면 그날이 오늘이 되어 원래대로
+  const nightNow = () => { const n = new Date(); return n.getHours() + n.getMinutes() / 60 >= CLOSE_H; };
+  const riskNight = (it) => { const d1 = addDays(TODAY, 1), e = estStock(it, d1); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H, d1); return r ? { ...r, est: true, night: true, from: e.from } : null; };
+  const risk1 = (it, v) => (nightNow() ? riskNight(it) : riskOf(it, v) || riskEst(it, v));
   function risk86(M, inp) {
     return M.items.filter((i) => !i.ledgerOnly).map((it) => risk1(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
   }
@@ -2495,10 +2500,11 @@
     const box = $("orderList"); box.innerHTML = "";
     const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
     if (rk.length) {
-      box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>86 위험</b></div>` +
+      const night = rk.some((x) => x.night);
+      box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>${night ? "내일 86 위험" : "86 위험"}</b>${night ? "<span>영업 끝 · 내일 문 열 때 예상 재고 기준</span>" : ""}</div>` +
         rk.map((x) => { const u = esc(x.it.pk.stock || ""), nw = (s) => `<span class="nw">${s}</span>`; // 줄바꿈은 덩어리 사이에서만 ("월 입고 / 전"처럼 끊기지 않게)
           const why = [nw(`${x.est ? "예상 " : ""}재고 ${r1(x.have)}${u}`), nw(`<b>${r1(Math.max(0.1, x.use - x.have))}${u} 부족</b> 예상`), x.by !== x.out ? nw(`${DOW[dow(x.by)]} 입고 전`) : ""].filter(Boolean).join(" · ") + (x.est ? " " + nw(`(${esc(x.from.slice(5).replace("-", "/"))} 센 값 기준)`) : "");
-          return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${why}</em></span><small><i>${x.est ? "확인필요" : "86 위험"}</i>${esc(x.when)}${x.thaw ? `<span class="thaw">입고당일 해동필요</span>` : ""}</small></button>`; }).join("") + `</div>`);
+          return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${why}</em></span><small><i>${x.est && !(x.night && x.from === TODAY) ? "확인필요" : "86 위험"}</i>${esc(x.when)}${x.thaw ? `<span class="thaw">입고당일 해동필요</span>` : ""}</small></button>`; }).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
@@ -3481,7 +3487,7 @@
   function renderHealth(M) {
     const rows = gwHealth(), nm = (k) => String((M.items.find((i) => i.key === k) || { name: k }).name).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim();
     const sold = []; for (let d = mondayOf(TODAY); d <= TODAY; d = addDays(d, 1)) Object.keys(db["soldout." + d] || {}).forEach((k) => sold.push(nm(k)));
-    rows.push({ k: "86", t: "오늘 86 위험", sub: "폰 알림 10·16·20시", v: `${risk86(M, todayInput()).length}개`, s: "info" });
+    rows.push({ k: "86", t: nightNow() ? "내일 86 위험" : "오늘 86 위험", sub: "폰 알림 10·16·20시", v: `${risk86(M, todayInput()).length}개`, s: "info" });
     rows.push({ k: "sold", t: "이번 주 품절", sub: sold.length ? sold.slice(0, 4).join(", ") + (sold.length > 4 ? ` 외 ${sold.length - 4}` : "") : "발주 탭 카드의 [품절 기록]으로", v: `${sold.length}번`, s: "info" });
     const bad = rows.filter((r) => r.s === "bad").length, warn = rows.filter((r) => r.s === "warn").length, sum = $("hlthSum");
     sum.textContent = bad ? `확인 필요 ${bad}` : warn ? `늦음 ${warn}` : "이상 없음"; sum.className = bad ? "bad" : warn ? "warn" : "ok";
@@ -3611,5 +3617,5 @@
       if (!busy(db.misPush) && !busy(db.salesPush)) misFastUntil = 0;
     } finally { polling = false; }
   }, 2000);
-  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, OPEN_H, gwHealth };
+  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth };
 })();

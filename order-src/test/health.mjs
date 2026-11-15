@@ -1,6 +1,7 @@
 // GW 상황판·품절 기록 화면 시험 (11/15 KM "2주안 기획들 실행해"): 시트 사본으로 그날 아침을 열어
 //  1) 발주 탭: [품절 기록]이 86 위험·0을 센 품목에만 보이는지, 검색하면 보이는지, 누르면 기록되고 다시 누르면 지워지는지(시트 저장 내용까지)
 //  2) 리포트 탭: GW 상황판 줄·색, 품절 횟수, 일부러 끊긴 자료(오래된 PC 신호·합계 다름)를 넣었을 때 빨강으로 바뀌는지
+//  3) 밤 9시: 86이 내일 기준("오늘"·지난 시각 없음, 제목 "내일 86 위험")
 // 쓰기는 가짜 시트(이 시험 안에서만 합쳐 둠)로 받음. 사용: node order-src/test/health.mjs <kv.json> [날짜 2026-11-16] [사진 폴더]
 import fs from "fs";
 import path from "path";
@@ -113,5 +114,21 @@ const g3 = (t) => bd.rows.find((r) => r.t === t) || {};
 ok(g3("실제 매출").dot === "warn" && g3("매장 PC 연결").dot === "warn" && !bd.rows.some((r) => r.dot === "bad"), `13:00: 실제 매출 ${g3("실제 매출").v}(${g3("실제 매출").dot}) · PC ${g3("매장 PC 연결").v}(${g3("매장 PC 연결").dot}) · 빨강 없음`);
 ok(/^늦음 \d+$/.test(bd.sum) && bd.sumCls === "warn", `제목 옆: "${bd.sum}"`);
 ok(C3.errs.length === 0, "페이지 오류 " + (C3.errs.length ? C3.errs.slice(0, 2).join(" | ") : "없음"));
+await C3.ctx.close();
+
+// ---------- 4) 밤 9시 (11/15 KM "영업 끝난 시간에 당일 86위험은 이해가 안가. 밤에는 다음날 기준"): 86은 내일 문 열 때 예상 재고 기준 ----------
+const N = await open(null, "21:00");
+const nv = await N.p.evaluate(() => {
+  const C = window.__orderCalc, M = C.model(), db = C.db(), inp = db["input." + C.TODAY] || {};
+  const l = M.items.filter((i) => !i.ledgerOnly).map((it) => C.risk1(it, inp[it.key])).filter(Boolean);
+  return { night: C.nightNow(), n: l.length, today: l.filter((x) => /^오늘/.test(x.when)).length, past: l.filter((x) => x.at < 1).length, allNight: l.every((x) => x.night), head: ((document.querySelector("#orderList .risk86 .r-top b") || {}).textContent || ""), sub: ((document.querySelector("#orderList .risk86 .r-top span") || {}).textContent || ""), first: l.sort((a, b) => a.at - b.at).slice(0, 3).map((x) => x.when) };
+});
+ok(nv.night && nv.n > 0 && nv.today === 0 && nv.past === 0 && nv.allNight, `21:00: 86 ${nv.n}개 · "오늘" ${nv.today}개 · 지난 시각 ${nv.past}개 · 앞 3개 ${JSON.stringify(nv.first)}`);
+ok(nv.head === "내일 86 위험" && /내일 문 열 때/.test(nv.sub), `제목 "${nv.head}" · "${nv.sub}"`);
+await report(N.p);
+bd = await board(N.p);
+ok(bd.rows.some((r) => r.t === "내일 86 위험"), `상황판 줄: ${bd.rows.filter((r) => /86/.test(r.t)).map((r) => r.t + " " + r.v).join(", ")}`);
+if (shotDir) { await dock(N.p, "order"); await N.p.evaluate(() => window.scrollTo(0, 0)); await N.p.waitForTimeout(300); await N.p.screenshot({ path: shotDir + "/5-night86.png" }); }
+ok(N.errs.length === 0, "페이지 오류 " + (N.errs.length ? N.errs.slice(0, 2).join(" | ") : "없음"));
 await b.close();
 console.log(fail ? `실패 ${fail}개` : "모두 통과"); process.exit(fail ? 1 : 0);
