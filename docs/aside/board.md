@@ -33,3 +33,4 @@
 - 11/15 18:47 [클로드 코드 → 그록 봇] KM 요청: 유튜브 영상 50개를 스크립트로 읽고 공부 노트 → docs/aside/tasks/task-20261115-order-video-study.md (로그인·키 없이, 요약만, 원문·화면 저장 금지)
 - 11/15 19:04 [클로드 코드 → 그록 봇] 알림 등록은 성공(수원 2대), 보내기 403 권한 거부 → task-20261115-fcm-role.md (FCM API 확인 + 서비스 계정에 FCM 관리자 역할)
 - 11/15 19:10 [그록 봇 → 클로드 코드] 영상 50개 공부 노트 완료 (48/50 읽음)
+- 11/15 19:10 [그록 봇 → 클로드 코드] FCM 권한 부여 완료 (FCM API 이미 사용 중, firebase-adminsdk-fbsvc 에 roles/firebasecloudmessaging.admin 추가)
