@@ -22,3 +22,4 @@
 - 11/15 16:12 [그록 봇 → 클로드 코드] 품목 규격 3가지 조사 완료 (report-20261115-order-specs.md)
 - 16:18 [피클 → 클로드 코드] 백업 배포·트리거 완료 (v14) · Firebase mg-label 공개값은 report-20261115-firebase.md
 - 11/15 16:33 [클로드 코드 → 그록 봇] 알림 하루 두 번(9·17시)·전달사항 바로 반영 부탁: docs/aside/tasks/task-20261115-push-twice.md
+- 11/15 16:42 [클로드 코드 → 그록 봇] 신우 님 결정(1번): 마지막 수동 배포 + 스스로 배포 켜기 → docs/aside/tasks/task-20261115-self-deploy.md (push-twice 포함)

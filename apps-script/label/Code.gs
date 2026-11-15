@@ -57,6 +57,8 @@ function doPost(e) {
     if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
     if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
     if (body.action === 'learn') return json_(learn_(store, String(body.id || '').slice(0, 40), String(body.name || '').slice(0, 80), String(body.text || '').slice(0, 3000), String(body.color || '').slice(0, 20)));
+    if (body.action === 'self_update') return json_(selfUpdate_());
+    if (body.action === 'admin_run') return json_(adminRun_(String(body.fn || '')));
     if (body.action === 'push_sub') return json_(pushSub_(store, String(body.token || '').slice(0, 400), String(body.old || '').slice(0, 400)));
     if (body.action === 'push_notice') return json_(pushNotice_(store, String(body.text || '').slice(0, 200), String(body.token || '').slice(0, 400)));
     if (body.action === 'unphoto') return json_(unPhoto_(store, String(body.id || '').slice(0, 40)));
@@ -938,4 +940,55 @@ function installPushTrigger() {
   ScriptApp.newTrigger('pushDaily').timeBased().everyDays(1).atHour(17).create();
   pushSheet_();
   Logger.log('매일 아침 9시·저녁 5시 유통기한 알림 트리거를 만들었습니다');
+}
+
+
+// ---- 스스로 배포 (매장모음 프로젝트에서만 씀) ----
+// 저장소 main 의 apps-script/label/Code.gs 를 받아 이 프로젝트 코드를 바꾸고, 새 버전을 만들어 기존 배포(같은 주소)에 올립니다.
+// 저장소에 올라간 코드만 배포하므로 누가 불러도 main 그대로일 뿐입니다 (1분에 한 번까지).
+// 처음 한 번: script.google.com/home/usersettings 에서 'Google Apps Script API' 켜기 + appsscript.json 에 oauthScopes 추가 + 편집기에서 setupSelfUpdate 실행(권한 허용).
+const SELF_DEPLOY_ID = 'AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw';
+const SELF_SRC = 'https://raw.githubusercontent.com/MFGKOREA/label-list/main/apps-script/label/Code.gs';
+
+function selfUpdate_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('self_update')) return { error: '1분 뒤에 다시' };
+  cache.put('self_update', '1', 60);
+  const src = UrlFetchApp.fetch(SELF_SRC + '?t=' + Date.now(), { muteHttpExceptions: true });
+  if (src.getResponseCode() !== 200) return { error: '저장소 코드를 못 받음 ' + src.getResponseCode() };
+  const code = src.getContentText();
+  if (code.indexOf('function doPost') < 0 || code.indexOf('function selfUpdate_') < 0) return { error: '받은 코드가 이상함 (doPost/selfUpdate_ 없음)' };
+  const api = 'https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId();
+  const H = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  const call = (path, method, body) => {
+    const res = UrlFetchApp.fetch(api + path, { method: method || 'get', headers: H, contentType: 'application/json', payload: body ? JSON.stringify(body) : undefined, muteHttpExceptions: true });
+    const d = JSON.parse(res.getContentText() || '{}');
+    if (res.getResponseCode() >= 300) throw new Error(path + ' ' + res.getResponseCode() + ' ' + JSON.stringify(d).slice(0, 300));
+    return d;
+  };
+  try {
+    const cur = call('/content');
+    const files = cur.files.map((f) => (f.type === 'SERVER_JS' && f.name === 'Code' ? { name: f.name, type: f.type, source: code } : { name: f.name, type: f.type, source: f.source }));
+    if (!files.some((f) => f.name === 'Code')) throw new Error('Code 파일을 못 찾음');
+    call('/content', 'put', { files: files });
+    const ver = call('/versions', 'post', { description: '자동 배포 ' + new Date().toISOString() });
+    call('/deployments/' + SELF_DEPLOY_ID, 'put', { deploymentConfig: { versionNumber: ver.versionNumber, manifestFileName: 'appsscript', description: '자동 배포 v' + ver.versionNumber } });
+    return { ok: true, version: ver.versionNumber };
+  } catch (err) { return { error: String(err.message || err) }; }
+}
+
+// 배포 뒤에 다시 돌려야 하는 설치 함수만 (정해진 것만)
+function adminRun_(fn) {
+  const ok = { installPushTrigger: installPushTrigger, installBackupTrigger: installBackupTrigger, installTracePruneTrigger: installTracePruneTrigger, backupDaily: backupDaily };
+  if (!ok[fn]) return { error: '허용되지 않은 함수' };
+  const cache = CacheService.getScriptCache();
+  if (cache.get('admin_' + fn)) return { error: '1분 뒤에 다시' };
+  cache.put('admin_' + fn, '1', 60);
+  try { ok[fn](); return { ok: true, fn: fn }; } catch (err) { return { error: String(err.message || err) }; }
+}
+
+// 편집기에서 한 번 실행: 권한 확인 (Apps Script API 를 켰는지, 배포를 볼 수 있는지)
+function setupSelfUpdate() {
+  const res = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + '/deployments/' + SELF_DEPLOY_ID, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  Logger.log(res.getResponseCode() === 200 ? '스스로 배포 준비 완료' : '아직 안 됨: ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 300));
 }
