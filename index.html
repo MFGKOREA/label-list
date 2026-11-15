@@ -763,11 +763,29 @@ li.expired .name { text-decoration: none; }
     <h3 id="pushAskTitle">알림을 받아 보세요</h3>
     <p class="pa-store"><b id="pushAskStore"></b> 알림만 이 휴대폰으로 와요</p>
     <ul class="pa-list">
-      <li><span class="pa-ic exp">D-7</span><div><b>유통기한 임박</b><small>매일 아침 9시 · 지났거나 7일 이내 품목</small></div></li>
+      <li><span class="pa-ic exp">D-7</span><div><b>유통기한 임박</b><small>매일 아침 9시·저녁 5시 · 7일도 안 남은 품목</small></div></li>
       <li><span class="pa-ic">✎</span><div><b>전달사항</b><small>누가 고치면 바로</small></div></li>
     </ul>
     <p class="pa-ios" id="pushAskIos" hidden>아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요. 먼저 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어 주세요.</p>
     <div class="actions"><button type="button" class="btn" id="pushAskNo">나중에</button><button type="button" class="btn primary" id="pushAskGo">알림 받기</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="pushHelp" hidden>
+  <div class="popup" role="dialog" aria-modal="true" aria-labelledby="pushHelpTitle">
+    <h3 id="pushHelpTitle">알림이 꺼져 있어요</h3>
+    <p class="reset-text">"허용 안 함"을 누르면 앱에서는 다시 물어볼 수 없어요. 휴대폰 설정에서 한 번만 켜 주세요. 켜고 앱으로 돌아오면 자동으로 등록돼요.</p>
+    <ol class="steps" id="pushHelpIos">
+      <li><span class="tx">휴대폰 <b>설정</b> 앱 → <b>알림</b></span></li>
+      <li><span class="tx">목록에서 <b>한글표시사항</b>을 누릅니다<small>홈 화면에 추가한 앱 이름이에요</small></span></li>
+      <li><span class="tx"><b>알림 허용</b>을 켭니다</span></li>
+    </ol>
+    <ol class="steps" id="pushHelpAnd" hidden>
+      <li><span class="tx">휴대폰 <b>설정</b> → <b>애플리케이션</b> → <b>한글표시사항</b><small>홈 화면 앱이 아니면 → <b>Chrome</b>(또는 삼성 인터넷) → 알림 → 사이트</small></span></li>
+      <li><span class="tx"><b>알림</b>을 누릅니다</span></li>
+      <li><span class="tx"><b>알림 허용</b>을 켭니다<small>크롬 화면에서는 주소창 왼쪽 아이콘 → 권한 → 알림 → 허용 도 돼요</small></span></li>
+    </ol>
+    <div class="actions"><button type="button" class="btn primary" id="pushHelpOk">확인</button></div>
   </div>
 </div>
 
@@ -2629,7 +2647,9 @@ li.expired .name { text-decoration: none; }
   function paintPush() {
     const b = $("pushOpen"); if (!pushOk()) { b.hidden = true; return; }
     const sv = pushSaved();
-    b.hidden = Notification.permission === "denied" || (Notification.permission === "granted" && sv.store === STORE && !!sv.token);
+    const denied = Notification.permission === "denied";
+    b.textContent = denied ? "🔕 알림 꺼짐" : "🔔 알림 받기";
+    b.hidden = !denied && Notification.permission === "granted" && sv.store === STORE && !!sv.token;
   }
   let fbLoad = null;
   const loadFb = () => fbLoad || (fbLoad = new Promise((ok, no) => {
@@ -2668,12 +2688,25 @@ li.expired .name { text-decoration: none; }
       setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 2500);
     }
   }
-  $("pushOpen").onclick = () => pushSubscribe(false);
+  // "허용 안 함"을 눌렀으면 앱이 다시 물을 수 없음 → 휴대폰 설정에서 켜는 방법 안내
+  $("pushOpen").onclick = () => {
+    if ("Notification" in window && Notification.permission === "denied") {
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      $("pushHelpIos").hidden = !ios; $("pushHelpAnd").hidden = ios;
+      $("pushHelp").hidden = false; return;
+    }
+    pushSubscribe(false);
+  };
+  $("pushHelpOk").onclick = () => { $("pushHelp").hidden = true; };
+  $("pushHelp").addEventListener("click", (e) => { if (e.target.id === "pushHelp") $("pushHelp").hidden = true; });
+  // 설정에서 켜고 돌아오면 바로 등록
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && pushOk() && Notification.permission === "granted" && !pushSaved().token) pushSubscribe(true); paintPush(); });
   // 처음 여는 사람에게 한 번만: 알림 받기 안내 (임박 팝업이 떠 있으면 닫힌 뒤에)
   const PUSH_ASK = "label-list-push-asked";
   const iosBrowser = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone && !matchMedia("(display-mode: standalone)").matches;
+  const PUSH_ASK_ON = false; // 실제 폰에서 알림 등록이 확인되면 켬 (그전엔 직원들이 눌러도 실패할 수 있어서)
   function pushAskMaybe() {
-    if (!FB_CONFIG || !storeKnown || !$("pushAsk").hidden) return;
+    if (!PUSH_ASK_ON || !FB_CONFIG || !storeKnown || !$("pushAsk").hidden) return;
     try { if (localStorage.getItem(PUSH_ASK)) return; } catch { return; }
     const ios = iosBrowser();
     if (!ios && !pushOk()) return; // 알림을 못 받는 브라우저
@@ -2702,11 +2735,12 @@ li.expired .name { text-decoration: none; }
     if (!FB_CONFIG) return;
     if (pushNoticeLast === null) pushNoticeLast = prev || "";
     clearTimeout(pushNoticeTimer);
+    // 다 쓰고 칸을 벗어나면 바로, 쓰는 중이면 손을 뗀 지 4초 뒤 (글자마다 알림이 가지 않게)
     pushNoticeTimer = setTimeout(() => {
       if (!text || text === pushNoticeLast) return;
       pushNoticeLast = text;
       hubPost({ action: "push_notice", store: STORE, text: text.slice(0, 200), token: pushSaved().token || "" }).catch(() => {});
-    }, 20000);
+    }, document.activeElement === $("noticeInput") ? 4000 : 0);
   }
   if (!storeKnown) {
     $("storeName").textContent = "매장 선택";

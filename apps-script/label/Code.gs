@@ -780,7 +780,7 @@ function restoreStore(store, date) {
 
 // ---- 휴대폰 알림 (매장모음 프로젝트에서만 씀) ----
 // 각 휴대폰이 앱에서 [알림 받기]를 누르면 Firebase 알림 주소(토큰)를 매장과 함께 '알림' 탭에 저장.
-// 매일 아침 9시: 매장마다 지난 것·7일 이내 품목을 그 매장 폰들에 / 전달사항이 바뀌면: 같은 매장 다른 폰들에.
+// 매일 아침 9시·저녁 5시: 매장마다 7일도 안 남은 품목(지난 것 포함)을 그 매장 폰들에 / 전달사항이 바뀌면: 같은 매장 다른 폰들에.
 // 스크립트 속성 FCM_SA 에 Firebase 서비스 계정 JSON(비공개 키 파일 내용 전체)을 넣어야 보냅니다.
 const PUSH_SHEET = '알림';
 const APP_URL = 'https://mfgkorea.github.io/label-list/';
@@ -844,12 +844,12 @@ function pushSend_(store, title, body, tag, skip) {
   return sent;
 }
 
-// 전달사항 알림: 같은 매장 다른 폰들에 (매장마다 2분에 한 번까지)
+// 전달사항 알림: 같은 매장 다른 폰들에 바로 (매장마다 30초에 한 번까지)
 function pushNotice_(store, text, from) {
   if (!text) return { sent: 0 };
   const cache = CacheService.getScriptCache(), k = 'pn_' + store;
   if (cache.get(k)) return { sent: 0, wait: true };
-  cache.put(k, '1', 120);
+  cache.put(k, '1', 30); // 같은 매장 30초에 한 번까지 (바로 보내되 연달아 여러 번은 막음)
   return { sent: pushSend_(store, (STORE_NAMES[store] || store) + ' · 전달사항', text, 'notice-' + store, from) };
 }
 
@@ -913,12 +913,13 @@ function pushDaily() {
       const exp = it.mode === 'period' ? addPeriod_(it.mfg, Number(it.num) || 0, it.unit) : it.expiry;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(exp || '')) return null;
       return { name: it.name, n: Math.round((new Date(exp + 'T00:00:00') - t0) / 86400000) };
-    }).filter((r) => r && r.n <= 7).sort((a, b) => a.n - b.n);
+    }).filter((r) => r && r.n < 7).sort((a, b) => a.n - b.n); // 7일도 안 남은 품목 (지난 것 포함)
     if (!rows.length) return;
     const gone = rows.filter((r) => r.n < 0).length, soon = rows.length - gone;
-    const head = [gone ? '지난 것 ' + gone + '개' : '', soon ? '7일 이내 ' + soon + '개' : ''].filter(String).join(', ');
+    const head = [gone ? '지난 것 ' + gone + '개' : '', soon ? '7일 안 남음 ' + soon + '개' : ''].filter(String).join(', ');
+    const when = Number(Utilities.formatDate(new Date(), tz, 'H')) >= 12 ? '저녁 확인' : '아침 확인';
     const list = rows.slice(0, 5).map((r) => r.name.replace(/\(.*?\)|_.*$/g, '') + ' ' + (r.n === 0 ? 'D-DAY' : r.n > 0 ? 'D-' + r.n : 'D+' + (-r.n))).join(', ');
-    try { pushSend_(store, (STORE_NAMES[store] || store) + ' · 유통기한 확인', head + ' · ' + list + (rows.length > 5 ? ' 외' : ''), 'expiry-' + store, ''); } catch (err) { Logger.log(store + ' 알림 실패: ' + err); }
+    try { pushSend_(store, (STORE_NAMES[store] || store) + ' · 유통기한 ' + when, head + ' · ' + list + (rows.length > 5 ? ' 외' : ''), 'expiry-' + store, ''); } catch (err) { Logger.log(store + ' 알림 실패: ' + err); }
   });
 }
 function addPeriod_(mfg, num, unit) {
@@ -928,10 +929,11 @@ function addPeriod_(mfg, num, unit) {
   else { const m = unit === 'y' ? num * 12 : num; const t = new Date(d.getFullYear(), d.getMonth() + m, 1); const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(); t.setDate(Math.min(d.getDate(), last)); return Utilities.formatDate(t, Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
-// 편집기에서 한 번 실행: 매일 아침 9시 유통기한 알림
+// 편집기에서 한 번 실행: 매일 아침 9시·저녁 5시 유통기한 알림
 function installPushTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'pushDaily') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('pushDaily').timeBased().everyDays(1).atHour(9).create();
+  ScriptApp.newTrigger('pushDaily').timeBased().everyDays(1).atHour(17).create();
   pushSheet_();
-  Logger.log('매일 아침 9시 유통기한 알림 트리거를 만들었습니다');
+  Logger.log('매일 아침 9시·저녁 5시 유통기한 알림 트리거를 만들었습니다');
 }
