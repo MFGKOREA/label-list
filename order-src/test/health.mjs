@@ -92,6 +92,7 @@ const B = await open((d) => {
   d.misAgent = { ...(d.misAgent || {}), at: new Date(day + "T09:30:00+09:00").getTime() - 3 * 864e5 }; // PC 신호 3일 전
   d.salesPush = { ...(d.salesPush || {}), parts: { ...((d.salesPush || {}).parts || {}), menu: { ...(((d.salesPush || {}).parts || {}).menu || {}), chkBad: 2 } } }; // 메뉴 합계 다른 날 2
   d.hourShare = { ...(d.hourShare || {}), to: "2026-10-20" }; // 시간대 비율 27일 전
+  d.collectLog = [{ t: "2026-11-16 08:23", r: "ok", why: "ok" }, { t: "2026-11-16 09:10", r: "fail", why: "login", txt: "GW 로그인이 풀려 MIS를 못 열었어요" }]; // 자동 수집: 로그인 풀림
 });
 await report(B.p);
 bd = await board(B.p);
@@ -99,9 +100,10 @@ const g = (t) => bd.rows.find((r) => r.t === t) || {};
 ok(g("매장 PC 연결").dot === "bad" && /3일 전/.test(g("매장 PC 연결").v), `PC 신호 3일 전 → 빨강 ("${g("매장 PC 연결").v}")`);
 ok(g("합계 대조").dot === "bad" && /다른 날 2/.test(g("합계 대조").v), `합계 다름 2 → 빨강 ("${g("합계 대조").v}")`);
 ok(g("시간대 비율").dot === "bad", `시간대 비율 10/20까지 → 빨강 ("${g("시간대 비율").v}")`);
+ok(g("자동 수집").dot === "bad" && /로그인 풀림/.test(g("자동 수집").v), `자동 수집 로그인 풀림 → 빨강 ("${g("자동 수집").v}")`);
 ok(/^확인 필요 \d+$/.test(bd.sum) && +bd.sum.split(" ").pop() >= 3 && bd.sumCls === "bad", `제목 옆: "${bd.sum}"`);
 const hp = await B.p.evaluate(() => window.__orderCalc.gwHealth().filter((r) => r.s === "bad").map((r) => r.t));
-ok(hp.includes("매장 PC 연결") && hp.includes("합계 대조"), `gwHealth() bad = ${hp.join(", ")}`);
+ok(hp.includes("매장 PC 연결") && hp.includes("합계 대조") && hp.includes("자동 수집"), `gwHealth() bad = ${hp.join(", ")}`);
 if (shotDir) { await B.p.evaluate(() => document.getElementById("hlthH").scrollIntoView({ block: "start" })); await B.p.waitForTimeout(300); await B.p.screenshot({ path: shotDir + "/4-board-bad.png" }); }
 ok(B.errs.length === 0, "페이지 오류 " + (B.errs.length ? B.errs.slice(0, 2).join(" | ") : "없음"));
 await B.ctx.close();
@@ -115,6 +117,18 @@ ok(g3("실제 매출").dot === "warn" && g3("매장 PC 연결").dot === "warn" &
 ok(/^늦음 \d+$/.test(bd.sum) && bd.sumCls === "warn", `제목 옆: "${bd.sum}"`);
 ok(C3.errs.length === 0, "페이지 오류 " + (C3.errs.length ? C3.errs.slice(0, 2).join(" | ") : "없음"));
 await C3.ctx.close();
+
+// ---------- 3b) 자동 수집 기록: 미룸은 초록, 한 번 못 받음은 노랑, 두 번 연속 못 받음은 빨강 ----------
+for (const [log, want, label] of [
+  [[{ t: day + " 12:20", r: "skip", why: "ordertime" }], "ok", "발주 시간대 미룸"],
+  [[{ t: day + " 10:23", r: "ok", why: "ok" }, { t: day + " 12:23", r: "fail", why: "no_reply" }], "warn", "한 번 PC 응답 없음"],
+  [[{ t: day + " 10:23", r: "fail", why: "no_reply" }, { t: day + " 12:23", r: "skip", why: "pc_off" }], "bad", "두 번 연속(응답 없음 → PC 꺼짐)"],
+]) {
+  const X = await open((d) => { d.collectLog = log; }, "13:00");
+  const h = await X.p.evaluate(() => window.__orderCalc.gwHealth().find((r) => r.k === "auto"));
+  ok(h && h.s === want, `자동 수집 ${label} → ${want} ("${h && h.v}")`);
+  await X.ctx.close();
+}
 
 // ---------- 4) 밤 9시 (11/15 KM "영업 끝난 시간에 당일 86위험은 이해가 안가. 밤에는 다음날 기준"): 86은 내일 문 열 때 예상 재고 기준 ----------
 const N = await open(null, "21:00");

@@ -41,6 +41,7 @@ export function cutKv(data, asOf, { today = "counted", dropMonths = [] } = {}) {
   const lim = today === "none" ? asOf : asOf + " 99";
   ["onhand", "onhand.archive", "prepLog"].forEach((k) => { if (Array.isArray(d[k])) d[k] = d[k].filter((l) => l && l.t && l.t < lim); });
   ["misPush", "salesPush", "learnlog", "learnsnap"].forEach((k) => delete d[k]);
+  if (Array.isArray(d.collectLog)) d.collectLog = d.collectLog.filter((x) => x && String(x.t || "").slice(0, 10) <= asOf); // 수집 기록도 그날 뒤 것은 자름
   return d;
 }
 // today: "counted"(그날 재고는 남기고 그날 발주·추천은 지움) | "none"(그날 입력 전부 지움) | "all"(그대로)

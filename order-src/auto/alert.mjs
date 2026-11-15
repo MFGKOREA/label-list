@@ -3,7 +3,7 @@
 //  - 시트 자료로 앱을 "지금"으로 열어 앱과 같은 계산(risk1·calc)으로 알릴 것만 한두 줄로 찍음. 읽기만 함(시트에 쓰지 않음)
 //  - 예약 작업이 이 줄을 마지막 답으로 내면 KM 폰에 알림이 감(예약 작업의 푸시). 알릴 게 없으면 "알림 없음"
 //  - 화면에 찍는 숫자는 매장 자료이므로 저장소·커밋에 옮기지 않음
-//  + GW 상황판(11/15 "2주안 기획들 실행해", 14번): 오전(12시 전) 차례에만 상황판의 빨강 줄(이틀 넘게 끊긴 자료·하루 넘게 없는 PC 신호·합계 다름)을 한 줄 붙임
+//  + GW 상황판(11/15 "2주안 기획들 실행해", 14번): 오전(12시 전) 차례엔 상황판의 빨강 줄(이틀 넘게 끊긴 자료·하루 넘게 없는 PC 신호·합계 다름·자동 수집)을, 오후 차례엔 자동 수집 빨강(로그인 풀림 등)만 한 줄 붙임
 //    = 앱 리포트 탭 상황판과 같은 함수(gwHealth). 노랑·초록은 알리지 않음(이상 있을 때만)
 // 사용: node order-src/auto/alert.mjs [--kv 파일] [--at 2026-11-14T16:05]   (예약 작업이 주는 --kind 86은 받기만 함)
 //   지금부터 내일 문 닫을 때까지 바닥날 품목(86 위험)
@@ -36,7 +36,8 @@ const r = await page.evaluate(({ hourK }) => {
   //  (내일 점심까지만 보면 11/14 토 버터라이스 "일 디너 19:00"이 빠졌음 — 실제로는 일요일 점심에 바닥)
   const r86 = items.map((it) => { const k = C.risk1(it, inp[it.key]); return k ? { name: short(it.name), est: !!k.est, when: k.when, at: k.at, have: k.have, lack: Math.max(0.1, k.use - k.have), unit: it.pk.stock || "", thaw: !!k.thaw } : null; }).filter(Boolean).sort((a, b) => a.at - b.at);
   const soon = r86.filter((x) => x.at > hourK / 24 && x.at < 2), later = r86.length - soon.length;
-  const bad = hourK < 12 && C.gwHealth ? C.gwHealth().filter((h) => h.s === "bad").map((h) => `${h.t} ${h.v}`) : [];
+  // 오전(12시 전) 차례: 상황판 빨강 전부. 오후(12~18시) 차례: 자동 수집 빨강만(로그인 풀림 등 그날 손봐야 하는 것, 11/15 기획안 7번). 저녁: 없음
+  const bad = C.gwHealth ? C.gwHealth().filter((h) => h.s === "bad" && (hourK < 12 || (hourK < 18 && h.k === "auto"))).map((h) => `${h.t} ${h.v}`) : [];
   return { T, soon, later, bad };
 }, { hourK });
 await close();

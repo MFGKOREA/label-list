@@ -3479,9 +3479,21 @@
     const nBad = (num(mp.chkBad) || 0) + (sp.chk && sp.chk.ok === false ? 1 : 0) + (Array.isArray(ss.chkBad) ? ss.chkBad.length : 0);
     const seen = !!sp.chk || "chkBad" in mp || Array.isArray(ss.chkBad);
     rows.push({ k: "sum", t: "합계 대조", sub: "MIS 화면 합계 = 읽은 값의 합", v: nBad ? `다른 날 ${nBad}` : seen ? "맞음" : "아직 결과 없음", s: nBad ? "bad" : seen ? "ok" : "none" });
-    // 자동 수집·학습(10:23·15:23 예약 작업)이 남긴 마지막 기록. 새 매출이 들어온 날만 남기므로 매출 줄과 같이 움직임 → 노랑까지만
-    const auto = (db.learnlog || []).filter((x) => x && /자동/.test(String(x.by || "")) && x.t).sort((a, b) => (a.t < b.t ? -1 : 1)).pop(), aDay = auto ? String(auto.t).slice(0, 10) : null;
-    rows.push({ k: "learn", t: "자동 수집·학습", sub: "예약 작업 10:23 · 15:23", v: aDay ? `${dd(aDay)} ${String(auto.t).slice(11, 16)}` : "없음", s: !aDay ? "none" : gap(after ? TODAY : addDays(TODAY, -1), aDay) <= 0 ? "ok" : "warn" });
+    // 자동 수집 (11/15 KM "진행", 기획안 7번): 예약 작업(10:23·15:23)의 collect.py가 돌 때마다 남기는 collectLog(최근 60개)의 마지막 결과·원인
+    //  미룸(발주 시간대·다른 요청)·한 번 못 받음은 다음 차례가 다시 받으니 노랑까지. 로그인 풀림·MIS 화면 바뀜·합계 다름(사람이 봐야 함)이나 두 번 연속 못 받음 → 빨강
+    //  마지막 기록이 21시간 넘게 없으면 노랑, 45시간 넘으면 빨강(예약 작업이 멈춤). collectLog가 아직 없으면 예전처럼 학습 기록("자동")으로 봄
+    const cl = (Array.isArray(db.collectLog) ? db.collectLog : []).filter((x) => x && x.t && x.r);
+    if (cl.length) {
+      const WHY = { ok: "받음", fresh: "최신", tried: "최신", busy: "미룸(다른 요청 중)", ordering: "미룸(발주 전송 중)", ordertime: "미룸(발주 시간대)", pc_off: "PC 꺼짐", no_reply: "PC 응답 없음", login: "로그인 풀림", screen: "MIS 화면 바뀜", sum: "합계 다름", other: "못 받음" };
+      const last = cl[cl.length - 1], human = ["login", "screen", "sum"].includes(last.why);
+      let failN = 0; for (let i = cl.length - 1; i >= 0 && (cl[i].r === "fail" || cl[i].why === "pc_off"); i--) failN++;
+      const age = Date.now() - Date.parse(String(last.t).replace(" ", "T") + ":00+09:00"), stale = !(age >= 0) ? 0 : age > 45 * 3600e3 ? 2 : age > 21 * 3600e3 ? 1 : 0;
+      const s0 = human || failN >= 2 || stale === 2 ? "bad" : last.r === "fail" || last.why === "pc_off" || stale === 1 ? "warn" : "ok";
+      rows.push({ k: "auto", t: "자동 수집", sub: human ? `사람이 확인 · ${String(last.txt || "").slice(0, 40)}` : failN >= 2 ? `${failN}번 연속 못 받음 · 예약 작업 10:23 · 15:23` : stale ? "예약 작업이 안 돈 것 같음 · 10:23 · 15:23" : "예약 작업 10:23 · 15:23 · 미룸은 다음 차례에", v: `${dd(String(last.t).slice(0, 10))} ${String(last.t).slice(11, 16)} ${WHY[last.why] || last.why}`, s: s0 });
+    } else {
+      const auto = (db.learnlog || []).filter((x) => x && /자동/.test(String(x.by || "")) && x.t).sort((a, b) => (a.t < b.t ? -1 : 1)).pop(), aDay = auto ? String(auto.t).slice(0, 10) : null;
+      rows.push({ k: "auto", t: "자동 수집", sub: "예약 작업 10:23 · 15:23", v: aDay ? `${dd(aDay)} ${String(auto.t).slice(11, 16)}` : "없음", s: !aDay ? "none" : gap(after ? TODAY : addDays(TODAY, -1), aDay) <= 0 ? "ok" : "warn" });
+    }
     return rows;
   }
   function renderHealth(M) {
