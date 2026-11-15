@@ -2588,8 +2588,9 @@ li.expired .name { text-decoration: none; }
 
   // ---- 휴대폰 알림 (유통기한·전달사항): 이 기기에서 고른 매장 알림만 받음 ----
   // Firebase 웹 푸시. 기기 알림 주소(토큰)는 매장모음 '알림' 탭에 매장과 함께 저장되고, 보내기는 매장모음 구글 코드가 함
-  const FB_CONFIG = null; // Firebase 웹 앱 설정 (공개값) — 프로젝트 설정 → 일반 → 웹 앱
-  const FB_VAPID = ""; // 클라우드 메시징 → 웹 푸시 인증서 공개 키
+  // Firebase 웹 앱 설정 (공개값, docs/aside/reports/report-20261115-firebase.md)
+  const FB_CONFIG = { apiKey: "AIzaSyAplFZ92jTVwwgfYsOQapwStvKydxsYyQU", authDomain: "mg-label.firebaseapp.com", projectId: "mg-label", storageBucket: "mg-label.firebasestorage.app", messagingSenderId: "121073203096", appId: "1:121073203096:web:85e2b86000e3ec1cf61ded" };
+  const FB_VAPID = "BAMhKgkSeozEpXF8uEQikje7fQvG1ATVNSdtdh-kYuJEF9Cyiue7_VxVzVK9nvk_knCmX57Vy3z9Ujqju_pTcic"; // 웹 푸시 공개 키
   const PUSH_KEY = "label-list-push";
   const pushSaved = () => { try { return JSON.parse(localStorage.getItem(PUSH_KEY)) || {}; } catch { return {}; } };
   const pushOk = () => !!FB_CONFIG && storeKnown && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
