@@ -83,7 +83,8 @@ body {
 @media (prefers-reduced-motion: reduce) { .online i::after { animation: none; opacity: 0; } }
 .online b { font-weight: 800; }
 /* 처음 한 번 뜨는 알림 안내 */
-.push-ask { justify-items: center; text-align: center; gap: 12px; padding-top: 26px; }
+.push-ask { justify-items: center; text-align: center; gap: 16px; padding-top: 28px; }
+.push-ask h3 { font-size: 22px; }
 .pa-bell { width: 56px; height: 56px; border-radius: 18px; background: #e6f1ec; color: #3f7a62; display: grid; place-items: center; }
 .pa-bell svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; animation: ring 2.4s ease-in-out infinite; transform-origin: 50% 20%; }
 @keyframes ring { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(14deg); } 80% { transform: rotate(-12deg); } 85% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
@@ -763,13 +764,9 @@ li.expired .name { text-decoration: none; }
 <div class="overlay" id="pushAsk" hidden>
   <div class="popup push-ask" role="dialog" aria-modal="true" aria-labelledby="pushAskTitle" tabindex="-1">
     <div class="pa-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"/></svg></div>
-    <h3 id="pushAskTitle">알림을 받아 보세요</h3>
-    <p class="pa-store"><b id="pushAskStore"></b> 알림만 이 휴대폰으로 와요</p>
-    <ul class="pa-list">
-      <li><span class="pa-ic exp">D-7</span><div><b>유통기한 임박</b><small>매일 아침 9시·저녁 5시 · 7일도 안 남은 품목</small></div></li>
-      <li><span class="pa-ic">✎</span><div><b>전달사항</b><small>누가 고치면 바로</small></div></li>
-    </ul>
-    <p class="pa-ios" id="pushAskIos" hidden>아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요. 먼저 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어 주세요.</p>
+    <h3 id="pushAskTitle">알림 기능 추가</h3>
+    <span id="pushAskStore" hidden></span>
+    <p class="pa-ios" id="pushAskIos" hidden>아이폰은 <b>홈 화면 앱</b>(웹 앱으로 열기)에서만 알림을 받을 수 있어요.</p>
     <div class="actions"><button type="button" class="btn" id="pushAskNo">나중에</button><button type="button" class="btn primary" id="pushAskGo">알림 받기</button></div>
   </div>
 </div>
@@ -2703,7 +2700,7 @@ li.expired .name { text-decoration: none; }
       $("pushAskStore").textContent = (STORES[STORE] && STORES[STORE].name) || "이 매장";
       $("pushAskIos").innerHTML = standalone
         ? "이 아이폰은 알림을 받을 수 없는 iOS 버전이에요. <b>설정 → 일반 → 소프트웨어 업데이트</b>에서 iOS 16.4 이상으로 올린 뒤 다시 눌러 주세요."
-        : "아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요. 먼저 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어 주세요.";
+        : "아이폰은 <b>홈 화면 앱</b>(웹 앱으로 열기)에서만 알림을 받을 수 있어요.";
       $("pushAskIos").hidden = false;
       $("pushAskGo").textContent = standalone ? "확인" : "홈 화면 추가 방법";
       $("pushAskGo").dataset.mode = standalone ? "ok" : "ios";
