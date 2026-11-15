@@ -912,13 +912,15 @@ function pushDaily() {
     const rows = items.filter((it) => it.mode !== 'note' && it.mode !== 'pack' && it.id !== '__notice__').map((it) => {
       const exp = it.mode === 'period' ? addPeriod_(it.mfg, Number(it.num) || 0, it.unit) : it.expiry;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(exp || '')) return null;
-      return { name: it.name, n: Math.round((new Date(exp + 'T00:00:00') - t0) / 86400000) };
+      return { name: it.name, exp: exp, n: Math.round((new Date(exp + 'T00:00:00') - t0) / 86400000) };
     }).filter((r) => r && r.n < 7).sort((a, b) => a.n - b.n); // 7일도 안 남은 품목 (지난 것 포함)
     if (!rows.length) return;
     const gone = rows.filter((r) => r.n < 0).length, soon = rows.length - gone;
-    const head = [gone ? '지난 것 ' + gone + '개' : '', soon ? '7일 안 남음 ' + soon + '개' : ''].filter(String).join(', ');
+    const head = gone ? '지난 것 ' + gone + '개 포함 ' + rows.length + '개' : rows.length + '개';
     const when = Number(Utilities.formatDate(new Date(), tz, 'H')) >= 12 ? '저녁 확인' : '아침 확인';
-    const list = rows.slice(0, 5).map((r) => r.name.replace(/\(.*?\)|_.*$/g, '') + ' ' + (r.n === 0 ? 'D-DAY' : r.n > 0 ? 'D-' + r.n : 'D+' + (-r.n))).join(', ');
+    // 날짜로: 수란 11/17까지 · 지난 건 샐러드믹스 11/12 지남
+    const md = (iso) => Number(iso.slice(5, 7)) + '/' + Number(iso.slice(8, 10));
+    const list = rows.slice(0, 5).map((r) => r.name.replace(/\(.*?\)|_.*$/g, '') + ' ' + md(r.exp) + (r.n < 0 ? ' 지남' : '까지')).join(', ');
     try { pushSend_(store, (STORE_NAMES[store] || store) + ' · 유통기한 ' + when, head + ' · ' + list + (rows.length > 5 ? ' 외' : ''), 'expiry-' + store, ''); } catch (err) { Logger.log(store + ' 알림 실패: ' + err); }
   });
 }
