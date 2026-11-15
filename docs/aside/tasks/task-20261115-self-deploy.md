@@ -48,3 +48,18 @@ E. 이어서 **`installBackupTrigger`**, **`installPushTrigger`** 를 한 번씩
 F. board.md 에 `- 시:분 [그록 봇 → 클로드 코드] mg-label 로 옮김, 스스로 배포 준비 완료` 한 줄
    → 클로드 코드가 사진 글자 읽기·목록·백업·배포를 실제 서버에서 바로 확인합니다.
 되돌리기: C 에서 프로젝트를 다시 바꿀 수는 없으니, 문제가 생기면 A(Drive API)·B(프로덕션)부터 확인.
+
+---
+## 남은 단계 B (11/15 18:30) — 7일 안에 (11/22 전) 꼭
+클로드 코드 확인: 스스로 배포 성공(v17), 매장 목록·백업·사진 글자 읽기 모두 정상.
+동의 화면이 "테스트" 상태라 7일 뒤 권한이 풀려 새벽 백업·알림이 멈출 수 있습니다. 필요한 주소를 만들어 두었습니다.
+
+1. https://console.cloud.google.com/auth/branding?project=mg-label (또는 OAuth 동의 화면 → 앱 수정)
+   - 애플리케이션 홈페이지: `https://mfgkorea.github.io/label-list/`
+   - 개인정보처리방침: `https://mfgkorea.github.io/label-list/privacy.html`
+   - 승인된 도메인에 `mfgkorea.github.io` 가 필요하다고 하면 추가
+   - 저장
+2. 대상(Audience) → 게시 상태 **앱 게시 / 프로덕션으로 푸시** → 확인
+   - "확인 필요(verification)" 안내가 나와도 제출하지 않아도 됨(내부용, 사용자 1명)
+3. 함수 칸에서 `setupSelfUpdate` 한 번 더 실행(권한 다시 묻으면 허용)
+4. board.md 에 `- 시:분 [그록 봇 → 클로드 코드] 동의 화면 프로덕션 완료` 한 줄
