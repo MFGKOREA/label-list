@@ -138,7 +138,7 @@ def main():
         case("I 다른 매출 요청이 도는 중 → 덮지 않음", N, {"miss_g": [Y], "salesPush": {"id": 5, "at": ms(N) - 60e3, "status": "running", "startAt": ms(N) - 50e3}}, "ok", 2, lambda q, o: not q, log=("skip", "busy")),
         case("J 발주 전송 중 → 미룸", N, {"miss_g": [Y], "misPush": {"date": "2026-11-13", "status": "pending", "at": ms(N) - 30e3}}, "ok", 2, lambda q, o: not q, log=("skip", "ordering")),
         case("K PC가 오류로 끝냄 → 못 받음(기록 other)", N, {"miss_g": [Y]}, "error", 4, lambda q, o: len(q) == 1, log=("fail", "other")),
-        case("K2 로그인이 풀려 못 받음 → 기록 login(사람이 봐야 함)", N, {"miss_g": [Y]}, "login", 4, lambda q, o: len(q) == 1, log=("fail", "login")),
+        case("K2 로그인이 풀려 못 받음 → 기록 login(사람이 봐야 함)", N, {"miss_g": [Y]}, "login", 4, lambda q, o: len(q) == 1 and "로그인 풀림" in o, log=("fail", "login")),
         case("K3 기록이 이미 60개 → 60개로 유지, 맨 끝이 새 기록", N, {"collectLog": [{"t": "2026-11-01 10:23", "r": "ok", "why": "ok"}] * 60}, None, 0, lambda q, o: not q, log=("fresh", "fresh")),
         case("L 메뉴만 빔 → 메뉴 요청만", N, {"miss_m": ["2026-11-11", Y]}, "ok", 0, lambda q, o: len(q) == 1 and q[0].get("kind") == "menu" and q[0]["from"] == "2026-11-11" and "also" not in q[0]),
         case("M 지난주 일요일 매출이 빔 → 그날부터 요청", N, {"miss_g": ["2026-11-08", Y]}, "ok", 0, lambda q, o: q and q[0]["from"] == "2026-11-08"),

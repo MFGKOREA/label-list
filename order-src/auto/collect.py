@@ -53,6 +53,7 @@ def post(body):
 
 
 LOG_KEY, LOG_MAX = "collectLog", 60
+WHY_KO = {"no_reply": "PC 응답 없음", "login": "로그인 풀림 → 매장 PC에서 GW 다시 로그인", "screen": "MIS 화면 바뀜 → 총괄 GW 채팅에서 확인", "sum": "합계 다름 → MIS 화면 확인", "other": "기타"}
 
 
 def classify(text, picked=True):
@@ -264,14 +265,16 @@ def main():
     # 계획에 있는 일이 안 됐어도 매출·메뉴가 됐으면 성공으로 봄 (내일 다시 해 봄). 그것만 요청했는데 안 됐으면 못 받음
     picked = p.get("status") not in ("pending", None) or bool(p.get("startAt"))
     if not want_g and not want_m and not any((ps.get(j["kind"]) or {}).get("status") == "done" for j in jobs) and p.get("status") != "done":
-        print("못 받음: %s" % (p.get("text") or "PC 응답 없음"))
-        clog(a.dry, f, kst, "fail", classify(p.get("text"), picked), p.get("text") or "PC 응답 없음")
+        why = classify(p.get("text"), picked)
+        print("못 받음(%s): %s" % (WHY_KO[why], p.get("text") or "PC 응답 없음"))
+        clog(a.dry, f, kst, "fail", why, p.get("text") or "PC 응답 없음")
         return 4
     if (want_g or want_m) and (p.get("status") not in ("done", "error") or not ok_g or not ok_m):
         bad = [x.get("text") for k, x in ps.items() if isinstance(x, dict) and x.get("status") == "error" and x.get("text")]
         txt = " / ".join(bad) or p.get("text") or "PC 응답 없음"
-        print("못 받음: %s" % txt)
-        clog(a.dry, f, kst, "fail", classify(txt, picked), txt, g=len(got_g), m=len(got_m))
+        why = classify(txt, picked)
+        print("못 받음(%s): %s" % (WHY_KO[why], txt))
+        clog(a.dry, f, kst, "fail", why, txt, g=len(got_g), m=len(got_m))
         return 4
     clog(a.dry, f, kst, "ok", "ok", g=len(got_g), m=len(got_m))
     return 0
