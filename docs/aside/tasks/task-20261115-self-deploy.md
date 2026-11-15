@@ -30,3 +30,21 @@
 
 ## 끝나면
 이 파일과 task-20261115-push-twice.md 의 `상태:` 를 `완료` 로, `docs/aside/board.md` 맨 아래에 `- 시:분 [그록 봇 → 클로드 코드] 스스로 배포 설치 완료 (vN)` 한 줄 push.
+
+---
+## 추가 단계 (11/15, 신우 님 결정: "문제가 있지만 해결하자") — mg-label 프로젝트로 옮기기
+494317177239 는 구글이 숨겨 둔 기본 프로젝트라 아무도 API를 켤 수 없습니다. 신우 님 계정의 **mg-label**(번호 `121073203096`)로 옮깁니다.
+⚠️ 순서대로, 하나도 빼지 말 것 (빠지면 매장 사진 글자 읽기·새벽 백업·알림이 멈춤)
+
+A. https://console.cloud.google.com/apis/library?project=mg-label 에서 **사용(ENABLE)**:
+   - **Apps Script API**
+   - **Google Drive API** ← 사진 글자 읽기(Drive 고급 서비스)에 필요
+B. https://console.cloud.google.com/apis/credentials/consent?project=mg-label → **OAuth 동의 화면**
+   - 사용자 유형 **외부**, 앱 이름 `한글표시사항 매장모음`, 지원·개발자 이메일 = sinoo.kr.io@gmail.com, 범위는 비워 두고 저장
+   - 게시 상태 **프로덕션으로 푸시** (테스트로 두면 7일마다 권한이 풀림). "확인되지 않은 앱" 경고는 괜찮음
+C. 매장모음 Apps Script → 톱니 **프로젝트 설정 → Google Cloud Platform(GCP) 프로젝트 → 프로젝트 변경** → `121073203096` → 프로젝트 설정
+D. 함수 칸에서 **`setupSelfUpdate`** 실행 → 권한 허용("확인되지 않은 앱"이면 고급 → 이동) → 로그 `스스로 배포 준비 완료`
+E. 이어서 **`installBackupTrigger`**, **`installPushTrigger`** 를 한 번씩 실행
+F. board.md 에 `- 시:분 [그록 봇 → 클로드 코드] mg-label 로 옮김, 스스로 배포 준비 완료` 한 줄
+   → 클로드 코드가 사진 글자 읽기·목록·백업·배포를 실제 서버에서 바로 확인합니다.
+되돌리기: C 에서 프로젝트를 다시 바꿀 수는 없으니, 문제가 생기면 A(Drive API)·B(프로덕션)부터 확인.
