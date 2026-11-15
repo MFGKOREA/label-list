@@ -2240,12 +2240,12 @@
         `<span class="need prebox${q ? " has" : ""}"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
       return d;
     }
-    // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 왼쪽 설명 줄에 (11/15 정리: 재고칸 위에 떠 있던 상자를 옮김)
+    // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
     const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? "BOX" : esc(unit)}` : ""; })();
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${estTxt ? `<span class="estnote">${estTxt}</span>` : ""}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
-      // 재고칸 (예상 재고는 위 c-meta의 estnote)
-      (() => `<div class="stk"><label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`)() +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
+      // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게")
+      (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
