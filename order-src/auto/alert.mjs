@@ -3,6 +3,8 @@
 //  - 시트 자료로 앱을 "지금"으로 열어 앱과 같은 계산(risk1·calc)으로 알릴 것만 한두 줄로 찍음. 읽기만 함(시트에 쓰지 않음)
 //  - 예약 작업이 이 줄을 마지막 답으로 내면 KM 폰에 알림이 감(예약 작업의 푸시). 알릴 게 없으면 "알림 없음"
 //  - 화면에 찍는 숫자는 매장 자료이므로 저장소·커밋에 옮기지 않음
+//  + GW 상황판(11/15 "2주안 기획들 실행해", 14번): 오전(12시 전) 차례에만 상황판의 빨강 줄(이틀 넘게 끊긴 자료·하루 넘게 없는 PC 신호·합계 다름)을 한 줄 붙임
+//    = 앱 리포트 탭 상황판과 같은 함수(gwHealth). 노랑·초록은 알리지 않음(이상 있을 때만)
 // 사용: node order-src/auto/alert.mjs [--kv 파일] [--at 2026-11-14T16:05]   (예약 작업이 주는 --kind 86은 받기만 함)
 //   지금부터 내일 문 닫을 때까지 바닥날 품목(86 위험)
 //   --at: 그 시각으로 열어 봄(시험). 그날 뒤 자료는 잘라냄(asof.mjs)
@@ -34,13 +36,15 @@ const r = await page.evaluate(({ hourK }) => {
   //  (내일 점심까지만 보면 11/14 토 버터라이스 "일 디너 19:00"이 빠졌음 — 실제로는 일요일 점심에 바닥)
   const r86 = items.map((it) => { const k = C.risk1(it, inp[it.key]); return k ? { name: short(it.name), est: !!k.est, when: k.when, at: k.at, have: k.have, lack: Math.max(0.1, k.use - k.have), unit: it.pk.stock || "", thaw: !!k.thaw } : null; }).filter(Boolean).sort((a, b) => a.at - b.at);
   const soon = r86.filter((x) => x.at > hourK / 24 && x.at < 2), later = r86.length - soon.length;
-  return { T, soon, later };
+  const bad = hourK < 12 && C.gwHealth ? C.gwHealth().filter((h) => h.s === "bad").map((h) => `${h.t} ${h.v}`) : [];
+  return { T, soon, later, bad };
 }, { hourK });
 await close();
 const lines = [];
 const fmt86 = (x) => `${x.name} ${x.when}(${x.est ? "예상 " : ""}${q1(x.have)}${x.unit}·${q1(x.lack)} 부족${x.thaw ? "·입고당일 해동" : ""})`;
 function q1(x) { return String(Math.round(x * 10) / 10); }
 if (r.soon.length) lines.push(`86 위험 ${r.soon.length}개 · ` + r.soon.slice(0, 8).map(fmt86).join(" · ") + (r.soon.length > 8 ? ` 외 ${r.soon.length - 8}개` : "") + (r.later ? ` (그 뒤 ${r.later}개는 앱에서)` : ""));
+if (r.bad.length) lines.push(`GW 확인 필요 ${r.bad.length} · ` + r.bad.join(" · ") + " (앱 리포트 탭 GW 상황판)");
 if (errs.length) lines.push(`(앱 화면 오류 ${errs.length}개: ${errs[0].slice(0, 80)})`);
 console.log(lines.length ? lines.join("\n") : "알림 없음");
 process.exit(lines.length ? 10 : 0);

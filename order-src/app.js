@@ -133,6 +133,7 @@
   }
   // 재고·발주·프랩 입력은 계산 모델을 통째로 다시 만들지 않고 채점만 다시 (입력할 때마다 느려지지 않게)
   function light(key) {
+    if (/^soldout\./.test(key)) return; // 품절 기록(11/15)은 계산에 안 씀
     if (/^(prepOnhand\.|prepLog$)/.test(key)) { if (cache) cache.plan = null; return; }
     if (/^(input\.|onhand$)/.test(key) && cache) { applyScores(cache); return; }
     invalidate();
@@ -140,7 +141,7 @@
   function setKey(key, value) {
     if (value === null) delete db[key]; else db[key] = value;
     lsSave(); light(key);
-    if (key !== "learnlog" && key !== "learnsnap") { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
+    if (key !== "learnlog" && key !== "learnsnap" && !/^soldout\./.test(key)) { clearTimeout(trackT); trackT = setTimeout(() => learnTrack(), 1500); }
     if (API) { if (!(key in pend.base) && isObj(syncBase[key])) pend.base[key] = clone(syncBase[key]); pend.set[key] = 1; savePend(); send(key); }
     if (key === "input." + TODAY || key === "misPush") setTimeout(renderMis, 0);
     if (key === "salesPush") setTimeout(renderSales, 0);
@@ -2231,6 +2232,9 @@
     // 7일마다 세는 품목 (weeklyState): 셀 날 "7일 세기" · 접어 둔 칸 "다음 MM.DD". 모자랄 수 있어 띄운 품목은 칩 없이 예전처럼
     //  (예상 −1단위로 보니 하루 20개 넘게 그렇게 떠서, "확인필요"를 다 붙이면 칩이 소용없어짐)
     const ws = weeklyState(it, inp[it.key]), wkTag = !ws ? "" : ws.fold ? `<span class="chip wk">다음 ${mmdd(ws.next)}</span>` : ws.why === "due" ? `<span class="chip wk">7일 세기</span>` : "";
+    // 품절 기록 (11/15 KM "2주안 기획들 실행해", 3번): 86 위험·검색한 품목·0을 센 품목·이미 기록한 품목에만 [품절 기록] → soldout.날짜 = {품목: "18:12"}.
+    //  다시 누르면 지움. 품절 횟수를 재야 86 알림 효과("품절 −50%")를 볼 수 있음. 계산에는 아직 안 씀
+    const soldMap = () => db["soldout." + TODAY] || {}, showSold = !preMode && (!!soldMap()[it.key] || !!rk86 || !!($("q") && $("q").value.trim()) || (counted(v) && num(v.s) === 0));
     const top = `<div class="c-top"><span class="c-name">${esc(it.name)}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
     // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
@@ -2246,12 +2250,23 @@
     // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
     const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? "BOX" : esc(unit)}` : ""; })();
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
       // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게")
       (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
+    const sb = d.querySelector(".soldbtn");
+    if (sb) {
+      const paint = () => { const t = soldMap()[it.key]; sb.classList.toggle("on", !!t); sb.setAttribute("aria-pressed", String(!!t)); sb.textContent = t ? `품절 ${t} · 취소` : "품절 기록"; };
+      paint();
+      sb.addEventListener("click", () => {
+        const m = { ...soldMap() };
+        if (m[it.key]) delete m[it.key]; else { const n = new Date(); m[it.key] = `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; }
+        setKey("soldout." + TODAY, m); paint();
+        toast(m[it.key] ? `${it.name} 품절 ${m[it.key]} 기록` : `${it.name} 품절 기록 지움`);
+      });
+    }
     const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const wn = d.querySelector(".wipnote"); if (wn) { const t = wipTxt(); wn.textContent = t; wn.hidden = !t; } const cn = d.querySelector(".cutnote"); if (cn) { const t = cutTxt(); cn.textContent = t; cn.hidden = !t; } const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
@@ -3428,9 +3443,54 @@
     }
     invalidate(); renderReport();
   });
+  // ---------- GW 상황판 (11/15 KM "2주안 기획들 실행해", 기획안 14번) ----------
+  //  확인하러 여는 곳(시트·매장 PC·리포트·알림)을 한 화면에: 자료마다 마지막으로 들어온 날, PC 신호, 합계 대조, 자동 수집, 오늘 86, 이번 주 품절.
+  //  s: ok 초록 · warn 노랑(하루 늦음, 영업 중 PC 꺼짐) · bad 빨강(이틀 넘게 끊김·합계 다름) · none 아직 없음 · info 참고
+  //  "있어야 할 날": 어제 매출은 10:23 자동 수집 뒤에 들어옴 → 11시 전엔 그제까지, 11시부터 어제까지 있으면 정상(11/12~15 실제 수집 시각 기준)
+  //  PC: 확장은 켜져 있으면 10분마다 신호(gw-agent bg.js). 밤·아침(21~11시)엔 꺼져 있어도 정상, 영업 중 30분 넘게 없으면 노랑, 하루 넘게 없으면 빨강
+  //  자동 알림(auto/alert.mjs 10시 차례)이 같은 함수로 빨강만 한 줄 붙임 = "이상 있을 때만 알림". 새로 모으는 자료는 없음(시트에 있는 것만 봄)
+  function gwHealth() {
+    const rows = [], dd = (d) => (d ? `${+d.slice(5, 7)}/${+d.slice(8, 10)}` : "");
+    const now = new Date(), hNow = now.getHours() + now.getMinutes() / 60, after = hNow >= 11;
+    const want = addDays(TODAY, after ? -1 : -2), gap = (a, d) => Math.round((parseISO(a) - parseISO(d)) / 864e5); // 지금 있어야 할 마지막 날
+    const byWant = (d, warnMax) => (!d ? "none" : gap(want, d) <= 0 ? "ok" : gap(want, d) <= warnMax ? "warn" : "bad");
+    const ago = (ms) => { const m = Math.max(0, Math.round((Date.now() - ms) / 6e4)); return m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.floor(m / 1440)}일 전`; };
+    const lastOf = (pre) => Object.keys(db).filter((k) => k.startsWith(pre)).map((k) => k.slice(pre.length)).filter((d) => /^\d{4}-\d\d-\d\d$/.test(d) && d <= TODAY).sort().pop() || null;
+    const ag = db.misAgent || {}, agMin = ag.at ? (Date.now() - ag.at) / 6e4 : Infinity, bizH = hNow >= 11 && hNow < 21; // 영업 중
+    rows.push({ k: "pc", t: "매장 PC 연결", sub: `GW Agent${ag.ver ? " " + ag.ver : ""}${ag.at && !ag.auto ? " · 상시 수집 꺼짐" : ""}${!bizH ? " · 밤엔 꺼져도 정상" : ""}`, v: ag.at ? `${ago(ag.at)} 신호` : "신호 없음", s: agMin < 30 || (!bizH && agMin < 16 * 60) ? "ok" : agMin < 1440 ? "warn" : "bad" });
+    const fc = db.forecast || {}, gLast = Object.keys(fc).filter((d) => d < TODAY && num((fc[d] || {}).act) > 0).sort().pop() || null;
+    rows.push({ k: "gross", t: "실제 매출", sub: "MIS 일별매출 → Forecast 실제", v: gLast ? `${dd(gLast)}까지` : "없음", s: byWant(gLast, 1) });
+    const mLast = lastOf("menuDay.");
+    rows.push({ k: "menu", t: "메뉴 판매", sub: "메뉴별 매출 → 레시피 사용량", v: mLast ? `${dd(mLast)}까지` : "없음", s: byWant(mLast, 1) });
+    const os = db.misOrderScan || {}, rs = db.misRecvScan || {};
+    rows.push({ k: "order", t: "주문현황", sub: "빠진 발주 채우기", v: os.to ? `${dd(os.to)}까지` : "없음", s: byWant(os.to, 2) });
+    rows.push({ k: "recv", t: "입고현황", sub: "받은 양 · 반품", v: rs.to ? `${dd(rs.to)}까지` : "없음", s: byWant(rs.to, 2) });
+    const hs = db.hourShare || {}, hLag = hs.to ? gap(TODAY, hs.to) : null; // 1주에 한 번 받음
+    rows.push({ k: "hour", t: "시간대 비율", sub: "86 바닥 시각 계산에 씀 · 1주에 한 번", v: hs.to ? `${dd(hs.to)}까지` : "없음", s: hLag == null ? "none" : hLag <= 8 ? "ok" : hLag <= 14 ? "warn" : "bad" });
+    const evAt = num((db.events || {}).at);
+    rows.push({ k: "events", t: "행사 일정", sub: "데스크위젯 → 컨벤션센터", v: evAt > 0 ? `${ago(evAt)} 갱신` : "없음", s: !(evAt > 0) ? "none" : Date.now() - evAt < 2 * 864e5 ? "ok" : Date.now() - evAt < 7 * 864e5 ? "warn" : "bad" });
+    const sp = db.salesPush || {}, mp = (sp.parts || {}).menu || {}, ss = db.misSetScan || {};
+    const nBad = (num(mp.chkBad) || 0) + (sp.chk && sp.chk.ok === false ? 1 : 0) + (Array.isArray(ss.chkBad) ? ss.chkBad.length : 0);
+    const seen = !!sp.chk || "chkBad" in mp || Array.isArray(ss.chkBad);
+    rows.push({ k: "sum", t: "합계 대조", sub: "MIS 화면 합계 = 읽은 값의 합", v: nBad ? `다른 날 ${nBad}` : seen ? "맞음" : "아직 결과 없음", s: nBad ? "bad" : seen ? "ok" : "none" });
+    // 자동 수집·학습(10:23·15:23 예약 작업)이 남긴 마지막 기록. 새 매출이 들어온 날만 남기므로 매출 줄과 같이 움직임 → 노랑까지만
+    const auto = (db.learnlog || []).filter((x) => x && /자동/.test(String(x.by || "")) && x.t).sort((a, b) => (a.t < b.t ? -1 : 1)).pop(), aDay = auto ? String(auto.t).slice(0, 10) : null;
+    rows.push({ k: "learn", t: "자동 수집·학습", sub: "예약 작업 10:23 · 15:23", v: aDay ? `${dd(aDay)} ${String(auto.t).slice(11, 16)}` : "없음", s: !aDay ? "none" : gap(after ? TODAY : addDays(TODAY, -1), aDay) <= 0 ? "ok" : "warn" });
+    return rows;
+  }
+  function renderHealth(M) {
+    const rows = gwHealth(), nm = (k) => String((M.items.find((i) => i.key === k) || { name: k }).name).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim();
+    const sold = []; for (let d = mondayOf(TODAY); d <= TODAY; d = addDays(d, 1)) Object.keys(db["soldout." + d] || {}).forEach((k) => sold.push(nm(k)));
+    rows.push({ k: "86", t: "오늘 86 위험", sub: "폰 알림 10·16·20시", v: `${risk86(M, todayInput()).length}개`, s: "info" });
+    rows.push({ k: "sold", t: "이번 주 품절", sub: sold.length ? sold.slice(0, 4).join(", ") + (sold.length > 4 ? ` 외 ${sold.length - 4}` : "") : "발주 탭 카드의 [품절 기록]으로", v: `${sold.length}번`, s: "info" });
+    const bad = rows.filter((r) => r.s === "bad").length, warn = rows.filter((r) => r.s === "warn").length, sum = $("hlthSum");
+    sum.textContent = bad ? `확인 필요 ${bad}` : warn ? `늦음 ${warn}` : "이상 없음"; sum.className = bad ? "bad" : warn ? "warn" : "ok";
+    const rank = { bad: 0, warn: 1 }; rows.sort((a, b) => (rank[a.s] ?? 2) - (rank[b.s] ?? 2)); // 빨강·노랑을 위로 (나머지는 원래 순서)
+    $("hlth").innerHTML = rows.map((r) => `<div class="cell kv hl"><span><i class="dot ${r.s}" aria-hidden="true"></i>${esc(r.t)}<small>${esc(r.sub)}</small></span><b class="${{ ok: "ok", bad: "bad", warn: "warn" }[r.s] || "mut"}">${esc(r.v)}</b></div>`).join("");
+  }
   function renderReport() {
     const M = model();
-    renderXp(M); renderReq(M);
+    renderXp(M); renderReq(M); renderHealth(M);
     // 한 주(월~일) 단위로 채점: 재고 입력 사이 사용량이 끝난 날의 주 (수불현황은 한 달 단위라 주 채점에서는 뺌)
     const byWeek = new Map();
     M.scores.forEach((s) => { if (s.src === "ledger") return; const w = mondayOf(s.end); if (!byWeek.has(w)) byWeek.set(w, []); byWeek.get(w).push(s); });
@@ -3551,5 +3611,5 @@
       if (!busy(db.misPush) && !busy(db.salesPush)) misFastUntil = 0;
     } finally { polling = false; }
   }, 2000);
-  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, OPEN_H };
+  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, OPEN_H, gwHealth };
 })();

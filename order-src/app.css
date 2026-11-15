@@ -783,3 +783,18 @@ details.weekly .wk-t em { display: block; font-style: normal; font-size: 12px; f
 details.weekly .wk-s { flex: none; font-size: 13px; font-weight: 700; color: var(--accent-text); }
 details.weekly .wk-s::before { content: "펼치기 ▾"; }
 details.weekly[open] .wk-s::before { content: "접기 ▴"; }
+/* GW 상황판 (11/15): 점 색 = 상태 (초록 맞음 · 노랑 늦음 · 빨강 끊김/합계 다름 · 회색 아직/참고) */
+#hlthSum.ok { color: var(--accent-text); font-weight: 700; }
+#hlthSum.warn { color: var(--chick-ink); font-weight: 700; }
+#hlthSum.bad { color: var(--rose-ink); font-weight: 700; }
+.cell.kv.hl { padding-top: 9px; padding-bottom: 9px; }
+.kv.hl .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: var(--fill-2); }
+.kv.hl .dot.ok { background: var(--accent-text); }
+.kv.hl .dot.warn { background: var(--chick-ink); }
+.kv.hl .dot.bad { background: var(--rose-ink); }
+.kv.hl .dot.info { background: var(--muted); }
+.kv b.warn { color: var(--chick-ink); }
+/* 품절 기록 (11/15): 86 위험·검색한 품목에만 작은 단추. 누르면 빨강 "품절 18:12 · 취소" */
+.c-meta .soldbtn { display: inline-block; margin-top: 6px; padding: 3px 9px; border: 1px solid var(--fill-2); border-radius: 999px; background: none; color: var(--muted); font-size: 12px; font-weight: 700; line-height: normal; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.c-meta .soldbtn.on { border-color: var(--rose-ink); background: var(--rose); color: var(--rose-ink); }
+.chip.sold-lg { background: none; border: 1px solid var(--fill-2); color: var(--muted); }
