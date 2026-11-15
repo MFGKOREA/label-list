@@ -792,6 +792,17 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .mrow.hw .nm small { white-space: normal; text-wrap: pretty; }
 .mrow.hw .pc { white-space: nowrap; }
 .nw { white-space: nowrap; }
+/* 7일마다 세는 품목 (11/15 KM): 셀 날이 아닌 품목은 목록 맨 아래에 접어 둠. 칩은 회색(정보), 모자랄 수 있으면 확인필요(빨강) */
+.chip.wk { background: var(--fill-2); color: var(--fg); }
+details.weekly { margin-bottom: 20px; }
+details.weekly > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 4px 7px; padding: 6px 0; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
+details.weekly > summary::-webkit-details-marker { display: none; }
+details.weekly .wk-t { font-size: 14px; font-weight: 700; color: var(--muted); }
+details.weekly .wk-t small { font-weight: 500; font-size: 12px; }
+details.weekly .wk-t em { display: block; font-style: normal; font-size: 12px; font-weight: 500; margin-top: 1px; }
+details.weekly .wk-s { flex: none; font-size: 13px; font-weight: 700; color: var(--accent-text); }
+details.weekly .wk-s::before { content: "펼치기 ▾"; }
+details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 
 </style>
 </head>
@@ -1012,6 +1023,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       <div class="cell legend-row"><span class="chip t-inc">입고예정 6PK</span><span>발주했지만 아직 안 온 양.</span></div>
       <div class="cell legend-row"><span class="chip t-est">예상 5.8EA</span><span>앱이 추정한 재고. 참고만.</span></div>
       <div class="cell legend-row"><span class="chip diff">86 위험</span><span>다음 입고 전에 떨어질 수 있는 품목. 맨 위 빨간 카드.</span></div>
+      <div class="cell legend-row"><span class="chip wk">7일 세기</span><span>거의 발주 안 하는 품목. 7일에 한 번만 셈. 셀 날이 아니면 목록 맨 아래에 접혀 있고, 모자랄 것 같으면 위로 올라옴.</span></div>
       <div class="cell legend-row"><span class="chip t-est">해동 1일</span><span>냉동. 입고 다음 날부터 사용.</span></div>
       <div class="cell legend-row"><span class="chip t-est">금일 발주 마감</span><span>14:30 지남. 날짜 아래 표시.</span></div>
     </div>
@@ -3276,7 +3288,10 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     const rk86 = preMode ? null : risk1(it, v), tag86 = rk86 ? `<span class="chip diff">${rk86.est ? "예상 " : ""}${esc(rk86.when)} 부족</span>` : "";
-    const top = `<div class="c-top"><span class="c-name">${esc(it.name)}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}</span>${tag86 || tag || rng ? `<span class="c-tags">${tag86}${tag}${rng}</span>` : ""}</div>`;
+    // 7일마다 세는 품목 (weeklyState): 셀 날 "7일 세기" · 접어 둔 칸 "다음 MM.DD". 모자랄 수 있어 띄운 품목은 칩 없이 예전처럼
+    //  (예상 −1단위로 보니 하루 20개 넘게 그렇게 떠서, "확인필요"를 다 붙이면 칩이 소용없어짐)
+    const ws = weeklyState(it, inp[it.key]), wkTag = !ws ? "" : ws.fold ? `<span class="chip wk">다음 ${mmdd(ws.next)}</span>` : ws.why === "due" ? `<span class="chip wk">7일 세기</span>` : "";
+    const top = `<div class="c-top"><span class="c-name">${esc(it.name)}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
     // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
       const d0 = pDay(), pc = preCalc(it, v, d0), w0 = pc.w, inc0 = incomingOf(it, d0); // 입고예정은 실제로 넣은 발주만
@@ -3315,22 +3330,21 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       const rows = [...document.querySelectorAll("#orderList .cell[data-key]")], nx = rows[rows.indexOf(d) + 1];
       jump(nx ? { key: nx.dataset.key, f: 0 } : null);
     }));
-    // 급변 경고: 직전에 센 재고(3일 안) + 그 사이 입고보다 3배 넘게 많거나, 1/3 아래로 줄었는데 예상 사용량으론 설명이 안 되면
-    const jumpWarn = () => {
-      const a = num(v.s); if (!isFinite(a) || preMode) return null;
-      for (let k = 1; k <= 3; k++) {
-        const x = addDays(TODAY, -k), r = (db["input." + x] || {})[it.key]; if (!counted(r)) continue;
-        const b = num(r.s), f = it.box || 1; if (!(b > 0)) return null;
-        const arr = arrBetween(it, x, meatOn(it, x), TODAY, meatOn(it, TODAY) || (it.thaw > 0 && new Date().getHours() < MEAT_H)) / f;
-        const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s, weGross: weSum(x, TODAY, true), fcVar: fcVar(x, TODAY, true) }, 0, 0), use = c.none ? 0 : c.use / f;
-        const up = a >= 3 * (b + arr) && a - (b + arr) >= 2, down = a <= b / 3 && b - a >= 2 && b - a > 3 * use + arr;
-        return up || down ? `${it.name}: ${k === 1 ? "어제" : mmdd(x)} ${b} → 오늘 ${a}. 숫자 확인해 주세요` : null;
-      }
-      return null;
-    };
     si.addEventListener("input", () => si.parentElement.classList.remove("warn"));
-    d.addEventListener("change", () => {
-      const jw = jumpWarn(); si.parentElement.classList.toggle("warn", !!jw); if (jw) toast("⚠ " + jw, 5000);
+    d.addEventListener("change", (ev) => {
+      // 급변 확인 (jumpOf, 11/15 KM "둘 다 넣기"): 4배 넘게 튀면 저장 전에 한 번 묻고, 3~4배는 예전처럼 알림만. 같은 값은 한 번만 물음
+      const jw = jumpOf(it, num(v.s)); si.parentElement.classList.toggle("warn", !!jw);
+      if (jw && ev.target === si) {
+        if (jw.hard && !jumpOk.has(it.key + "|" + v.s)) {
+          if (!confirm(`${it.name}\n${jw.when} ${jw.b} → 오늘 ${jw.a} (4배 넘게 차이)\n\n${jw.a} 맞나요?\n맞으면 [확인], 다시 넣으려면 [취소]`)) {
+            // 취소: 저장하지 않고 칸을 저장된 값으로 되돌린 뒤 다시 넣게 함
+            si.value = (inp[it.key] || {}).s ?? ""; live(); si.parentElement.classList.remove("warn");
+            setTimeout(() => { orderFocus = null; si.focus(); si.select(); }, 0);
+            return;
+          }
+          jumpOk.add(it.key + "|" + v.s);
+        } else if (!jw.hard) toast(`⚠ ${jw.msg}. 숫자 확인해 주세요`, 5000);
+      }
       const was = pinRank(it, win, inp[it.key]), was86 = !preMode && !!risk1(it, inp[it.key]);
       const all = { ...todayInput() };
       // r: 그때 앱이 추천한 발주수량 (나중에 실제 발주와 비교해 학습)
@@ -3356,6 +3370,24 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   }
   const localStamp = () => { const n = new Date(); return `${iso(n)} ${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; };
   let orderFocus = null;
+  // 급변 확인 (11/15 KM "둘 다 넣기"): 직전에 센 재고(3일 안) + 그 사이 입고보다 4배 넘게 많거나, 1/4 아래로 줄었는데 예상 사용량으론 설명이 안 되면
+  //  저장 전에 "44 맞나요?"를 한 번 물음(hard). 3~4배는 예전처럼 알림만(soft).
+  //  근거: 10/19~11/14 재고 기록 1,564건 중 앞뒤보다 4배 넘게 튄 값 11건(냉동사각어묵 4→44→5 등). 하나가 그 품목 사용량 학습을 몇 주 흔듦
+  const jumpOk = new Set(); // "맞아요" 한 값(품목|값)은 다시 안 물음
+  function jumpOf(it, a) {
+    if (!isFinite(a) || preMode) return null;
+    for (let k = 1; k <= 3; k++) {
+      const x = addDays(TODAY, -k), r = (db["input." + x] || {})[it.key]; if (!counted(r)) continue;
+      const b = num(r.s), f = it.box || 1; if (!(b > 0)) return null;
+      const arr = arrBetween(it, x, meatOn(it, x), TODAY, meatOn(it, TODAY) || (it.thaw > 0 && new Date().getHours() < MEAT_H)) / f;
+      const c = calc(it, { ...orderWindow(x), days: k, gross: sumGross(x, TODAY, true).s, weGross: weSum(x, TODAY, true), fcVar: fcVar(x, TODAY, true) }, 0, 0), use = c.none ? 0 : c.use / f;
+      const up = (m) => a >= m * (b + arr) && a - (b + arr) >= 2, down = (m) => a <= b / m && b - a >= 2 && b - a > 3 * use + arr;
+      if (!up(3) && !down(3)) return null;
+      const when = k === 1 ? "어제" : mmdd(x);
+      return { hard: up(4) || down(4), a, b, k, x, when, msg: `${it.name}: ${when} ${b} → 오늘 ${a}` };
+    }
+    return null;
+  }
   // 발주 시트 순서 그대로 업체별로 쭉 (발주 필요한 것만 맨 위로, 검색·업체 버튼은 거르기만)
   // 86 위험: 오늘 넣은 재고 + 그 사이 들어올 입고로 오늘 발주분이 들어오기 전까지 못 버틸 것 같은 품목
   // 86 가능성 = 입고 전까지 쓸 양이 가진 양보다 많을 확률 (사용량 오차 = ± 범위와 같은 계산 오차 + Forecast 오차)
@@ -3403,10 +3435,64 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   }
   // 오늘 안 센 품목도 86을 봄 (11/15 KM: 일요일엔 재고를 안 세서 86이 하나도 안 떴음 — 버터라이스 토 14시 40개 → 일 점심 바닥)
   //  최근 3일 안 센 재고 → 오늘 아침 예상 재고(estStock: 그 사이 실제 매출·받은 입고)로 같은 계산(문 열 때부터 오늘 영업 전부). 화면엔 "예상"으로
-  const riskEst = (it, v) => { if (counted(v) || (v && v.est)) return null; const e = estStock(it, TODAY); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw), est: 1 }, OPEN_H); return r ? { ...r, est: true, from: e.from } : null; };
+  //  riskOf는 재고칸 단위로 받으니 박스로 세는 품목은 예상(팩)을 박스로 바꿔 넘김 (11/15 고침: 예전엔 팩 수를 박스 수로 읽어 박스 크기 배만큼 많게 봄)
+  const riskEst = (it, v) => { if (counted(v) || (v && v.est)) return null; const e = estStock(it, TODAY); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H); return r ? { ...r, est: true, from: e.from } : null; };
   const risk1 = (it, v) => riskOf(it, v) || riskEst(it, v);
   function risk86(M, inp) {
     return M.items.filter((i) => !i.ledgerOnly).map((it) => risk1(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
+  }
+  // ---------- 7일마다 세는 품목 (11/15 KM "둘 다 넣기") ----------
+  //  최근 28일 동안 발주가 필요했던 날(앱 추천 r>0 또는 KM 발주 o>0)이 2일 이하이고 3번 넘게 센 품목은 매일 말고 7일마다 셈.
+  //  요일은 정하지 않음 (KM "목요일에 내가 쉬면?"): 마지막으로 센 지 7일이 지나면 그 뒤 재고를 넣는 날 다시 띄움(쉬는 날은 건너뜀).
+  //  그 사이에도 예상 재고가 없거나, 예상 재고로 계산해 발주가 필요하거나 86 위험이면 바로 띄움(칩 없이 예전처럼). 해동·신규 품목은 뺌.
+  //  셀 날이 아니면 목록 맨 아래 "7일마다 세는 품목"에 접어 둠(검색하면 그대로 보임, 사전발주 ON이면 안 접음).
+  //  근거: 10/19~11/14 전체를 센 18일 2,242번 중 38%가 거의 발주 안 하는 품목(기획안 세부 분석 2번). 안전 기준을 넣은 앱 규칙으로는 하루 약 16개(13%) 덜 셈
+  // minCount 3: 7일마다 세면 28일에 3~4번(쉬는 날이 끼면 3번)이라 4로 두면 주간 품목이 매일로 돌아갔다 다시 주간이 됨
+  const WEEKLY = { every: 7, look: 28, maxNeed: 2, minCount: 3 };
+  let weeklyMemo = new Map(), weeklyOpen = false;
+  function weeklyOf(it) {
+    if (weeklyMemo.has(it.key)) return weeklyMemo.get(it.key);
+    let out = null;
+    if (!it.thaw && !it.ledgerOnly && !it.isNew) { // 신규 품목은 사용량을 아직 몰라 매일 셈
+      let need = 0, cnt = 0, last = null;
+      for (let k = 1; k <= WEEKLY.look; k++) {
+        const x = addDays(TODAY, -k), r = (db["input." + x] || {})[it.key]; if (!r) continue;
+        if (num(r.r) > 0 || num(r.o) > 0) need++;
+        if (counted(r)) { cnt++; if (!last) last = x; }
+      }
+      if (need <= WEEKLY.maxNeed && cnt >= WEEKLY.minCount) out = { last, next: addDays(last, WEEKLY.every), need, cnt };
+    }
+    weeklyMemo.set(it.key, out); return out;
+  }
+  // 오늘 이 품목을 어떻게 보일지: fold = 맨 아래로 접음, why = "today"(오늘 넣음) · "due"(셀 날) · "low"(모자랄 수 있음·예상 없음)
+  let weeklyStMemo = new Map();
+  function weeklyState(it, v) {
+    if (preMode) return null;
+    const w = weeklyOf(it); if (!w) return null;
+    const mk = it.key + "|" + (v ? `${v.s}|${v.o}` : ""); if (weeklyStMemo.has(mk)) return weeklyStMemo.get(mk);
+    let why = null;
+    if (v && (String(v.s ?? "").trim() !== "" || num(v.o) > 0)) why = "today";
+    else if (w.next <= TODAY) why = "due";
+    else {
+      // 재고는 밀봉 팩만 세서(뜯은 팩은 안 셈) 예상 재고가 센 값보다 한 단위쯤 많게 나오기 쉬움 → 접을지는 예상에서 한 단위를 빼고 판단
+      const e = estStock(it, TODAY), u = it.box || 1;
+      if (!e || weeklyLow(it, w, Math.max(0, e.v - u), Math.max(0, e.raw - u))) why = "low";
+    }
+    const out = { ...w, why, fold: !why };
+    weeklyStMemo.set(mk, out); return out;
+  }
+  // 재고(sv, 팩 단위 · raw = 반올림 전)로 봐서 지금 띄워야 하는지: 이번 기간 발주가 필요하거나, 86 위험이거나,
+  //  다음 셀 날(w.next)에 발주하면 들어오는 날까지 못 버티면 (그때까지 쓸 양 + 여유분 > 재고 + 입고예정)
+  //  되돌려 보기(시트 사본 11/3~11/14, 날마다 그날 10시, 전체 센 6일 평균 127번): 후보 하루 41개. 예상 그대로면 접힘 34개지만 실제 센 값이라면 띄웠을 것(예상이 부족을 가림) 16건,
+  //  ×0.7이면 28개·5건, −1단위(지금)면 16개·1건. 접혔는데 KM이 그날 직접 발주한 것 6건(앱 추천 0)
+  function weeklyLow(it, w, sv, raw) {
+    const r = calc(it, orderWindowFor(it, TODAY), sv, incNow(it));
+    if (!r.none && r.packs > 0) return true;
+    const until = orderWindowFor(it, w.next).deliv, days = Math.max(1, Math.round((parseISO(until) - parseISO(TODAY)) / 864e5));
+    const span = { ...orderWindowFor(it, TODAY), end: until, days, nEff: effDays(TODAY, until), gross: sumGross(TODAY, until, false).s, wkGross: wkGross(TODAY, until), weGross: weSum(TODAY, until, false), fcVar: fcVar(TODAY, until, false), post: undefined };
+    const rs = calc(it, span, sv, incNow(it));
+    if (!rs.none && rs.short0 > 0) return true;
+    return !!riskOf(it, { s: String((raw ?? sv) / (it.box || 1)), est: 1 }, OPEN_H); // riskOf는 재고칸 단위(박스 품목은 BOX)로 받음
   }
   // ---------- 보관 위치 버튼 (11/6 KM): 드라이 · 워크인 · 프리저 — 누르면 그 위치 품목만 ----------
   //  위치 = itemCfg[품목].loc ("dry" | "walk" | "frz"). 없으면 이름으로 짐작 (냉동·고기·새우 → 프리저, 채소·치즈·크림·소스 냉장 → 워크인, 나머지 드라이)
@@ -3448,7 +3534,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
   }
 
   function renderList() {
-    preMemo = new Map(); wipMemo = new Map();
+    preMemo = new Map(); wipMemo = new Map(); weeklyMemo = new Map(); weeklyStMemo = new Map();
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
@@ -3461,9 +3547,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
+    const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly).forEach((it) => {
       const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
+      if (!q) { const ws = weeklyState(it, inp[it.key]); if (ws && ws.fold) { folded.push(it); return; } }
       const v = it.vendor || "업체 미지정";
       if (!groups.has(v)) groups.set(v, []);
       groups.get(v).push(it);
@@ -3512,7 +3600,19 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       (locSel ? [...list].sort((a, b) => roOf(a, ix.get(a.key)) - roOf(b, ix.get(b.key))) : list).forEach((it) => g.appendChild(rowEl(it, win, inp)));
       box.appendChild(g); n += list.length;
     });
-    $("nores").hidden = n > 0;
+    // 7일마다 세는 품목: 접어 두고 누르면 펼침 (펼칠 때 그림). 펼친 상태는 다시 그려도 그대로
+    if (folded.length) {
+      const ix = new Map(M.items.map((it, i) => [it.key, i]));
+      const list = locSel ? [...folded].sort((a, b) => roOf(a, ix.get(a.key)) - roOf(b, ix.get(b.key))) : folded;
+      const det = document.createElement("details"); det.className = "weekly"; det.open = weeklyOpen;
+      det.innerHTML = `<summary><span class="wk-t">7일마다 세는 품목 <small>${list.length}</small><em>다음 셀 날까지 안 세도 돼요</em></span><span class="wk-s" aria-hidden="true"></span></summary>`;
+      const g = document.createElement("div"); g.className = "group";
+      const fill = () => { if (!g.childElementCount) list.forEach((it) => g.appendChild(rowEl(it, win, inp))); };
+      if (det.open) fill();
+      det.addEventListener("toggle", () => { weeklyOpen = det.open; if (det.open) fill(); });
+      det.appendChild(g); box.appendChild(det);
+    }
+    $("nores").hidden = n + folded.length > 0;
     if (orderFocus) { const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`); if (el) el.querySelectorAll("input")[orderFocus.f].focus(); orderFocus = null; }
     $("cats").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === cat));
     renderLocs(M);
@@ -4511,7 +4611,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       if (!busy(db.misPush) && !busy(db.salesPush)) misFastUntil = 0;
     } finally { polling = false; }
   }, 2000);
-  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar };
+  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, OPEN_H };
 })();
 
 </script>

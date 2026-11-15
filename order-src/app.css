@@ -772,3 +772,14 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .mrow.hw .nm small { white-space: normal; text-wrap: pretty; }
 .mrow.hw .pc { white-space: nowrap; }
 .nw { white-space: nowrap; }
+/* 7일마다 세는 품목 (11/15 KM): 셀 날이 아닌 품목은 목록 맨 아래에 접어 둠. 칩은 회색(정보), 모자랄 수 있으면 확인필요(빨강) */
+.chip.wk { background: var(--fill-2); color: var(--fg); }
+details.weekly { margin-bottom: 20px; }
+details.weekly > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 4px 7px; padding: 6px 0; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
+details.weekly > summary::-webkit-details-marker { display: none; }
+details.weekly .wk-t { font-size: 14px; font-weight: 700; color: var(--muted); }
+details.weekly .wk-t small { font-weight: 500; font-size: 12px; }
+details.weekly .wk-t em { display: block; font-style: normal; font-size: 12px; font-weight: 500; margin-top: 1px; }
+details.weekly .wk-s { flex: none; font-size: 13px; font-weight: 700; color: var(--accent-text); }
+details.weekly .wk-s::before { content: "펼치기 ▾"; }
+details.weekly[open] .wk-s::before { content: "접기 ▴"; }
