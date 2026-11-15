@@ -2212,7 +2212,7 @@
       let need;
       // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
-      const m = it.pk.mult || 1, rm = (v) => (m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v));
+      const m = it.pk.mult || 1, rm = (v) => (it.useStep && v > 0 ? Math.ceil(v / m - 1e-9) * m : m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v)); // 한 번에 쓰는 품목은 발주 단위로 올림 (11/16 KM "발주는 1통 단위")
       // 몇 포션인지 (itemCfg.portionG): 보이는 필요량 × 1단위 g ÷ 1포션 g
       const por = (q) => (it.portionG && it.pk.g && q > 0 ? `<em class="por">${Math.ceil(q * it.pk.g / it.portionG - 1e-9)}${esc(it.portionLabel)}</em>` : "");
       if (!isFinite(s) && num(v.o) > 0) return `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
@@ -2416,7 +2416,9 @@
       const hit = pts.find((x) => x.h + 1e-9 < lump(x.u));
       if (!hit) return null;
       const nowH = new Date().getHours() + new Date().getMinutes() / 60;
-      return { it, have: hit.h, use: lump(hit.u), by: hit.c || until, out: until, p: 1, when: `${it.useName || `다음 ${r1(U)}${it.pk.stock || ""} 쓸`} 때`, at: Math.max(off + OPEN_H / 24, nowH / 24 + 0.001), thaw: it.thaw || 0, deliv: w.deliv, lump: U };
+      // 모자란 양은 발주 단위로 올림 (11/16 KM "발주는 1통 단위야": 0 → 1.5통 교체엔 2통, 1통 있으면 1통)
+      const mlt = it.pk.mult || 1, shortS = Math.ceil((lump(hit.u) - hit.h) / mlt - 1e-9) * mlt;
+      return { it, have: hit.h, use: lump(hit.u), shortS, by: hit.c || until, out: until, p: 1, when: `${it.useName || `다음 ${r1(U)}${it.pk.stock || ""} 쓸`} 때`, at: Math.max(off + OPEN_H / 24, nowH / 24 + 0.001), thaw: it.thaw || 0, deliv: w.deliv, lump: U };
     }
     if (p < SHOW_P) return null;
     // 언제 바닥나는지: 날마다 매출 비율로 사용량을 나누고(입고는 그날 아침에 더함), 그날 안에서는 영업시간에 비례해 시각으로 (런치 = 15시 전)
@@ -2608,7 +2610,7 @@
       const night = rk.some((x) => x.night);
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>${night ? "내일 86 위험" : "86 위험"}</b>${night ? "<span>영업 끝 · 내일 문 열 때 예상 재고 기준</span>" : ""}</div>` +
         rk.map((x) => { const u = esc(x.it.pk.stock || ""), nw = (s) => `<span class="nw">${s}</span>`; // 줄바꿈은 덩어리 사이에서만 ("월 입고 / 전"처럼 끊기지 않게)
-          const why = [nw(`${x.est ? "예상 " : ""}재고 ${r1(x.have)}${u}`), nw(`<b>${r1(Math.max(0.1, x.use - x.have))}${u} 부족</b> 예상`), x.by !== x.out ? nw(`${DOW[dow(x.by)]} 입고 전`) : ""].filter(Boolean).join(" · ") + (x.est ? " " + nw(`(${esc(x.from.slice(5).replace("-", "/"))} 센 값 기준)`) : "");
+          const why = [nw(`${x.est ? "예상 " : ""}재고 ${r1(x.have)}${u}`), nw(`<b>${r1(x.shortS != null ? x.shortS : Math.max(0.1, x.use - x.have))}${u} 부족</b> 예상`), x.by !== x.out ? nw(`${DOW[dow(x.by)]} 입고 전`) : ""].filter(Boolean).join(" · ") + (x.est ? " " + nw(`(${esc(x.from.slice(5).replace("-", "/"))} 센 값 기준)`) : "");
           return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${why}</em></span><small><i>${x.est && !(x.night && x.from === TODAY) ? "확인필요" : "86 위험"}</i>${esc(x.when)}${x.thaw ? `<span class="thaw">입고당일 해동필요</span>` : ""}</small></button>`; }).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }

@@ -34,7 +34,7 @@ const r = await page.evaluate(({ hourK }) => {
   const items = M.items.filter((i) => !i.ledgerOnly);
   // 86: 앱의 86 위험과 같은 계산(센 값, 안 센 품목은 최근 3일 센 값 → 예상 재고). 지금부터 내일 문 닫을 때(at < 2) 안에 바닥날 것만
   //  (내일 점심까지만 보면 11/14 토 버터라이스 "일 디너 19:00"이 빠졌음 — 실제로는 일요일 점심에 바닥)
-  const r86 = items.map((it) => { const k = C.risk1(it, inp[it.key]); return k ? { name: short(it.name), est: !!k.est, when: k.when, at: k.at, have: k.have, lack: Math.max(0.1, k.use - k.have), unit: it.pk.stock || "", thaw: !!k.thaw } : null; }).filter(Boolean).sort((a, b) => a.at - b.at);
+  const r86 = items.map((it) => { const k = C.risk1(it, inp[it.key]); return k ? { name: short(it.name), est: !!k.est, when: k.when, at: k.at, have: k.have, lack: k.shortS != null ? k.shortS : Math.max(0.1, k.use - k.have), unit: it.pk.stock || "", thaw: !!k.thaw } : null; }).filter(Boolean).sort((a, b) => a.at - b.at);
   const soon = r86.filter((x) => x.at > hourK / 24 && x.at < 2), later = r86.length - soon.length;
   // 오전(12시 전) 차례: 상황판 빨강 전부. 오후(12~18시) 차례: 자동 수집 빨강만(로그인 풀림 등 그날 손봐야 하는 것, 11/15 기획안 7번). 저녁: 없음
   const bad = C.gwHealth ? C.gwHealth().filter((h) => h.s === "bad" && (hourK < 12 || (hourK < 18 && h.k === "auto"))).map((h) => `${h.t} ${h.v}`) : [];

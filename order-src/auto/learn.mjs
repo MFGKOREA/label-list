@@ -36,7 +36,7 @@ const r = await page.evaluate(() => {
   const noFc = []; for (let i = 0; i < 7; i++) { const d = add(T, i); if (!(n((fc[d] || {}).fc) > 0)) noFc.push(d); }
   const ag = db.misAgent || {};
   // 오늘 86 위험 (11/15 KM: 일요일·쉬는 날엔 재고를 안 셀 수 있음 → 아침 보고로도 알림). 센 품목은 센 값, 안 센 품목은 최근 3일 센 값 → 예상 재고
-  const inpT = db["input." + T] || {}, r86 = C.risk1 ? M.items.filter((i) => !i.ledgerOnly).map((it) => { const k = C.risk1(it, inpT[it.key]); return k ? { name: it.name, est: !!k.est, night: !!k.night, when: k.when, at: k.at, have: k.have, short: Math.max(0.1, k.use - k.have), unit: it.pk.stock || "", p: Math.round(k.p * 100) } : null; }).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p) : [];
+  const inpT = db["input." + T] || {}, r86 = C.risk1 ? M.items.filter((i) => !i.ledgerOnly).map((it) => { const k = C.risk1(it, inpT[it.key]); return k ? { name: it.name, est: !!k.est, night: !!k.night, when: k.when, at: k.at, have: k.have, short: k.shortS != null ? k.shortS : Math.max(0.1, k.use - k.have), unit: it.pk.stock || "", p: Math.round(k.p * 100) } : null; }).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p) : [];
   // 메뉴 추세 (11/15 KM "메뉴 판매량이 바뀌면 레시피 대비 계산해서 트렌드 파악"): 최근 28일 메뉴×레시피 ÷ A가 쓴 달들 (τ, 앱은 A에 반만 반영). 하루 0.3단위 넘게 쓰는 품목만
   const g1 = C.dayGross ? C.dayGross(T, false).v / 1e6 : 0, trend = M.items.filter((it) => !it.ledgerOnly && it.trendTau && it.trendTau !== 1 && (it.rateA0 || it.rateA || 0) * g1 >= 0.3).map((it) => ({ name: it.name, tau: it.trendTau }));
   const up = trend.filter((x) => x.tau >= 1.2).sort((a, b) => b.tau - a.tau).slice(0, 5), down = trend.filter((x) => x.tau <= 0.8).sort((a, b) => a.tau - b.tau).slice(0, 5);
