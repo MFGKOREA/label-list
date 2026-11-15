@@ -2645,7 +2645,9 @@ li.expired .name { text-decoration: none; }
   const pushSaved = () => { try { return JSON.parse(localStorage.getItem(PUSH_KEY)) || {}; } catch { return {}; } };
   const pushOk = () => !!FB_CONFIG && storeKnown && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   function paintPush() {
-    const b = $("pushOpen"); if (!pushOk()) { b.hidden = true; return; }
+    const b = $("pushOpen");
+    // 아이폰 사파리(또는 iOS 16.4 미만)는 알림을 못 받지만, 버튼은 보여서 누르면 방법을 안내
+    if (!pushOk()) { b.hidden = !(FB_CONFIG && storeKnown && /iphone|ipad|ipod/i.test(navigator.userAgent)); b.textContent = "🔔 알림 받기"; return; }
     const sv = pushSaved();
     const denied = Notification.permission === "denied";
     b.textContent = denied ? "🔕 알림 꺼짐" : "🔔 알림 받기";
@@ -2690,6 +2692,17 @@ li.expired .name { text-decoration: none; }
   }
   // "허용 안 함"을 눌렀으면 앱이 다시 물을 수 없음 → 휴대폰 설정에서 켜는 방법 안내
   $("pushOpen").onclick = () => {
+    if (!pushOk()) { // 아이폰: 홈 화면 앱이 아니거나 iOS가 오래됨
+      const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+      $("pushAskStore").textContent = (STORES[STORE] && STORES[STORE].name) || "이 매장";
+      $("pushAskIos").innerHTML = standalone
+        ? "이 아이폰은 알림을 받을 수 없는 iOS 버전이에요. <b>설정 → 일반 → 소프트웨어 업데이트</b>에서 iOS 16.4 이상으로 올린 뒤 다시 눌러 주세요."
+        : "아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요. 먼저 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어 주세요.";
+      $("pushAskIos").hidden = false;
+      $("pushAskGo").textContent = standalone ? "확인" : "홈 화면 추가 방법";
+      $("pushAskGo").dataset.mode = standalone ? "ok" : "ios";
+      $("pushAsk").hidden = false; return;
+    }
     if ("Notification" in window && Notification.permission === "denied") {
       const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
       $("pushHelpIos").hidden = !ios; $("pushHelpAnd").hidden = ios;
@@ -2722,7 +2735,9 @@ li.expired .name { text-decoration: none; }
   $("pushAsk").addEventListener("click", (e) => { if (e.target.id === "pushAsk") $("pushAsk").hidden = true; });
   $("pushAskGo").onclick = () => {
     $("pushAsk").hidden = true;
-    if (iosBrowser()) { howtoTab(true); $("howto").hidden = false; return; }
+    const mode = $("pushAskGo").dataset.mode; delete $("pushAskGo").dataset.mode;
+    if (mode === "ok") return;
+    if (mode === "ios" || iosBrowser()) { howtoTab(true); $("howto").hidden = false; return; }
     pushSubscribe(false); // 누른 순간에 권한을 물어야 휴대폰이 허락 창을 띄움
   };
   setTimeout(pushAskMaybe, 1500);
