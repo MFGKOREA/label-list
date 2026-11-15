@@ -36,7 +36,7 @@
 - `gw-agent/auto.js`(판단) · `gw-plan.json`(더 받아 올 것) · `mis-sales.js`(읽는 법). 시험 `node order-src/test/gw/auto.test.mjs`, `node order-src/test/gw/e2e-auto.mjs`(진짜 확장).
 - `python3 order-src/auto/collect.py [--dry]` — 자동 수집. 끝 코드 0 최신/받음 · 2 건너뜀 · 3 시트 비정상 · 4 못 받음. 시험 `python3 order-src/auto/test_collect.py`(가짜 시트·가짜 PC).
 - `node order-src/auto/learn.mjs [--log] [--final] [--dry]` — 어제 채점(Forecast 오차, 예상 재고 적중·WAPE, 한쪽으로 쏠린 품목). `--log`면 학습 기록에 하루 한 줄.
-- `node order-src/auto/alert.mjs [--kind auto|86|thaw] [--at 2026-11-14T16:05] [--kv 파일]` — 폰 알림 한두 줄(86 위험·내일 해동). 끝 코드 10 알릴 것 있음 · 0 없음 · 3 시트 비정상. `--at`으로 지난 시각을 열어 시험(그날 뒤 자료는 잘라냄).
+- `node order-src/auto/alert.mjs [--at 2026-11-14T16:05] [--kv 파일]` — 폰 알림 한 줄(86 위험: 지금부터 내일 문 닫을 때까지). 끝 코드 10 알릴 것 있음 · 0 없음 · 3 시트 비정상. `--at`으로 지난 시각을 열어 시험(그날 뒤 자료는 잘라냄). 해동 알림은 KM 제외(11/15)라 지움.
 - `order-src/test/bt/asof.mjs` — 앱을 "그날 그 시각"으로 여는 도구. 규칙 실험은 저장소 밖 복사본에서 하고, 이 도구로 지난 발주일들을 되돌려 본다.
 - 규칙 비교: `node order-src/test/bt/compare.mjs <kv.json> <기준.html> <고친.html> [--split YYYY-MM-DD]` (같은 채점 구간, 시간 분리).
 - 입고현황: `node order-src/test/bt/recv.mjs <kv.json> [--make 켠.html]` — 가짜 입고현황으로 쓰는 길 확인, 진짜 자료가 있으면 스스로 확인 결과. 켠 html로 `est.mjs` 비교.
