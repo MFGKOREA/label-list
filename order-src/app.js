@@ -690,6 +690,7 @@
       it.outStep = (c && c.outStep) || 0; // 꺼내 쓰는 단위 (버터라이스: 박스째 라인 리치인으로 → 재고가 40개씩 줄어듦)
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
+      it.noLoss = !!(c && c.noLoss); // 수불 로스를 안 곱함 (11/15 KM "레시피 계산으로": 리가토니는 10월 수불 51팩인데 센 값·입고로는 레시피와 같음)
       it.useK = (c && num(c.useK) > 0 && num(c.useK)) || 1; // KM이 정한 사용량 반영률 (라구소스 1.2 = 계산보다 20% 더)
       it.countStep = (c && num(c.countStep) > 0 && num(c.countStep)) || 0; // 재고를 박스째로만 세는 품목의 셈 단위 (없으면 최근 기록으로 짐작)
     };
@@ -1169,7 +1170,9 @@
       { const t1 = blend.theo.get(it.key) || 0, t0 = blend.theo0.get(it.key) || 0; it.newShare = Math.max(t0, t1) > 0 ? Math.min(1, Math.abs(t1 - t0) / Math.max(t0, t1)) : 0; }
       // 반은 최근 28영업일 날짜별 메뉴 판매로 (rollB). 메뉴 교체·신메뉴로 바뀐 몫이 큰 품목(newShare > 0.3)은 달 비율 그대로 (지난 판매가 옛 메뉴라서)
       if (it.rateB != null && rollB && rollB.get(it.key) > 0 && !(it.newShare > 0.3)) it.rateB = 0.5 * it.rateB + 0.5 * rollB.get(it.key);
-      it.loss = lossOf(it.key);
+      // 레시피로만 계산하는 품목(itemCfg.recipeOnly)은 최근 28영업일 메뉴 × 레시피 그대로 (11/15 KM "레시피 계산으로"). 리가토니: 10월에 늘어난 메뉴라 달 평균(0.081)이 뒤처짐, 28일 0.118 = 10/19~11/14 센 값·입고 22팩(레시피 22팩)
+      if (it.recipeOnly && rollB && rollB.get(it.key) > 0) it.rateB = rollB.get(it.key);
+      it.loss = it.noLoss ? 1 : lossOf(it.key);
       if (it.rateB != null) it.rateB *= it.loss;
       it.weKm = weMenu.has(it.key) ? weMenu.get(it.key) : null; // { we, wd }
       // 최근 달 실제가 레시피의 3배 넘게 차이 나면 레시피 밖 사용(튀김기름 등)이나 단위 문제라 B를 안 씀
