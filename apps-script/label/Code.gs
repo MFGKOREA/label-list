@@ -1002,5 +1002,7 @@ function pushStat_() {
   pushRows_().forEach((r) => { counts[r.store] = (counts[r.store] || 0) + 1; });
   let auth = '';
   try { fcmAuth_(); auth = 'ok'; } catch (err) { auth = String(err.message || err).slice(0, 200); }
-  return { counts: counts, lastError: CacheService.getScriptCache().get('push_err') || '', fcmAuth: auth };
+  let sa = '', project = '';
+  try { const j = JSON.parse(PropertiesService.getScriptProperties().getProperty('FCM_SA') || '{}'); sa = j.client_email || ''; project = j.project_id || ''; } catch (err) {}
+  return { counts: counts, lastError: CacheService.getScriptCache().get('push_err') || '', fcmAuth: auth, serviceAccount: sa, saProject: project };
 }
