@@ -151,7 +151,7 @@ KM에게 먼저 묻는다:
 - KM: 이 세션 제목은 "GW Agent", 앞으로 KM이 하는 **모든 업무의 총괄 채팅**. KM 요청은 여기서 하거나 맞는 세션(데스크위젯·PL 보드·매장모음 등)에 넘기고 결과를 받아 정리한다. 세션 목록·ID·비공개 저장소 경로는 이 공개 저장소에 적지 않는다.
 
 ## 6-0a. 공부 노트 (11/15 KM "모두 학습하고 공부해")
-- KM이 보낸 유튜브 영상 50개(AI 에이전트·웹 자동화·Claude Code·Power Automate·n8n·프롬프트) 노트: `docs/study/ai-automation-videos.md`. 클라우드에선 유튜브가 막혀 제작자 글·공식 문서로 정리했다(영상과 이어진 글 29개, 주제 자료만 20개, 못 엶 1개). 실제 스크립트는 그록 봇이 읽었다(48/50, `docs/aside/reports/report-20261115-order-video-study.md`). KM은 "별로네" 뒤 'KM용 한 장'(개발 말 빼고 매장 일 10줄)을 골랐다 → 노트 맨 위. KM에게는 긴 노트보다 짧은 한 장이 맞다.
+- KM이 보낸 유튜브 영상 50개(AI 에이전트·웹 자동화·Claude Code·Power Automate·n8n·프롬프트) 노트: `docs/study/ai-automation-videos.md`. 클라우드에선 유튜브가 막혀 제작자 글·공식 문서로 정리했다(영상과 이어진 글 29개, 주제 자료만 20개, 못 엶 1개). 실제 스크립트는 그록 봇이 읽었다(48/50, `docs/aside/reports/report-20261115-order-video-study.md`). KM은 "별로네" 뒤 'KM용 한 장'(개발 말 빼고 매장 일 10줄)을 골랐다 → 노트 맨 위. KM에게는 긴 노트보다 짧은 한 장이 맞다. KM이 10가지를 쓰기로 함(11/15) → 이쪽도 그록 봇·다른 세션에 보내는 지시는 같은 틀(할 일·끝 기준·예시·모양·'모름'과 출처)로 쓰고, 답의 숫자엔 출처를 붙이고 모르면 모른다고 한다.
 - 거기서 나온 후보(KM 결정 전엔 안 바꿈): GW Agent 시험에 서버 오류·늦은 응답 경우 더하기, 공개 저장소에 매장 자료 커밋을 막는 hook, 스킬 description 손보기, PAD·n8n 연습(가짜 숫자로만). PAD를 매장 PC에 깔기 전에는 Chrome 백그라운드 설정이 GW Agent에 미치는 영향을 먼저 본다.
 - 바뀐 사실: OpenAI Agent Builder 2026-11-30 종료(직접 확인), Atlas·ChatGPT agent 종료(검색 기준). Claude Code에서 'think hard'는 키워드가 아니다(effort 설정이 조절, ultrathink만 한 번 더 깊게).
 
