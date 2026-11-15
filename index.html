@@ -82,6 +82,7 @@ body {
 @keyframes breathe { 0% { transform: scale(1); opacity: .45; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .online i::after { animation: none; opacity: 0; } }
 .online b { font-weight: 800; }
+.push-why { max-width: 200px; font-size: 11px; line-height: 1.35; color: var(--rose-t); text-align: right; word-break: break-all; }
 .howto-open { position: relative; width: 100%; text-align: center; font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 /* 홈 화면 추가: 연두빛이 은은하게 들어왔다 빠짐 (눈에 띄게, 과하지 않게) */
 .howto-open { background: linear-gradient(110deg, #fff 30%, #e3f1ea 50%, #fff 70%) 0 0 / 260% 100%; animation: hsheen 3.2s ease-in-out infinite, hglow 3.2s ease-in-out infinite; }
@@ -503,6 +504,7 @@ li.expired .name { text-decoration: none; }
       <span class="online" id="online" hidden><i></i><span>접속중 <b id="onlineN">0</b>명</span></span>
       <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
       <button type="button" class="howto-open" id="pushOpen" hidden>🔔 알림 받기</button>
+      <span class="push-why" id="pushWhy" hidden></span>
     </span>
   </div>
   <header class="hdr">
@@ -2617,14 +2619,24 @@ li.expired .name { text-decoration: none; }
         if (p !== "granted") { paintPush(); return; }
       }
       if (!quiet) b.textContent = "알림 켜는 중…";
-      const fb = await loadFb(), reg = await navigator.serviceWorker.ready;
-      const token = await fb.messaging().getToken({ vapidKey: FB_VAPID, serviceWorkerRegistration: reg });
-      if (!token) throw new Error("토큰 없음");
+      const step = (name, pr) => pr.catch((e) => { throw new Error(name + ": " + String((e && ((typeof e.code === "string" && e.code) || e.message)) || e).replace(/^FirebaseError:\s*/, "")); });
+      const fb = await step("도구", loadFb()), reg = await step("서비스워커", navigator.serviceWorker.ready);
+      const token = await step("등록", fb.messaging().getToken({ vapidKey: FB_VAPID, serviceWorkerRegistration: reg }));
+      if (!token) throw new Error("등록: 토큰 없음");
       const sv = pushSaved();
-      await hubPost({ action: "push_sub", store: STORE, token, old: sv.token && sv.token !== token ? sv.token : "" });
+      await step("저장", hubPost({ action: "push_sub", store: STORE, token, old: sv.token && sv.token !== token ? sv.token : "" }));
+      $("pushWhy").hidden = true;
       try { localStorage.setItem(PUSH_KEY, JSON.stringify({ token, store: STORE, at: Date.now() })); } catch {}
       if (!quiet) { b.textContent = "🔔 알림 켜짐"; setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 1500); }
-    } catch (err) { if (!quiet) { b.textContent = "알림을 켜지 못했어요"; setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 2500); } }
+    } catch (err) {
+      if (quiet) return;
+      // 왜 안 됐는지 화면에 남김 (사진으로 받아서 고칠 수 있게)
+      const why = String((err && ((typeof err.code === "string" && err.code) || err.message)) || err).replace(/^FirebaseError:\s*/, "").slice(0, 120);
+      b.textContent = "알림을 켜지 못했어요";
+      $("pushWhy").textContent = `이유: ${why} · 권한 ${Notification.permission} · ${navigator.standalone || matchMedia("(display-mode: standalone)").matches ? "홈 화면 앱" : "브라우저"}`;
+      $("pushWhy").hidden = false;
+      setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 2500);
+    }
   }
   $("pushOpen").onclick = () => pushSubscribe(false);
   // 이미 허용한 기기: 매장을 바꿨거나 하루 지났으면 조용히 다시 등록 (토큰이 바뀌는 경우 대비)
