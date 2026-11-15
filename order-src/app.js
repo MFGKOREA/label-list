@@ -1115,6 +1115,7 @@
     // B 비율의 반: 최근 28영업일 날짜별 메뉴 판매 × 레시피 ÷ 그 날들 Gross (11/14 KM "월별 메뉴 / 월별 그로스보다 데일리로 나누면 더 정확?")
     //  되돌려 보기(10/1~11/13, 날짜마다 그날 전 자료만, 실제 Gross를 안다고 놓고 레시피 사용량만): 앞으로 3일 오차 월별 23.0% → 반반 21.2%, 7일 19.8% → 17.8% (68품목 중 55개 나아짐).
     //  최근 28일만 쓰면 평균은 비슷(21.2% · 17.7%)하지만 나아지는 품목이 49개로 적어 반반. 커팅비프 부족분(부채살)도 28일을 묶어서
+    const TREND_W = 0.5; // 추세(28일) 반영 몫: A의 반은 지난 수불 그대로, 반은 최근 메뉴 추세로 고친 값 (아래 it.trendA)
     const rollB = (() => {
       const fc = db.forecast || {};
       const ds = Object.keys(db).filter((k) => /^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(8) < TODAY && Array.isArray((db[k] || {}).rows) && num((fc[k.slice(8)] || {}).act) > 0).map((k) => k.slice(8)).sort().slice(-28);
@@ -1142,6 +1143,13 @@
       let wu = 0, wg = 0;
       recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length); const u = r.actual.get(it.key); if (u != null) { wu += w * u; wg += w * r.gross / 1e6; } });
       it.rateA = wg > 0 && wu > 0 ? wu / wg : null;
+      // 추세 (11/15 KM "28일 기준 좋다 · 100% 반영이 아닌 계산식 중 하나"): A(지난 수불)는 메뉴 판매가 바뀐 걸 모름.
+      //  τ = 최근 28영업일 메뉴×레시피(100만원당, rollB) ÷ A가 쓴 달들(같은 3:2:1)의 메뉴×레시피(100만원당). A × τ를 A와 반반 섞음 → A × (1 + 0.5(τ−1)), τ는 0.5~2로 자름
+      //  되돌려 보기(그 전 자료로만 배움): 11/1 뒤 140구간 사용 오차 30.5→29.8% · 크게 모자람 37.1→35.0%, 11/5 뒤 31.6→30.9% · 35.6% 그대로, 11/8 뒤(55구간) 36.6→36.8% · 29.1→30.9%(1구간).
+      //  예상 재고(est.mjs) 평균 오차 1.587→1.599 · 덜 시킬 위험 517→509. 100% 반영은 1.592·501, 1/3은 1.586·513 (README "추세 반영")
+      { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t = r.theo && r.theo.get(it.key); if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } });
+        const tA = tg > 0 ? tq / tg : 0, r28 = rollB ? rollB.get(it.key) || 0 : 0;
+        it.trendA = tA > 0 && r28 > 0 ? 1 + TREND_W * (Math.min(2, Math.max(0.5, r28 / tA)) - 1) : 1; }
       // D: 3개월 이상이면 고정량 + 비례량 (최소제곱, 둘 다 0 이상일 때만)
       it.fixedA = 0;
       const pts = withA.slice(-6).map((r) => ({ d: r.days, g: r.gross / 1e6, u: r.actual.get(it.key) || 0 })).filter((p) => p.u > 0);
@@ -1151,6 +1159,7 @@
         const det = a * c - b * b;
         if (Math.abs(det) > 1e-9) { const fx = (e * c - b * f) / det, rt = (a * f - b * e) / det; if (fx >= 0 && rt > 0) { it.fixedA = fx; it.rateA = rt; } }
       }
+      if (it.rateA != null && it.trendA !== 1) { it.rateA0 = it.rateA; it.rateA *= it.trendA; it.fixedA *= it.trendA; } // rateA0 = 추세 섞기 전 (확인용)
       // B: 가장 최근 판매 달의 메뉴 비율 × 레시피, 이전 달들의 실제÷이론으로 로스 계수 (반은 최근 28영업일 날짜별 판매 rollB, 아래)
       const lastB = withB[withB.length - 1];
       const tb = lastB && lastB.theo.get(it.key);

@@ -105,6 +105,20 @@ ok(((d["misRecv.2026-11-12"] || {}).rows || []).length === 2 && d["misRecv.2026-
 ok(!JSON.stringify(d).includes("홍길동") && d.recvProbe && d.recvProbe.grids[0].cols.some((c) => /입고수량/.test(c)) && !d.recvProbe.grids[0].rows, "직원 이름은 어디에도 없음 · 열 이름만 기록");
 ok(Array.isArray((d["misRecv.2026-11-10"] || {}).rows) && d["misRecv.2026-11-10"].rows.length === 0 && d.misRecvScan.empty === 10 && d.misRecvScan.days === 2 && d.misRecvScan.all === 1 && !d["misRecv.2026-10-01"], "받은 게 없는 날은 빈 기록(10일) · 기간 밖(10/1)은 안 씀");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "입고현황 읽기도 KM 입력(input.날짜)은 안 건드림");
+// 7) Set판매현황 (11/15 KM 승인): 하루씩 세트·구성 메뉴·수량만 setDay.날짜에. 다른 화면은 안 엶, 금액·직원 이름은 저장 안 함, 이미 있는 날은 건너뜀
+gas.post({ action: "set", key: "setDay.2026-11-11", value: { at: 1, rows: [{ s: "x", m: "y", q: 1 }] } });
+let opened4 = null, paged4 = 0;
+d = await run({ kind: "sets", from: "2026-11-11", to: "2026-11-14" }, "sets-main.html", async (p) => { opened4 = await p.evaluate(() => window.__opened); paged4 = await p.evaluate(() => { const f = [...document.querySelectorAll("iframe")].map((x) => x.contentWindow).find((w) => { try { return /setsreport/.test(w.location.href); } catch (e) { return false; } }); return f ? f.__paged || 0 : -1; }); });
+console.log("결과:", d.salesPush.status, d.salesPush.text);
+ok(d.salesPush.status === "done" && d.salesPush.parts.sets.status === "done", "Set판매현황 읽기 끝남");
+ok(Array.isArray(opened4) && opened4.length === 1 && opened4[0] === "Set판매현황", "열린 화면은 Set판매현황 하나뿐 (접힌 매출분석 폴더는 펼침 단추로만)");
+const s13 = (d["setDay.2026-11-13"] || {}).rows || [], s14 = (d["setDay.2026-11-14"] || {}).rows || [];
+ok(s13.length === 4 && s13.find((r) => r.m === "감자 수프").q === 6 && s13.find((r) => r.m === "갈릭 버터라이스").s === "매드 프리미엄 세트" && s13[0].sc === "S01" && s13[0].mc === "M11", "11/13 세트 4줄 · 세트명·구성 메뉴·수량·코드 (합계 줄·다른 매장 줄은 뺌)");
+ok(s14.length === 5 && s14.filter((r) => r.m === "갈릭 버터라이스").reduce((a, r) => a + r.q, 0) === 7 && paged4 >= 1, "11/14 5줄: 한 쪽(3줄)에 안 들어가는 표를 한 쪽에 다 불러서 읽음");
+ok(Array.isArray((d["setDay.2026-11-12"] || {}).rows) && d["setDay.2026-11-12"].rows.length === 0 && d["setDay.2026-11-11"].rows[0].m === "y", "세트 판매 없는 날(11/12)은 빈 기록 · 이미 있던 날(11/11)은 다시 안 읽음");
+ok(!JSON.stringify(d).includes("홍길동") && !Object.keys(d).filter((k) => k.startsWith("setDay.")).some((k) => JSON.stringify(d[k]).includes("0,000")) && !Object.values(s14[0] || {}).some((v) => /수원/.test(String(v))) && !JSON.stringify(d).includes("다른매장") && !s13.some((r) => r.q === 50), "직원 이름·금액·매장명·다른 매장 줄은 저장 안 함");
+ok(d.setProbe && d.setProbe.grids[0].cols.some((c) => c === "NM_SET=세트명") && !d.setProbe.grids[0].rows && d.misSetScan && d.misSetScan.to === "2026-11-14" && d.misSetScan.days === 2 && d.misSetScan.empty === 1 && d.misSetScan.cols.m === "NM_MENU", "열 이름만 setProbe에 · 스캔 기록(끝날·저장 2일·빈 날 1일·쓴 칸)");
+ok(!Object.keys(d).some((k) => /^input\./.test(k)), "Set판매현황 읽기도 KM 입력(input.날짜)은 안 건드림");
 await b.close();
-console.log(`합계: 통과 ${36 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${44 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;
