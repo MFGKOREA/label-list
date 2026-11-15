@@ -2290,7 +2290,16 @@
     const weGross = (isWE(TODAY) ? left * dayGross(TODAY, false).v : 0) + weSum(addDays(TODAY, 1), until, false);
     const r = calc(it, { ...w, end: until, days: Math.max(1, days - 1 + left), gross, weGross, fcVar: fcVar(TODAY, until, false, left) }, 0, 0); if (r.none || !(r.use > 0)) return null;
     const have = availOf(it, v) + arr;
-    const p = r.sd > 0 ? 1 - phi((have - r.use) / r.sd) : have < r.use ? 1 : 0;
+    // 86 확률은 입고마다 따로 봄 (11/15 KM: 버터라이스 토 14시 40개 → 일요일 점심에 바닥. 앱은 월 입고 40을 미리 더해 80 vs 쓸 양 50으로 보고 안 띄웠음 — 바닥 시각은 "일 디너 18:00"으로 알고 있었는데)
+    //  창 끝까지 한 번(가진 것+모든 입고 vs 전체 사용) + 중간 입고가 들어오는 날 아침마다(가진 것+그 전 입고 vs 그날 아침까지 사용, 오차는 사용 비율만큼) → 가장 높은 것
+    //  되돌려 보기(센 날 16일 1,856건): 띄움 하루 2.8→3.6건. 새로 뜬 13건 중 그 뒤 0을 센 것 4(가지·크림치즈), 버터라이스 11/14(실제 일요일 바닥). 예전 44건 중 뒤에 0 센 것 0
+    const pOf = (h, u, f) => (r.sd > 0 ? 1 - phi((h - u) / (r.sd * f)) : h < u ? 1 : 0);
+    let p = pOf(have, r.use, 1);
+    [...new Set(arrs.map((a) => a.d))].filter((c) => c > TODAY && c < until).forEach((c) => {
+      const g = left * dayGross(TODAY, false).v + sumGross(addDays(TODAY, 1), c, false).s, f = gross > 0 ? g / gross : 0;
+      const h = availOf(it, v) + arrs.filter((a) => a.d < c).reduce((t, a) => t + a.q, 0);
+      if (f > 0) p = Math.max(p, pOf(h, r.use * f, f));
+    });
     if (p < SHOW_P) return null;
     // 언제 바닥나는지: 날마다 매출 비율로 사용량을 나누고(입고는 그날 아침에 더함), 그날 안에서는 영업시간에 비례해 시각으로 (런치 = 15시 전)
     let stock = availOf(it, v), when = `${DOW[dow(until)]} 입고 전`, at = days + 1; // at: 오늘부터 바닥날 때까지 (일 단위, 정렬용)
