@@ -2224,7 +2224,7 @@
     if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
-    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
+    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff" title="A·B 차이 ${Math.round(c0.spread * 100)}% → 보정해서 반영">보정 ${Math.round(c0.spread * 100)}%</span>`;
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     const rk86 = preMode ? null : risk1(it, v), tag86 = rk86 ? `<span class="chip diff">${rk86.est ? "예상 " : ""}${esc(rk86.when)} 부족</span>` : "";
@@ -2240,10 +2240,12 @@
         `<span class="need prebox${q ? " has" : ""}"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
       return d;
     }
+    // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 왼쪽 설명 줄에 (11/15 정리: 재고칸 위에 떠 있던 상자를 옮김)
+    const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? "BOX" : esc(unit)}` : ""; })();
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
-      // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
-      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${estTxt ? `<span class="estnote">${estTxt}</span>` : ""}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
+      // 재고칸 (예상 재고는 위 c-meta의 estnote)
+      (() => `<div class="stk"><label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -2697,8 +2699,8 @@
       d.className = "cell";
       const draw = () => {
         v.need = 0;
-        if (!ex) return '<span class="need none"><b>?</b></span>';
-        if (v.s === "") return '<span class="need none"><b>–</b></span>';
+        if (!ex) return '<span class="need none"><b>?</b><span>필요량</span></span>';
+        if (v.s === "") return '<span class="need none"><b>–</b><span>필요량</span></span>';
         // 2days 이상 프랩은 오늘 쓸 양 + 내일 아침(반나절)치까지 있어야 충분 → 아슬아슬하면 오늘 미리 만들도록 필요량으로
         const target = shelf && shelf <= 1 ? ex.e : Math.max(ex.e * 1.1, ex.eDay + ex.eTomorrow * 0.5);
         let r = target - (num(v.s) * dd.f || 0);
@@ -3397,7 +3399,7 @@
     //  예상 재고 기준 (2팀 G 백테스트와 같은 정의): 예상 재고(시작 재고 + 입고 − 예상 사용) vs 실제 끝 재고 → 오차는 |예상 사용 − 실제 사용|과 같음. 허용 = max(1단위(박스째 세면 1박스), 끝 재고의 10%), WAPE = Σ|오차| ÷ Σ끝 재고
     const hitOf = (l) => { const z = l.filter((x) => x.pF != null && isFinite(x.actual) && isFinite(x.e)); if (!z.length) return null; const hit = z.filter((x) => Math.abs(x.pF - x.actual) <= Math.max(x.u || 1, 0.1 * Math.abs(x.e))).length, ae = z.reduce((t, x) => t + Math.abs(x.pF - x.actual), 0), se = z.reduce((t, x) => t + Math.abs(x.e), 0); return { n: z.length, hit: hit / z.length * 100, wape: se ? ae / se * 100 : null }; };
     const hw = hitOf(list), hwPrev = pl ? hitOf(pl) : null;
-    const hwRow = hw ? `<div class="cell mrow"><span class="nm">예상 재고 적중 · WAPE<small>오차 ≤ max(1단위, 재고 10%) · ${hw.n}쌍${hwPrev ? ` · 지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
+    const hwRow = hw ? `<div class="cell mrow hw"><span class="nm">예상 재고 적중 · 오차<small>1단위·재고 10% 안이면 적중 · ${hw.n}번 비교${hwPrev ? ` · <span class="nw">지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}</span>` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
     $("rMethods").innerHTML = hwRow + ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     // 오차 범위 큰 품목 10개: 발주 카드의 ± 범위(예상 사용량의 몇 %)가 큰 순서. 범위 = 사용량 계산 오차 + Forecast 오차
     const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));

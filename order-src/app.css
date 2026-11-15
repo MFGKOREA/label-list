@@ -488,10 +488,8 @@ html, body { overflow-x: hidden; }
 .fld > span em.u { font-style: normal; color: var(--rose-ink); }
 /* 재고 급변 경고 */
 .fld.warn { box-shadow: 0 0 0 2px var(--rose-ink) !important; }
-/* 발주 예상 재고: 재고칸 위에 작은 회색 박스 */
-.cell:has(.estchip) .c-bot { margin-top: 24px; }
+/* 발주 예상 재고: 11/15부터 왼쪽 설명 줄(.estnote) */
 .c-bot .stk { position: relative; display: grid; min-width: 0; }
-.c-bot .estchip { position: absolute; left: 0; right: 0; top: -22px; text-align: center; white-space: nowrap; font-size: 12px; font-weight: 700; line-height: normal; color: var(--muted); background: var(--fill-2); border-radius: 6px; padding: 3px 2px; }
 /* 프랩 재고 입력칸: 입력하는 칸이 눈에 띄게 (흰 바탕 + 진한 테두리), 예상은 회색 읽기 칸 */
 .p-bot .fld:not(.ro) { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
 .p-bot .fld:not(.ro) > span { color: var(--fg); font-weight: 700; }
@@ -606,8 +604,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .risk86 .r-top { padding: 0 8px 4px; }
 .risk86 button { border-radius: 12px; padding: 10px 12px; }
 /* 품목 카드 안 칸(재고·발주·필요) 둥글기 통일: 카드 20 · 칸 12 */
-.fld, .need, .c-bot .estchip { border-radius: 12px; }
-.c-bot .estchip { border-radius: 6px; }
+.fld, .need { border-radius: 12px; }
 /* 사전발주 버튼 글씨 7.5px → 읽히는 크기 */
 .sect .pre { min-height: 22px; padding: 0 9px; font-size: 12px; letter-spacing: -0.03em; }
 /* 오늘 날짜 아래 발주 상태: 날짜 상자 가운데에 */
@@ -742,3 +739,36 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
 .subhead.low { color: var(--rose-ink); }
 .subhead small { font-size: 12px; font-weight: 700; opacity: .75; margin-left: 2px; }
+
+/* ---------- 화면 정리 (11/15 KM "전체 글 정렬… 지저분… 정리 및 순서") ---------- */
+/* 숨긴 칸은 진짜로 숨김: .misbar·.sect 같은 display 규칙이 hidden을 이겨서 빈 흰 줄(발주 화면 MIS 줄)·빈 '옵션 비율' 제목(리포트, KM이 숨기라고 한 것)이 보였음 */
+[hidden] { display: none !important; }
+/* 하위 화면 제목: 독이 생기며 뒤로가기를 숨기자 3칸 줄이 밀려 'Gross Sales · 원'이 가운데로 갔음 → 제목 왼쪽, 보조 글 오른쪽. 크기는 메인 제목에 맞춤 */
+.nav { display: flex; align-items: center; gap: 8px; margin: 2px 2px 14px; min-height: 36px; }
+.nav h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+.nav .right { margin-left: auto; padding-right: 0; }
+#v-loc .nav { margin-left: -4px; }
+#v-loc .nav h2 { font-size: 20px; }
+/* 발주 카드: '예상 N' 회색 상자가 재고칸 위에 떠서 카드마다 높이가 달랐음 → 왼쪽 설명 줄로 */
+.c-meta .estnote { color: var(--fg); font-weight: 700; }
+/* 업체·위치 버튼 줄: 같은 모양이라 구분이 안 됐음 → 줄 앞에 작은 이름 */
+.chips#cats, .chips#locs { grid-template-columns: 30px; }
+.chips#cats::before, .chips#locs::before { align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: -0.03em; }
+.chips#cats::before { content: "업체"; }
+.chips#locs::before { content: "위치"; }
+.chips#sorts { grid-template-columns: 30px; }
+.chips#sorts::before { content: "정렬"; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+.chips#sorts button { font-size: 14px; }
+/* 프랩 카드: 단위(X·PK)가 빨강이라 오류처럼 보였음 → 회색 */
+.fld > span em.u { color: var(--muted); }
+/* 리포트: 좋은 값·개수까지 빨강이었음 → 숫자는 기본색, 가장 잘 맞는 방식만 연두 */
+#v-report .hero-num b, #v-report .kpi b, #v-report .mrow .pc { color: var(--fg); }
+#v-report .mrow.best .pc { color: var(--accent-text); }
+/* 데이터 파일: 그달 Gross 칸과 파일 목록을 한 묶음처럼 */
+.group.gross-g { margin-bottom: 8px; }
+.locentry { margin: 0 0 20px; }
+/* 리포트 '예상 재고 적중' 줄: 막대 없이 두 칸 (설명은 줄바꿈, 숫자는 오른쪽) — 한 줄 제목이 되자 숫자와 설명이 겹쳤음 */
+.mrow.hw { grid-template-columns: minmax(0, 1fr) auto; }
+.mrow.hw .nm small { white-space: normal; text-wrap: pretty; }
+.mrow.hw .pc { white-space: nowrap; }
+.nw { white-space: nowrap; }

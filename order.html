@@ -508,10 +508,8 @@ html, body { overflow-x: hidden; }
 .fld > span em.u { font-style: normal; color: var(--rose-ink); }
 /* 재고 급변 경고 */
 .fld.warn { box-shadow: 0 0 0 2px var(--rose-ink) !important; }
-/* 발주 예상 재고: 재고칸 위에 작은 회색 박스 */
-.cell:has(.estchip) .c-bot { margin-top: 24px; }
+/* 발주 예상 재고: 11/15부터 왼쪽 설명 줄(.estnote) */
 .c-bot .stk { position: relative; display: grid; min-width: 0; }
-.c-bot .estchip { position: absolute; left: 0; right: 0; top: -22px; text-align: center; white-space: nowrap; font-size: 12px; font-weight: 700; line-height: normal; color: var(--muted); background: var(--fill-2); border-radius: 6px; padding: 3px 2px; }
 /* 프랩 재고 입력칸: 입력하는 칸이 눈에 띄게 (흰 바탕 + 진한 테두리), 예상은 회색 읽기 칸 */
 .p-bot .fld:not(.ro) { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
 .p-bot .fld:not(.ro) > span { color: var(--fg); font-weight: 700; }
@@ -626,8 +624,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .risk86 .r-top { padding: 0 8px 4px; }
 .risk86 button { border-radius: 12px; padding: 10px 12px; }
 /* 품목 카드 안 칸(재고·발주·필요) 둥글기 통일: 카드 20 · 칸 12 */
-.fld, .need, .c-bot .estchip { border-radius: 12px; }
-.c-bot .estchip { border-radius: 6px; }
+.fld, .need { border-radius: 12px; }
 /* 사전발주 버튼 글씨 7.5px → 읽히는 크기 */
 .sect .pre { min-height: 22px; padding: 0 9px; font-size: 12px; letter-spacing: -0.03em; }
 /* 오늘 날짜 아래 발주 상태: 날짜 상자 가운데에 */
@@ -763,6 +760,39 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .subhead.low { color: var(--rose-ink); }
 .subhead small { font-size: 12px; font-weight: 700; opacity: .75; margin-left: 2px; }
 
+/* ---------- 화면 정리 (11/15 KM "전체 글 정렬… 지저분… 정리 및 순서") ---------- */
+/* 숨긴 칸은 진짜로 숨김: .misbar·.sect 같은 display 규칙이 hidden을 이겨서 빈 흰 줄(발주 화면 MIS 줄)·빈 '옵션 비율' 제목(리포트, KM이 숨기라고 한 것)이 보였음 */
+[hidden] { display: none !important; }
+/* 하위 화면 제목: 독이 생기며 뒤로가기를 숨기자 3칸 줄이 밀려 'Gross Sales · 원'이 가운데로 갔음 → 제목 왼쪽, 보조 글 오른쪽. 크기는 메인 제목에 맞춤 */
+.nav { display: flex; align-items: center; gap: 8px; margin: 2px 2px 14px; min-height: 36px; }
+.nav h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+.nav .right { margin-left: auto; padding-right: 0; }
+#v-loc .nav { margin-left: -4px; }
+#v-loc .nav h2 { font-size: 20px; }
+/* 발주 카드: '예상 N' 회색 상자가 재고칸 위에 떠서 카드마다 높이가 달랐음 → 왼쪽 설명 줄로 */
+.c-meta .estnote { color: var(--fg); font-weight: 700; }
+/* 업체·위치 버튼 줄: 같은 모양이라 구분이 안 됐음 → 줄 앞에 작은 이름 */
+.chips#cats, .chips#locs { grid-template-columns: 30px; }
+.chips#cats::before, .chips#locs::before { align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: -0.03em; }
+.chips#cats::before { content: "업체"; }
+.chips#locs::before { content: "위치"; }
+.chips#sorts { grid-template-columns: 30px; }
+.chips#sorts::before { content: "정렬"; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+.chips#sorts button { font-size: 14px; }
+/* 프랩 카드: 단위(X·PK)가 빨강이라 오류처럼 보였음 → 회색 */
+.fld > span em.u { color: var(--muted); }
+/* 리포트: 좋은 값·개수까지 빨강이었음 → 숫자는 기본색, 가장 잘 맞는 방식만 연두 */
+#v-report .hero-num b, #v-report .kpi b, #v-report .mrow .pc { color: var(--fg); }
+#v-report .mrow.best .pc { color: var(--accent-text); }
+/* 데이터 파일: 그달 Gross 칸과 파일 목록을 한 묶음처럼 */
+.group.gross-g { margin-bottom: 8px; }
+.locentry { margin: 0 0 20px; }
+/* 리포트 '예상 재고 적중' 줄: 막대 없이 두 칸 (설명은 줄바꿈, 숫자는 오른쪽) — 한 줄 제목이 되자 숫자와 설명이 겹쳤음 */
+.mrow.hw { grid-template-columns: minmax(0, 1fr) auto; }
+.mrow.hw .nm small { white-space: normal; text-wrap: pretty; }
+.mrow.hw .pc { white-space: nowrap; }
+.nw { white-space: nowrap; }
+
 </style>
 </head>
 <body>
@@ -869,20 +899,20 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     </div>
     <div class="conn" id="connState"></div>
 
-    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
-    <div class="group" id="masters"></div>
-    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-
     <div class="sect"><span>월별 데이터</span><small>매달 4개</small></div>
     <div class="months" id="months" role="group" aria-label="월 선택"></div>
     <div class="sect"><span id="mTitle"></span><small id="mCount"></small></div>
-    <div class="group">
+    <div class="group gross-g">
       <div class="cell gross"><span class="kv"><span>실제 Gross Sales<small>그달 합계 (원)</small></span></span><input id="grossIn" inputmode="numeric" placeholder="예: 250,000,000" aria-label="그달 실제 Gross Sales"></div>
     </div>
     <div class="group" id="files"></div>
 
     <div class="sect"><span>레시피 연결 확인</span><small id="mapCount"></small></div>
     <div class="group" id="mapList"></div>
+
+    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
+    <div class="group" id="masters"></div>
+    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
@@ -924,8 +954,6 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
-    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
-    <div class="group" id="rReq" hidden></div>
     <div class="wkpick" hidden>
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
       <select id="rSel" aria-label="주 선택"></select>
@@ -941,6 +969,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       <div class="kpi"><span>채점한 품목</span><b id="kItems"></b></div>
       <div class="kpi"><span>재고 입력</span><b id="kLogs"></b></div>
     </div>
+    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
+    <div class="group" id="rReq" hidden></div>
     <div class="sect"><span>방식별 정확도</span></div>
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>오차 범위 큰 품목</span><small>오늘 발주 기준 ±</small></div>
@@ -3242,7 +3272,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
-    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff">오차 ${Math.round(c0.spread * 100)}% 보정반영</span>`;
+    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff" title="A·B 차이 ${Math.round(c0.spread * 100)}% → 보정해서 반영">보정 ${Math.round(c0.spread * 100)}%</span>`;
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     const rk86 = preMode ? null : risk1(it, v), tag86 = rk86 ? `<span class="chip diff">${rk86.est ? "예상 " : ""}${esc(rk86.when)} 부족</span>` : "";
@@ -3258,10 +3288,12 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         `<span class="need prebox${q ? " has" : ""}"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
       return d;
     }
+    // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 왼쪽 설명 줄에 (11/15 정리: 재고칸 위에 떠 있던 상자를 옮김)
+    const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? "BOX" : esc(unit)}` : ""; })();
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
-      // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸 위 작은 회색 박스 (재고칸은 비워 둠)
-      (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return `<div class="stk">${et != null ? `<span class="estchip">예상 ${et}${it.box ? "BOX" : esc(unit)}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`; })() +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${estTxt ? `<span class="estnote">${estTxt}</span>` : ""}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}</span>` +
+      // 재고칸 (예상 재고는 위 c-meta의 estnote)
+      (() => `<div class="stk"><label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -3715,8 +3747,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
       d.className = "cell";
       const draw = () => {
         v.need = 0;
-        if (!ex) return '<span class="need none"><b>?</b></span>';
-        if (v.s === "") return '<span class="need none"><b>–</b></span>';
+        if (!ex) return '<span class="need none"><b>?</b><span>필요량</span></span>';
+        if (v.s === "") return '<span class="need none"><b>–</b><span>필요량</span></span>';
         // 2days 이상 프랩은 오늘 쓸 양 + 내일 아침(반나절)치까지 있어야 충분 → 아슬아슬하면 오늘 미리 만들도록 필요량으로
         const target = shelf && shelf <= 1 ? ex.e : Math.max(ex.e * 1.1, ex.eDay + ex.eTomorrow * 0.5);
         let r = target - (num(v.s) * dd.f || 0);
@@ -4415,7 +4447,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
     //  예상 재고 기준 (2팀 G 백테스트와 같은 정의): 예상 재고(시작 재고 + 입고 − 예상 사용) vs 실제 끝 재고 → 오차는 |예상 사용 − 실제 사용|과 같음. 허용 = max(1단위(박스째 세면 1박스), 끝 재고의 10%), WAPE = Σ|오차| ÷ Σ끝 재고
     const hitOf = (l) => { const z = l.filter((x) => x.pF != null && isFinite(x.actual) && isFinite(x.e)); if (!z.length) return null; const hit = z.filter((x) => Math.abs(x.pF - x.actual) <= Math.max(x.u || 1, 0.1 * Math.abs(x.e))).length, ae = z.reduce((t, x) => t + Math.abs(x.pF - x.actual), 0), se = z.reduce((t, x) => t + Math.abs(x.e), 0); return { n: z.length, hit: hit / z.length * 100, wape: se ? ae / se * 100 : null }; };
     const hw = hitOf(list), hwPrev = pl ? hitOf(pl) : null;
-    const hwRow = hw ? `<div class="cell mrow"><span class="nm">예상 재고 적중 · WAPE<small>오차 ≤ max(1단위, 재고 10%) · ${hw.n}쌍${hwPrev ? ` · 지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
+    const hwRow = hw ? `<div class="cell mrow hw"><span class="nm">예상 재고 적중 · 오차<small>1단위·재고 10% 안이면 적중 · ${hw.n}번 비교${hwPrev ? ` · <span class="nw">지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}</span>` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
     $("rMethods").innerHTML = hwRow + ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     // 오차 범위 큰 품목 10개: 발주 카드의 ± 범위(예상 사용량의 몇 %)가 큰 순서. 범위 = 사용량 계산 오차 + Forecast 오차
     const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));

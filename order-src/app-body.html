@@ -101,20 +101,20 @@
     </div>
     <div class="conn" id="connState"></div>
 
-    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
-    <div class="group" id="masters"></div>
-    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-
     <div class="sect"><span>월별 데이터</span><small>매달 4개</small></div>
     <div class="months" id="months" role="group" aria-label="월 선택"></div>
     <div class="sect"><span id="mTitle"></span><small id="mCount"></small></div>
-    <div class="group">
+    <div class="group gross-g">
       <div class="cell gross"><span class="kv"><span>실제 Gross Sales<small>그달 합계 (원)</small></span></span><input id="grossIn" inputmode="numeric" placeholder="예: 250,000,000" aria-label="그달 실제 Gross Sales"></div>
     </div>
     <div class="group" id="files"></div>
 
     <div class="sect"><span>레시피 연결 확인</span><small id="mapCount"></small></div>
     <div class="group" id="mapList"></div>
+
+    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
+    <div class="group" id="masters"></div>
+    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
@@ -156,8 +156,6 @@
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
-    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
-    <div class="group" id="rReq" hidden></div>
     <div class="wkpick" hidden>
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
       <select id="rSel" aria-label="주 선택"></select>
@@ -173,6 +171,8 @@
       <div class="kpi"><span>채점한 품목</span><b id="kItems"></b></div>
       <div class="kpi"><span>재고 입력</span><b id="kLogs"></b></div>
     </div>
+    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
+    <div class="group" id="rReq" hidden></div>
     <div class="sect"><span>방식별 정확도</span></div>
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>오차 범위 큰 품목</span><small>오늘 발주 기준 ±</small></div>
