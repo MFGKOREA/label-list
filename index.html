@@ -98,6 +98,8 @@ body {
 .pa-list small { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
 .pa-ios { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--fg); background: var(--amber); border-radius: 12px; padding: 10px 12px; text-align: left; }
 .push-ask .actions { width: 100%; }
+/* 알림이 켜진 상태: 반짝임 없이 연두 테두리만 */
+.howto-open.push-on { animation: none; background: #e6f1ec; border-color: #cfe3da; color: #2f6b52; }
 .push-why { max-width: 200px; font-size: 11px; line-height: 1.35; color: var(--rose-t); text-align: right; word-break: break-all; }
 .howto-open { position: relative; width: 100%; text-align: center; font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 /* 홈 화면 추가: 연두빛이 은은하게 들어왔다 빠짐 (눈에 띄게, 과하지 않게) */
@@ -2651,8 +2653,11 @@ li.expired .name { text-decoration: none; }
     if (!pushOk()) { b.hidden = !(FB_CONFIG && storeKnown && /iphone|ipad|ipod/i.test(navigator.userAgent)); b.textContent = "🔔 알림 받기"; return; }
     const sv = pushSaved();
     const denied = Notification.permission === "denied";
-    b.textContent = denied ? "🔕 알림 꺼짐" : "🔔 알림 받기";
-    b.hidden = !denied && Notification.permission === "granted" && sv.store === STORE && !!sv.token;
+    const on = !denied && Notification.permission === "granted" && sv.store === STORE && !!sv.token;
+    // 켜진 뒤에도 버튼은 남겨 두고 상태만 보여줌 (누르면 다시 등록해서 확인)
+    b.textContent = denied ? "🔕 알림 꺼짐" : on ? "🔔 알림 켜짐" : "🔔 알림 받기";
+    b.classList.toggle("push-on", on);
+    b.hidden = false;
   }
   let fbLoad = null;
   const loadFb = () => fbLoad || (fbLoad = new Promise((ok, no) => {
@@ -2680,7 +2685,7 @@ li.expired .name { text-decoration: none; }
       await step("저장", hubPost({ action: "push_sub", store: STORE, token, old: sv.token && sv.token !== token ? sv.token : "" }));
       $("pushWhy").hidden = true;
       try { localStorage.setItem(PUSH_KEY, JSON.stringify({ token, store: STORE, at: Date.now() })); } catch {}
-      if (!quiet) { b.textContent = "🔔 알림 켜짐"; setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 1500); }
+      if (!quiet) { b.textContent = "✓ 알림 켜짐"; setTimeout(paintPush, 1500); } else paintPush();
     } catch (err) {
       if (quiet) return;
       // 왜 안 됐는지 화면에 남김 (사진으로 받아서 고칠 수 있게)
