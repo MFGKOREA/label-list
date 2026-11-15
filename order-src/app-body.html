@@ -93,15 +93,14 @@
     <div class="group" id="locList"></div>
   </section>
 
-  <!-- 재고·발주 기록 (11/16 KM "데이터 파일 탭, 과거 2주치 재고·발주량 시트 조회 및 인쇄 기능 필요해. 오늘 수요일이면 월화+과거 2주치. 점검용") -->
-  <section class="view" id="v-log" aria-label="재고·발주 기록" hidden>
+  <!-- BOH 수원컨벤션점 발주시트 (11/16 KM: 과거 2주치 재고·발주량 조회·인쇄, 점검용 → 주차별·Forecast·발주품목순, 설명 문구 없이) -->
+  <section class="view" id="v-log" aria-label="BOH 수원컨벤션점 발주시트" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
-      <h2>재고·발주 기록</h2>
+      <h2 class="logtitle">BOH 수원컨벤션점 발주시트</h2>
       <span class="right"><button type="button" class="printbtn" id="logPrint">인쇄</button></span>
     </div>
-    <p class="hint loghead" id="logHead"></p>
-    <p class="hint loglegend"><b class="lg-s">3</b> 센 재고 · <i class="lg-e">2.5</i> 예상 재고(안 센 날 앱이 채운 값) · <b class="lg-o">4</b> 발주(MIS 주문현황, 없는 날은 앱 입력) · 빈칸 = 기록 없음</p>
+    <div class="chips logweeks" id="logWeeks" role="group" aria-label="주차 고르기"></div>
     <div class="logwrap" id="logTable"></div>
   </section>
   <section class="view" id="v-files" aria-label="데이터 파일" hidden>
@@ -126,7 +125,7 @@
     <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
     <div class="group" id="masters"></div>
     <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-    <button type="button" class="locentry" data-go="log"><span><b>재고·발주 기록</b><small>지난 2주 + 이번 주 · 품목별 · 인쇄</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b><small>주차별 재고·발주·Forecast · 인쇄</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>

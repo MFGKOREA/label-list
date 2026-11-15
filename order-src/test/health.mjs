@@ -130,14 +130,28 @@ for (const [log, want, label] of [
   await X.ctx.close();
 }
 
-// ---------- 3c) 재고·발주 기록 (11/16 KM "과거 2주치 재고·발주량 조회·인쇄, 오늘 수요일이면 월화+과거 2주치") ----------
+// ---------- 3c) BOH 수원컨벤션점 발주시트 (11/16 KM: 주차별 · 날짜·요일 · Forecast · 재고 안 넣은 날은 예상 재고 · 발주는 앱 먼저, 없으면 GW · 발주품목순 · 설명 없이) ----------
 {
   const L = await open(null, "10:00");
-  await L.p.evaluate(() => document.querySelector('[data-go="log"]').click()); await L.p.waitForTimeout(600);
-  const lv = await L.p.evaluate(() => { const hs = [...document.querySelectorAll("#logTable thead th.dh")]; return { vis: !document.getElementById("v-log").hidden, n: hs.length, first: hs[0] && hs[0].textContent, last: hs.length && hs[hs.length - 1].textContent, rows: document.querySelectorAll("#logTable tbody tr:not(.lg)").length, items: window.__orderCalc.model().items.filter((i) => !i.ledgerOnly).length, est: document.querySelectorAll("#logTable i.e").length, print: !!document.getElementById("logPrint") }; });
+  await L.p.evaluate(() => document.querySelector('[data-go="log"]').click()); await L.p.waitForTimeout(800);
+  const lv = await L.p.evaluate(() => {
+    const C = window.__orderCalc, M = C.model(), db = C.db(), items = M.items.filter((i) => !i.ledgerOnly);
+    const wk = document.querySelector("#v-log .logwk"), hs = [...wk.querySelectorAll("thead th.dh")].map((x) => x.textContent);
+    const rows = [...wk.querySelectorAll("tbody tr:not(.fcrow)")], days = [...wk.querySelectorAll("thead th.dh")].map((x) => x.textContent.split(" ")[0]);
+    // 앱 발주 칸(>0)이 있는 칸은 그 값이어야 함 (GW 주문현황보다 먼저)
+    const year = C.TODAY.slice(0, 4), iso = (md) => { const [m, d] = md.split("/"); return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`; };
+    let appN = 0, appBad = 0; const vendorOrder = [];
+    rows.forEach((tr, r) => { const it = items.find((x) => x.name === tr.querySelector("th").title); if (!it) return; vendorOrder.push(it.vendor || "");
+      days.forEach((md, k) => { const o = Number(((db["input." + iso(md)] || {})[it.key] || {}).o); if (o > 0) { appN++; if (tr.querySelectorAll("td.o")[k].textContent !== String(Math.round(o * 10) / 10)) appBad++; } }); });
+    let switches = 0; for (let k = 1; k < vendorOrder.length; k++) if (vendorOrder[k] !== vendorOrder[k - 1]) switches++;
+    return { title: document.querySelector("#v-log h2").textContent, h3: wk.querySelector("h3").textContent, first: hs[0], n: hs.length, rows: rows.length, items: items.length, fc: !!wk.querySelector("tr.fcrow"), legend: !!document.querySelector("#v-log .loglegend, #logHead"), groupRows: wk.querySelectorAll("tr.lg").length, appN, appBad, vendors: new Set(vendorOrder).size, switches, chips: document.querySelectorAll("#logWeeks button[aria-pressed=true]").length };
+  });
   const mon = new Date(day + "T00:00:00Z"); mon.setUTCDate(mon.getUTCDate() - ((mon.getUTCDay() + 6) % 7) - 14);
   const want0 = `${mon.getUTCMonth() + 1}/${mon.getUTCDate()}`;
-  ok(lv.vis && lv.first.startsWith(want0) && /^\d+\/\d+월/.test(lv.first) && lv.rows === lv.items && lv.print, `재고·발주 기록: ${lv.first} ~ ${lv.last} · ${lv.n}일 · 품목 ${lv.rows}/${lv.items} · 예상 칸 ${lv.est} · 인쇄 단추`);
+  ok(lv.title === "BOH 수원컨벤션점 발주시트" && /^\d+주차/.test(lv.h3) && lv.chips === 3, `제목 "${lv.title}" · "${lv.h3}" · 고른 주 ${lv.chips}개`);
+  ok(lv.first.startsWith(want0) && /월$/.test(lv.first) && lv.n === 7 && lv.fc, `첫 주 ${lv.first} ~ 7일 · Forecast 줄`);
+  ok(lv.rows === lv.items && lv.groupRows === 0 && lv.switches === lv.vendors - 1 && !lv.legend, `품목 ${lv.rows}/${lv.items} · 위치 나눔 없음 · 업체별로 한 번씩 이어짐(발주품목순) · 설명 문구 없음`);
+  ok(lv.appN > 0 && lv.appBad === 0, `앱 발주 칸 ${lv.appN}개 모두 앱 값으로 표시`);
   if (shotDir) await L.p.screenshot({ path: shotDir + "/6-log.png" });
   ok(L.errs.length === 0, "페이지 오류 " + (L.errs.length ? L.errs.slice(0, 2).join(" | ") : "없음"));
   await L.ctx.close();

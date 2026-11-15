@@ -798,43 +798,51 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .c-meta .soldbtn { display: inline-block; margin-top: 6px; padding: 3px 9px; border: 1px solid var(--fill-2); border-radius: 999px; background: none; color: var(--muted); font-size: 12px; font-weight: 700; line-height: normal; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .c-meta .soldbtn.on { border-color: var(--rose-ink); background: var(--rose); color: var(--rose-ink); }
 .chip.sold-lg { background: none; border: 1px solid var(--fill-2); color: var(--muted); }
-/* 재고·발주 기록 (11/16 KM "과거 2주치 재고·발주량 조회 및 인쇄, 점검용") */
+/* BOH 수원컨벤션점 발주시트 (11/16 KM: 주차별 · Forecast · 발주품목순 · 설명 없이 · 줄 나누기 정리) */
 .nav .right .printbtn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 700; min-height: 32px; touch-action: manipulation; }
-#v-log .loghead { margin: 4px 2px 2px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
-#v-log .loglegend { margin: 0 2px 10px; }
-#v-log .loglegend .lg-s { color: var(--fg); } #v-log .loglegend .lg-e { color: var(--muted); } #v-log .loglegend .lg-o { color: var(--accent-text); }
-#v-log .logwrap { overflow: auto; max-height: calc(100dvh - 190px); background: var(--surface); border-radius: 14px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#v-log .nav h2.logtitle { font-size: 18px; line-height: 1.25; text-wrap: balance; }
+#v-log .logweeks { margin: 2px 0 12px; flex-wrap: wrap; }
+#v-log .logweeks button small { margin-left: 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
+#v-log .logwk { margin-bottom: 18px; }
+#v-log .logwk h3 { margin: 0 2px 8px; font-size: 16px; font-weight: 800; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+#v-log .logwk h3 span { font-size: 13px; font-weight: 600; color: var(--muted); }
+#v-log .logwk h3 .fcsum { color: var(--fg); }
+#v-log .logscroll { overflow: auto; max-height: calc(100dvh - 200px); background: var(--surface); border-radius: 14px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .logt { border-collapse: separate; border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
-.logt th, .logt td { padding: 4px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: right; min-width: 26px; }
-.logt thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); font-weight: 700; color: var(--fg); }
-.logt thead tr + tr th { top: 33px; font-size: 10px; font-weight: 600; color: var(--muted); }
-.logt th.dh { text-align: center; } .logt th.dh small { display: block; font-size: 10px; color: var(--muted); font-weight: 600; }
-.logt th.dh.today { color: var(--accent-text); }
-.logt .mon { border-left: 2px solid var(--muted); }
-.logt .nm { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 118px; max-width: 150px; white-space: normal; font-weight: 600; line-height: 1.25; border-right: 1px solid var(--line); }
+.logt th, .logt td { padding: 4px 6px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); white-space: nowrap; text-align: right; min-width: 30px; }
+.logt .ds { border-left: 1px solid color-mix(in srgb, var(--muted) 45%, transparent); }
+.logt thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); font-weight: 800; color: var(--fg); text-align: center; }
+.logt thead tr + tr th { top: 27px; font-size: 10px; font-weight: 600; color: var(--muted); }
+.logt th.dh span { color: var(--muted); font-weight: 600; } .logt th.dh.today { color: var(--accent-text); }
+.logt .nm { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 112px; max-width: 150px; white-space: normal; font-weight: 600; line-height: 1.25; border-right: 1px solid color-mix(in srgb, var(--muted) 45%, transparent); }
 .logt thead .nm { z-index: 3; }
-.logt .nm small { display: block; font-size: 10px; color: var(--muted); font-weight: 500; }
-.logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i.e { color: var(--muted); }
-.logt td.o b { color: var(--accent-text); font-weight: 800; } .logt td.o small { display: block; font-size: 9px; color: var(--muted); }
-.logt tr.lg th, .logt tr.lg td { background: var(--fill-2); font-size: 12px; font-weight: 800; padding-top: 6px; padding-bottom: 6px; }
+.logt .nm small { font-size: 10px; color: var(--muted); font-weight: 500; }
+.logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
+.logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
+.logt td.o { color: var(--accent-text); font-weight: 800; }
+.logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
 @media print {
   @page { size: A4 landscape; margin: 7mm; }
   body.log-print, body.log-print .app, body.log-print main { background: #fff !important; max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
-  body.log-print .view#v-log { padding: 0 !important; }
-  body.log-print .view:not(#v-log), body.log-print #dock, body.log-print .toast, body.log-print #v-log .nav .back, body.log-print #v-log .printbtn { display: none !important; }
+  body.log-print .view:not(#v-log), body.log-print #dock, body.log-print .toast, body.log-print #v-log .nav .back, body.log-print #v-log .printbtn, body.log-print #v-log .logweeks { display: none !important; }
   body.log-print #v-log { display: block !important; padding: 0 !important; }
-  body.log-print #v-log .nav h2 { font-size: 14px; margin: 0 0 2px; }
-  body.log-print #v-log .logwrap { overflow: visible !important; max-height: none !important; border-radius: 0; }
+  body.log-print #v-log .nav { display: block; padding: 0; margin: 0 0 2mm; }
+  body.log-print #v-log .nav h2 { font-size: 13px; margin: 0; color: #000; }
+  body.log-print #v-log .logwk { break-before: page; margin: 0; }
+  body.log-print #v-log .logwk:first-of-type { break-before: auto; }
+  body.log-print #v-log .logwk h3 { font-size: 11px; margin: 0 0 1.5mm; color: #000; }
+  body.log-print #v-log .logwk h3 span { font-size: 9px; color: #000; }
+  body.log-print #v-log .logscroll { overflow: visible !important; max-height: none !important; border-radius: 0; }
   body.log-print .logt { font-size: 7.5px; width: 100%; color: #000; }
-  body.log-print .logt th, body.log-print .logt td { padding: 1.5px 2px; min-width: 0; border-bottom: .5px solid #bbb; position: static !important; background: #fff !important; color: #000 !important; }
-  body.log-print .logt .nm { min-width: 0; width: 30mm; max-width: 30mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  body.log-print .logt .nm small { display: inline; margin-left: 2px; font-size: 6px; }
-  body.log-print .logt tr.lg th, body.log-print .logt tr.lg td { font-size: 8px; padding-top: 2px; padding-bottom: 2px; }
-  body.log-print .logt th.dh small, body.log-print .logt thead tr + tr th { font-size: 6.5px; }
-  body.log-print .logt .mon { border-left: 1.2px solid #000; }
-  body.log-print .logt td.s i.e, body.log-print .logt td.o small, body.log-print .logt .nm small { color: #555 !important; }
-  body.log-print .logt td.o b { color: #000 !important; text-decoration: underline; }
+  body.log-print .logt th, body.log-print .logt td { padding: 1.4px 2.5px; min-width: 0; border-bottom: .4pt solid #999; border-right: .4pt solid #ccc; position: static !important; color: #000 !important; background: #fff !important; }
+  body.log-print .logt .ds { border-left: .8pt solid #555; }
+  body.log-print .logt .nm { width: 34mm; max-width: 34mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: .8pt solid #555; }
+  body.log-print .logt .nm small { font-size: 6px; color: #444 !important; }
+  body.log-print .logt thead tr + tr th { font-size: 6.5px; }
+  body.log-print .logt tbody tr:nth-child(even) td, body.log-print .logt tbody tr:nth-child(even) .nm { background: #f3f3f3 !important; }
+  body.log-print .logt td.s i { color: #666 !important; }
+  body.log-print .logt td.o { font-weight: 800; }
+  body.log-print .logt tr.fcrow td, body.log-print .logt tr.fcrow .nm { background: #e6e6e6 !important; }
+  body.log-print .logt thead { display: table-header-group; }
   body.log-print .logt tr { break-inside: avoid; }
-  body.log-print .logt tr.lg th, body.log-print .logt tr.lg td { background: #eee !important; }
-  body.log-print #v-log .hint { font-size: 8px; margin: 0 0 3px; color: #000; }
 }

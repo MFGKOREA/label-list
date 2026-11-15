@@ -818,45 +818,53 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .c-meta .soldbtn { display: inline-block; margin-top: 6px; padding: 3px 9px; border: 1px solid var(--fill-2); border-radius: 999px; background: none; color: var(--muted); font-size: 12px; font-weight: 700; line-height: normal; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .c-meta .soldbtn.on { border-color: var(--rose-ink); background: var(--rose); color: var(--rose-ink); }
 .chip.sold-lg { background: none; border: 1px solid var(--fill-2); color: var(--muted); }
-/* 재고·발주 기록 (11/16 KM "과거 2주치 재고·발주량 조회 및 인쇄, 점검용") */
+/* BOH 수원컨벤션점 발주시트 (11/16 KM: 주차별 · Forecast · 발주품목순 · 설명 없이 · 줄 나누기 정리) */
 .nav .right .printbtn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 700; min-height: 32px; touch-action: manipulation; }
-#v-log .loghead { margin: 4px 2px 2px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
-#v-log .loglegend { margin: 0 2px 10px; }
-#v-log .loglegend .lg-s { color: var(--fg); } #v-log .loglegend .lg-e { color: var(--muted); } #v-log .loglegend .lg-o { color: var(--accent-text); }
-#v-log .logwrap { overflow: auto; max-height: calc(100dvh - 190px); background: var(--surface); border-radius: 14px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#v-log .nav h2.logtitle { font-size: 18px; line-height: 1.25; text-wrap: balance; }
+#v-log .logweeks { margin: 2px 0 12px; flex-wrap: wrap; }
+#v-log .logweeks button small { margin-left: 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
+#v-log .logwk { margin-bottom: 18px; }
+#v-log .logwk h3 { margin: 0 2px 8px; font-size: 16px; font-weight: 800; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+#v-log .logwk h3 span { font-size: 13px; font-weight: 600; color: var(--muted); }
+#v-log .logwk h3 .fcsum { color: var(--fg); }
+#v-log .logscroll { overflow: auto; max-height: calc(100dvh - 200px); background: var(--surface); border-radius: 14px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .logt { border-collapse: separate; border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
-.logt th, .logt td { padding: 4px 5px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: right; min-width: 26px; }
-.logt thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); font-weight: 700; color: var(--fg); }
-.logt thead tr + tr th { top: 33px; font-size: 10px; font-weight: 600; color: var(--muted); }
-.logt th.dh { text-align: center; } .logt th.dh small { display: block; font-size: 10px; color: var(--muted); font-weight: 600; }
-.logt th.dh.today { color: var(--accent-text); }
-.logt .mon { border-left: 2px solid var(--muted); }
-.logt .nm { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 118px; max-width: 150px; white-space: normal; font-weight: 600; line-height: 1.25; border-right: 1px solid var(--line); }
+.logt th, .logt td { padding: 4px 6px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); white-space: nowrap; text-align: right; min-width: 30px; }
+.logt .ds { border-left: 1px solid color-mix(in srgb, var(--muted) 45%, transparent); }
+.logt thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); font-weight: 800; color: var(--fg); text-align: center; }
+.logt thead tr + tr th { top: 27px; font-size: 10px; font-weight: 600; color: var(--muted); }
+.logt th.dh span { color: var(--muted); font-weight: 600; } .logt th.dh.today { color: var(--accent-text); }
+.logt .nm { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 112px; max-width: 150px; white-space: normal; font-weight: 600; line-height: 1.25; border-right: 1px solid color-mix(in srgb, var(--muted) 45%, transparent); }
 .logt thead .nm { z-index: 3; }
-.logt .nm small { display: block; font-size: 10px; color: var(--muted); font-weight: 500; }
-.logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i.e { color: var(--muted); }
-.logt td.o b { color: var(--accent-text); font-weight: 800; } .logt td.o small { display: block; font-size: 9px; color: var(--muted); }
-.logt tr.lg th, .logt tr.lg td { background: var(--fill-2); font-size: 12px; font-weight: 800; padding-top: 6px; padding-bottom: 6px; }
+.logt .nm small { font-size: 10px; color: var(--muted); font-weight: 500; }
+.logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
+.logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
+.logt td.o { color: var(--accent-text); font-weight: 800; }
+.logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
 @media print {
   @page { size: A4 landscape; margin: 7mm; }
   body.log-print, body.log-print .app, body.log-print main { background: #fff !important; max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
-  body.log-print .view#v-log { padding: 0 !important; }
-  body.log-print .view:not(#v-log), body.log-print #dock, body.log-print .toast, body.log-print #v-log .nav .back, body.log-print #v-log .printbtn { display: none !important; }
+  body.log-print .view:not(#v-log), body.log-print #dock, body.log-print .toast, body.log-print #v-log .nav .back, body.log-print #v-log .printbtn, body.log-print #v-log .logweeks { display: none !important; }
   body.log-print #v-log { display: block !important; padding: 0 !important; }
-  body.log-print #v-log .nav h2 { font-size: 14px; margin: 0 0 2px; }
-  body.log-print #v-log .logwrap { overflow: visible !important; max-height: none !important; border-radius: 0; }
+  body.log-print #v-log .nav { display: block; padding: 0; margin: 0 0 2mm; }
+  body.log-print #v-log .nav h2 { font-size: 13px; margin: 0; color: #000; }
+  body.log-print #v-log .logwk { break-before: page; margin: 0; }
+  body.log-print #v-log .logwk:first-of-type { break-before: auto; }
+  body.log-print #v-log .logwk h3 { font-size: 11px; margin: 0 0 1.5mm; color: #000; }
+  body.log-print #v-log .logwk h3 span { font-size: 9px; color: #000; }
+  body.log-print #v-log .logscroll { overflow: visible !important; max-height: none !important; border-radius: 0; }
   body.log-print .logt { font-size: 7.5px; width: 100%; color: #000; }
-  body.log-print .logt th, body.log-print .logt td { padding: 1.5px 2px; min-width: 0; border-bottom: .5px solid #bbb; position: static !important; background: #fff !important; color: #000 !important; }
-  body.log-print .logt .nm { min-width: 0; width: 30mm; max-width: 30mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  body.log-print .logt .nm small { display: inline; margin-left: 2px; font-size: 6px; }
-  body.log-print .logt tr.lg th, body.log-print .logt tr.lg td { font-size: 8px; padding-top: 2px; padding-bottom: 2px; }
-  body.log-print .logt th.dh small, body.log-print .logt thead tr + tr th { font-size: 6.5px; }
-  body.log-print .logt .mon { border-left: 1.2px solid #000; }
-  body.log-print .logt td.s i.e, body.log-print .logt td.o small, body.log-print .logt .nm small { color: #555 !important; }
-  body.log-print .logt td.o b { color: #000 !important; text-decoration: underline; }
+  body.log-print .logt th, body.log-print .logt td { padding: 1.4px 2.5px; min-width: 0; border-bottom: .4pt solid #999; border-right: .4pt solid #ccc; position: static !important; color: #000 !important; background: #fff !important; }
+  body.log-print .logt .ds { border-left: .8pt solid #555; }
+  body.log-print .logt .nm { width: 34mm; max-width: 34mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: .8pt solid #555; }
+  body.log-print .logt .nm small { font-size: 6px; color: #444 !important; }
+  body.log-print .logt thead tr + tr th { font-size: 6.5px; }
+  body.log-print .logt tbody tr:nth-child(even) td, body.log-print .logt tbody tr:nth-child(even) .nm { background: #f3f3f3 !important; }
+  body.log-print .logt td.s i { color: #666 !important; }
+  body.log-print .logt td.o { font-weight: 800; }
+  body.log-print .logt tr.fcrow td, body.log-print .logt tr.fcrow .nm { background: #e6e6e6 !important; }
+  body.log-print .logt thead { display: table-header-group; }
   body.log-print .logt tr { break-inside: avoid; }
-  body.log-print .logt tr.lg th, body.log-print .logt tr.lg td { background: #eee !important; }
-  body.log-print #v-log .hint { font-size: 8px; margin: 0 0 3px; color: #000; }
 }
 
 </style>
@@ -957,15 +965,14 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     <div class="group" id="locList"></div>
   </section>
 
-  <!-- 재고·발주 기록 (11/16 KM "데이터 파일 탭, 과거 2주치 재고·발주량 시트 조회 및 인쇄 기능 필요해. 오늘 수요일이면 월화+과거 2주치. 점검용") -->
-  <section class="view" id="v-log" aria-label="재고·발주 기록" hidden>
+  <!-- BOH 수원컨벤션점 발주시트 (11/16 KM: 과거 2주치 재고·발주량 조회·인쇄, 점검용 → 주차별·Forecast·발주품목순, 설명 문구 없이) -->
+  <section class="view" id="v-log" aria-label="BOH 수원컨벤션점 발주시트" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
-      <h2>재고·발주 기록</h2>
+      <h2 class="logtitle">BOH 수원컨벤션점 발주시트</h2>
       <span class="right"><button type="button" class="printbtn" id="logPrint">인쇄</button></span>
     </div>
-    <p class="hint loghead" id="logHead"></p>
-    <p class="hint loglegend"><b class="lg-s">3</b> 센 재고 · <i class="lg-e">2.5</i> 예상 재고(안 센 날 앱이 채운 값) · <b class="lg-o">4</b> 발주(MIS 주문현황, 없는 날은 앱 입력) · 빈칸 = 기록 없음</p>
+    <div class="chips logweeks" id="logWeeks" role="group" aria-label="주차 고르기"></div>
     <div class="logwrap" id="logTable"></div>
   </section>
   <section class="view" id="v-files" aria-label="데이터 파일" hidden>
@@ -990,7 +997,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
     <div class="group" id="masters"></div>
     <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-    <button type="button" class="locentry" data-go="log"><span><b>재고·발주 기록</b><small>지난 2주 + 이번 주 · 품목별 · 인쇄</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b><small>주차별 재고·발주·Forecast · 인쇄</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
@@ -3204,9 +3211,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     }
     menuWMemo.set(it.key, res); return res;
   };
-  function estStock(it, d, plan, pre) {
+  function estStock(it, d, plan, pre, anchor) { // anchor: 지난 날을 볼 때 그 날(발주시트). 없으면 오늘 기준 7일 안에서 센 값을 찾음(예전 그대로)
     const start = d > TODAY ? TODAY : addDays(d, -1);
-    for (let x = start; x >= addDays(TODAY, -7); x = addDays(x, -1)) {
+    for (let x = start; x >= addDays(anchor && anchor < TODAY ? anchor : TODAY, -7); x = addDays(x, -1)) {
       if (!counted((db["input." + x] || {})[it.key])) continue;
       const e = estWin(it, x, d, plan, pre);
       if (!e) return null;
@@ -3634,47 +3641,64 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       return `<div class="cell lrow" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${c.loc ? "" : " · <b>추정</b>"}</small></span><span class="rloc">${LOCS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}">${t.slice(0, 1)}</button>`).join("")}</span></div>`; }).join("") || `<div class="empty">이 위치 품목이 없어요</div>`;
     locSumUpdate();
   }
-  // ---------- 재고·발주 기록 (11/16 KM "과거 2주치 재고, 발주량 시트 조회 및 인쇄 기능. 오늘 수요일이면 월화+과거 2주치. 점검용, 품목별로 전부") ----------
-  //  기간: 2주 전 월요일 ~ 어제(오늘 넣은 칸이 있으면 오늘까지). 줄 = 품목(보관 위치·세는 순서), 칸 = 날마다 재고 | 발주
-  //  재고: 센 값은 그대로, 안 센 날 앱이 채운 예상 재고(est)는 회색 기울임. 발주: 그날 MIS 주문현황을 읽었으면 그 수량(앱 입력과 다르면 작게 "앱 n"), 없으면 앱 발주 칸
-  //  보기만 함(시트에 안 씀). 인쇄는 A4 가로 (@media print)
-  function stockLogRange() {
-    const from = addDays(mondayOf(TODAY), -14), to = Object.keys(db["input." + TODAY] || {}).length ? TODAY : addDays(TODAY, -1), days = [];
-    for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
-    return days;
+  // ---------- BOH 수원컨벤션점 발주시트 (11/16 KM) ----------
+  //  처음 요청: "과거 2주치 재고, 발주량 시트 조회 및 인쇄. 오늘 수요일이면 월화+과거 2주치. 점검용, 품목별로 전부"
+  //  고친 요청: "재고 안 넣은 거 있으면 예상재고로 반영 · 발주량은 어플에서 넣은 것, 어플에서 안 넣었다면 GW 에이전트가 조회한 발주량 ·
+  //    주차별(43, 44주차) · 요일 날짜 · 포캐스트도 기록 · 이름은 BOH 수원컨벤션점 발주시트 · 이상한 설명 지우고 · 표 줄 나누기 정리 · 드라이 이런 거 나누지 말고 발주품목순으로 쭉"
+  //  주차마다 표 하나(월~일). 줄 = Forecast(만원) + 품목(발주품목순 = 발주 탭 "발주품목순"과 같은 순서). 칸 = 날마다 재고 | 발주
+  //  재고: 센 값(검정). 안 센 날은 그날 아침 예상 재고(회색 기울임, 그 전 7일 안에 센 값에서 날짜순 계산), 없으면 앱이 채워 둔 예상 값. 오늘 뒤는 빈칸
+  //  발주: 앱 발주 칸(0보다 큼) → 없으면 GW Agent가 읽은 MIS 주문현황 수량. 보기만 함(시트에 안 씀). 인쇄는 A4 가로, 주차마다 새 쪽
+  let logWeekSel = null;
+  function logWeeksAll() {
+    const ds = Object.keys(db).filter((k) => /^(input|misOrder)\.\d{4}-\d\d-\d\d$/.test(k)).map((k) => k.slice(k.indexOf(".") + 1)).filter((d) => d <= TODAY).sort();
+    const first = mondayOf(ds[0] || TODAY), out = [];
+    for (let m = first; m <= mondayOf(TODAY); m = addDays(m, 7)) out.push(m);
+    return out;
   }
   function renderStockLog() { // 이름 주의: renderLog는 학습 기록 그리기(아래)
-    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), idx = new Map(all.map((it, i) => [it.key, i])), days = stockLogRange();
-    const md = (d) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`, f1 = (x) => { const n = num(x); return isFinite(n) ? String(Math.round(n * 100) / 100) : esc(x); };
-    let nS = 0, nE = 0, nO = 0;
-    const cellOf = (it, d) => {
-      const v = (db["input." + d] || {})[it.key] || {}, has = v.s !== "" && v.s != null && isFinite(num(v.s));
-      const sTxt = !has ? "" : v.est ? `<i class="e">${f1(v.s)}</i>` : `<b>${f1(v.s)}</b>`;
-      if (has) v.est ? nE++ : nS++;
-      const appO = num(v.o) > 0 ? num(v.o) : 0, mis = misOn(d) ? misRowsOf(it.key, d) : null, misQ = mis ? mis.reduce((t, r) => t + num(r.qty), 0) : null;
-      const oq = misQ != null ? misQ : appO, oTxt = oq > 0 ? `<b>${f1(oq)}</b>${misQ != null && appO > 0 && Math.abs(appO - misQ) > 1e-9 ? `<small>앱 ${f1(appO)}</small>` : ""}` : misQ === 0 && appO > 0 ? `<small>앱 ${f1(appO)}</small>` : "";
-      if (oq > 0) nO++;
-      const mon = dow(d) === 1 ? " mon" : "";
-      return `<td class="s${mon}">${sTxt}</td><td class="o">${oTxt}</td>`;
-    };
-    const head1 = days.map((d) => `<th colspan="2" class="dh${dow(d) === 1 ? " mon" : ""}${d === TODAY ? " today" : ""}">${md(d)}<small>${DOW[dow(d)]}</small></th>`).join("");
-    const head2 = days.map((d) => `<th class="sub${dow(d) === 1 ? " mon" : ""}">재고</th><th class="sub">발주</th>`).join("");
-    // 짧은 이름(앞 "냉동_", 괄호 업체, 첫 "_" 뒤 묶음 표기 뺌) — 겹치는 이름은 원래 이름 그대로. 원래 이름은 title로
+    const weeks = logWeeksAll();
+    if (!logWeekSel) logWeekSel = new Set(weeks.slice(-3)); // 처음엔 지난 2주 + 이번 주
+    $("logWeeks").innerHTML = weeks.map((m) => `<button type="button" data-w="${m}" aria-pressed="${logWeekSel.has(m)}">${isoWeek(m).w}주<small>${mmdd(m)}</small></button>`).join("");
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), order = [], byV = new Map();
+    all.forEach((it) => { const v = it.vendor || "업체 미지정"; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
+    byV.forEach((list) => order.push(...list)); // 발주품목순: 업체(처음 나온 순) 안에서 발주 시트 순서
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     all.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
-    const body = LOCS.map(([k, t]) => {
-      const list = all.filter((i) => locOf(i) === k).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
-      if (!list.length) return "";
-      return `<tr class="lg"><th class="nm" colspan="1">${t} <small>${list.length}</small></th><td colspan="${days.length * 2}"></td></tr>` + list.map((it) => {
-        const su = it.box ? "BOX" : it.pk.stock || "", ou = it.pk.order || su;
-        return `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))}<small>${esc(su)}${ou && ou !== su ? " · 발주 " + esc(ou) : ""}</small></th>${days.map((d) => cellOf(it, d)).join("")}</tr>`;
-      }).join("");
-    }).join("");
-    $("logHead").textContent = `${md(days[0])}(${DOW[dow(days[0])]}) ~ ${md(days[days.length - 1])}(${DOW[dow(days[days.length - 1])]}) · ${days.length}일 · 품목 ${all.length}개 · 센 칸 ${nS} · 예상 칸 ${nE} · 발주 칸 ${nO}`;
-    $("logTable").innerHTML = `<table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${head1}</tr><tr>${head2}</tr></thead><tbody>${body}</tbody></table>`;
+    const f1 = (x) => String(Math.round(x * 10) / 10), md = (d) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
+    const fcOf = (d) => num(((db.forecast || {})[d] || {}).fc);
+    const stockCell = (it, d) => {
+      if (d > TODAY) return "";
+      const v = (db["input." + d] || {})[it.key] || {};
+      if (counted(v)) return `<b>${f1(num(v.s))}</b>`;
+      const e = estStock(it, d, null, false, d), u = it.box || 1;
+      if (e) { const st = countStepOf(it); return `<i>${f1(st && e.v >= st ? e.v : (st ? e.raw : e.v) / u)}</i>`; } // 발주 카드의 "예상" 칩과 같은 값(박스 품목은 BOX)
+      return v.est && isFinite(num(v.s)) ? `<i>${f1(num(v.s))}</i>` : "";
+    };
+    const orderCell = (it, d) => {
+      if (d > TODAY) return "";
+      const appO = num(((db["input." + d] || {})[it.key] || {}).o);
+      if (appO > 0) return f1(appO);
+      const rows = misOn(d) ? misRowsOf(it.key, d) : null, q = rows ? rows.reduce((t, r) => t + num(r.qty), 0) : 0;
+      return q > 0 ? f1(q) : "";
+    };
+    const sel = weeks.filter((m) => logWeekSel.has(m));
+    $("logTable").innerHTML = sel.length ? sel.map((m) => {
+      const days = [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(m, k)), wk = isoWeek(m).w, fcSum = days.reduce((t, d) => t + (fcOf(d) || 0), 0);
+      const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
+      const h2 = days.map(() => `<th class="sub ds">재고</th><th class="sub">발주</th>`).join("");
+      const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
+      const rows = order.map((it) => `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`).join("");
+      return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
+        `<div class="logscroll"><table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
+    }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
   }
-  $("logPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("log-print"); document.title = `재고·발주 기록 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("log-print"); document.title = t0; }, 800); });
+  $("logWeeks").addEventListener("click", (e) => { const b = e.target.closest("button[data-w]"); if (!b) return; const w = b.dataset.w; logWeekSel.has(w) ? logWeekSel.delete(w) : logWeekSel.add(w); renderStockLog(); });
+  $("logPrint").addEventListener("click", () => {
+    const t0 = document.title, ws = [...(logWeekSel || [])].sort().map((m) => isoWeek(m).w);
+    document.body.classList.add("log-print"); document.title = `BOH 수원컨벤션점 발주시트 ${ws.length ? ws[0] + (ws.length > 1 ? "~" + ws[ws.length - 1] : "") + "주차" : ""}`;
+    window.print(); setTimeout(() => { document.body.classList.remove("log-print"); document.title = t0; }, 800);
+  });
   window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
   function locSumUpdate() {
     const all = model().items.filter((i) => !i.ledgerOnly);
