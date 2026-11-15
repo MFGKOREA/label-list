@@ -17,14 +17,14 @@ $.fn.datagrid = function (cmd) { if (cmd === "getRows") return []; if (cmd === "
 $.fn.treegrid = function (cmd) { if (cmd === "getData") return ST.data; if (cmd === "options") return { columns: [G1, G2] }; };
 $("#tg").data("datagrid", 1).data("treegrid", 1);
 // 날짜별 [이 매장 고객수, 골고루, 미트 더블, 로맨틱, 프리미엄] — 11/12는 이 매장 세트 없음(다른 매장 줄만), 11/14(토)는 많음
-var DAY = { "2026-11-12": null, "2026-11-13": [180, 4, 2, 1, 0], "2026-11-14": [420, 11, 6, 2, 1] };
+var DAY = { "2026-11-10": [100, 3, 1, 0, 0, 9], "2026-11-12": null, "2026-11-13": [180, 4, 2, 1, 0], "2026-11-14": [420, 11, 6, 2, 1] }; // 11/10: 세트 합계(9)가 세트별 합(4)과 다름 (합계 대조 시험용)
 function fn_Search() {
   if (!window.event) throw new Error("no event");
   var s = $("#sDate").val(), v = DAY[s], kids = [];
-  var row = function (cd, nm, c, gg, mt, ro, pr) { var r = { CD_STORE: cd, NM_STORE: nm, GROSS_SALES: "9,000,000", TOTAL_SALES: "9,500,000", RESTAURANT_SALES: "9,000,000", DELIVERY_SALES: "0", CUST_CNT: c, TOTAL_PPA: "50,000", TOT_CNT: gg + mt + ro + pr, TOT_AMT: "1,000,000", TOT_PER: "10.0" };
+  var row = function (cd, nm, c, gg, mt, ro, pr, tt) { var r = { CD_STORE: cd, NM_STORE: nm, GROSS_SALES: "9,000,000", TOTAL_SALES: "9,500,000", RESTAURANT_SALES: "9,000,000", DELIVERY_SALES: "0", CUST_CNT: c, TOTAL_PPA: "50,000", TOT_CNT: tt != null ? tt : gg + mt + ro + pr, TOT_AMT: "1,000,000", TOT_PER: "10.0" };
     SETS.forEach(function (k) { r[k + "_CNT"] = 0; r[k + "_AMT"] = "0"; r[k + "_PER"] = "0"; }); r.MGGGR_CNT = gg; r.MTDB_CNT = mt; r.ROMANTIC_CNT = ro; r.PREMIUM_CNT = pr; r.MGGGR_AMT = (gg * 120000).toLocaleString(); return r; };
   kids.push(row("1111111", "다른매장", 300, 50, 50, 5, 5));
-  if (v) kids.push(row("1345090", "MG수원컨벤션센터점", v[0], v[1], v[2], v[3], v[4]));
+  if (v) kids.push(row("1345090", "MG수원컨벤션센터점", v[0], v[1], v[2], v[3], v[4], v[5]));
   var tot = row("", "합계", 0, 0, 0, 0, 0); tot.children = kids;
   setTimeout(function () { ST.data = [tot]; window.__q = (window.__q || 0) + 1; }, 300);
 }

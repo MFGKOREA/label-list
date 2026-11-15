@@ -24,6 +24,16 @@
     } catch (e) { return plain; }
   })();
   const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[,\s원]/g, "")); return isFinite(n) ? n : NaN; };
+  // 합계 대조 (11/15 KM "합계는 한 번 더 맞춰 본다"): 읽은 줄을 더한 값과 화면의 합계 줄(또는 바닥 줄)을 맞춰 봄.
+  //  지금은 다르면 결과 글에 ⚠로 알리기만 하고 저장은 그대로 (실제 화면에서 맞는지 본 뒤 막을지 정함). 합계 줄이 없으면 null
+  const grandRow = (r) => { const vs = Object.values(r || {}).map((v) => String(v ?? "").trim()); return vs.some((v) => /합\s*계|총\s*계|^계$|^total$|grand\s*total/i.test(v)) && !vs.some((v) => /소\s*계/.test(v)); };
+  const sumCheck = (rows, foot, field, isData) => {
+    const tots = [...rows.filter(grandRow), ...(foot || []).filter((r) => r && typeof r === "object")].map((r) => num(r[field])).filter((v) => isFinite(v));
+    if (!tots.length) return null;
+    const t = tots.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a)); // 합계·평균 줄이 같이 있으면 큰 쪽이 합계
+    const s = rows.filter(isData).reduce((a, r) => { const v = num(r[field]); return isFinite(v) ? a + v : a; }, 0);
+    return { ok: Math.abs(s - t) <= Math.max(1, Math.abs(t) * 1e-3), table: Math.round(t), rows: Math.round(s) };
+  };
   // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
   const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
   const withKey = (u) => u + (KEY ? "&k=" + encodeURIComponent(KEY) : "");
@@ -206,13 +216,13 @@
     const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total|~/i.test(String(v ?? "").trim()));
     // Gross 칸: "Gross Sales"가 먼저, 수량·건수·비율 칸은 제외
     const bad = (c) => /qty|수량|건수|율|%|cnt|count|net|순|할인/i.test(title(c) + " " + c.field);
-    let rows = hit.rows, cols = null, dateCol, grossCol;
+    let rows = hit.rows, cols = null, dateCol, grossCol, gUsed = hit.grid;
     for (let t = 0; t < 8 && !(dateCol && grossCol); t++) { // 다른 표가 조금 늦게 채워질 수 있어 2초까지 다시 봄
       for (const g of [hit.grid, ...L.grids().filter((x) => x !== hit.grid && (L.raw(x) || []).length)]) {
         const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), rs = L.raw(g) || [];
         const dc = cs.find((c) => /일자|날짜|date|영업일/i.test(title(c) + c.field) && rs.some((r) => toIso(r[c.field]))) || cs.find((c) => rs.length && rs.filter((r) => toIso(r[c.field])).length >= Math.min(2, rs.length));
         const gc = cs.find((c) => /gross\s*sales/i.test(title(c) + " " + c.field)) || cs.find((c) => /gross/i.test(title(c) + " " + c.field) && !bad(c)) || cs.find((c) => /총\s*매출|매출\s*합계|매출액/.test(title(c)) && !bad(c));
-        if (!cols || (dc && gc)) { rows = rs; cols = cs; dateCol = dc; grossCol = gc; }
+        if (!cols || (dc && gc)) { rows = rs; cols = cs; dateCol = dc; grossCol = gc; gUsed = g; }
         if (dc && gc) break;
       }
       if (!(dateCol && grossCol)) await sleep(250);
@@ -225,6 +235,8 @@
     rows.forEach((r) => { if (isTotal(r)) return; const dt = toIso(r[dateCol.field]), v = num(r[grossCol.field]); if (!dt || dt < job.from || dt > job.to || !(v > 0)) return; if (dt in got) dup.push(dt); got[dt] = Math.round(v); if (totalCol) { const x = num(r[totalCol.field]); if (x > 0) tot[dt] = Math.round(x); } if (netCol) { const x = num(r[netCol.field]); if (x > 0) net[dt] = Math.round(x); } });
     if (dup.length) return finish(false, `같은 날짜가 두 번 나와요 (${[...new Set(dup)].map((d) => d.slice(5)).join(", ")}) · 옵션이 '일자별'인지 확인`);
     if (!Object.keys(got).length) return finish(false, `${title(grossCol)} 값이 없어요 (${job.from} ~ ${job.to})`);
+    // 합계 대조: 날짜 줄(기간 밖 포함, 화면에 보인 것 전부)의 Gross 합 = 화면 합계 줄?
+    const chk = sumCheck(rows, (() => { try { return $(gUsed).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), grossCol.field, (r) => !isTotal(r) && !!toIso(r[dateCol.field]));
     // 11/12 KM: kind "now" = 오늘 지금까지 Gross만 보기. 영업 중 값이라 Forecast 실제 칸(학습)에는 넣지 않고 결과 글에만 적음
     if (job.kind === "now") { const v = got[job.to] || 0; return finish(true, `${job.to.slice(5).replace("-", "/")} 지금까지 Gross ${v.toLocaleString("ko-KR")}원 (${new Date().toTimeString().slice(0, 5)} 조회 · 학습엔 안 씀)`, { now: v, nowAt: Date.now() }); }
     // 말이 안 되는 값이면 안 씀: 하루 Gross가 10만 원 미만·1억 초과, 또는 기존 값의 1/3~3배 밖
@@ -249,7 +261,8 @@
     Object.keys(got).forEach((dt) => { const cur = fc0[dt] || {}, e = {}; if (tot[dt] && num(cur.total) !== tot[dt]) e.total = String(tot[dt]); if (net[dt] && num(cur.net) !== net[dt]) e.net = String(net[dt]); if (Object.keys(e).length) { tpatch[dt] = e; tn++; } });
     if (tn) await merge("forecast", tpatch);
     const parts = [filled.length ? `채움 ${filled.join(", ")}` : "", diff.length ? `고침 ${diff.join(", ")}` : ""].filter(Boolean);
-    return finish(true, `${Object.keys(got).length}일 확인${parts.length ? " · " + parts.join(" · ") : " · 모두 같음"}${totalCol ? ` · Total Sales ${tn}일` : " · Total Sales 칸 없음"}`, { col: title(grossCol), totalCol: totalCol ? title(totalCol) : null, netCol: netCol ? title(netCol) : null, days: Object.keys(got).length });
+    const warn = chk && !chk.ok ? ` · ⚠ 합계 다름 (표 합계 ${man(chk.table)} · 읽은 날 합 ${man(chk.rows)}, MIS 화면 확인)` : "";
+    return finish(true, `${Object.keys(got).length}일 확인${parts.length ? " · " + parts.join(" · ") : " · 모두 같음"}${totalCol ? ` · Total Sales ${tn}일` : " · Total Sales 칸 없음"}${warn}`, { col: title(grossCol), totalCol: totalCol ? title(totalCol) : null, netCol: netCol ? title(netCol) : null, days: Object.keys(got).length, chk });
   } catch (e) {
     return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
   }
@@ -298,7 +311,7 @@
       const have = await get();
       const days = []; for (let x = job.from; x <= job.to; ) { if (job.force || !have["menuDay." + x]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
       const L = loader($, d);
-      let saved = 0; const empty = [], failed = [], saveErr = []; let rem = [], hung = false;
+      let saved = 0; const empty = [], failed = [], saveErr = [], chkBad = []; let rem = [], hung = false;
       // 시트 저장은 뒤에서 차례로 (하루 저장에 2~4초 → 조회를 막지 않게). 실패한 날은 따로 모음
       let saveQ = Promise.resolve();
       const save = (day, rows) => { saveQ = saveQ.then(() => set("menuDay." + day, { at: Date.now(), rows })).then(() => { saved++; }, () => { saveErr.push(day); }); };
@@ -322,6 +335,9 @@
         const rows = [];
         hit.rows.forEach((r) => { if (isTotal(r)) return; const m = String(r[menuCol.field] ?? "").trim(), q = num(r[qtyCol.field]); if (!m || !(q > 0)) return; rows.push({ c: catCol ? String(r[catCol.field] ?? "").trim() : "", m, q }); });
         if (!rows.length) return "empty";
+        // 합계 대조: 메뉴 줄 수량 합(0·마이너스 줄 포함) = 화면 합계 줄 수량?
+        const ck = sumCheck(hit.rows, (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
+        if (ck && !ck.ok) chkBad.push(day);
         save(day, rows); return "ok";
       };
       try {
@@ -342,9 +358,10 @@
       } finally { await saveQ.catch(() => {}); }
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set([...failed, ...saveErr])].sort();
       const text = `메뉴 판매 ${saved}일 저장` + (empty.length ? ` · 판매 없음 ${empty.map(md).join(", ")}` : "") + (hung ? " · MIS가 응답하지 않아 멈췄어요" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")} (다시 누르면 그날만 받아요)` : "") +
-        (rem.length ? ` · 남은 ${rem.length}일은 다시 누르면 이어서 받아요` : "") + (days.length ? "" : " · 새로 받을 날 없음");
-      if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length }); }
-      return finish(true, text, { days: saved, more: rem.length });
+        (rem.length ? ` · 남은 ${rem.length}일은 다시 누르면 이어서 받아요` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
+        (chkBad.length ? ` · ⚠ 합계 다른 날 ${chkBad.sort().map(md).join(", ")} (MIS 화면 확인)` : "");
+      if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length, chkBad: chkBad.length }); }
+      return finish(true, text, { days: saved, more: rem.length, chkBad: chkBad.length });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
     }
@@ -745,7 +762,7 @@
       days.reverse(); // 최근 날부터 (창 시간이 모자라면 옛날 쪽이 다음으로 밀림)
       const L = loader($, d);
       const heads = (g) => (optsOf(g).columns || []).map((row) => row.map((c) => `${c.field || ""}=${title(c)}${c.colspan ? "*" + c.colspan : ""}`));
-      let saved = 0, probed = false, used = null, hits = 0; const empty = [], failed = []; let rem = [];
+      let saved = 0, probed = false, used = null, hits = 0; const empty = [], failed = [], chkBad = []; let rem = [];
       const readDay = async (day) => {
         step = "조회 " + day;
         if (!(await L.idle(T.q))) return "busy";
@@ -770,6 +787,9 @@
         used = { store: stCd.field, sets: cnt.map((c) => c.field) };
         const r = mine[0], q = (f) => { const v = num(r[f]); return isFinite(v) ? v : 0; };
         const out = cnt.map((c) => ({ s: c.field.replace(/_CNT$/i, ""), q: q(c.field) })).filter((x) => x.q);
+        // 합계 대조: 세트별 수량 합 = 이 줄의 '세트 합계' 수량(TOT_CNT)?
+        const tf = byF(/^TOT_CNT$/i);
+        if (tf && Math.abs(q(tf.field) - cnt.reduce((a, c) => a + q(c.field), 0)) > 0) chkBad.push(day);
         hits++;
         await set("setDay." + day, { at: Date.now(), cust: byF(/^CUST_CNT$/i) ? q(byF(/^CUST_CNT$/i).field) : null, tot: byF(/^TOT_CNT$/i) ? q(byF(/^TOT_CNT$/i).field) : null, rows: out });
         saved++; return "ok";
@@ -791,9 +811,10 @@
           dates: dbs().map((i) => $(i).datebox("getValue")), inputs: [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password" && /store|stor|shop|str|매장|brand|area|sel|cmb|gubun|type/i.test(i.id + i.name)).map((i) => `${i.tagName.toLowerCase()}#${i.id || "-"}=${String(i.value).slice(0, 20)}`).slice(0, 12) };
         await merge("setProbe", { diag }).catch(() => {});
       }
-      await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used }).catch(() => {});
+      await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used, chkBad: chkBad.sort() }).catch(() => {});
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set(failed)].sort();
-      const text = `Set판매현황 ${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? " · 이 매장 줄이 한 번도 안 나옴(저장 안 함, 화면 모양만 기록)" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음");
+      const text = `Set판매현황 ${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? " · 이 매장 줄이 한 번도 안 나옴(저장 안 함, 화면 모양만 기록)" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
+        (chkBad.length ? ` · ⚠ 세트 합계 다른 날 ${chkBad.map(md).join(", ")} (MIS 화면 확인)` : "");
       if (!hits && days.length) return finish(false, text, { days: 0 });
       return finish(true, text, { days: saved, more: rem.length });
     } catch (e) {
