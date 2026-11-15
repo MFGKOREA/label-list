@@ -2647,10 +2647,10 @@ li.expired .name { text-decoration: none; }
   function paintPush() {
     const b = $("pushOpen");
     // 아이폰 사파리(또는 iOS 16.4 미만)는 알림을 못 받지만, 버튼은 보여서 누르면 방법을 안내
-    if (!pushOk()) { b.hidden = !(FB_CONFIG && storeKnown && /iphone|ipad|ipod/i.test(navigator.userAgent)); b.textContent = "🔔 알림 받기"; return; }
-    const sv = pushSaved();
+    // 버튼은 항상 보임. 알림을 못 받는 브라우저면 누를 때 방법을 안내
+    if (!pushOk()) { b.hidden = !(FB_CONFIG && storeKnown); b.textContent = "🔔 알림 받기"; b.classList.remove("push-on"); return; }
     const denied = Notification.permission === "denied";
-    const on = !denied && Notification.permission === "granted" && sv.store === STORE && !!sv.token;
+    const on = Notification.permission === "granted"; // 허용했으면 '알림 켜짐' (등록은 뒤에서 조용히)
     // 켜진 뒤에도 버튼은 남겨 두고 상태만 보여줌 (누르면 다시 등록해서 확인)
     b.textContent = denied ? "🔕 알림 꺼짐" : on ? "🔔 알림 켜짐" : "🔔 알림 받기";
     b.classList.toggle("push-on", on);
@@ -2695,8 +2695,13 @@ li.expired .name { text-decoration: none; }
   }
   // "허용 안 함"을 눌렀으면 앱이 다시 물을 수 없음 → 휴대폰 설정에서 켜는 방법 안내
   $("pushOpen").onclick = () => {
-    if (!pushOk()) { // 아이폰: 홈 화면 앱이 아니거나 iOS가 오래됨
+    if (!pushOk()) { // 아이폰: 홈 화면 앱이 아니거나 iOS가 오래됨 / 그 밖: 알림을 못 받는 브라우저
       const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+      if (!/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+        $("pushAskIos").innerHTML = "이 브라우저는 알림을 받을 수 없어요. <b>크롬</b>으로 열어 주세요.";
+        $("pushAskIos").hidden = false; $("pushAskGo").textContent = "확인"; $("pushAskGo").dataset.mode = "ok";
+        $("pushAsk").hidden = false; return;
+      }
       $("pushAskStore").textContent = (STORES[STORE] && STORES[STORE].name) || "이 매장";
       $("pushAskIos").innerHTML = standalone
         ? "이 아이폰은 알림을 받을 수 없는 iOS 버전이에요. <b>설정 → 일반 → 소프트웨어 업데이트</b>에서 iOS 16.4 이상으로 올린 뒤 다시 눌러 주세요."
