@@ -502,6 +502,7 @@ li.expired .name { text-decoration: none; }
     <span class="top-right">
       <span class="online" id="online" hidden><i></i><span>접속중 <b id="onlineN">0</b>명</span></span>
       <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
+      <button type="button" class="howto-open" id="pushOpen" hidden>🔔 알림 받기</button>
     </span>
   </div>
   <header class="hdr">
@@ -1723,7 +1724,8 @@ li.expired .name { text-decoration: none; }
     if (!noticeDirty) return;
     const text = $("noticeInput").value.trim().slice(0, 200);
     const it = { id: NOTICE_ID, name: "전달사항", memo: text, mode: "note", expiry: "2099-12-31", mfg: "", num: 0, unit: "", updatedAt: Date.now() };
-    try { const list = await call("saveItem", it); noticeDirty = false; notice = it; apply(list); }
+    const prev = (notice && notice.memo) || "";
+    try { const list = await call("saveItem", it); noticeDirty = false; notice = it; apply(list); pushNoticeLater(text, prev); }
     catch { $("noticeTime").textContent = "저장 안 됨 · 인터넷 확인"; $("noticeTime").classList.add("err"); }
   }
   $("noticeInput").addEventListener("input", () => {
@@ -2583,6 +2585,62 @@ li.expired .name { text-decoration: none; }
 
   // 다음부터는 휴대폰에 저장된 화면으로 바로 열림
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+  // ---- 휴대폰 알림 (유통기한·전달사항): 이 기기에서 고른 매장 알림만 받음 ----
+  // Firebase 웹 푸시. 기기 알림 주소(토큰)는 매장모음 '알림' 탭에 매장과 함께 저장되고, 보내기는 매장모음 구글 코드가 함
+  const FB_CONFIG = null; // Firebase 웹 앱 설정 (공개값) — 프로젝트 설정 → 일반 → 웹 앱
+  const FB_VAPID = ""; // 클라우드 메시징 → 웹 푸시 인증서 공개 키
+  const PUSH_KEY = "label-list-push";
+  const pushSaved = () => { try { return JSON.parse(localStorage.getItem(PUSH_KEY)) || {}; } catch { return {}; } };
+  const pushOk = () => !!FB_CONFIG && storeKnown && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  function paintPush() {
+    const b = $("pushOpen"); if (!pushOk()) { b.hidden = true; return; }
+    const sv = pushSaved();
+    b.hidden = Notification.permission === "denied" || (Notification.permission === "granted" && sv.store === STORE && !!sv.token);
+  }
+  let fbLoad = null;
+  const loadFb = () => fbLoad || (fbLoad = new Promise((ok, no) => {
+    const add = (src) => new Promise((a, b) => { const sc = document.createElement("script"); sc.src = src; sc.onload = a; sc.onerror = b; document.head.appendChild(sc); });
+    add("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js")
+      .then(() => add("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"))
+      .then(() => { if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG); ok(firebase); })
+      .catch(() => { fbLoad = null; no(new Error("알림 도구를 못 받았어요")); });
+  }));
+  async function pushSubscribe(quiet) {
+    if (!pushOk()) return;
+    const b = $("pushOpen");
+    try {
+      if (Notification.permission !== "granted") {
+        if (quiet) return;
+        const p = await Notification.requestPermission();
+        if (p !== "granted") { paintPush(); return; }
+      }
+      if (!quiet) b.textContent = "알림 켜는 중…";
+      const fb = await loadFb(), reg = await navigator.serviceWorker.ready;
+      const token = await fb.messaging().getToken({ vapidKey: FB_VAPID, serviceWorkerRegistration: reg });
+      if (!token) throw new Error("토큰 없음");
+      const sv = pushSaved();
+      await hubPost({ action: "push_sub", store: STORE, token, old: sv.token && sv.token !== token ? sv.token : "" });
+      try { localStorage.setItem(PUSH_KEY, JSON.stringify({ token, store: STORE, at: Date.now() })); } catch {}
+      if (!quiet) { b.textContent = "🔔 알림 켜짐"; setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 1500); }
+    } catch (err) { if (!quiet) { b.textContent = "알림을 켜지 못했어요"; setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 2500); } }
+  }
+  $("pushOpen").onclick = () => pushSubscribe(false);
+  // 이미 허용한 기기: 매장을 바꿨거나 하루 지났으면 조용히 다시 등록 (토큰이 바뀌는 경우 대비)
+  if (pushOk() && Notification.permission === "granted") { const sv = pushSaved(); if (sv.store !== STORE || !sv.token || Date.now() - (sv.at || 0) > 86400000) pushSubscribe(true); }
+  paintPush();
+  // 전달사항을 고치면 같은 매장 다른 폰에 알림: 쓰는 동안 여러 번 저장되니 마지막 저장 20초 뒤 한 번만
+  let pushNoticeTimer = 0, pushNoticeLast = null;
+  function pushNoticeLater(text, prev) {
+    if (!FB_CONFIG) return;
+    if (pushNoticeLast === null) pushNoticeLast = prev || "";
+    clearTimeout(pushNoticeTimer);
+    pushNoticeTimer = setTimeout(() => {
+      if (!text || text === pushNoticeLast) return;
+      pushNoticeLast = text;
+      hubPost({ action: "push_notice", store: STORE, text: text.slice(0, 200), token: pushSaved().token || "" }).catch(() => {});
+    }, 20000);
+  }
   if (!storeKnown) {
     $("storeName").textContent = "매장 선택";
     $("storeChange").hidden = true;
