@@ -245,6 +245,12 @@ html, body { overflow-x: hidden; }
 .f-row input:focus { box-shadow: 0 0 0 2px var(--accent); background: var(--surface); }
 .f-row.today { background: var(--surface); box-shadow: inset 3px 0 0 var(--fg); }
 .f-row.today input { background: var(--fill-2); }
+/* 컨벤션센터 행사 한 줄 (11/15 시안 A): 칸 아래, 요일 칸 너비만큼 들여 씀 */
+.f-row .f-ev { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; margin-top: -1px; padding: 0 2px 2px 35px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.f-row .f-ev-k { flex: none; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--fill-2); color: var(--fg); }
+.f-row .f-ev-k.exh { background: var(--rose); color: var(--rose-ink); }
+.f-row .f-ev-n { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-row .f-ev-m { flex: 0 0 100%; font-variant-numeric: tabular-nums; }
 .diff { font-size: 12px; font-weight: 700; text-align: right; }
 .diff.d-up { color: var(--ok); }
 .diff.d-down { color: var(--rose-ink); }

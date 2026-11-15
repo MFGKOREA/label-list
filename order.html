@@ -265,6 +265,12 @@ html, body { overflow-x: hidden; }
 .f-row input:focus { box-shadow: 0 0 0 2px var(--accent); background: var(--surface); }
 .f-row.today { background: var(--surface); box-shadow: inset 3px 0 0 var(--fg); }
 .f-row.today input { background: var(--fill-2); }
+/* 컨벤션센터 행사 한 줄 (11/15 시안 A): 칸 아래, 요일 칸 너비만큼 들여 씀 */
+.f-row .f-ev { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; margin-top: -1px; padding: 0 2px 2px 35px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.f-row .f-ev-k { flex: none; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--fill-2); color: var(--fg); }
+.f-row .f-ev-k.exh { background: var(--rose); color: var(--rose-ink); }
+.f-row .f-ev-n { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-row .f-ev-m { flex: 0 0 100%; font-variant-numeric: tabular-nums; }
 .diff { font-size: 12px; font-weight: 700; text-align: right; }
 .diff.d-up { color: var(--ok); }
 .diff.d-down { color: var(--rose-ink); }
@@ -3890,10 +3896,18 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
         `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}</span>` +
         `<input class="fc" inputmode="numeric" enterkeyhint="next" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
         `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
+      // 컨벤션센터 행사 (11/15 KM 시안 A 고름 "참가인원·수용인원 있으면 좋을 듯"): 데스크위젯이 매일 보내는 events → 그날 줄 아래에 종류·이름, 숫자가 있으면 수용·예상 관람 한 줄 더
+      //  배수는 안 붙임: 전시회 금요일 1.71배(행사 없는 금요일 대비)를 예상에 곱하면 오히려 덜 맞았음(11/15 되돌려 보기) → 이름·규모만 보여 주고 Forecast는 KM이 정함
+      const ev = ((db.events || {}).days || {})[d];
+      if (ev && ev.n) {
+        const kind = ev.exh ? "전시회" : ev.conv ? "컨벤션" : "행사", ppl = (v) => Math.round(num(v)).toLocaleString("ko-KR") + "명";
+        const meta = [num(ev.cap) > 0 ? "수용 " + ppl(ev.cap) : "", num(ev.exp) > 0 ? "예상 관람 " + ppl(ev.exp) : ""].filter(Boolean).join(" · ");
+        row.insertAdjacentHTML("beforeend", `<div class="f-ev"><b class="f-ev-k${ev.exh ? " exh" : ""}">${kind}</b><span class="f-ev-n">${esc((ev.names || []).join(" · "))}</span>${meta ? `<span class="f-ev-m">${meta}</span>` : ""}</div>`);
+      }
       const [fi, ai] = row.querySelectorAll("input");
       const upd = () => {
         [fi, ai].forEach((el) => { const v = el.value.replace(/\D/g, ""); const c = v ? Number(v).toLocaleString("ko-KR") : ""; if (el.value !== c) el.value = c; });
-        row.lastElementChild.outerHTML = diffHTML(fi.value.replace(/\D/g, ""), ai.value.replace(/\D/g, ""));
+        row.querySelector(".diff").outerHTML = diffHTML(fi.value.replace(/\D/g, ""), ai.value.replace(/\D/g, "")); // 행사 줄이 맨 뒤에 붙을 수 있어 오차 칸을 이름으로 찾음
         foot(); clearTimeout(fcSaveT); fcSaveT = setTimeout(fcSave, 1200);
       };
       const save = () => { clearTimeout(fcSaveT); fcSave(); };
