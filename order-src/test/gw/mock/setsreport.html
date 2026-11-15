@@ -1,32 +1,31 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Set판매현황</title><script src="jquery.js"></script></head><body>
 Set판매현황
+<!-- 가짜 MIS Set판매현황: 11/15 실제 조회에서 본 모양(treegrid "tg", 매장마다 한 줄, 세트마다 수량·금액·% 칸). 숫자는 지어낸 것 -->
 <input id="sDate" class="easyui-datebox" value="2026-11-13"><input id="eDate" class="easyui-datebox" value="2026-11-13">
-<input id="cdStore" value="1345090" disabled>
 <a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
-<table id="sGrid"></table>
+<table id="tg"></table>
 <script>
 $("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
 $.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
-// 열(가정): 매장명 · 세트코드 · 세트명 · 구성메뉴코드 · 구성메뉴명 · 수량 · 금액 · 등록자(직원 이름 — 저장되면 안 됨)
-var COLS = [[{ field: "CD_STORE", title: "매장코드" }, { field: "NM_STORE", title: "매장명" }, { field: "CD_SET", title: "세트코드" }, { field: "NM_SET", title: "세트명" }, { field: "CD_MENU", title: "구성메뉴코드" }, { field: "NM_MENU", title: "구성메뉴명" },
-  { field: "QT_SALE", title: "수량" }, { field: "AM_SALE", title: "금액" }, { field: "NM_USER", title: "등록자" }]];
-var PG = { size: 3 };
-// 실제 easyui처럼 getRows는 다시 불러오기 전까지 같은 배열을 돌려줌 (조회·쪽 넘김 때만 새 배열)
-$.fn.datagrid = function (cmd) { var st = this.data("dg") || { all: [], view: [] }; if (!this.data("dg")) this.data("dg", st);
-  if (cmd === "getRows") return st.view; if (cmd === "getData") return { total: st.all.length, rows: st.view };
-  if (cmd === "options") return { columns: COLS, pagination: true, pageList: [3, 10] };
-  if (cmd === "getPager") { var me = this; return { pagination: function (a) { if (a && typeof a === "object" && a.pageSize) PG.next = a.pageSize; if (a === "select") setTimeout(function () { var x = me.data("dg"); PG.size = PG.next || PG.size; x.view = x.all.slice(0, PG.size); window.__paged = (window.__paged || 0) + 1; }, 300); } }; } };
-$("#sGrid").data("datagrid", 1);
-// [날짜, 세트코드, 세트명, 메뉴코드, 메뉴명, 수량, (다른 매장 코드)]  11/13(금) 이 매장 4줄 + 다른 매장 1줄(저장되면 안 됨) + 합계, 11/14(토) 5줄(쪽 넘김 필요), 11/12는 세트 판매 없음
-var DATA = {
-  "2026-11-13": [["S01", "매드갈릭 골고루 세트(2인)", "M11", "갈릭 스노잉 피자", 3], ["S01", "매드갈릭 골고루 세트(2인)", "M21", "감자 수프", 6], ["S02", "매드 프리미엄 세트", "M31", "갈릭 버터라이스", 2], ["S02", "매드 프리미엄 세트", "M41", "포레스트스테이크", 2], ["S02", "매드 프리미엄 세트", "M31", "갈릭 버터라이스", 50, "1111111"]],
-  "2026-11-14": [["S01", "매드갈릭 골고루 세트(2인)", "M11", "갈릭 스노잉 피자", 7], ["S01", "매드갈릭 골고루 세트(2인)", "M21", "감자 수프", 14], ["S03", "매드갈릭 미트 더블 세트(4인)", "M31", "갈릭 버터라이스", 4], ["S03", "매드갈릭 미트 더블 세트(4인)", "M51", "립", 2], ["S02", "매드 프리미엄 세트", "M31", "갈릭 버터라이스", 3]]
-};
+var SETS = ["ROMANTIC", "PREMIUM", "MGGGR", "MTDB", "WINESET"], NAMES = ["[안심]로맨틱", "매드 프리미엄", "골고루", "미트 더블", "나잇 앤 와인"];
+var G1 = [{ title: "매장", colspan: 2 }, { title: "매출", colspan: 6 }, { title: "세트 합계", colspan: 3 }].concat(NAMES.map(function (n) { return { title: n, colspan: 3 }; }));
+var G2 = [{ field: "CD_STORE", title: "매장코드" }, { field: "NM_STORE", title: "매장명" }, { field: "GROSS_SALES", title: "Gross Sales" }, { field: "TOTAL_SALES", title: "Total Sales" }, { field: "RESTAURANT_SALES", title: "RESTAURANT Sales" }, { field: "DELIVERY_SALES", title: "DELIVERY Sales" }, { field: "CUST_CNT", title: "매장고객수" }, { field: "TOTAL_PPA", title: "TOTAL PPA" },
+  { field: "TOT_CNT", title: "수량" }, { field: "TOT_AMT", title: "금액" }, { field: "TOT_PER", title: "%" }];
+SETS.forEach(function (k) { G2.push({ field: k + "_CNT", title: "수량" }, { field: k + "_AMT", title: "금액" }, { field: k + "_PER", title: "%" }); });
+var ST = { data: [] };
+$.fn.datagrid = function (cmd) { if (cmd === "getRows") return []; if (cmd === "options") return { columns: [G1, G2] }; if (cmd === "getData") return { total: 0, rows: [] }; };
+$.fn.treegrid = function (cmd) { if (cmd === "getData") return ST.data; if (cmd === "options") return { columns: [G1, G2] }; };
+$("#tg").data("datagrid", 1).data("treegrid", 1);
+// 날짜별 [이 매장 고객수, 골고루, 미트 더블, 로맨틱, 프리미엄] — 11/12는 이 매장 세트 없음(다른 매장 줄만), 11/14(토)는 많음
+var DAY = { "2026-11-12": null, "2026-11-13": [180, 4, 2, 1, 0], "2026-11-14": [420, 11, 6, 2, 1] };
 function fn_Search() {
   if (!window.event) throw new Error("no event");
-  var s = $("#sDate").val(), e = $("#eDate").val(), rows = [];
-  Object.keys(DATA).forEach(function (d) { if (d >= s && d <= e) DATA[d].forEach(function (r) { rows.push({ CD_STORE: r[5] || "1345090", NM_STORE: r[5] ? "다른매장" : "수원컨벤션점", CD_SET: r[0], NM_SET: r[1], CD_MENU: r[2], NM_MENU: r[3], QT_SALE: r[4], AM_SALE: (r[4] * 10000).toLocaleString(), NM_USER: "홍길동" }); }); });
-  if (rows.length) rows.push({ CD_STORE: "", NM_STORE: "합계", CD_SET: "", NM_SET: "", CD_MENU: "", NM_MENU: "", QT_SALE: 99, AM_SALE: "", NM_USER: "" });
-  setTimeout(function () { PG.size = 3; $("#sGrid").data("dg", { all: rows, view: rows.slice(0, PG.size) }); window.__q = (window.__q || 0) + 1; }, 300);
+  var s = $("#sDate").val(), v = DAY[s], kids = [];
+  var row = function (cd, nm, c, gg, mt, ro, pr) { var r = { CD_STORE: cd, NM_STORE: nm, GROSS_SALES: "9,000,000", TOTAL_SALES: "9,500,000", RESTAURANT_SALES: "9,000,000", DELIVERY_SALES: "0", CUST_CNT: c, TOTAL_PPA: "50,000", TOT_CNT: gg + mt + ro + pr, TOT_AMT: "1,000,000", TOT_PER: "10.0" };
+    SETS.forEach(function (k) { r[k + "_CNT"] = 0; r[k + "_AMT"] = "0"; r[k + "_PER"] = "0"; }); r.MGGGR_CNT = gg; r.MTDB_CNT = mt; r.ROMANTIC_CNT = ro; r.PREMIUM_CNT = pr; r.MGGGR_AMT = (gg * 120000).toLocaleString(); return r; };
+  kids.push(row("1111111", "다른매장", 300, 50, 50, 5, 5));
+  if (v) kids.push(row("1345090", "MG수원컨벤션센터점", v[0], v[1], v[2], v[3], v[4]));
+  var tot = row("", "합계", 0, 0, 0, 0, 0); tot.children = kids;
+  setTimeout(function () { ST.data = [tot]; window.__q = (window.__q || 0) + 1; }, 300);
 }
 </script></body></html>

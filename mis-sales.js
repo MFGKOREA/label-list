@@ -694,10 +694,12 @@
   }
 
   // ---------- Set판매현황 (11/15 KM 승인 "그래 읽고 너도 분석해봐", kind "sets") ----------
-  //  세트(골고루·미트 더블·프리미엄·로맨틱 등)에 실제로 어떤 메뉴가 들어갔는지 하루씩 읽어 시트 setDay.날짜 = { at, rows: [{ s 세트, m 구성 메뉴, q 수량 }] } 에 둠.
-  //  메뉴별 매출현황에는 세트가 세트 이름 한 줄과 "셋트구성코드"로만 나와(주말에 급증) 세트 안의 밥·사이드·수프가 레시피 계산에서 빠짐 → 그 몫을 채우는 데 씀
-  //  메뉴 경로: 매출정보관리 › 매출분석(폴더) › Set판매현황. 이 매장만, 조회만(조회·쪽 넘김 말고는 아무것도 누르지 않음). 금액·직원 이름은 저장하지 않음
-  //  처음엔 열 이름만 setProbe에 남기고, 세트·메뉴·수량 칸을 못 찾으면 머리글을 알려 주고 멈춤(다음에 읽는 스크립트만 고치면 됨)
+  //  실제 화면(11/15 첫 조회): 매장마다 한 줄, 세트 종류마다 수량·금액·% 칸이 옆으로 늘어선 표(treegrid "tg").
+  //   칸: 매장코드·매장명·Gross/Total/RESTAURANT/DELIVERY Sales·매장고객수(CUST_CNT)·PPA, 세트 합계(TOT_CNT), 세트별 *_CNT
+  //   (ROANDPRE·ROMANTIC·ROMANTIC_SL·PREMIUM·ROMANTIC_CK·MGGGR 골고루·MTDB 미트더블·WINESET·WINE). 구성 메뉴는 이 화면에 없음
+  //  하루씩 조회해서 이 매장(1345090) 줄의 세트별 수량·고객수만 시트 setDay.날짜 = { at, cust, tot, rows: [{ s 세트 칸, q 수량 }] } 에 둠. 금액·다른 매장은 저장 안 함
+  //  메뉴 경로: 매출정보관리 › 매출분석(폴더) › Set판매현황. 조회·쪽 넘김 말고는 아무것도 누르지 않음. 최근 날부터 읽고 하루마다 바로 저장(창이 닫혀도 남게)
+  //  세트 칸 제목(겹 머리글)은 setProbe.heads에. 결과가 계속 비면 저장하지 않고 화면 모양만 setProbe.diag에 남김
   async function runSets() {
     try {
       step = "Set판매현황 메뉴";
@@ -730,17 +732,18 @@
       const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
       if (!btn) { step = "조회"; return finish(false, "Set판매현황 조회 버튼을 못 찾았어요"); }
       const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
-      const colsOf = (g) => { const o = $(g).datagrid("options"); return [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); };
-      const totalOf = (g) => { try { const x = $(g).datagrid("getData") || {}; return +x.total || 0; } catch (e) { return 0; } };
+      const optsOf = (g) => { try { return $(g).data("treegrid") ? $(g).treegrid("options") : $(g).datagrid("options"); } catch (e) { return $(g).datagrid("options"); } };
+      const colsOf = (g) => { const o = optsOf(g); return [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); };
+      // treegrid는 getRows가 비어 있을 수 있어 getData를 펼쳐 읽음 (자식 줄까지)
+      const rowsOf = (g) => { try { if ($(g).data("treegrid")) { const out = [], walk = (a) => (a || []).forEach((r) => { out.push(r); walk(r.children); }); walk($(g).treegrid("getData")); return out; } } catch (e) {} try { return $(g).datagrid("getRows") || []; } catch (e) { return []; } };
       const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total/i.test(String(v ?? "").trim()));
-      // 날짜: 어제까지 28일 중 시트에 아직 없는 날만 (force면 다). from을 주면 거기부터(최대 31일)
       const to = job.to, from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 27); return t.toISOString().slice(0, 10); })();
       const have = await get();
       const days = []; for (let x = from; x <= to && days.length < 31; ) { if (job.force || !have["setDay." + x]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      days.reverse(); // 최근 날부터 (창 시간이 모자라면 옛날 쪽이 다음으로 밀림)
       const L = loader($, d);
-      let saved = 0, probed = false, used = null; const empty = [], failed = [], saveErr = []; let rem = [];
-      let saveQ = Promise.resolve();
-      const save = (day, rows) => { saveQ = saveQ.then(() => set("setDay." + day, { at: Date.now(), rows })).then(() => { saved++; }, () => { saveErr.push(day); }); };
+      const heads = (g) => (optsOf(g).columns || []).map((row) => row.map((c) => `${c.field || ""}=${title(c)}${c.colspan ? "*" + c.colspan : ""}`));
+      let saved = 0, probed = false, used = null, hits = 0; const empty = [], failed = []; let rem = [];
       const readDay = async (day) => {
         step = "조회 " + day;
         if (!(await L.idle(T.q))) return "busy";
@@ -748,60 +751,48 @@
         $(ds[0]).datebox("setValue", fmt(day, like)); if (ds[1]) $(ds[1]).datebox("setValue", fmt(day, like));
         const prev = L.refs();
         press(R, btn.closest("a, button, input") || btn);
-        let hit = await L.awaitLoad(prev, T.q);
-        if (!hit) return "timeout";
-        // 쪽 나눔 표면 한 쪽에 다 보이게 바꿔 다시 불러옴 (조회만)
-        try {
-          const o = $(hit.grid).datagrid("options"), t = totalOf(hit.grid);
-          if (o.pagination && t > hit.rows.length) {
-            const n = Math.min(5000, t), pg = $(hit.grid).datagrid("getPager");
-            pg.pagination({ pageSize: n, pageList: [...new Set([...(o.pageList || []), n])] }); pg.pagination("select", 1);
-            for (let k = 0; k < 100 && (L.raw(hit.grid) || []).length < n; k++) await sleep(200);
-            await L.idle(T.q); hit = { grid: hit.grid, rows: L.raw(hit.grid) || [] };
-          }
-        } catch (e) {}
-        if (!probed) { probed = true; await set("setProbe", { at: Date.now(), day, grids: L.grids().map((g) => ({ id: g.id || "", cols: colsOf(g).map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!$(g).datagrid("options").pagination })) }).catch(() => {}); }
-        if (!hit.rows.length) return "empty";
-        const cs = colsOf(hit.grid), TT = (c) => title(c) + " " + c.field;
-        const f = (re, bad) => cs.find((c) => re.test(TT(c)) && !(bad && bad.test(TT(c))));
-        const qty = f(/판매\s*수량/) || f(/수량|QTY|QT_/i, /금액|단가|율|%|AMT|PRICE|합계/i);
-        const setCol = f(/세트\s*(메뉴)?\s*명|SET_?NM|NM_?SET/i) || f(/세트|SET/i, /코드|CODE|CD_|구성|수량|금액|AMT|QTY|QT_/i);
-        const menu = f(/구성\s*(메뉴)?\s*명|하위\s*메뉴|선택\s*메뉴|구성\s*메뉴/, /코드|CODE|CD_|수량|금액|QTY|AMT/i) || f(/메뉴\s*명|NM_?MENU|MENU_?NM|상품\s*명|품목\s*명|NM_?ITEM|ITEM_?NM/i, /세트|SET|코드|CODE|CD_/i);
-        const setCd = f(/세트\s*코드|SET_?CD|CD_?SET/i), menuCd = f(/구성\s*코드|메뉴\s*코드|MENU_?CD|CD_?MENU/i, /세트|SET/i);
-        step = "읽기 " + day;
-        if (!qty || !(setCol || menu)) throw new Error(`세트·메뉴·수량 칸을 못 찾았어요 (머리글: ${cs.map(title).join(", ").slice(0, 240)})`);
-        // 이 매장 줄만: 매장코드 칸이 있으면 1345090만, 코드 없이 매장명만 여럿이면 저장하지 않고 멈춤 (다른 매장 자료는 읽지 않음)
-        const stCd = f(/매장\s*코드|CD_?STORE|STORE_?CD|CD_?STR\b|CD_?SHOP/i), stNm = f(/매장\s*명|NM_?STORE|STORE_?NM|NM_?SHOP/i);
-        let rs = hit.rows.filter((r) => !isTotal(r));
-        if (stCd) rs = rs.filter((r) => String(r[stCd.field] ?? "").trim() === STORE);
-        else if (stNm && new Set(rs.map((r) => String(r[stNm.field] ?? "").trim())).size > 1) throw new Error("여러 매장 자료가 섞여 있어 저장하지 않았어요");
-        used = { s: setCol ? setCol.field : null, m: menu ? menu.field : null, q: qty.field };
-        const rows = [];
-        rs.forEach((r) => { const q = num(r[qty.field]); if (!q) return;
-          const sv = setCol ? String(r[setCol.field] ?? "").trim().slice(0, 60) : "", mv = menu ? String(r[menu.field] ?? "").trim().slice(0, 60) : "";
-          if (!sv && !mv) return;
-          rows.push({ s: sv, m: mv, q, ...(setCd ? { sc: String(r[setCd.field] ?? "").trim().slice(0, 20) } : {}), ...(menuCd ? { mc: String(r[menuCd.field] ?? "").trim().slice(0, 20) } : {}) }); });
-        if (!rows.length) return "empty";
-        save(day, rows); return "ok";
+        const hit = await L.awaitLoad(prev, T.q);
+        const g = (hit && hit.grid) || L.grids()[0];
+        if (!g) return "timeout";
+        const rows = rowsOf(g);
+        if (!probed) { probed = true; await set("setProbe", { at: Date.now(), day, grids: L.grids().map((x) => ({ id: x.id || "", tree: !!$(x).data("treegrid"), cols: colsOf(x).map((c) => `${c.field}=${title(c)}`), heads: heads(x), n: rowsOf(x).length })) }).catch(() => {}); }
+        if (!hit && !rows.length) return "timeout";
+        const cs = colsOf(g), byF = (re) => cs.find((c) => re.test(c.field));
+        const stCd = byF(/^CD_?STORE$|^STORE_?CD$|^CD_?STR$|^CD_?SHOP$/i) || cs.find((c) => /매장\s*코드/.test(title(c)));
+        if (!stCd) throw new Error(`매장코드 칸이 없어 이 매장 줄을 못 골라요 (머리글: ${cs.map((c) => c.field + "=" + title(c)).join(", ").slice(0, 200)})`);
+        const mine = rows.filter((r) => !isTotal(r) && String(r[stCd.field] ?? "").trim() === STORE);
+        if (!mine.length) return "empty";
+        // 세트 칸: 이름이 _CNT로 끝나는 수량 칸 (고객수·합계는 따로)
+        const cnt = cs.filter((c) => /_CNT$/i.test(c.field) && !/^(CUST|TOT)_CNT$/i.test(c.field));
+        if (!cnt.length) throw new Error(`세트 수량 칸(_CNT)을 못 찾았어요 (머리글: ${cs.map((c) => c.field + "=" + title(c)).join(", ").slice(0, 200)})`);
+        used = { store: stCd.field, sets: cnt.map((c) => c.field) };
+        const r = mine[0], q = (f) => { const v = num(r[f]); return isFinite(v) ? v : 0; };
+        const out = cnt.map((c) => ({ s: c.field.replace(/_CNT$/i, ""), q: q(c.field) })).filter((x) => x.q);
+        hits++;
+        await set("setDay." + day, { at: Date.now(), cust: byF(/^CUST_CNT$/i) ? q(byF(/^CUST_CNT$/i).field) : null, tot: byF(/^TOT_CNT$/i) ? q(byF(/^TOT_CNT$/i).field) : null, rows: out });
+        saved++; return "ok";
       };
-      try {
-        const again = []; let stuck = 0;
-        for (let i = 0; i < days.length && !replaced; i++) {
-          if (left() < T.q + T.reserve) { rem = days.slice(i); break; }
-          const r = await readDay(days[i]);
-          if (r === "empty") empty.push(days[i]); else if (r !== "ok") again.push(days[i]);
-          if (r === "ok" || r === "empty") stuck = 0;
-          else if (++stuck >= 2) { failed.push(...again.splice(0)); rem = days.slice(i + 1); break; }
-          prog(`세트 ${i + 1}/${days.length}일`);
-        }
-        for (const day of again) { if (replaced || left() < T.q + T.reserve) { failed.push(day); continue; } const r = await readDay(day); if (r === "empty") empty.push(day); else if (r !== "ok") failed.push(day); }
-      } finally { await saveQ.catch(() => {}); }
-      // 판매 없는 날도 "없음"으로 남김(다음에 다시 안 읽게)
-      for (const day of empty) await set("setDay." + day, { at: Date.now(), rows: [] }).catch(() => {});
-      await set("misSetScan", { at: Date.now(), from, to, days: saved, empty: empty.length, left: rem.length, cols: used }).catch(() => {});
-      const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set([...failed, ...saveErr])].sort();
-      const text = `Set판매현황 ${saved}일 저장` + (empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음");
-      if (bad.length && !saved) return finish(false, text, { days: saved, bad: bad.length });
+      const again = []; let stuck = 0;
+      for (let i = 0; i < days.length && !replaced; i++) {
+        if (left() < T.q + T.reserve) { rem = days.slice(i); break; }
+        const r = await readDay(days[i]);
+        if (r === "empty") empty.push(days[i]); else if (r !== "ok") again.push(days[i]);
+        if (r === "ok" || r === "empty") stuck = 0;
+        else if (++stuck >= 2) { failed.push(...again.splice(0)); rem = days.slice(i + 1); break; }
+        prog(`세트 ${i + 1}/${days.length}일`);
+      }
+      for (const day of again) { if (replaced || left() < T.q + T.reserve) { failed.push(day); continue; } const r = await readDay(day); if (r === "empty") empty.push(day); else if (r !== "ok") failed.push(day); }
+      // 이 매장 줄이 없는 날: 다른 날은 읽혔으면(hits) 그날은 세트 없음으로 남김. 한 날도 안 읽혔으면 저장하지 않고 화면 모양만 남김(조회가 안 된 것일 수 있음)
+      if (hits) { for (const day of empty) await set("setDay." + day, { at: Date.now(), cust: null, tot: 0, rows: [] }).catch(() => {}); }
+      else {
+        const diag = { at: Date.now(), days: days.length, empty: empty.length, failed: failed.length, grids: L.grids().map((x) => ({ id: x.id || "", tree: !!$(x).data("treegrid"), dg: (() => { try { return ($(x).datagrid("getRows") || []).length; } catch (e) { return -1; } })(), tg: (() => { try { return $(x).data("treegrid") ? ($(x).treegrid("getData") || []).length : -1; } catch (e) { return -2; } })() })),
+          dates: dbs().map((i) => $(i).datebox("getValue")), inputs: [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password" && /store|stor|shop|str|매장|brand|area|sel|cmb|gubun|type/i.test(i.id + i.name)).map((i) => `${i.tagName.toLowerCase()}#${i.id || "-"}=${String(i.value).slice(0, 20)}`).slice(0, 12) };
+        await merge("setProbe", { diag }).catch(() => {});
+      }
+      await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used }).catch(() => {});
+      const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set(failed)].sort();
+      const text = `Set판매현황 ${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? " · 이 매장 줄이 한 번도 안 나옴(저장 안 함, 화면 모양만 기록)" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음");
+      if (!hits && days.length) return finish(false, text, { days: 0 });
       return finish(true, text, { days: saved, more: rem.length });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
