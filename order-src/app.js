@@ -1149,7 +1149,7 @@
       //  예상 재고(est.mjs) 평균 오차 1.587→1.599 · 덜 시킬 위험 517→509. 100% 반영은 1.592·501, 1/3은 1.586·513 (README "추세 반영")
       { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t = r.theo && r.theo.get(it.key); if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } });
         const tA = tg > 0 ? tq / tg : 0, r28 = rollB ? rollB.get(it.key) || 0 : 0;
-        it.trendA = tA > 0 && r28 > 0 ? 1 + TREND_W * (Math.min(2, Math.max(0.5, r28 / tA)) - 1) : 1; }
+        it.trendTau = tA > 0 && r28 > 0 ? Math.min(2, Math.max(0.5, r28 / tA)) : 1; it.trendA = 1 + TREND_W * (it.trendTau - 1); }
       // D: 3개월 이상이면 고정량 + 비례량 (최소제곱, 둘 다 0 이상일 때만)
       it.fixedA = 0;
       const pts = withA.slice(-6).map((r) => ({ d: r.days, g: r.gross / 1e6, u: r.actual.get(it.key) || 0 })).filter((p) => p.u > 0);
