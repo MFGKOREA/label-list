@@ -2723,7 +2723,7 @@ li.expired .name { text-decoration: none; }
   // 처음 여는 사람에게 한 번만: 알림 받기 안내 (임박 팝업이 떠 있으면 닫힌 뒤에)
   const PUSH_ASK = "label-list-push-asked";
   const iosBrowser = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone && !matchMedia("(display-mode: standalone)").matches;
-  const PUSH_ASK_ON = false; // 실제 폰에서 알림 등록이 확인되면 켬 (그전엔 직원들이 눌러도 실패할 수 있어서)
+  const PUSH_ASK_ON = true; // 11/15 수원점 폰 2대 실제 알림 수신 확인
   function pushAskMaybe() {
     if (!PUSH_ASK_ON || !FB_CONFIG || !storeKnown || !$("pushAsk").hidden) return;
     try { if (localStorage.getItem(PUSH_ASK)) return; } catch { return; }
