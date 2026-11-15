@@ -1904,11 +1904,15 @@
   const recvPlausible = (it, y) => { const cap = 5 * ordMaxOf(it); return !(cap > 0) || (recvRowsOf(it.key, y) || []).every((m) => Math.abs(ordToStock(it, num(m.qty))) <= cap); }; // 반품 줄도 같은 기준
   const recvOn = (it, y) => RECV_USE && y < TODAY && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on && recvPlausible(it, y); // 어제까지만 (오늘 것은 아직 다 안 들어왔을 수 있음, 앞날 기록은 쓰지 않음)
   const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
+  // 손으로 적은 입고·이동 (11/15 KM: 버터라이스가 모자라 다른 매장에서 45개 빌림 — MIS 입고현황엔 안 잡힘). 시트 recvAdd.날짜 = { rows: [{ key 품목, q 재고단위(빌려주면 −), note }] }
+  //  KM이 말해 준 것만 적는다. 같은 날 입고현황에 같은 양이 잡히면 두 번 세지 않음
+  const addRowsOf = (it, x) => ((db["recvAdd." + x] || {}).rows || []).filter((r) => r && r.key === it.key && num(r.q) !== 0 && !(recvOn(it, x) && (recvRowsOf(it.key, x) || []).some((m) => Math.abs(ordToStock(it, num(m.qty)) - num(r.q)) < 1e-6)));
   const arrivalsOf = (it, x) => {
-    const out = arrivalsOrd(it, x); if (!RECV_USE) return out;
+    const out = arrivalsOrd(it, x), add = addRowsOf(it, x).map((r) => ({ d: x, q: num(r.q), recv: true, add: true }));
+    if (!RECV_USE) return add.length ? [...out, ...add] : out;
     const kept = out.filter((a) => !recvOn(it, a.d)); // 받은 기록이 있는 날로 잡힌 발주 입고는 빼고
     if (recvOn(it, x)) (recvRowsOf(it.key, x) || []).forEach((m) => kept.push({ d: x, q: ordToStock(it, num(m.qty)), recv: true })); // 그날 실제로 받은 양
-    return kept;
+    return add.length ? [...kept, ...add] : kept;
   };
   const arrivalsOrd = (it, x) => {
     const r = (db["input." + x] || {})[it.key];
