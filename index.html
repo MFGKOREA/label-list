@@ -82,6 +82,22 @@ body {
 @keyframes breathe { 0% { transform: scale(1); opacity: .45; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .online i::after { animation: none; opacity: 0; } }
 .online b { font-weight: 800; }
+/* 처음 한 번 뜨는 알림 안내 */
+.push-ask { justify-items: center; text-align: center; gap: 12px; padding-top: 26px; }
+.pa-bell { width: 56px; height: 56px; border-radius: 18px; background: #e6f1ec; color: #3f7a62; display: grid; place-items: center; }
+.pa-bell svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; animation: ring 2.4s ease-in-out infinite; transform-origin: 50% 20%; }
+@keyframes ring { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(14deg); } 80% { transform: rotate(-12deg); } 85% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
+@media (prefers-reduced-motion: reduce) { .pa-bell svg { animation: none; } }
+.pa-store { margin: -6px 0 0; font-size: 14px; color: var(--muted); }
+.pa-store b { color: var(--fg); }
+.popup .pa-list { width: 100%; margin: 0; padding: 0; background: none; box-shadow: none; display: grid; gap: 8px; text-align: left; }
+.popup .pa-list li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; border-radius: 14px; background: #f7f7f8; }
+.pa-ic { flex: none; width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 14px; font-weight: 800; background: #fff; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+.pa-ic.exp { background: var(--rose); color: var(--rose-t); box-shadow: none; }
+.pa-list b { display: block; font-size: 15px; font-weight: 800; }
+.pa-list small { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
+.pa-ios { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--fg); background: var(--amber); border-radius: 12px; padding: 10px 12px; text-align: left; }
+.push-ask .actions { width: 100%; }
 .push-why { max-width: 200px; font-size: 11px; line-height: 1.35; color: var(--rose-t); text-align: right; word-break: break-all; }
 .howto-open { position: relative; width: 100%; text-align: center; font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 /* 홈 화면 추가: 연두빛이 은은하게 들어왔다 빠짐 (눈에 띄게, 과하지 않게) */
@@ -739,6 +755,20 @@ li.expired .name { text-decoration: none; }
   <div class="pv-img"><img id="pvImg" alt="라벨 사진"></div>
   <div><div class="pv-msg" id="pvMsg"></div><div class="pv-f"><button type="button" id="pvRetake">다시 찍기</button><button type="button" id="pvDel">사진 삭제</button></div></div>
   <input type="file" id="pvFile" accept="image/*" hidden>
+</div>
+
+<div class="overlay" id="pushAsk" hidden>
+  <div class="popup push-ask" role="dialog" aria-modal="true" aria-labelledby="pushAskTitle" tabindex="-1">
+    <div class="pa-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"/></svg></div>
+    <h3 id="pushAskTitle">알림을 받아 보세요</h3>
+    <p class="pa-store"><b id="pushAskStore"></b> 알림만 이 휴대폰으로 와요</p>
+    <ul class="pa-list">
+      <li><span class="pa-ic exp">D-7</span><div><b>유통기한 임박</b><small>매일 아침 9시 · 지났거나 7일 이내 품목</small></div></li>
+      <li><span class="pa-ic">✎</span><div><b>전달사항</b><small>누가 고치면 바로</small></div></li>
+    </ul>
+    <p class="pa-ios" id="pushAskIos" hidden>아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요. 먼저 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어 주세요.</p>
+    <div class="actions"><button type="button" class="btn" id="pushAskNo">나중에</button><button type="button" class="btn primary" id="pushAskGo">알림 받기</button></div>
+  </div>
 </div>
 
 <div class="overlay" id="addHome" hidden>
@@ -2639,6 +2669,30 @@ li.expired .name { text-decoration: none; }
     }
   }
   $("pushOpen").onclick = () => pushSubscribe(false);
+  // 처음 여는 사람에게 한 번만: 알림 받기 안내 (임박 팝업이 떠 있으면 닫힌 뒤에)
+  const PUSH_ASK = "label-list-push-asked";
+  const iosBrowser = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone && !matchMedia("(display-mode: standalone)").matches;
+  function pushAskMaybe() {
+    if (!FB_CONFIG || !storeKnown || !$("pushAsk").hidden) return;
+    try { if (localStorage.getItem(PUSH_ASK)) return; } catch { return; }
+    const ios = iosBrowser();
+    if (!ios && !pushOk()) return; // 알림을 못 받는 브라우저
+    if (!ios && (Notification.permission === "denied" || (Notification.permission === "granted" && pushSaved().token))) return;
+    if (!$("alert").hidden || !$("picker").hidden || !$("howto").hidden) { setTimeout(pushAskMaybe, 800); return; }
+    try { localStorage.setItem(PUSH_ASK, "1"); } catch {}
+    $("pushAskStore").textContent = (STORES[STORE] && STORES[STORE].name) || "이 매장";
+    $("pushAskIos").hidden = !ios;
+    $("pushAskGo").textContent = ios ? "홈 화면 추가 방법" : "알림 받기";
+    $("pushAsk").hidden = false; $("pushAsk").querySelector(".popup").focus({ preventScroll: true });
+  }
+  $("pushAskNo").onclick = () => { $("pushAsk").hidden = true; };
+  $("pushAsk").addEventListener("click", (e) => { if (e.target.id === "pushAsk") $("pushAsk").hidden = true; });
+  $("pushAskGo").onclick = () => {
+    $("pushAsk").hidden = true;
+    if (iosBrowser()) { howtoTab(true); $("howto").hidden = false; return; }
+    pushSubscribe(false); // 누른 순간에 권한을 물어야 휴대폰이 허락 창을 띄움
+  };
+  setTimeout(pushAskMaybe, 1500);
   // 이미 허용한 기기: 매장을 바꿨거나 하루 지났으면 조용히 다시 등록 (토큰이 바뀌는 경우 대비)
   if (pushOk() && Notification.permission === "granted") { const sv = pushSaved(); if (sv.store !== STORE || !sv.token || Date.now() - (sv.at || 0) > 86400000) pushSubscribe(true); }
   paintPush();
