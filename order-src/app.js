@@ -532,9 +532,9 @@
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
   let wholeMemo = new Map(); // 통 단위로 세는 품목 (wholeStep)
-  let keyItem = new Map(), misTrustMemo = null, recvTrustMemo = null; // 품목 키 → 품목 (MIS 품목코드 it.codes) · 주문현황 믿을 수 있나 (misTrust) · 입고현황 믿을 수 있나 (recvTrust)
+  let keyItem = new Map(), misTrustMemo = null, recvTrustMemo = null, ordMaxMemo = new Map(); // 품목 키 → 품목 (MIS 품목코드 it.codes) · 주문현황 믿을 수 있나 (misTrust) · 입고현황 믿을 수 있나 (recvTrust)
   let menuUseMemo = new Map(), menuWMemo = new Map(); // 날짜별 메뉴 역산 사용량 · 품목별 메뉴 역산 비율 (menuW)
-  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; recvTrustMemo = null; menuUseMemo = new Map(); menuWMemo = new Map(); };
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; recvTrustMemo = null; ordMaxMemo = new Map(); menuUseMemo = new Map(); menuWMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -1882,7 +1882,18 @@
     rat.sort((a, b) => a - b); const med = rat.length ? rat[rat.length >> 1] : null;
     return (recvTrustMemo = { on: n >= 20 && hit / n >= 0.6 && med > 0.5 && med < 2, n, hit, med });
   };
-  const recvOn = (it, y) => RECV_USE && y < TODAY && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on; // 어제까지만 (오늘 것은 아직 다 안 들어왔을 수 있음, 앞날 기록은 쓰지 않음)
+  // 한 줄이 그 품목이 시키던 가장 큰 양의 5배를 넘으면 단위가 다른 줄로 봄 → 그날은 입고현황 대신 발주 기록으로 (11/15: 버터갈릭시즈닝 한 달 2개 쓰는데 발주 없이 40 한 줄)
+  const ordMaxOf = (it) => {
+    if (ordMaxMemo.has(it.key)) return ordMaxMemo.get(it.key);
+    let m = 0;
+    Object.keys(db).forEach((k) => {
+      if (/^input\.\d{4}-\d\d-\d\d$/.test(k)) { const r = (db[k] || {})[it.key]; if (r && num(r.o) > 0) m = Math.max(m, ordToStock(it, num(r.o))); }
+      else if (/^misOrder\.\d{4}-\d\d-\d\d$/.test(k)) (misRowsOf(it.key, k.slice(9)) || []).forEach((x) => { m = Math.max(m, ordToStock(it, num(x.qty))); });
+    });
+    ordMaxMemo.set(it.key, m); return m;
+  };
+  const recvPlausible = (it, y) => { const cap = 5 * ordMaxOf(it); return !(cap > 0) || (recvRowsOf(it.key, y) || []).every((m) => ordToStock(it, num(m.qty)) <= cap); };
+  const recvOn = (it, y) => RECV_USE && y < TODAY && (it.codes || []).length > 0 && Array.isArray((db["misRecv." + y] || {}).rows) && recvTrust().on && recvPlausible(it, y); // 어제까지만 (오늘 것은 아직 다 안 들어왔을 수 있음, 앞날 기록은 쓰지 않음)
   const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
   const arrivalsOf = (it, x) => {
     const out = arrivalsOrd(it, x); if (!RECV_USE) return out;
