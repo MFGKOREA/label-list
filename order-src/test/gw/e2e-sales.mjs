@@ -1,7 +1,7 @@
 // 매출 불러오기 시험 (가짜 MIS + 가짜 Apps Script): mis-sales.js
 //  1) 메뉴별 매출현황 하루씩 → 시트 menuDay.날짜 (합계 줄 빼고, 이미 있는 날은 건너뜀)
 //  2) 예전 Gross 불러오기(MiscellaneousReport)도 그대로 되는지
-//  합계 대조(11/15): 메뉴·Gross·세트 모두 화면 합계와 읽은 합이 다르면 결과 글에 ⚠ (저장은 그대로)
+//  합계 대조(11/15): 메뉴·Gross·세트 모두 화면 합계와 읽은 합이 다르면 결과 글에 ⚠ (저장은 그대로). SUM_BLOCK을 켜면 그날은 저장 안 함
 // 사용: node order-src/test/gw/e2e-sales.mjs
 import path from "path";
 import { fileURLToPath } from "url";
@@ -20,10 +20,11 @@ await ctx.route("https://script.google.com/**", async (r) => {
 });
 await ctx.route("https://mis.test/**", (r) => r.fulfill({ path: HERE + "/mock/" + new URL(r.request().url()).pathname.slice(1) }));
 await ctx.route("https://mfgkorea.github.io/label-list/mis-sales.js*", (r) => r.fulfill({ path: REPO + "/mis-sales.js", contentType: "text/javascript" }));
-const run = async (job, page = "sales-main.html", peek) => {
+const run = async (job, page = "sales-main.html", peek, block) => {
   gas.post({ action: "set", key: "salesPush", value: { id: Date.now(), at: Date.now(), status: "pending", ...job } });
   const p = await ctx.newPage(); p.on("pageerror", (e) => console.log("page err", e.message)); p.on("dialog", (d) => d.accept());
   await p.goto("https://mis.test/" + page); await p.waitForTimeout(300);
+  if (block) await p.evaluate(() => { window.__sumBlock = true; }); // 합계 대조 "다르면 저장 안 함" 켬 (11/15)
   await p.evaluate(() => { const s = document.createElement("script"); s.src = "https://mfgkorea.github.io/label-list/mis-sales.js?quiet=1&t=" + Date.now(); document.body.appendChild(s); });
   for (let i = 0; i < 120 && /pending|running/.test(gas.get({ api: "1" }).data.salesPush.status); i++) await p.waitForTimeout(500);
   if (peek) await peek(p);
@@ -43,6 +44,9 @@ ok(sat.find((r) => r.m === "매드 스테이크 & 치킨 플래터" && r.c === "
 ok(!sat.some((r) => /합계/.test(r.c + r.m)), "합계 줄은 뺌");
 ok(sat.some((r) => r.c === "Brunch_Plates"), "중분류(브런치)까지 같이");
 ok(!/⚠/.test(d.salesPush.text) && d.salesPush.parts.menu.chkBad === 0, "합계 대조: 메뉴 줄 합 = 화면 합계 줄이면 경고 없음");
+// 1-1) 합계 대조를 "다르면 저장 안 함"으로 켜면(SUM_BLOCK) 그날은 저장하지 않고 ⚠ (다음에 다시 읽음)
+d = await run({ kind: "menu", from: "2026-10-26", to: "2026-10-26" }, "sales-main.html", null, true);
+ok(d.salesPush.status === "done" && /⚠ 합계 다른 날 10\/26 \(저장 안 함/.test(d.salesPush.text) && d.salesPush.parts.menu.chkBad === 1 && !d["menuDay.2026-10-26"], "합계 대조 켬: 메뉴 합계가 다른 10/26은 저장 안 함 · " + d.salesPush.text);
 // 1-2) 합계 대조 (11/15 KM "합계는 한 번 더 맞춰 본다"): 화면 합계 줄과 읽은 합이 다르면 ⚠로 알리고 저장은 그대로
 d = await run({ kind: "menu", from: "2026-10-26", to: "2026-10-26" });
 ok(d.salesPush.status === "done" && /⚠ 합계 다른 날 10\/26/.test(d.salesPush.text) && d.salesPush.parts.menu.chkBad === 1 && (d["menuDay.2026-10-26"] || {}).rows.length === 4, "합계 대조: 메뉴 합계가 다르면 ⚠ 다른 날 10/26 (저장은 그대로) · " + d.salesPush.text);
@@ -53,6 +57,8 @@ console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(d.salesPush.status === "done" && d.forecast["2026-10-24"].act === "16366000", "Gross 불러오기 그대로 됨");
 ok(d.forecast["2026-10-24"].total === "16866000" && d.forecast["2026-10-24"].net === "14878182" && d.salesPush.totalCol === "Total Sales" && d.salesPush.netCol === "Net Sales", "같은 화면에서 Total Sales·순매출도 읽어 forecast.total/net에 (PL 보드가 그록봇 수집분과 합침, 발주앱은 안 씀)");
 ok(d.salesPush.chk && d.salesPush.chk.ok === true && d.salesPush.chk.table === 37545000 && !/⚠/.test(d.salesPush.text), "합계 대조: Gross 날짜 줄 합 = 화면 '합 계' 줄 (경고 없음)");
+d = await run({ from: "2026-10-21", to: "2026-10-22" }, "sales-main.html", null, true);
+ok(d.salesPush.status !== "done" && /합계가 달라서 안 넣었어요/.test(d.salesPush.text), "합계 대조 켬: Gross 합계가 다르면 안 넣음 · " + d.salesPush.text);
 d = await run({ from: "2026-10-21", to: "2026-10-22" });
 ok(d.salesPush.status === "done" && /⚠ 합계 다름/.test(d.salesPush.text) && d.salesPush.chk && d.salesPush.chk.ok === false && d.forecast["2026-10-21"].act === "3538000", "합계 대조: Gross 합계가 다르면 ⚠ (값은 그대로) · " + d.salesPush.text);
 // 3) MIS 메뉴 살펴보기 (11/13): 접힌 폴더를 펴서 이름만 읽음. 메뉴 이름은 누르지 않음(화면이 열리면 안 됨), 자료는 안 읽음
@@ -129,6 +135,8 @@ ok(!JSON.stringify(d).includes("다른매장") && ![s13, s14].some((x) => JSON.s
 ok(d.setProbe && d.setProbe.grids[0].tree === true && d.setProbe.grids[0].cols.includes("MGGGR_CNT=수량") && JSON.stringify(d.setProbe.grids[0].heads).includes("골고루*3") && d.misSetScan && d.misSetScan.to === "2026-11-14" && d.misSetScan.days === 2 && d.misSetScan.empty === 1 && d.misSetScan.cols.sets.includes("MTDB_CNT"), "열 이름·겹 머리글(세트 이름)은 setProbe에 · 스캔 기록(끝날·저장 2일·빈 날 1일)");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "Set판매현황 읽기도 KM 입력(input.날짜)은 안 건드림");
 ok(!/⚠/.test(d.salesPush.text) && Array.isArray(d.misSetScan.chkBad) && d.misSetScan.chkBad.length === 0, "합계 대조: 세트별 합 = 세트 합계면 경고 없음");
+d = await run({ kind: "sets", from: "2026-11-10", to: "2026-11-10" }, "sets-main.html", null, true);
+ok(/⚠ 세트 합계 다른 날 11\/10 \(저장 안 함/.test(d.salesPush.text) && !d["setDay.2026-11-10"] && d.misSetScan.chkBad.join() === "2026-11-10", "합계 대조 켬: 세트 합계가 다른 11/10은 저장 안 함 · " + d.salesPush.text);
 d = await run({ kind: "sets", from: "2026-11-10", to: "2026-11-10" }, "sets-main.html");
 ok(d.salesPush.status === "done" && /⚠ 세트 합계 다른 날 11\/10/.test(d.salesPush.text) && d.misSetScan.chkBad.join() === "2026-11-10" && d["setDay.2026-11-10"].tot === 9, "합계 대조: 세트 합계(9)가 세트별 합(4)과 다르면 ⚠ (저장은 그대로) · " + d.salesPush.text);
 // 7-2) 이 매장 줄이 한 번도 안 나오면(조회가 안 된 것일 수 있음) 빈 날로 저장하지 않고 화면 모양만 남김
@@ -136,5 +144,5 @@ d = await run({ kind: "sets", from: "2026-11-01", to: "2026-11-02" }, "sets-main
 console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(!d["setDay.2026-11-01"] && !d["setDay.2026-11-02"] && d.setProbe.diag && d.setProbe.diag.grids[0].tree === true && d.misSetScan.to === null && d.salesPush.parts.sets.status === "error", "이 매장 줄이 없으면 아무 날도 저장 안 함 · setProbe.diag만 · 끝날 기록 안 함(다음에 다시)");
 await b.close();
-console.log(`합계: 통과 ${51 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${54 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

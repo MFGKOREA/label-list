@@ -34,6 +34,10 @@
     const s = rows.filter(isData).reduce((a, r) => { const v = num(r[field]); return isFinite(v) ? a + v : a; }, 0);
     return { ok: Math.abs(s - t) <= Math.max(1, Math.abs(t) * 1e-3), table: Math.round(t), rows: Math.round(s) };
   };
+  // 합계 대조를 "다르면 저장 안 함"으로 (11/15 KM "먼저 할 4가지 바로 진행" 6번 데이터 지킴이).
+  //  실제 MIS 화면의 합계 줄이 맞게 읽히는지 첫 결과(11/16 아침)를 본 뒤 true로 바꿈. 그 전엔 알리기만(⚠).
+  //  시험은 window.__sumBlock으로 켜고 끔
+  const SUM_BLOCK = typeof window !== "undefined" && typeof window.__sumBlock === "boolean" ? window.__sumBlock : false;
   // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
   const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
   const withKey = (u) => u + (KEY ? "&k=" + encodeURIComponent(KEY) : "");
@@ -73,8 +77,8 @@
   const t0 = Date.now(), left = () => BUDGET - (Date.now() - t0);
   let step = "시작";
   const diag = {};
-  const finish = async (ok, text, extra) => {
-    if (!ok) {
+  const finish = async (ok, text, extra, noDiag) => {
+    if (!ok && !noDiag) { // noDiag: 화면은 잘 읽었는데 일부러 안 넣은 경우(합계가 다름 등) — 막힌 화면 기록은 남기지 않음
       // 막힌 화면의 구조만 (표 머리글, 입력칸 이름, 앞 3줄)
       diag.at = new Date().toString(); diag.step = step;
       diag.frames = frames().map((w) => {
@@ -243,6 +247,7 @@
     const fc0 = (await get()).forecast || {};
     const odd = Object.entries(got).filter(([dt, v]) => { const old = num((fc0[dt] || {}).act); return v < 1e5 || v > 1e8 || (old > 0 && (v / old > 3 || v / old < 1 / 3)); });
     if (odd.length) return finish(false, `값이 이상해서 안 넣었어요 (${odd.map(([dt, v]) => `${dt.slice(5)} ${Math.round(v / 1e4).toLocaleString("ko-KR")}만`).join(", ")}) · 칸 "${title(grossCol)}"가 맞는지 확인`);
+    if (SUM_BLOCK && chk && !chk.ok) return finish(false, `합계가 달라서 안 넣었어요 (표 합계 ${Math.round(chk.table / 1e4).toLocaleString("ko-KR")}만 · 읽은 날 합 ${Math.round(chk.rows / 1e4).toLocaleString("ko-KR")}만) · MIS 화면 확인`, { chk }, true);
 
     // 7) 앱 Forecast 실제 칸에 넣기 (MIS 값이 기준: 비었거나 다르면 바꿈)
     step = "저장";
@@ -337,7 +342,7 @@
         if (!rows.length) return "empty";
         // 합계 대조: 메뉴 줄 수량 합(0·마이너스 줄 포함) = 화면 합계 줄 수량?
         const ck = sumCheck(hit.rows, (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
-        if (ck && !ck.ok) chkBad.push(day);
+        if (ck && !ck.ok) { chkBad.push(day); if (SUM_BLOCK) return "chk"; } // 켜져 있으면 그날은 저장 안 함 (다음에 다시 읽음)
         save(day, rows); return "ok";
       };
       try {
@@ -345,21 +350,21 @@
         for (let i = 0; i < days.length && !replaced; i++) {
           if (left() < T.q + T.reserve) { rem = days.slice(i); break; } // 시간이 다 돼 가면 여기까지만 (남은 날은 다시 누르면 이어서)
           const r = await readDay(days[i]);
-          if (r === "empty") empty.push(days[i]); else if (r !== "ok") again.push(days[i]);
-          if (r === "ok" || r === "empty") stuck = 0;
+          if (r === "empty") empty.push(days[i]); else if (r !== "ok" && r !== "chk") again.push(days[i]);
+          if (r === "ok" || r === "empty" || r === "chk") stuck = 0;
           else if (++stuck >= 2) { hung = true; failed.push(...again.splice(0)); rem = days.slice(i + 1); break; } // 두 번 연달아 응답 없음 = MIS가 멈춤 → 남은 날을 하나하나 기다리지 않고 바로 알림
           prog(`${i + 1}/${days.length}일`);
         }
         for (const day of again) { // 못 받은 날은 한 번 더
           if (replaced || left() < T.q + T.reserve) { failed.push(day); continue; }
           const r = await readDay(day);
-          if (r === "empty") empty.push(day); else if (r !== "ok") failed.push(day);
+          if (r === "empty") empty.push(day); else if (r !== "ok" && r !== "chk") failed.push(day);
         }
       } finally { await saveQ.catch(() => {}); }
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set([...failed, ...saveErr])].sort();
       const text = `메뉴 판매 ${saved}일 저장` + (empty.length ? ` · 판매 없음 ${empty.map(md).join(", ")}` : "") + (hung ? " · MIS가 응답하지 않아 멈췄어요" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")} (다시 누르면 그날만 받아요)` : "") +
         (rem.length ? ` · 남은 ${rem.length}일은 다시 누르면 이어서 받아요` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
-        (chkBad.length ? ` · ⚠ 합계 다른 날 ${chkBad.sort().map(md).join(", ")} (MIS 화면 확인)` : "");
+        (chkBad.length ? ` · ⚠ 합계 다른 날 ${chkBad.sort().map(md).join(", ")} (${SUM_BLOCK ? "저장 안 함, " : ""}MIS 화면 확인)` : "");
       if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length, chkBad: chkBad.length }); }
       return finish(true, text, { days: saved, more: rem.length, chkBad: chkBad.length });
     } catch (e) {
@@ -789,8 +794,10 @@
         const out = cnt.map((c) => ({ s: c.field.replace(/_CNT$/i, ""), q: q(c.field) })).filter((x) => x.q);
         // 합계 대조: 세트별 수량 합 = 이 줄의 '세트 합계' 수량(TOT_CNT)?
         const tf = byF(/^TOT_CNT$/i);
-        if (tf && Math.abs(q(tf.field) - cnt.reduce((a, c) => a + q(c.field), 0)) > 0) chkBad.push(day);
+        const off = tf && Math.abs(q(tf.field) - cnt.reduce((a, c) => a + q(c.field), 0)) > 0;
+        if (off) chkBad.push(day);
         hits++;
+        if (off && SUM_BLOCK) return "chk"; // 켜져 있으면 그날은 저장 안 함
         await set("setDay." + day, { at: Date.now(), cust: byF(/^CUST_CNT$/i) ? q(byF(/^CUST_CNT$/i).field) : null, tot: byF(/^TOT_CNT$/i) ? q(byF(/^TOT_CNT$/i).field) : null, rows: out });
         saved++; return "ok";
       };
@@ -798,12 +805,12 @@
       for (let i = 0; i < days.length && !replaced; i++) {
         if (left() < T.q + T.reserve) { rem = days.slice(i); break; }
         const r = await readDay(days[i]);
-        if (r === "empty") empty.push(days[i]); else if (r !== "ok") again.push(days[i]);
-        if (r === "ok" || r === "empty") stuck = 0;
+        if (r === "empty") empty.push(days[i]); else if (r !== "ok" && r !== "chk") again.push(days[i]);
+        if (r === "ok" || r === "empty" || r === "chk") stuck = 0;
         else if (++stuck >= 2) { failed.push(...again.splice(0)); rem = days.slice(i + 1); break; }
         prog(`세트 ${i + 1}/${days.length}일`);
       }
-      for (const day of again) { if (replaced || left() < T.q + T.reserve) { failed.push(day); continue; } const r = await readDay(day); if (r === "empty") empty.push(day); else if (r !== "ok") failed.push(day); }
+      for (const day of again) { if (replaced || left() < T.q + T.reserve) { failed.push(day); continue; } const r = await readDay(day); if (r === "empty") empty.push(day); else if (r !== "ok" && r !== "chk") failed.push(day); }
       // 이 매장 줄이 없는 날: 다른 날은 읽혔으면(hits) 그날은 세트 없음으로 남김. 한 날도 안 읽혔으면 저장하지 않고 화면 모양만 남김(조회가 안 된 것일 수 있음)
       if (hits) { for (const day of empty) await set("setDay." + day, { at: Date.now(), cust: null, tot: 0, rows: [] }).catch(() => {}); }
       else {
@@ -814,7 +821,7 @@
       await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used, chkBad: chkBad.sort() }).catch(() => {});
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set(failed)].sort();
       const text = `Set판매현황 ${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? " · 이 매장 줄이 한 번도 안 나옴(저장 안 함, 화면 모양만 기록)" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
-        (chkBad.length ? ` · ⚠ 세트 합계 다른 날 ${chkBad.map(md).join(", ")} (MIS 화면 확인)` : "");
+        (chkBad.length ? ` · ⚠ 세트 합계 다른 날 ${chkBad.map(md).join(", ")} (${SUM_BLOCK ? "저장 안 함, " : ""}MIS 화면 확인)` : "");
       if (!hits && days.length) return finish(false, text, { days: 0 });
       return finish(true, text, { days: saved, more: rem.length });
     } catch (e) {
