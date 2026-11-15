@@ -130,6 +130,19 @@ for (const [log, want, label] of [
   await X.ctx.close();
 }
 
+// ---------- 3c) 재고·발주 기록 (11/16 KM "과거 2주치 재고·발주량 조회·인쇄, 오늘 수요일이면 월화+과거 2주치") ----------
+{
+  const L = await open(null, "10:00");
+  await L.p.evaluate(() => document.querySelector('[data-go="log"]').click()); await L.p.waitForTimeout(600);
+  const lv = await L.p.evaluate(() => { const hs = [...document.querySelectorAll("#logTable thead th.dh")]; return { vis: !document.getElementById("v-log").hidden, n: hs.length, first: hs[0] && hs[0].textContent, last: hs.length && hs[hs.length - 1].textContent, rows: document.querySelectorAll("#logTable tbody tr:not(.lg)").length, items: window.__orderCalc.model().items.filter((i) => !i.ledgerOnly).length, est: document.querySelectorAll("#logTable i.e").length, print: !!document.getElementById("logPrint") }; });
+  const mon = new Date(day + "T00:00:00Z"); mon.setUTCDate(mon.getUTCDate() - ((mon.getUTCDay() + 6) % 7) - 14);
+  const want0 = `${mon.getUTCMonth() + 1}/${mon.getUTCDate()}`;
+  ok(lv.vis && lv.first.startsWith(want0) && /^\d+\/\d+월/.test(lv.first) && lv.rows === lv.items && lv.print, `재고·발주 기록: ${lv.first} ~ ${lv.last} · ${lv.n}일 · 품목 ${lv.rows}/${lv.items} · 예상 칸 ${lv.est} · 인쇄 단추`);
+  if (shotDir) await L.p.screenshot({ path: shotDir + "/6-log.png" });
+  ok(L.errs.length === 0, "페이지 오류 " + (L.errs.length ? L.errs.slice(0, 2).join(" | ") : "없음"));
+  await L.ctx.close();
+}
+
 // ---------- 4) 밤 9시 (11/15 KM "영업 끝난 시간에 당일 86위험은 이해가 안가. 밤에는 다음날 기준"): 86은 내일 문 열 때 예상 재고 기준 ----------
 const N = await open(null, "21:00");
 const nv = await N.p.evaluate(() => {

@@ -1441,6 +1441,11 @@
   const logOn = (it, d) => (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(d)).pop() || inputLog(it.key, d);
   const meatOn = (it, d) => { const l = logOn(it, d); return l ? isMeat(l.t, it) : false; };
   // 두 재고 사이 입고: x(또는 그 전날 마감) 뒤 ~ d. 미트카운트로 센 날의 입고는 센 뒤에 들어옴
+  function arrListBetween(it, x, xMeat, d, dMeat) { // arrBetween과 같은 입고를 날짜와 함께 (예상 재고를 날짜순으로 셀 때)
+    const out = [], lo = xMeat ? addDays(x, -1) : x;
+    for (let j = 0; j <= 21; j++) arrivalsOf(it, addDays(d, -j)).forEach((a) => { if (a.d > lo && (dMeat ? a.d < d : a.d <= d)) out.push({ d: a.d, q: a.q }); });
+    return out;
+  }
   function arrBetween(it, x, xMeat, d, dMeat) {
     let q = 0; const lo = xMeat ? addDays(x, -1) : x;
     for (let j = 0; j <= 21; j++) arrivalsOf(it, addDays(d, -j)).forEach((a) => { if (a.d > lo && (dMeat ? a.d < d : a.d <= d)) q += a.q; });
@@ -1616,7 +1621,7 @@
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -1649,6 +1654,7 @@
     if (to === "files") renderFiles();
     if (to === "report") renderReport();
     if (to === "loc") renderLocEdit();
+    if (to === "log") renderStockLog();
     if (to === "files") locSumUpdate();
   }
   document.addEventListener("click", (e) => {
@@ -1978,7 +1984,27 @@
     const gross = left * dayGross(x, true).v + sumGross(addDays(x, 1), d, true).s;
     const weGross = (isWE(x) ? left * dayGross(x, true).v : 0) + weSum(addDays(x, 1), d, true);
     const c = calc(it, { ...orderWindow(x), days: Math.max(1, k - 1 + left), gross, weGross, fcVar: fcVar(x, d, true, left) }, 0, 0);
-    return c.none ? null : { base: stockOf(it, r) + arr, use: c.use, left, k };
+    if (c.none) return null;
+    // 날짜순 계산용(seqStock): 날마다 매출 비중(센 날은 남은 영업 몫만)과 입고 목록
+    const days = [{ d: x, w: left * dayGross(x, true).v }]; for (let y = addDays(x, 1); y < d; y = addDays(y, 1)) days.push({ d: y, w: dayGross(y, true).v });
+    const arrs = arrListBetween(it, x, xm, d, !!pre); (plan || []).forEach((a) => { if (a.d > x && a.d <= d) arrs.push({ d: a.d, q: a.q }); });
+    return { base: stockOf(it, r) + arr, use: c.use, left, k, x, s0: stockOf(it, r), days, arrs };
+  }
+  // 예상 재고를 날짜순으로 (11/16 KM "일요일 품절 위험이었다가 월요일 입고면 12시 지나고 최소 예상재고 + 월요일 입고량은 들어가야 하는 거 아냐?"):
+  //  그날 쓸 양을 빼되 0 밑으로 내려가지 않음(바닥나면 못 판 만큼은 사라짐 — 메뉴 86), 입고는 들어오는 날 아침에 더함.
+  //  예전엔 (센 값 + 모든 입고 − 모든 사용)으로 한 번에 빼서, 일요일에 모자란 만큼을 월요일 입고에서 깎았음(홀그레인머스타드 토 1 + 월 입고 1 − 토·일 2.18 → 월 0, 실제로는 월 1).
+  //  바닥나지 않는 구간은 예전과 똑같음. 날마다 쓸 양 = 전체 사용 × 그날 매출 비중(메뉴 역산으로 지난 몫을 바꿨으면 지난 날들은 그 몫을 나눔)
+  function seqStock(e, use, past) {
+    const W = e.days, tot = W.reduce((t, x) => t + x.w, 0);
+    let per;
+    if (past && tot > 0) {
+      const wP = W.filter((x) => x.d < past.end).reduce((t, x) => t + x.w, 0), wF = tot - wP, fut = Math.max(0, use - past.use);
+      per = W.map((x) => (x.d < past.end ? (wP > 0 ? past.use * x.w / wP : 0) : wF > 0 ? fut * x.w / wF : 0));
+    } else per = W.map((x) => (tot > 0 ? use * x.w / tot : use / W.length));
+    const by = {}; e.arrs.forEach((a) => { by[a.d] = (by[a.d] || 0) + a.q; });
+    let st = e.s0 + (by[e.x] || 0); // 미트카운트(입고 전에 셈)면 센 날 입고도 처음에 더함
+    W.forEach((x, i) => { st = Math.max(0, st - per[i]) + (by[addDays(x.d, 1)] || 0); });
+    return st;
   }
   // 메뉴 역산 (11/14 KM): 날짜별 메뉴 판매(menuDay, PC가 아침마다 전날 것을 받음) × 레시피 = 그날 품목 사용량(로스 전). 메뉴 판매가 없는 날은 null
   const menuUseOn = (key, x) => {
@@ -2056,12 +2082,12 @@
       // 지난 날(센 날 ~ 어제) 사용량은 메뉴 역산과 섞음: 그 사이 날들의 메뉴 판매가 다 있을 때만.
       //  앞날(입고일 등)까지 볼 때는 지난 몫만 고치고 오늘부터는 지금 계산 그대로 → 오늘 예상 재고와 86 위험·입고일 예상이 같은 출발점
       const mw = menuW(it), end = d > TODAY ? TODAY : d;
-      let use = e.use, used = 0;
+      let use = e.use, used = 0, past = null;
       if (mw.w > 0 && x < end) {
         const um = menuUseSpan(it, x, e.left, end), ep = um == null ? null : end === d ? e : estWin(it, x, end, null, pre);
         // 그 사이 관련 메뉴가 하나도 안 팔렸으면(um 0) 지난 몫은 0 = 재고가 센 날 그대로 (11/14 KM "어제 메뉴 판매가 0개면 예상 재고는 어제와 같음").
         //  되돌려 보기: 메뉴 0 구간(입고 앎) 150건 중 실제로 그대로 87%, 하루 구간 93%. 메뉴와 맞는 품목(w>0)에만: 부채살처럼 메뉴와 상관없이 주는 품목(w 0)에 쓰면 덜 시킬 위험이 늘었음
-        if (ep) { const past = um > 0 ? (1 - mw.w) * ep.use + mw.w * um : 0; use = e.use - ep.use + past; used = um > 0 ? mw.w : 1; }
+        if (ep) { const pu = um > 0 ? (1 - mw.w) * ep.use + mw.w * um : 0; use = e.use - ep.use + pu; used = um > 0 ? mw.w : 1; past = { end, use: pu }; }
       }
       // 통 단위로 세는 품목은 예상 재고도 셈 단위로 반올림 (11/13 KM: "안 팔렸는데 0.1씩 줄어듦").
       //  재고는 밀봉 팩만 세서 뜯은 팩을 다 쓸 때까지 그대로이다가 한 번에 1개 줄어듦 → 0.1씩 깎으면 평균은 맞아도 날마다 틀려 보임.
@@ -2069,7 +2095,7 @@
       // 20·25·10·5개 묶음째로만 세는 품목(버터라이스·스파게티니·시즐링·바지락·새우살·부라타·폭립 등, countStepOf)은 그 묶음 단위로 반올림 (11/14 되돌려 보기 1,850건:
       //  1개 단위로 두던 것보다 평균 오차 1.624→1.592 · 반 단위 안 46.6→48.5% · 덜 시킬 위험 535→521 · 더 시킬 쪽 453→432, 배운 기간·시험 기간 모두 같은 쪽).
       //  뜯은 묶음은 안 세니 센 값은 늘 묶음의 배수 → 가장 가까운 배수가 가장 자주 맞음 (예전 칩은 내림: 평균 오차 1.664 · 반 단위 안 48.1%)
-      const v0 = Math.max(0, e.base - use), st0 = countStepOf(it) || wholeStep(it);
+      const v0 = seqStock(e, use, past), st0 = countStepOf(it) || wholeStep(it);
       return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: e.k, menuW: used };
     }
     return null;
@@ -2477,6 +2503,48 @@
       return `<div class="cell lrow" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${c.loc ? "" : " · <b>추정</b>"}</small></span><span class="rloc">${LOCS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}">${t.slice(0, 1)}</button>`).join("")}</span></div>`; }).join("") || `<div class="empty">이 위치 품목이 없어요</div>`;
     locSumUpdate();
   }
+  // ---------- 재고·발주 기록 (11/16 KM "과거 2주치 재고, 발주량 시트 조회 및 인쇄 기능. 오늘 수요일이면 월화+과거 2주치. 점검용, 품목별로 전부") ----------
+  //  기간: 2주 전 월요일 ~ 어제(오늘 넣은 칸이 있으면 오늘까지). 줄 = 품목(보관 위치·세는 순서), 칸 = 날마다 재고 | 발주
+  //  재고: 센 값은 그대로, 안 센 날 앱이 채운 예상 재고(est)는 회색 기울임. 발주: 그날 MIS 주문현황을 읽었으면 그 수량(앱 입력과 다르면 작게 "앱 n"), 없으면 앱 발주 칸
+  //  보기만 함(시트에 안 씀). 인쇄는 A4 가로 (@media print)
+  function stockLogRange() {
+    const from = addDays(mondayOf(TODAY), -14), to = Object.keys(db["input." + TODAY] || {}).length ? TODAY : addDays(TODAY, -1), days = [];
+    for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+    return days;
+  }
+  function renderStockLog() { // 이름 주의: renderLog는 학습 기록 그리기(아래)
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), idx = new Map(all.map((it, i) => [it.key, i])), days = stockLogRange();
+    const md = (d) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`, f1 = (x) => { const n = num(x); return isFinite(n) ? String(Math.round(n * 100) / 100) : esc(x); };
+    let nS = 0, nE = 0, nO = 0;
+    const cellOf = (it, d) => {
+      const v = (db["input." + d] || {})[it.key] || {}, has = v.s !== "" && v.s != null && isFinite(num(v.s));
+      const sTxt = !has ? "" : v.est ? `<i class="e">${f1(v.s)}</i>` : `<b>${f1(v.s)}</b>`;
+      if (has) v.est ? nE++ : nS++;
+      const appO = num(v.o) > 0 ? num(v.o) : 0, mis = misOn(d) ? misRowsOf(it.key, d) : null, misQ = mis ? mis.reduce((t, r) => t + num(r.qty), 0) : null;
+      const oq = misQ != null ? misQ : appO, oTxt = oq > 0 ? `<b>${f1(oq)}</b>${misQ != null && appO > 0 && Math.abs(appO - misQ) > 1e-9 ? `<small>앱 ${f1(appO)}</small>` : ""}` : misQ === 0 && appO > 0 ? `<small>앱 ${f1(appO)}</small>` : "";
+      if (oq > 0) nO++;
+      const mon = dow(d) === 1 ? " mon" : "";
+      return `<td class="s${mon}">${sTxt}</td><td class="o">${oTxt}</td>`;
+    };
+    const head1 = days.map((d) => `<th colspan="2" class="dh${dow(d) === 1 ? " mon" : ""}${d === TODAY ? " today" : ""}">${md(d)}<small>${DOW[dow(d)]}</small></th>`).join("");
+    const head2 = days.map((d) => `<th class="sub${dow(d) === 1 ? " mon" : ""}">재고</th><th class="sub">발주</th>`).join("");
+    // 짧은 이름(앞 "냉동_", 괄호 업체, 첫 "_" 뒤 묶음 표기 뺌) — 겹치는 이름은 원래 이름 그대로. 원래 이름은 title로
+    const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
+    all.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
+    const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
+    const body = LOCS.map(([k, t]) => {
+      const list = all.filter((i) => locOf(i) === k).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
+      if (!list.length) return "";
+      return `<tr class="lg"><th class="nm" colspan="1">${t} <small>${list.length}</small></th><td colspan="${days.length * 2}"></td></tr>` + list.map((it) => {
+        const su = it.box ? "BOX" : it.pk.stock || "", ou = it.pk.order || su;
+        return `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))}<small>${esc(su)}${ou && ou !== su ? " · 발주 " + esc(ou) : ""}</small></th>${days.map((d) => cellOf(it, d)).join("")}</tr>`;
+      }).join("");
+    }).join("");
+    $("logHead").textContent = `${md(days[0])}(${DOW[dow(days[0])]}) ~ ${md(days[days.length - 1])}(${DOW[dow(days[days.length - 1])]}) · ${days.length}일 · 품목 ${all.length}개 · 센 칸 ${nS} · 예상 칸 ${nE} · 발주 칸 ${nO}`;
+    $("logTable").innerHTML = `<table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${head1}</tr><tr>${head2}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+  $("logPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("log-print"); document.title = `재고·발주 기록 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("log-print"); document.title = t0; }, 800); });
+  window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
   function locSumUpdate() {
     const all = model().items.filter((i) => !i.ledgerOnly);
     const sum = LOCS.map(([k, t]) => `${t} ${all.filter((i) => locOf(i) === k).length}`).join(" · "), guess = all.filter((i) => !((db.itemCfg || {})[i.key] || {}).loc).length;
