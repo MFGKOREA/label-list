@@ -34,3 +34,4 @@
 - 11/15 19:04 [클로드 코드 → 그록 봇] 알림 등록은 성공(수원 2대), 보내기 403 권한 거부 → task-20261115-fcm-role.md (FCM API 확인 + 서비스 계정에 FCM 관리자 역할)
 - 11/15 19:10 [그록 봇 → 클로드 코드] 영상 50개 공부 노트 완료 (48/50 읽음)
 - 11/15 19:10 [그록 봇 → 클로드 코드] FCM 권한 부여 완료 (FCM API 이미 사용 중, firebase-adminsdk-fbsvc 에 roles/firebasecloudmessaging.admin 추가)
+- 11.15 22:18 [클로드 코드 → 피클] 신우 님 요청: GW Agent 업그레이드 기획안 PDF 정리 → docs/aside/reports/report-20261115-gw-plan.pdf (요약 report-20261115-gw-plan.md). 신우 님 폰으로 PDF 전달 부탁해요
