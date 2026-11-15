@@ -38,6 +38,7 @@
 - `node order-src/auto/learn.mjs [--log] [--final] [--dry]` — 어제 채점(Forecast 오차, 예상 재고 적중·WAPE, 한쪽으로 쏠린 품목). `--log`면 학습 기록에 하루 한 줄.
 - `node order-src/auto/alert.mjs [--at 2026-11-14T16:05] [--kv 파일]` — 폰 알림 한 줄(86 위험: 지금부터 내일 문 닫을 때까지 + 12시 전 차례엔 GW 상황판 빨강 줄). 끝 코드 10 알릴 것 있음 · 0 없음 · 3 시트 비정상. (`--at`은 asof가 salesPush를 지워서 합계 대조 줄은 시험 못 함 → `test/health.mjs`로 봄) `--at`으로 지난 시각을 열어 시험(그날 뒤 자료는 잘라냄). 해동 알림은 KM 제외(11/15)라 지움.
 - `order-src/test/bt/asof.mjs` — 앱을 "그날 그 시각"으로 여는 도구. 규칙 실험은 저장소 밖 복사본에서 하고, 이 도구로 지난 발주일들을 되돌려 본다.
+- 한 번에 쓰는 양(11/16 대두유 1.5통): `itemCfg.useStep`·`useName`. 시험 `node order-src/test/lump.mjs <kv.json>`. 다른 품목(통째로 쓰는 소스 등)도 KM이 말하면 itemCfg에 더하기만(시트 merge, 백업 뒤).
 - 예상 재고 날짜순 시험(11/16): `node order-src/test/estfloor.mjs <kv.json> [날짜]` — 입고 날 아침 예상 재고 ≥ 그날 입고량. 예상 재고 규칙을 바꾸면 `test/bt/est.mjs <kv> <예전.html> <새.html>`로 같은 1,850건 비교부터.
 - KM 발주 습관 되돌려 보기(11/15, 기획안 1번 발주 초안 준비): `node order-src/test/bt/habit-items.mjs kv.json items.json && python3 -I order-src/test/bt/habit.py kv.json items.json` — 앱 추천 대 습관 초안(재고 문턱·늘 시키는 양·미리 시키는 습관 등)을 날마다 그 전 자료로만 배워 비교. 잣대는 "하루 고칠 줄". 11/15 결과(24일): 습관을 얹으면 고칠 줄이 늘어 초안은 앱 추천 그대로 → 6~8주 쌓이면 주간 점검에서 다시 돌림. 결과 숫자는 저장소에 넣지 않음(비공개 기획안 세부 분석 탭).
 - 규칙 비교: `node order-src/test/bt/compare.mjs <kv.json> <기준.html> <고친.html> [--split YYYY-MM-DD]` (같은 채점 구간, 시간 분리).

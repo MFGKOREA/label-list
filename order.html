@@ -1832,6 +1832,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       it.noLoss = !!(c && c.noLoss); // 수불 로스를 안 곱함 (11/15 KM "레시피 계산으로": 리가토니는 10월 수불 51팩인데 센 값·입고로는 레시피와 같음)
       it.useK = (c && num(c.useK) > 0 && num(c.useK)) || 1; // KM이 정한 사용량 반영률 (라구소스 1.2 = 계산보다 20% 더)
       it.countStep = (c && num(c.countStep) > 0 && num(c.countStep)) || 0; // 재고를 박스째로만 세는 품목의 셈 단위 (없으면 최근 기록으로 짐작)
+      // 한 번에 쓰는 양 (11/16 KM "대두유가 0.1씩 사용하는 품목이 아니야, 프라이어에 1.5통씩 들어가서"): 조금씩 줄지 않고 쓸 때 통째로 나감
+      //  → 86 위험·발주는 "다음 입고 전까지 쓸 횟수(올림) × 한 번 양"이 있어야 함. useName = 화면에 쓸 이름("기름 교체")
+      it.useStep = (c && num(c.useStep) > 0 && num(c.useStep)) || 0; it.useName = (c && c.useName) || "";
     };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
@@ -2458,6 +2461,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     ss += wkPlus;
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
+    // 한 번에 쓰는 품목(useStep): 교체 시점을 모르니 이 기간에 쓸 양이 조금이라도 있으면 한 번은 통째로 들어갈 수 있음 → 쓸 횟수(올림) × 한 번 양은 있어야 함
+    const lumpOf = (u) => (it.useStep > 0 && u > 1e-9 ? Math.ceil(u / it.useStep - 1e-9) * it.useStep : 0);
+    need = Math.max(need, lumpOf(use));
     const short0 = need - s - inc;
     // 입고 전 부족분은 이번 발주로 못 메움 (11/11): 이번 발주분은 입고일(해동 품목은 그 다음 날)부터 쓸 수 있음.
     //  재고가 그 전에 바닥날 것 같으면 발주량은 "입고 뒤 구간에 쓸 양 + 그 구간 여유분"까지만. 재고가 넉넉하면 예전 식 그대로 (둘 중 작은 쪽)
@@ -2469,7 +2475,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       // 입고 전에 잡힌 프랩 배치는 자르지 않음: 재료가 모자라면 배치가 입고 뒤로 밀릴 뿐 수요가 없어지지 않음 (11/12 검증 E)
       const batchPre = ba && ba.notes.some((n) => n.d && n.d < wp.today);
       if (!cp.none && !batchPre) {
-        usePost = cp.use; ssPost = Math.min(cp.ss, 0.5 * cp.use); needPost = Math.min(cp.need, cp.use + ssPost); usePre = Math.max(0, use - cp.use); // 여유분 상한(11/13 KM 승인, C1): 입고 뒤 여유 ≤ 사용의 절반. 새송이 20→16 등
+        usePost = cp.use; ssPost = Math.min(cp.ss, 0.5 * cp.use); needPost = Math.max(Math.min(cp.need, cp.use + ssPost), lumpOf(cp.use)); usePre = Math.max(0, use - cp.use); // 여유분 상한(11/13 KM 승인, C1): 입고 뒤 여유 ≤ 사용의 절반. 새송이 20→16 등
         preShort = Math.max(0, usePre - s - inc);
         if (short0 > needPost) { short = needPost; cut = short0 - needPost; }
         floorQ = Math.min(floorQ, usePost);
@@ -3536,6 +3542,20 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       const h = availOf(it, v) + arrs.filter((a) => a.d < c).reduce((t, a) => t + a.q, 0);
       if (f > 0) { const pc = pOf(h, r.use * f, f); if (pc > p) { p = pc; hB = h; uB = r.use * f; byD = c; } }
     });
+    // 한 번에 쓰는 품목(useStep, 11/16 KM 대두유 1.5통): 조금씩 줄지 않으니 확률 대신 "입고 전까지 쓸 횟수(올림) × 한 번 양"과 가진 양을 견줌
+    //  (입고마다: 그 입고 전까지 가진 양 vs 쓸 횟수×양). 모자란 첫 구간이 86 — 부족량도 그 기준(0.1이 아니라 1.5통 단위), 시각 대신 "기름 교체 때"
+    if (it.useStep > 0) {
+      const U = it.useStep, lump = (u) => (u > 1e-9 ? Math.ceil(u / U - 1e-9) * U : 0), pts = [];
+      [...new Set(arrs.map((a) => a.d))].filter((c) => c > d0 && c < until).sort().forEach((c) => {
+        const g = left * dayGross(d0, false).v + sumGross(addDays(d0, 1), c, false).s, f = gross > 0 ? g / gross : 0;
+        pts.push({ c, h: availOf(it, v) + arrs.filter((a) => a.d < c).reduce((t, a) => t + a.q, 0), u: r.use * f });
+      });
+      pts.push({ c: null, h: have, u: r.use });
+      const hit = pts.find((x) => x.h + 1e-9 < lump(x.u));
+      if (!hit) return null;
+      const nowH = new Date().getHours() + new Date().getMinutes() / 60;
+      return { it, have: hit.h, use: lump(hit.u), by: hit.c || until, out: until, p: 1, when: `${it.useName || `다음 ${r1(U)}${it.pk.stock || ""} 쓸`} 때`, at: Math.max(off + OPEN_H / 24, nowH / 24 + 0.001), thaw: it.thaw || 0, deliv: w.deliv, lump: U };
+    }
     if (p < SHOW_P) return null;
     // 언제 바닥나는지: 날마다 매출 비율로 사용량을 나누고(입고는 그날 아침에 더함), 그날 안에서는 영업시간에 비례해 시각으로 (런치 = 15시 전)
     let stock = availOf(it, v), when = `${DOW[dow(until)]} 입고 전`, at = off + days + 1; // at: 오늘 0시부터 바닥날 때까지 (일 단위, 정렬·알림용. 밤에 내일부터 봐도 오늘 기준)
