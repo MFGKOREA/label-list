@@ -1,9 +1,9 @@
-// 폰 알림 거리 (11/15 KM "먼저 할 4가지 바로 진행"): 3번 영업 중 86 · 12번 내일 해동
+// 폰 알림 거리 (11/15 KM "먼저 할 4가지 바로 진행"): 3번 영업 중 86. 12번 내일 해동은 KM이 첫 알림을 받고 "해동은 앞으로 제외"(11/15) → --kind thaw로만
 //  - 시트 자료로 앱을 "지금"으로 열어 앱과 같은 계산(risk1·calc)으로 알릴 것만 한두 줄로 찍음. 읽기만 함(시트에 쓰지 않음)
 //  - 예약 작업이 이 줄을 마지막 답으로 내면 KM 폰에 알림이 감(예약 작업의 푸시). 알릴 게 없으면 "알림 없음"
 //  - 화면에 찍는 숫자는 매장 자료이므로 저장소·커밋에 옮기지 않음
 // 사용: node order-src/auto/alert.mjs [--kind auto|86|thaw] [--kv 파일] [--at 2026-11-14T16:05]
-//   auto: 한국 시각 18시 전이면 86(오늘~내일 점심 안에 바닥날 품목), 18시부터는 내일 해동 + 내일 86
+//   auto(= 86): 지금부터 내일 문 닫을 때까지 바닥날 품목. thaw: 내일 해동 + 내일 86 (11/15 KM 제외 — 예약 작업은 안 씀)
 //   --at: 그 시각으로 열어 봄(시험). 그날 뒤 자료는 잘라냄(asof.mjs)
 // 끝 코드: 10 알릴 것 있음 · 0 없음 · 3 시트 비정상(아무것도 안 함)
 import fs from "fs";
@@ -24,7 +24,7 @@ const at = val("--at"); // "2026-11-14T16:05"
 const nowK = at ? new Date(at + ":00+09:00") : new Date();
 const hourK = +new Date(nowK.getTime() + 9 * 3600e3).toISOString().slice(11, 13) + +new Date(nowK.getTime() + 9 * 3600e3).toISOString().slice(14, 16) / 60;
 let kind = val("--kind") || "auto";
-if (kind === "auto") kind = hourK < 18 ? "86" : "thaw";
+if (kind === "auto") kind = "86"; // 11/15 KM "해동은 앞으로 제외": 저녁(20:05)에도 86만 (내일 문 닫을 때까지)
 const { page, close, errs } = await openApp(at ? { kvPath, asOf: at.slice(0, 10), hour: hourK, today: "all" } : { kvPath });
 const r = await page.evaluate(({ kind, hourK }) => {
   const C = window.__orderCalc, M = C.model(), db = C.db(), T = C.TODAY, inp = db["input." + T] || {};
