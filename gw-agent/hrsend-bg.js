@@ -40,7 +40,7 @@ async function hrsRun(req, board, boardWin) {
   await setRun({ stage: "precheck" });
   const alive = setInterval(() => { chrome.runtime.getPlatformInfo(() => {}); }, 20e3);
   let tabId = null, res = null;
-  const D = 30e3; // 요일 단계(탭 로딩·업로드·검증·저장) 하나의 한도 (페이지 안 대기 17초 + 로딩 덮개)
+  const D = 60e3; // 업로드·검증·저장 단계 하나의 한도 (저장 뒤 메인 표 재조회 30초 포함)
   try {
     // 1) 보내기 전 검사
     const chk = hrsCheck(req);
@@ -81,7 +81,7 @@ async function hrsRun(req, board, boardWin) {
     // 3) 요일마다: 탭 로딩 → 업로드 → 행 검증 → 팝업 저장
     for (const f of files) {
       await setRun({ stage: "upload", tab: tabId, day: f.dow });
-      r = await hrsExec(tabId, "dayOpen", { dow: f.dow, prevSaved: savedDays.length === files.indexOf(f) }, D); // 앞 요일이 다 저장됐을 때만 "수정중인 데이터" 확인창에 예
+      r = await hrsExec(tabId, "dayOpen", { dow: f.dow, prevSaved: savedDays.length === files.indexOf(f) }, 130e3); // 첫 로딩 60초 + 요일 전환 30초 × 3번까지 // 앞 요일이 다 저장됐을 때만 "수정중인 데이터" 확인창에 예
       if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
       const before = r.before;
       r = await hrsExec(tabId, "dayUpload", { b64: hrsB64(f.bytes), name: f.name }, D);

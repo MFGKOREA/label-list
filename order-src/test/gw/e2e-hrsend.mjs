@@ -28,12 +28,15 @@ const hrPage = () => `<!doctype html><meta charset="utf-8"><title>HR</title><bod
 const W=${JSON.stringify(WEEKS)}; let wk=${S.weekStart}, dept=${JSON.stringify(S.deptStart)}, status='';
 const KIND={'출근':'10','휴무':'17','주휴일':'18','공휴일':'19'}, DOWS=['MON','TUE','WED','THU','FRI','SAT','SUN'];
 // 사이트 전역 흉내: jq(ajaxComplete·data('kendoGrid')), decParam, doClientMsg
-const H=[]; window.jq=function(sel){ if(sel===document) return {ajaxComplete(fn){H.push(fn);}}; const el=typeof sel==='string'?document.querySelector(sel):sel; return {data(k){return el&&el.__k&&el.__k[k];}}; };
+const H=[],HS=[]; window.jq=function(sel){ if(sel===document) return {ajaxComplete(fn){H.push(fn);},ajaxSend(fn){HS.push(fn);}}; const el=typeof sel==='string'?document.querySelector(sel):sel; return {data(k){return el&&el.__k&&el.__k[k];},modal(c){if(el&&el.__k&&el.__k['bs.modal'])el.__k['bs.modal'][c]();}}; };
+// Bootstrap 3 modal 흉내: show → backdrop·body.modal-open, hide → isShown false, 0.36초 뒤 display none·backdrop 지움 (S.stuck이면 backdrop이 남음)
+const STUCK=${JSON.stringify(!!S.stuck)};
+function mkModal(el){const m={isShown:false,show(){m.isShown=true;el.style.display='block';const b=document.createElement('div');b.className='modal-backdrop in';document.body.appendChild(b);document.body.classList.add('modal-open');},hide(){if(!m.isShown)return;m.isShown=false;setTimeout(()=>{el.style.display='none';if(!(STUCK&&window.__saves>=1))document.querySelectorAll('.modal-backdrop').forEach(b=>b.remove());document.body.classList.remove('modal-open');},360);}};el.__k=Object.assign(el.__k||{},{'bs.modal':m});return m;}
 window.decParam=(s)=>decodeURIComponent(escape(atob(s)));
 window.doClientMsg=function(m){const s=typeof m==='object'?m.message:m;const d=document.createElement('div');d.className='toast-msg';d.textContent=s;document.getElementById('toasts').appendChild(d);setTimeout(()=>d.remove(),3000);if(/불가|오류|Error/.test(s)){document.getElementById('jl_noti_msg').textContent=s;document.getElementById('jl_noti').style.display='block';}};
 document.getElementById('jl_noti_footer_btn1').onclick=()=>{document.getElementById('jl_noti').style.display='none';};
 document.getElementById('jl_noti_report').onclick=()=>{window.__reported=1;};
-async function ajax(ep,body){const url='/HRT/W_HRT2325/W_HRT2325/'+ep;const r=await fetch(url,{method:'POST',body:JSON.stringify(body||{})});const t=await r.text();H.forEach(h=>h({}, {status:r.status,responseText:t}, {url}));try{return {status:r.status,j:JSON.parse(t)};}catch(e){return {status:r.status,j:null};}}
+async function ajax(ep,body){const url='/HRT/W_HRT2325/W_HRT2325/'+ep;const st={url};HS.forEach(h=>h({},{},st));const r=await fetch(url,{method:'POST',body:JSON.stringify(body||{})});const t=await r.text();H.forEach(h=>h({}, {status:r.status,responseText:t}, st));try{return {status:r.status,j:JSON.parse(t)};}catch(e){return {status:r.status,j:null};}}
 const enc=(o)=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 let pop=[];const grid={dataSource:{view(){return pop;}}};
 document.querySelector('a[menu-app-id="HRT/W_HRT2325"]').addEventListener('click',(e)=>{e.preventDefault();setTimeout(render,300);});
@@ -57,12 +60,12 @@ function render(){document.getElementById('app').innerHTML=\`
  <div id="hrt2325_pop_sub" style="display:none"><div id="tabs"></div>
    <form id="hrt2325_day_frm_file_upload"><input type="file" id="hrt2325_day_excel_file" style="display:none"></form>
    <div id="hrt2325_pop_list_html" class="k-grid"></div><button id="hrt2325_pop_btn_save">저장</button><button class="btn-close">닫기</button></div>\`;
- document.getElementById('hrt2325_pop_list_html').__k={kendoGrid:grid};
+ document.getElementById('hrt2325_pop_list_html').__k={kendoGrid:grid};const MD=mkModal(document.getElementById('hrt2325_pop_sub'));window.__saves=0;
  document.getElementById('ddb').onclick=()=>{document.getElementById('ddl').style.display='block';};
  document.querySelectorAll('#ddl li').forEach(li=>li.onclick=()=>{dept=li.textContent;document.getElementById('hrt2325_dept_category').value=dept;document.getElementById('ddb').textContent=dept;document.getElementById('ddl').style.display='none';});
  document.getElementById('hrt2325_btn_search').onclick=search;
- document.getElementById('hrt2325_btn_pop').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='block';curDow='';openMdl();};
- document.querySelector('#hrt2325_pop_sub .btn-close').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='none';};
+ document.getElementById('hrt2325_btn_pop').onclick=()=>{if(document.querySelectorAll('.modal-backdrop').length){window.__dblBackdrop=1;}MD.show();curDow='';openMdl();};
+ document.querySelector('#hrt2325_pop_sub .btn-close').onclick=()=>MD.hide();
  document.getElementById('hrt2325_day_excel_file').addEventListener('change',async(e)=>{const f=e.target.files[0];const raw=new Uint8Array(await f.arrayBuffer());const r=await ajax('uploadDayExcelFile_prc',{name:f.name,ss:/sharedStrings/.test(new TextDecoder().decode(raw))});if(r.status!==200){doClientMsg({message:'Internal Server Error'});return;}
    const rows=parseXlsx(raw).slice(1);const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;
    pop=rows.map(x=>{const [,no,nm,kind,i,o,b]=x;const row={emp_code:no,emp_name:nm,chk_message:''};const mine=REG[dept]||{},other=Object.keys(REG).filter(d=>d!==dept).some(d=>REG[d][no]);
@@ -70,7 +73,7 @@ function render(){document.getElementById('app').innerHTML=\`
      row[dow+'_time_item_code_p']=KIND[kind]||null;row[dow+'_work_on_p_hhmm']=i;row[dow+'_work_off_p_hhmm']=o;row[dow+'_break_time_p_hhmm']=b;return row;});
    window.__fname=f.name;window.__rows=rows;dirty=true;doClientMsg('엑셀 데이터가 화면에 반영되었습니다.');});
  document.getElementById('hrt2325_pop_btn_save').onclick=async()=>{const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;const bad=pop.find(r=>r.chk_message);if(bad){doClientMsg(bad.emp_name+'('+bad.emp_code+')님의 스케줄 등록/수정이 불가합니다('+bad.chk_message+')');return;}
-   await ajax('saveData_prc',{dow,dept,wk,file:window.__fname,rows:window.__rows});dirty=false;doClientMsg('저장되었습니다.');document.getElementById('hrt2325_pop_sub').style.display='none';search();};
+   await ajax('saveData_prc',{dow,dept,wk,file:window.__fname,rows:window.__rows});dirty=false;window.__saves++;doClientMsg('저장되었습니다.');MD.hide();setTimeout(search,200);};
  document.getElementById('hrt2325_btn_notice').onclick=async()=>{if(!confirm('공지 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'NOTICE',wk});await search();doClientMsg('공지 되었습니다.');};
  document.getElementById('hrt2325_btn_confirm').onclick=async()=>{if(!confirm('확정 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'CONFIRM',wk});await search();doClientMsg('확정 되었습니다.');};
  document.getElementById('hrt2325_btn_init').onclick=async()=>{if(!confirm('기존에 등록된 자료가 있다면 삭제 후 초기화가 진행됩니다.'))return;await ajax('init_prc',{wk});await search();doClientMsg('초기화 되었습니다.');};
@@ -98,7 +101,7 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
       const b = JSON.parse(body || "{}"); S.calls.push(ep);
       const enc = (o) => Buffer.from(JSON.stringify(o), "utf8").toString("base64");
       if (ep === "getMasterList_prc" && b.workType === "MASTER") { const st = S.status[b.wk] || ""; return json({ returnCode: 0, data: { infoEnc: enc(st ? [{ schedule_status: st }] : []) } }); }
-      if (ep === "getMasterList_prc") { const reg = S.reg[b.dept] || {}; return json({ returnCode: 0, data: { infoEnc: enc(Object.keys(reg).map((no) => ({ emp_code: no, emp_name: reg[no], chk_message: "" }))) } }); }
+      if (ep === "getMasterList_prc") { await new Promise((r) => setTimeout(r, S.detailMs || 300)); const reg = S.reg[b.dept] || {}; return json({ returnCode: 0, data: { infoEnc: enc(Object.keys(reg).map((no) => ({ emp_code: no, emp_name: reg[no], chk_message: "" }))) } }); }
       if (ep === "uploadDayExcelFile_prc") { S.uploads++; if (S.uploadHttp !== 200 || !b.ss) { rs.writeHead(500); return rs.end("Internal Server Error"); } return json({ returnCode: 0 }); }
       if (ep === "saveData_prc") { S.saves.push(b); return json({ returnCode: 0 }); }
       if (ep === "statusChangeData_prc") { S.status[b.wk] = b.to; if (b.to === "NOTICE") S.notice++; else S.confirm++; return json({ returnCode: 0 }); }
@@ -208,6 +211,15 @@ x = await send({ mode: "test", employees: t9 });
 ok(x.res && x.res.ok && S.saves[0] && JSON.stringify(S.saves[0].rows[0].slice(3)) === JSON.stringify(["출근", "09:00", "18:00", "01:00"]), "\"9:00\"·\"1:00\" → 09:00·01:00으로 올림", brief(x));
 x = await send({ mode: "test", employees: (() => { const e = all3(); e[0].days[0] = { date: dates[0], kind: "출근", in: "9시", out: "18:00", brk: "" }; return e; })() });
 ok(x.res && !x.res.ok && x.res.stage === "precheck" && /시간 형식 오류/.test(x.res.message), "\"9시\" → 사전 점검에서 '시간 형식 오류'", brief(x));
+// 8d) 팝업이 닫힐 때 backdrop이 남는 경우 → 정리하고 다음 요일 계속, 끝나면 화면에 덮개 없음
+reset({ stuck: true, status: {} });
+x = await send({ mode: "saveOnly", employees: all3() });
+const clean8 = await (async () => { const p = ctx.pages().find((q) => /hr\.pljec/.test(q.url())); return p ? await p.evaluate(() => ({ bd: document.querySelectorAll(".modal-backdrop").length, mo: document.body.classList.contains("modal-open"), dbl: !!window.__dblBackdrop })) : null; })();
+ok(x.res && x.res.ok && S.saves.length === 7 && clean8 && clean8.bd === 0 && !clean8.mo && !clean8.dbl, "남은 modal-backdrop 정리하고 7일 저장, 끝난 뒤 덮개·modal-open 없음", brief(x) + " " + JSON.stringify(clean8));
+// 8e) 팝업 첫 로딩이 느림(3초) → 기다렸다가 진행
+reset({ detailMs: 3000 });
+x = await send({ mode: "test", employees: all3() });
+ok(x.res && x.res.ok && S.saves.length === 1, "첫 로딩 3초 걸려도 기다려서 저장", brief(x));
 // 9) 업로드 500 (inlineStr 등) → 그 자리에서 멈춤
 reset({ uploadHttp: 500 });
 x = await send({ mode: "test", employees: all3() });

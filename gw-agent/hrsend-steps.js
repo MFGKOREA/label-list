@@ -22,7 +22,7 @@ async function hrsStep(op, a) {
   const decode = (v) => { try { let x = typeof window.decParam === "function" ? window.decParam(v) : v; if (typeof x === "string") x = JSON.parse(x); return x; } catch (e) { return null; } };
 
   // ---- 문구·서버 응답 받아 두기 (한 번만) ----
-  const H = window.__gwHrs || (window.__gwHrs = { msgs: [], ajax: [], status: [], hooked: false, quiet: false });
+  const H = window.__gwHrs || (window.__gwHrs = { msgs: [], ajax: [], sent: [], seq: 0, status: [], hooked: false, quiet: false });
   const clean = (m) => String(m == null ? "" : m).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
   const note = (kind, m) => { const s = clean(m); if (s) H.msgs.push({ t: Date.now(), kind, msg: s }); };
   if (!H.hooked) {
@@ -32,17 +32,18 @@ async function hrsStep(op, a) {
     } catch (e) {}
     try { const al = window.alert; window.alert = function (m) { note("alert", m); if (!H.quiet) return al.apply(this, arguments); }; } catch (e) {}
     try { // 엔드포인트별 HTTP 상태·returnCode. 내용은 남기지 않고, 주차 상태(schedule_status)만 풀어 둠
+      if ($) $(document).ajaxSend(function (ev, xhr, st) { const m = /\/(\w+_prc)\b/.exec(String((st && st.url) || "")); if (!m) return; st.__gw = ++H.seq; H.sent.push({ t: Date.now(), ep: m[1], id: st.__gw }); }); // 보낸 요청에 번호 → 그 요청의 응답만 기다림
       if ($) $(document).ajaxComplete(function (ev, xhr, st) {
         const url = String((st && st.url) || ""), m = /\/(\w+_prc)\b/.exec(url); if (!m) return;
         let j = null; try { j = xhr.responseJSON || JSON.parse(xhr.responseText || "null"); } catch (e) {}
         const rc = j && (j.returnCode != null ? j.returnCode : j.data && j.data.returnCode);
-        const ent = { t: Date.now(), ep: m[1], http: xhr.status, rc: rc == null ? null : String(rc) };
+        const ent = { t: Date.now(), ep: m[1], http: xhr.status, rc: rc == null ? null : String(rc), id: (st && st.__gw) || 0 };
         if (m[1] === "getMasterList_prc" && j && j.data && j.data.infoEnc != null) { const d = decode(j.data.infoEnc); if (Array.isArray(d)) { ent.st = [...new Set(d.map((r) => String((r && r.schedule_status) || "")).filter(Boolean))]; ent.n = d.length; } }
         H.ajax.push(ent);
       });
     } catch (e) {}
   }
-  const mark = () => ({ m: H.msgs.length, a: H.ajax.length });
+  const mark = () => ({ m: H.msgs.length, a: H.ajax.length, s: H.seq });
   const errText = (s) => /오류|실패|불가|error|exception|필수|다름|없습니다|확인해|세션|로그인/i.test(s);
   // 기다리던 문구 → ok, 그 사이 오류 문구 → 그 문구
   async function waitMsg(from, good, ms, okIf) {
@@ -61,7 +62,8 @@ async function hrsStep(op, a) {
     return { ok: false, msg: "", timeout: true };
   }
   function dismiss() { const b = $id("jl_noti_footer_btn1"); if (b && vis(b)) tap(b); } // 오류 알림의 [확인] ("오류 신고"는 안 누름)
-  async function waitAjax(from, ep, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const x = H.ajax.slice(from.a).find((e) => e.ep === ep); if (x) return x; await sleep(120); } return null; }
+  // from(mark) 뒤에 "보낸" 그 엔드포인트 요청의 응답 (ajaxSend 번호로 맞춤. 번호가 없는 옛 기록은 시각으로)
+  async function waitAjax(from, ep, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const x = H.ajax.slice(from.a).find((e) => e.ep === ep && (!e.id || e.id > (from.s || 0))); if (x) return x; await sleep(120); } return null; }
   async function idle(ms) { // 로딩 덮개(JLAMP.common.loading · kendo)가 사라질 때까지
     const t0 = Date.now(); await sleep(120);
     while (Date.now() - t0 < (ms || 15e3)) {
@@ -76,17 +78,34 @@ async function hrsStep(op, a) {
     try { await fn(); } finally { setTimeout(() => { window.confirm = orig; }, 4000); }
     return seen;
   }
-  const popOpen = () => vis($id("hrt2325_pop_sub")) || vis($id("hrt2325_pop_btn_save"));
+  // ---- 팝업(#hrt2325_pop_sub, Bootstrap 3.3.5 modal) 열림·닫힘 (11/16 KM: 닫힘에 약 0.36초) ----
+  const modal = () => { try { return $ && $("#hrt2325_pop_sub").data("bs.modal"); } catch (e) { return null; } };
+  const backdrops = () => document.querySelectorAll(".modal-backdrop").length;
+  const popOpen = () => { const m = modal(), el = $id("hrt2325_pop_sub"); return (m ? !!m.isShown : true) && (vis(el) || vis($id("hrt2325_pop_btn_save"))); };
+  const popClosed = () => { const m = modal(), el = $id("hrt2325_pop_sub"); let disp = "none"; try { disp = el ? getComputedStyle(el).display : "none"; } catch (e) {} return (!m || m.isShown === false) && disp === "none" && backdrops() === 0; };
+  async function waitClosed(ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (popClosed()) return true; await sleep(100); } return popClosed(); }
+  // 멈춘 모달 정리: modal('hide') → 대기 → 남은 backdrop·body.modal-open 지움 (화면이 막힌 채 남지 않게)
+  async function unstick() {
+    try { if ($) $("#hrt2325_pop_sub").modal("hide"); } catch (e) {}
+    await waitClosed(1500);
+    if (!popClosed()) {
+      document.querySelectorAll(".modal-backdrop").forEach((b) => b.remove());
+      document.body.classList.remove("modal-open"); document.body.style.paddingRight = "";
+      const el = $id("hrt2325_pop_sub"); if (el) { el.style.display = "none"; el.classList.remove("in"); el.setAttribute("aria-hidden", "true"); }
+      const m = modal(); if (m) m.isShown = false;
+      await sleep(200);
+    }
+    return popClosed();
+  }
   const popRows = () => { try { const g = $ && $("#hrt2325_pop_list_html").data("kendoGrid"); if (g) return [].slice.call(g.dataSource.view()); } catch (e) {} return null; };
   const hm = (v) => String(v == null ? "" : v).replace(/[^\d]/g, "").padStart(v ? 4 : 0, "0"); // "09:00"·"0900" → "0900", 빈칸 → ""
-  async function closePop() {
-    if (!popOpen()) return true;
+  async function closePop() { // 오류로 멈출 때: 저장하지 않고 닫음
+    if (popClosed()) return true;
     const box = $id("hrt2325_pop_sub") || document.body;
-    const win = box.closest(".k-window") || box.parentElement || box;
-    const btn = [...win.querySelectorAll("button, a, span")].find((b) => vis(b) && (/^(닫기|취소)$/.test(tx(b)) || /k-i-close|k-i-x|btn[-_]?close/.test(b.className || "") || b.getAttribute("aria-label") === "Close"));
-    await withConfirm(/닫|저장되지 않은|취소/, async () => { if (btn) tap(btn); else { try { const w = $ && $(win).data("kendoWindow"); if (w) w.close(); } catch (e) {} } });
-    for (let k = 0; k < 25 && popOpen(); k++) await sleep(120);
-    return !popOpen();
+    const btn = [...box.querySelectorAll("button, a, span")].find((b) => vis(b) && (/^(닫기|취소)$/.test(tx(b)) || /\bclose\b|k-i-close|btn[-_]?close/.test(b.className || "") || b.getAttribute("data-dismiss") === "modal" || b.getAttribute("aria-label") === "Close"));
+    await withConfirm(/닫|저장되지 않은|취소/, async () => { if (btn) tap(btn); else { try { if ($) $("#hrt2325_pop_sub").modal("hide"); } catch (e) {} } });
+    if (await waitClosed(2000)) return true;
+    return unstick();
   }
 
   // 로그인 판정 (11/16 KM): HR에는 자동완성 방지용 #jlamp_autocomplete_2(type=password, 투명도 0, 0×0)가 늘 있음 → 비밀번호 칸이 있다는 것만으론 안 됨
@@ -110,7 +129,7 @@ async function hrsStep(op, a) {
     return (!!idIn && !!btn) || (pw.length > 0 && /^\/main\/login/.test(location.pathname));
   };
 
-  if (op === "done") { H.quiet = false; return { ok: true }; }
+  if (op === "done") { H.quiet = false; if (!popClosed()) { if (popOpen()) await closePop(); else await unstick(); } return { ok: true, clean: popClosed() }; } // 어떻게 끝나든 팝업·덮개를 정리
   H.quiet = true; // 자동으로 도는 동안 alert 창은 띄우지 않고 문구만 받아 둠
 
   if (op === "probe") {
@@ -202,14 +221,16 @@ async function hrsStep(op, a) {
     }
     let opened = false;
     if (!popOpen()) {
+      // 앞 요일 팝업이 완전히 닫힐 때까지 (isShown false · display none · backdrop 0). 멈췄으면 정리하고 다시
+      if (!(await waitClosed(3000))) { await unstick(); if (!(await waitClosed(2000))) return fail("upload", "앞 팝업이 닫히지 않아요 (modal-backdrop이 남음)"); }
       const btn = $id("hrt2325_btn_pop"); if (!btn || off(btn)) return fail("upload", "[일자별 수정] 단추가 없거나 꺼져 있어요");
       const m0 = mark();
       const seen = await withConfirm(null, async () => { tap(btn); await sleep(300); });
       if (seen.length) return fail("upload", "저장 안 된 내역이 있다고 해서 멈춤: " + clean(seen[0]));
       for (let k = 0; k < 50 && !popOpen(); k++) await sleep(150);
       if (!popOpen()) return fail("upload", "[일자별 수정] 창이 안 열렸어요");
-      const ax = await settle(m0, 12e3); opened = true;
-      if (!ax) return fail("upload", "팝업 첫 로딩(MON) 응답이 안 왔어요");
+      const ax = await settle(m0, 60e3); opened = true; // 첫 로딩(DETAIL) 실측 7~21초 → 한도 60초
+      if (!ax) return fail("upload", "팝업 첫 로딩(MON) 응답이 60초 안에 안 왔어요");
       if (ax.http >= 400) return fail("upload", `팝업 첫 로딩 HTTP ${ax.http}`);
     }
     let loaded = opened && cur() === D; // 새로 열었고 바라던 요일(MON)이 이미 눌려 로딩됨
@@ -220,7 +241,7 @@ async function hrsStep(op, a) {
       // "수정중인 데이터가 존재합니다. 초기화하고 다른 일자로 변경 하시겠습니까?" → 앞 요일 저장이 확인된 경우에만 예
       const seen = await withConfirm(a.prevSaved ? /수정중인 데이터가 존재합니다/ : null, async () => { tap(lb); });
       if (seen.length && !(a.prevSaved && /수정중인 데이터가 존재합니다/.test(seen[0]))) return fail("upload", `${D}로 바꾸려는데 확인창이 떠서 멈춤 (앞 요일 저장 안 됨): ${clean(seen[0])}`);
-      const ax = await settle(m1, 8e3);
+      const ax = await settle(m1, 30e3); // 요일 전환 실측 2~4초 → 한도 30초
       if (ax && ax.http >= 400) return fail("upload", `${D} 자료 로딩 HTTP ${ax.http}`);
       loaded = cur() === D && !!ax && fresh();
     }
@@ -271,8 +292,11 @@ async function hrsStep(op, a) {
     const r = await waitMsg(m0, /저장되었습니다/, 17e3); await idle(10e3);
     const ax = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc");
     if (!r.ok) { await closePop(); return fail("save", r.timeout ? (ax ? `저장 응답(saveData_prc HTTP ${ax.http}) 뒤 '저장되었습니다'가 안 떴어요` : "저장 단추를 눌렀는데 서버 호출이 없었어요(화면이 저장을 막음)") : r.msg, { confirms: seen }); }
-    for (let k = 0; k < 40 && popOpen(); k++) await sleep(120);
-    return { ok: true, toast: r.msg, http: ax ? ax.http : null, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) };
+    // 팝업이 다 닫히고(hidden.bs.modal 뒤 상태) 메인 표 다시 조회(getMasterList_prc) 응답까지
+    let closed = await waitClosed(5000);
+    if (!closed) closed = await unstick();
+    const re = await waitAjax(m0, "getMasterList_prc", 30e3); await idle(15e3);
+    return { ok: true, toast: r.msg, http: ax ? ax.http : null, closed, reload: re ? re.http : null, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) };
   }
 
   if (op === "status") { // 다시 검색해서 지금 상태 (공지·확정 전 확인)

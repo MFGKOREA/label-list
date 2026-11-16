@@ -92,12 +92,25 @@ export const pingAgent = () => window.postMessage({ type: "MFG_HR_PING" }, locat
 export const agentVersion = () => agentVer;
 export function onAgent(f: Listener) { listeners.add(f); return () => listeners.delete(f); }
 
+// 걸리는 시간 (11/16 KM 실측): 팝업 첫 로딩 7~21초, 요일 전환 2~4초 → 7일 약 2분 30초~3분, test(1일) 약 30~60초
+export const HR_EXPECT_SEC: Record<Mode, [number, number]> = { test: [30, 60], saveOnly: [150, 180], full: [170, 210] };
+const HR_WAIT_MS: Record<Mode, number> = { test: 4 * 60e3, saveOnly: 8 * 60e3, full: 9 * 60e3 }; // 이 안에 결과가 없으면 "아직 모름"으로 돌려줌 (확장은 계속 돌 수 있음)
+
 export function sendToAgent(p: { dept: Dept; weekStart: string; weekEnd: string; mode: Mode; employees: HrEmp[]; allowInit?: boolean },
   onProgress?: (item: HrResult["log"][number]) => void): Promise<HrResult> {
   const requestId = crypto.randomUUID();
   return new Promise((resolve) => {
+    let last = Date.now();
+    const timer = setInterval(() => { // 진행 소식이 끊긴 채 한도를 넘으면 상태를 한 번 물어보고 끝냄
+      if (Date.now() - last < HR_WAIT_MS[p.mode]) return;
+      clearInterval(timer); off();
+      window.postMessage({ type: "MFG_HR_SEND_STATUS", requestId }, location.origin);
+      resolve({ type: "MFG_HR_SEND_RESULT", requestId, ok: false, stage: "week", message: `${Math.round(HR_WAIT_MS[p.mode] / 60e3)}분 동안 결과가 없어요 — HR 탭을 확인하고, 같은 주를 다시 보내기 전에 HR 화면에서 저장된 요일을 확인해 주세요`, rowErrors: [], savedDays: [], noticed: false, confirmed: false, savedEmpNos: [], mode: p.mode, log: [], code: "timeout" });
+    }, 5000);
     const off = onAgent((d) => {
       if (d.requestId !== requestId) return;
+      last = Date.now();
+      if (d.type === "MFG_HR_SEND_RESULT" || (d.type === "MFG_HR_SEND_ACK" && !d.ok)) clearInterval(timer);
       if (d.type === "MFG_HR_SEND_PROGRESS") onProgress?.(d.item);
       if (d.type === "MFG_HR_SEND_ACK" && !d.ok) { off(); resolve({ type: "MFG_HR_SEND_RESULT", requestId, ok: false, stage: "precheck", message: d.error || "확장이 요청을 안 받았어요", rowErrors: [], savedDays: [], noticed: false, confirmed: false, savedEmpNos: [], mode: p.mode, log: [] }); }
       if (d.type === "MFG_HR_SEND_RESULT") { off(); resolve(d as HrResult); }

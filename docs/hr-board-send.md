@@ -32,11 +32,12 @@
 ## 확장이 HR에서 하는 일 (확인된 사실대로)
 1. 주간스케쥴(시간) 열기 → 소속구분(BOH/FOH) → 라벨 `48주(11/23~11/29)`가 보드 주와 같아질 때까지 `hrt2325.moveWeek` → [검색]
 2. 주차 상태 = `getMasterList_prc` 응답 `data.infoEnc`를 `decParam`으로 푼 `[{schedule_status}]`. CONFIRM·NOTICE면 멈춤
-3. 요일마다(각 단계 30초 한도): [일자별 수정] → **요일 label 클릭 → 그날 자료 로딩(getMasterList_prc DETAIL) 대기** → 업로드 전 사번 기억 → 숨은 파일 칸에 엑셀 → "엑셀 데이터가 화면에 반영되었습니다." → **행별 검증** → 팝업 [저장] → "저장되었습니다."
+3. 요일마다 (팝업 첫 로딩 한도 60초·실측 7~21초, 요일 전환 한도 30초·실측 2~4초, 7일 전체 약 2분 30초~3분): [일자별 수정] → **요일 label 클릭 → 그날 자료 로딩(getMasterList_prc DETAIL) 대기** → 업로드 전 사번 기억 → 숨은 파일 칸에 엑셀 → "엑셀 데이터가 화면에 반영되었습니다." → **행별 검증** → 팝업 [저장] → "저장되었습니다."
    - 행별 검증(`#hrt2325_pop_list_html` kendo view): `chk_message`가 있으면 오류(예: "사번, 이름 오류.", "소속구분이 다름", "예외 근태유형", "출근인경우 출/퇴, 휴게 시간 필수 입력") · 사번 집합 = 보낸 파일 · `{DAY}_time_item_code_p`(출근 10, 휴무 17, 없으면 null) · 출근·퇴근·휴게 시간
    - 업로드 전 HR에 있던 직원이 파일에 없으면(신규 입사자 등) `missing`으로 회신
    - 하나라도 걸리면 **저장하지 않고 팝업을 닫고** 회신. 이미 저장된 요일은 `savedDays`
 4. full: 메인 [저장](켜져 있을 때만) → [공지](confirm "공지 하시겠습니까?") → [확정](confirm "확정 하시겠습니까?")
+- 팝업(Bootstrap 3 modal)은 isShown false·display none·backdrop 0이 될 때까지 기다린 뒤 다시 엶. backdrop이 남으면 modal('hide') → backdrop·body.modal-open 지움. 어떻게 멈추든 끝에 같은 정리를 함
 - confirm은 그 단추에서 예상한 문구에만 "예". 오류 알림은 `#jl_noti_footer_btn1`로 닫고 "오류 신고"는 안 누름
 - 문구는 `doClientMsg`(문자열·{message})를 감싸서, 서버 상태는 `jq(document).ajaxComplete`로 엔드포인트별 HTTP·returnCode를 모아 판단(기록에 남김)
 - 메인 표는 읽지 않음(직책 칸에 휴대폰 번호). 팝업 표에서 emp_code·emp_name·chk_message·근태·시간만. 확장 기록에는 이름을 남기지 않음
