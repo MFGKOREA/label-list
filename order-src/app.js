@@ -2609,7 +2609,7 @@
     // (11/16 KM "유한락스는 온세물류(소모품)", "발주현황표 다시 확인") 업체는 MIS 주문현황의 거래처명(misOrder 줄의 v)이 우선, 없으면 발주 품목 파일(소모품 = 한성물산, 세제 = 이콜랩)
     const SUP = /장갑|봉투|호일|냅킨|물티슈|타올|용기|박스|쇼핑백|수세미|포션백|유산지|유니랩|랩\(|쌀포대|도마|스쿱|페퍼밀|빨대|스트로우|컵|행주|세제|광택제|클리너|린스|락스/;
     const custOf = new Map(); Object.keys(db).filter((k) => /^misOrder\.\d{4}-\d\d-\d\d$/.test(k)).sort().forEach((k) => ((db[k] || {}).rows || []).forEach((r) => { if (r && r.v) custOf.set(String(r.code), String(r.v)); }));
-    const grpOf = (c, fileV, name) => { const v = custOf.get(c) || ""; if (/이콜랩/.test(v) || (!v && /세제/.test(fileV || ""))) return "세제"; if (/한성/.test(v) || (!v && /소모품/.test(fileV || ""))) return "한성물산 (소모품)"; 
+    const grpOf = (c, fileV, name) => { const v = custOf.get(c) || (/니트릴/.test(name || "") ? "온세물류" : ""); // 11/16 KM "니트릴은 온세물류야, 최근에 시킨 적이 없을 뿐" if (/이콜랩/.test(v) || (!v && /세제/.test(fileV || ""))) return "세제"; if (/한성/.test(v) || (!v && /소모품/.test(fileV || ""))) return "한성물산 (소모품)"; 
       if (/온세/.test(v) && (SUP.test(name || "") || /소모품|세제/.test(fileV || ""))) return "온세물류 (소모품)"; return null; }; // 음료·주류·기타 식자재(롯데칠성·주류·온세물류 식자재)는 넣지 않음 (11/16 KM "제외")
     const extra = new Map(); // 코드 → { name, unit, vendor }
     ((db["master.order"] || {}).rows || []).forEach((r) => { const c = String(r.code || ""); if (!/^\d{6,}$/.test(c) || have.has(c) || !/소모품|세제/.test(r.vendor || "")) return; const g = grpOf(c, r.vendor, r.name); if (g) extra.set(c, { name: r.name, unit: r.unit || "", vendor: g }); });
