@@ -34,7 +34,7 @@
 
 ## 3. 도구
 
-- `gw-agent/auto.js`(판단) · `gw-plan.json`(더 받아 올 것) · `mis-sales.js`(읽는 법). 시험 `node order-src/test/gw/auto.test.mjs`, `node order-src/test/gw/e2e-auto.mjs`(진짜 확장).
+- `gw-agent/auto.js`(판단) · `gw-plan.json`(더 받아 올 것) · `mis-sales.js`(읽는 법). 시험 `node order-src/test/gw/auto.test.mjs`, `node order-src/test/gw/e2e-auto.mjs`(진짜 확장). 발주 전송 흐름은 `node order-src/test/gw/e2e-order.mjs`(진짜 확장 + 가짜 서버, 8개 · 11/16).
 - `python3 order-src/auto/collect.py [--dry]` — 자동 수집. 끝 코드 0 최신/받음 · 2 건너뜀 · 3 시트 비정상 · 4 못 받음. 시험 `python3 order-src/auto/test_collect.py`(가짜 시트·가짜 PC).
 - `node order-src/auto/learn.mjs [--log] [--final] [--dry]` — 어제 채점(Forecast 오차, 예상 재고 적중·WAPE, 한쪽으로 쏠린 품목). `--log`면 학습 기록에 하루 한 줄.
 - `node order-src/auto/alert.mjs [--at 2026-11-14T16:05] [--kv 파일]` — 폰 알림 한 줄(86 위험: 지금부터 내일 문 닫을 때까지 + 12시 전 차례엔 GW 상황판 빨강 줄). 끝 코드 10 알릴 것 있음 · 0 없음 · 3 시트 비정상. (`--at`은 asof가 salesPush를 지워서 합계 대조 줄은 시험 못 함 → `test/health.mjs`로 봄) `--at`으로 지난 시각을 열어 시험(그날 뒤 자료는 잘라냄). 해동 알림은 KM 제외(11/15)라 지움.
