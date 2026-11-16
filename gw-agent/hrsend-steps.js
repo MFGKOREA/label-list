@@ -186,28 +186,48 @@ async function hrsStep(op, a) {
     return { ok: true, toast: r.msg, confirms: seen };
   }
 
-  if (op === "dayOpen") { // 팝업 열기 → 요일 label 눌러 그날 자료 로딩 → 업로드 전 사번
+  if (op === "dayOpen") { // 팝업 열기 → (openMdl이 MON을 눌러 첫 로딩) → 그 로딩이 끝난 뒤 그 요일 label → 그날 자료 → 업로드 전 사번
+    //  11/16 KM 실제 확인: 팝업 저장 뒤 [일자별 수정]을 다시 열면 openMdl이 요일 라디오를 새로 만들고 MON을 눌러 getMasterList(DETAIL)로 로딩함.
+    //  그 응답이 끝나고 표가 다시 그려진 뒤(행 workType이 '')에 label[for="hrt2325_pop_title_{DAY}"]를 눌러야 함. 그 전 표를 읽으면 지난 시도의 행이 섞임
+    const D = a.dow;
+    const cur = () => (document.querySelector('input[name="hrt2325_pop_title"]:checked') || {}).value || "";
+    const fresh = () => { const rs = popRows(); return !!rs && rs.length > 0 && rs.every((r) => (r.workType == null ? "" : String(r.workType)) === ""); }; // 빈 표는 아직 안 그려진 것
+    const sig = () => { const rs = popRows() || []; return rs.length + ":" + rs.map((r) => r.emp_code).join(","); };
+    async function settle(from, ms) { // 그 뒤 온 DETAIL 응답 + 로딩 덮개 + 표가 다시 그려짐(workType '') + 0.4초 동안 그대로
+      const ax = await waitAjax(from, "getMasterList_prc", ms);
+      await idle(10e3);
+      const t0 = Date.now(); let last = sig(), since = Date.now();
+      while (Date.now() - t0 < 8e3) { await sleep(120); const g = sig(); if (g !== last) { last = g; since = Date.now(); } if (fresh() && Date.now() - since >= 400) break; }
+      return ax;
+    }
+    let opened = false;
     if (!popOpen()) {
       const btn = $id("hrt2325_btn_pop"); if (!btn || off(btn)) return fail("upload", "[일자별 수정] 단추가 없거나 꺼져 있어요");
-      const seen = await withConfirm(null, async () => { tap(btn); await sleep(500); });
+      const m0 = mark();
+      const seen = await withConfirm(null, async () => { tap(btn); await sleep(300); });
       if (seen.length) return fail("upload", "저장 안 된 내역이 있다고 해서 멈춤: " + clean(seen[0]));
       for (let k = 0; k < 50 && !popOpen(); k++) await sleep(150);
       if (!popOpen()) return fail("upload", "[일자별 수정] 창이 안 열렸어요");
-      await idle(10e3);
+      const ax = await settle(m0, 12e3); opened = true;
+      if (!ax) return fail("upload", "팝업 첫 로딩(MON) 응답이 안 왔어요");
+      if (ax.http >= 400) return fail("upload", `팝업 첫 로딩 HTTP ${ax.http}`);
     }
-    const radio = document.querySelector(`input[name="hrt2325_pop_title"][value="${a.dow}"]`);
-    if (!radio) return fail("upload", `요일 탭(${a.dow})을 못 찾았어요`);
-    const lb = (radio.id && document.querySelector(`label[for="${radio.id}"]`)) || radio.closest("label") || radio.parentElement;
-    const m0 = mark();
-    tap(lb && vis(lb) ? lb : radio);
-    let ax = await waitAjax(m0, "getMasterList_prc", radio.checked ? 6e3 : 12e3);
-    if (!ax && !radio.checked) { tap(radio); ax = await waitAjax(m0, "getMasterList_prc", 8e3); }
-    await idle(12e3);
-    if (!radio.checked) return fail("upload", `요일 탭(${a.dow})이 선택되지 않아요`);
-    if (ax && ax.http >= 400) return fail("upload", `${a.dow} 자료 로딩 HTTP ${ax.http}`);
+    let loaded = opened && cur() === D; // 새로 열었고 바라던 요일(MON)이 이미 눌려 로딩됨
+    for (let t = 0; t < 3 && !loaded; t++) {
+      const lb = document.querySelector(`label[for="hrt2325_pop_title_${D}"]`) || (() => { const r = document.querySelector(`input[name="hrt2325_pop_title"][value="${D}"]`); return r && ((r.id && document.querySelector(`label[for="${r.id}"]`)) || r.closest("label") || r); })();
+      if (!lb) return fail("upload", `요일 탭(${D})을 못 찾았어요`);
+      const m1 = mark();
+      // "수정중인 데이터가 존재합니다. 초기화하고 다른 일자로 변경 하시겠습니까?" → 앞 요일 저장이 확인된 경우에만 예
+      const seen = await withConfirm(a.prevSaved ? /수정중인 데이터가 존재합니다/ : null, async () => { tap(lb); });
+      if (seen.length && !(a.prevSaved && /수정중인 데이터가 존재합니다/.test(seen[0]))) return fail("upload", `${D}로 바꾸려는데 확인창이 떠서 멈춤 (앞 요일 저장 안 됨): ${clean(seen[0])}`);
+      const ax = await settle(m1, 8e3);
+      if (ax && ax.http >= 400) return fail("upload", `${D} 자료 로딩 HTTP ${ax.http}`);
+      loaded = cur() === D && !!ax && fresh();
+    }
+    if (!loaded) return fail("upload", `요일 탭(${D})으로 바꾸고 그날 자료를 불러오지 못했어요 (지금 ${cur() || "선택 없음"}, 3번 시도)`);
     const rows = popRows();
     if (!rows) return fail("upload", "팝업 표(#hrt2325_pop_list_html)를 못 읽었어요");
-    return { ok: true, loaded: !!ax, before: rows.map((r) => String(r.emp_code || "")).filter(Boolean) };
+    return { ok: true, day: cur(), before: rows.map((r) => String(r.emp_code || "")).filter(Boolean) };
   }
 
   if (op === "dayUpload") { // 숨은 파일 칸에 엑셀 → change → 화면 반영 (저장 아님)
@@ -240,7 +260,7 @@ async function hrsStep(op, a) {
     const gotSet = new Set(got.map((g) => g.empNo));
     a.rows.forEach((s) => { if (!gotSet.has(s.empNo)) errs.push({ empNo: s.empNo, name: s.name, msg: "보낸 행이 표에 없어요" }); });
     const missing = (a.before || []).filter((x) => !sent.has(x)); // 업로드 전 HR에 있던 직원이 파일에 없음(신규 입사자 등)
-    if (errs.length || missing.length) { await closePop(); return fail("upload", errs.length ? `${D} 행 오류 ${errs.length}건 — 저장 안 함` : `${D} HR에 있는데 파일에 없는 직원 ${missing.length}명 — 저장 안 함`, { rowErrors: errs, missing }); }
+    if (errs.length || missing.length) { await closePop(); return fail("upload", errs.length ? `${D} 행 오류 ${errs.length}건 — 저장 안 함` : `${D} 업로드 전 HR 표에 있던 직원 ${missing.length}명이 보낸 명단에 없어요(신규 입사자 등) — 저장 안 함`, { rowErrors: errs, missing }); }
     return { ok: true, n: got.length };
   }
 

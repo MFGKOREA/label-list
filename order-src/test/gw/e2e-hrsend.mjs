@@ -39,7 +39,12 @@ let pop=[];const grid={dataSource:{view(){return pop;}}};
 document.querySelector('a[menu-app-id="HRT/W_HRT2325"]').addEventListener('click',(e)=>{e.preventDefault();setTimeout(render,300);});
 function btns(){document.getElementById('hrt2325_btn_notice').disabled=status!=='EDIT';document.getElementById('hrt2325_btn_confirm').disabled=status!=='NOTICE';document.getElementById('hrt2325_btn_init').disabled=!(wk>=47);}
 async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';btns();document.getElementById('mg').innerHTML='<table><tbody><tr><td>직원 (휴대폰 칸)</td></tr></tbody></table>';}
-async function loadDay(dow){const r=await ajax('getMasterList_prc',{workType:'DETAIL',dept,wk,dow});pop=JSON.parse(decParam(r.j.data.infoEnc));}
+let dirty=false,curDow='MON';
+async function loadDay(dow){const r=await ajax('getMasterList_prc',{workType:'DETAIL',dept,wk,dow});await new Promise(r=>setTimeout(r,250));pop=JSON.parse(decParam(r.j.data.infoEnc)).map(x=>Object.assign(x,{workType:''}));dirty=false;curDow=dow;}
+// openMdl 흉내: 요일 라디오를 새로 만들고 MON을 눌러 로딩. 로딩 전까지는 지난 표(workType 'U')가 남아 있음
+function openMdl(){pop=pop.map(x=>Object.assign({},x,{workType:'U'}));const t=document.getElementById('tabs');t.innerHTML=DOWS.map(v=>'<input type="radio" name="hrt2325_pop_title" id="hrt2325_pop_title_'+v+'" value="'+v+'"><label for="hrt2325_pop_title_'+v+'">'+v+'</label>').join('');
+ t.querySelectorAll('input').forEach(r=>r.addEventListener('click',(e)=>{if(r.value===curDow&&r.checked&&!dirty)return;if(dirty&&!confirm('수정중인 데이터가 존재합니다. 초기화하고 다른 일자로 변경 하시겠습니까?')){e.preventDefault();return;}window.__switch=(window.__switch||0)+1;setTimeout(()=>loadDay(r.value),50);}));
+ setTimeout(()=>document.querySelector('label[for=hrt2325_pop_title_MON]').click(),150);}
 function render(){document.getElementById('app').innerHTML=\`
  <input type="hidden" id="hrt2325_search_site_code" value="5090"><input type="hidden" id="hrt2325_dept_category" value="\${dept}">
  <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}">
@@ -49,24 +54,23 @@ function render(){document.getElementById('app').innerHTML=\`
  <button id="hrt2325_btn_search">검색</button><button id="hrt2325_btn_pop">일자별 수정</button><button id="hrt2325_btn_save" disabled>저장</button>
  <button id="hrt2325_btn_notice" disabled>공지</button><button id="hrt2325_btn_confirm" disabled>확정</button><button id="hrt2325_btn_init" disabled>초기화</button><button id="hrt2325_btn_copy">전주복사</button>
  <div class="k-grid" id="mg"></div>
- <div id="hrt2325_pop_sub" style="display:none"><div>\${DOWS.map((v,i)=>'<input type="radio" name="hrt2325_pop_title" id="pt'+i+'" value="'+v+'"'+(i==0?' checked':'')+'><label for="pt'+i+'">'+v+'</label>').join('')}</div>
+ <div id="hrt2325_pop_sub" style="display:none"><div id="tabs"></div>
    <form id="hrt2325_day_frm_file_upload"><input type="file" id="hrt2325_day_excel_file" style="display:none"></form>
    <div id="hrt2325_pop_list_html" class="k-grid"></div><button id="hrt2325_pop_btn_save">저장</button><button class="btn-close">닫기</button></div>\`;
  document.getElementById('hrt2325_pop_list_html').__k={kendoGrid:grid};
  document.getElementById('ddb').onclick=()=>{document.getElementById('ddl').style.display='block';};
  document.querySelectorAll('#ddl li').forEach(li=>li.onclick=()=>{dept=li.textContent;document.getElementById('hrt2325_dept_category').value=dept;document.getElementById('ddb').textContent=dept;document.getElementById('ddl').style.display='none';});
  document.getElementById('hrt2325_btn_search').onclick=search;
- document.getElementById('hrt2325_btn_pop').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='block';setTimeout(()=>loadDay('MON'),200);};
- document.querySelectorAll('input[name=hrt2325_pop_title]').forEach(r=>r.addEventListener('change',()=>{pop=[];loadDay(r.value);}));
+ document.getElementById('hrt2325_btn_pop').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='block';curDow='';openMdl();};
  document.querySelector('#hrt2325_pop_sub .btn-close').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='none';};
  document.getElementById('hrt2325_day_excel_file').addEventListener('change',async(e)=>{const f=e.target.files[0];const raw=new Uint8Array(await f.arrayBuffer());const r=await ajax('uploadDayExcelFile_prc',{name:f.name,ss:/sharedStrings/.test(new TextDecoder().decode(raw))});if(r.status!==200){doClientMsg({message:'Internal Server Error'});return;}
    const rows=parseXlsx(raw).slice(1);const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;
    pop=rows.map(x=>{const [,no,nm,kind,i,o,b]=x;const row={emp_code:no,emp_name:nm,chk_message:''};const mine=REG[dept]||{},other=Object.keys(REG).filter(d=>d!==dept).some(d=>REG[d][no]);
      if(!mine[no]&&other)row.chk_message='소속구분이 다름';else if(mine[no]!==nm)row.chk_message='사번, 이름 오류.';else if(!KIND[kind])row.chk_message='예외 근태유형';else if(kind==='출근'&&!(i&&o&&b))row.chk_message='출근인경우 출/퇴, 휴게 시간 필수 입력';
      row[dow+'_time_item_code_p']=KIND[kind]||null;row[dow+'_work_on_p_hhmm']=i;row[dow+'_work_off_p_hhmm']=o;row[dow+'_break_time_p_hhmm']=b;return row;});
-   window.__fname=f.name;window.__rows=rows;doClientMsg('엑셀 데이터가 화면에 반영되었습니다.');});
+   window.__fname=f.name;window.__rows=rows;dirty=true;doClientMsg('엑셀 데이터가 화면에 반영되었습니다.');});
  document.getElementById('hrt2325_pop_btn_save').onclick=async()=>{const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;const bad=pop.find(r=>r.chk_message);if(bad){doClientMsg(bad.emp_name+'('+bad.emp_code+')님의 스케줄 등록/수정이 불가합니다('+bad.chk_message+')');return;}
-   await ajax('saveData_prc',{dow,dept,wk,file:window.__fname,rows:window.__rows});doClientMsg('저장되었습니다.');document.getElementById('hrt2325_pop_sub').style.display='none';search();};
+   await ajax('saveData_prc',{dow,dept,wk,file:window.__fname,rows:window.__rows});dirty=false;doClientMsg('저장되었습니다.');document.getElementById('hrt2325_pop_sub').style.display='none';search();};
  document.getElementById('hrt2325_btn_notice').onclick=async()=>{if(!confirm('공지 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'NOTICE',wk});await search();doClientMsg('공지 되었습니다.');};
  document.getElementById('hrt2325_btn_confirm').onclick=async()=>{if(!confirm('확정 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'CONFIRM',wk});await search();doClientMsg('확정 되었습니다.');};
  document.getElementById('hrt2325_btn_init').onclick=async()=>{if(!confirm('기존에 등록된 자료가 있다면 삭제 후 초기화가 진행됩니다.'))return;await ajax('init_prc',{wk});await search();doClientMsg('초기화 되었습니다.');};
@@ -159,7 +163,7 @@ ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.msgs.filter((m)
 // 2) saveOnly: 상태 없는 주라도 7일 저장, 공지·확정 안 함
 reset({ status: {} });
 x = await send({ mode: "saveOnly", employees: all3() });
-ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.length === 7 && S.notice === 0 && !x.res.confirmed && x.res.savedEmpNos.length === 3, "saveOnly: 상태 없어도 7일 저장, 공지·확정 안 함", brief(x));
+ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.map((q) => q.dow).join() === "MON,TUE,WED,THU,FRI,SAT,SUN" && S.notice === 0 && !x.res.confirmed && x.res.savedEmpNos.length === 3, "saveOnly: 상태 없어도 7일 저장(팝업 다시 열 때마다 MON 첫 로딩 뒤 요일 label), 공지·확정 안 함", brief(x));
 // 3) full: EDIT → 7일 저장 → 공지 → 확정
 reset();
 x = await send({ employees: all3() });
@@ -194,6 +198,16 @@ reset();
 x = await send({ mode: "test", employees: [emp("90000001", "시험일"), emp("90000002", "시험이")] });
 ok(x.res && !x.res.ok && (x.res.missing || []).join() === "90000003" && S.saves.length === 0, "직원 1명 빠짐(HR엔 있음) → 명단 회신, 저장 안 함", brief(x));
 ok(await (async () => { const p = ctx.pages().find((q) => /hr\.pljec/.test(q.url())); return p ? await p.evaluate(() => !window.__reported && getComputedStyle(document.getElementById("hrt2325_pop_sub")).display === "none") : false; })(), "오류 뒤 팝업 닫음 · '오류 신고'는 안 누름");
+// 8b) 바로 앞 시도에서 없는 사번이 섞여 표에 남았어도(팝업은 닫힘), 다음 시도는 새로 로딩된 표로 판단 → 성공
+x = await send({ mode: "test", employees: all3() });
+ok(x.res && x.res.ok && S.saves.length === 1, "앞 시도의 옛 행이 남아 있어도 첫 로딩(workType '') 뒤에 읽어 정상 저장", brief(x));
+// 8c) 한 자리 시간 "9:00" → 사전 점검에서 "09:00"으로 바꿔 보냄
+reset();
+const t9 = all3(); t9[0].days[0] = { date: dates[0], kind: "출근", in: "9:00", out: "18:00", brk: "1:00" };
+x = await send({ mode: "test", employees: t9 });
+ok(x.res && x.res.ok && S.saves[0] && JSON.stringify(S.saves[0].rows[0].slice(3)) === JSON.stringify(["출근", "09:00", "18:00", "01:00"]), "\"9:00\"·\"1:00\" → 09:00·01:00으로 올림", brief(x));
+x = await send({ mode: "test", employees: (() => { const e = all3(); e[0].days[0] = { date: dates[0], kind: "출근", in: "9시", out: "18:00", brk: "" }; return e; })() });
+ok(x.res && !x.res.ok && x.res.stage === "precheck" && /시간 형식 오류/.test(x.res.message), "\"9시\" → 사전 점검에서 '시간 형식 오류'", brief(x));
 // 9) 업로드 500 (inlineStr 등) → 그 자리에서 멈춤
 reset({ uploadHttp: 500 });
 x = await send({ mode: "test", employees: all3() });

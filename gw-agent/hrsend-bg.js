@@ -81,7 +81,7 @@ async function hrsRun(req, board, boardWin) {
     // 3) 요일마다: 탭 로딩 → 업로드 → 행 검증 → 팝업 저장
     for (const f of files) {
       await setRun({ stage: "upload", tab: tabId, day: f.dow });
-      r = await hrsExec(tabId, "dayOpen", { dow: f.dow }, D);
+      r = await hrsExec(tabId, "dayOpen", { dow: f.dow, prevSaved: savedDays.length === files.indexOf(f) }, D); // 앞 요일이 다 저장됐을 때만 "수정중인 데이터" 확인창에 예
       if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
       const before = r.before;
       r = await hrsExec(tabId, "dayUpload", { b64: hrsB64(f.bytes), name: f.name }, D);

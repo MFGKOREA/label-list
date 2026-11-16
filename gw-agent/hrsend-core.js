@@ -59,7 +59,7 @@
         const kind = String(d.kind || "").trim();
         if (KINDS.indexOf(kind) < 0) { bad(`${date} 근태유형 "${kind || "(빈칸)"}"은 HR에 없어요 — 보드에서 출근·휴무·주휴일·공휴일 중 하나로 바꿔 보내 주세요`); ok = false; continue; }
         let tin = hhmm(d.in), tout = hhmm(d.out), brk = hhmm(d.brk);
-        if (tin === null || tout === null || brk === null) { bad(`${date} 시간 모양이 틀려요 (출근 ${d.in || "-"} · 퇴근 ${d.out || "-"} · 휴게 ${d.brk || "-"}, HH:MM)`); ok = false; continue; }
+        if (tin === null || tout === null || brk === null) { bad(`${date} 시간 형식 오류 (출근 ${d.in || "-"} · 퇴근 ${d.out || "-"} · 휴게 ${d.brk || "-"}, HH:MM)`); ok = false; continue; }
         if (kind === "출근") {
           if (!tin || !tout) { bad(`${date} 출근인데 출근·퇴근 시각이 비었어요`); ok = false; continue; }
           if (!brk) brk = "00:00"; // 휴게 없으면 00:00 (HR 필수 칸)
