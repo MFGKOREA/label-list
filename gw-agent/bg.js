@@ -333,7 +333,10 @@ async function tickOnce(why) {
   }
   if (!job && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); const { auto } = await get("auto"); post("misAgent", { at: now, mode: "ondemand", ver: VER, auto: auto === false ? 0 : 1 }); } // 폰에 "PC 대기 중" (auto: 상시 수집 켜짐)
   const orderWaiting = p.date === ymd() && p.status === "pending" && now - (p.at || 0) < 30 * 60e3;
-  const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 6 * 3600e3; // 1.7.3: 매출 요청은 6시간까지 받음 (PC가 꺼져 있다 켜져도. 예전엔 30분이 지나면 버림)
+  // 1.11.0: 내가 낸 당일 되풀이 요청이 20분 넘게 pending이면 버린 것으로 보고 받지 않게 (그러면 당일 되풀이가 새 요청을 낼 수 있음)
+  const { perSt: peri = {} } = await get("perSt");
+  const ownStale = peri.reqId != null && "s" + peri.reqId === "s" + sp.id && sp.status === "pending" && now - (sp.at || 0) > 20 * 60e3;
+  const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 6 * 3600e3 && !ownStale; // 1.7.3: 매출 요청은 6시간까지 받음 (PC가 꺼져 있다 켜져도. 예전엔 30분이 지나면 버림)
 
   if (!job) {
     const req = orderWaiting ? { kind: "order", id: "o" + p.id, msg: "폰 전송 받음 → GW·MIS 열기" } : salesWaiting ? { kind: "sales", id: "s" + sp.id, msg: "Gross 불러오기 받음 → GW·MIS 열기" } : null;
