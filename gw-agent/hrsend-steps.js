@@ -230,12 +230,17 @@ async function hrsStep(op, a) {
     const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요");
     const leaf = (cs) => [].concat(...(cs || []).map((c) => (c.columns ? leaf(c.columns) : [c])));
     const unl = leaf(g.columns || []).filter((c) => !c.hidden && !c.locked), ci = unl.findIndex((c) => c.field === "MON_time_item_code_p");
-    const tbl = g.table && g.table[0] ? g.table[0] : null, tr = tbl && tbl.querySelector("tr[data-uid]");
-    if (ci < 0 || !tr) return { ok: true, list: [], why: "표가 비어 있거나 근태 칸을 못 찾음" };
+    const tbl = g.table && g.table[0] ? g.table[0] : null;
+    if (ci < 0 || !tbl) return { ok: true, list: [], why: "표가 비어 있거나 근태 칸을 못 찾음" };
+    // 수정 가능한 칸(edit_yn이 N이 아닌 행·요일)을 골라 편집기를 엶 — 잠긴 날은 드롭다운이 안 열림
+    let tr = null, cj = ci;
+    for (const row of tbl.querySelectorAll("tr[data-uid]")) { let di = null; try { di = g.dataItem(row); } catch (e) {} if (!di) continue; const D = DAYS7.find((x) => String(di[x + "_edit_yn"]) !== "N"); if (D) { tr = row; cj = unl.findIndex((c) => c.field === D + "_time_item_code_p"); break; } }
+    if (!tr || cj < 0) return { ok: true, list: [], why: "수정 가능한 칸이 없음" };
+    if (g.dataSource.hasChanges()) return { ok: true, list: [], why: "표에 저장 안 된 변경이 있어 편집기를 열지 않음" };
     let list = [];
     try {
-      g.editCell($(tr.cells[ci])); await sleep(500);
-      const box = $(tr.cells[ci]);
+      g.editCell($(tr.cells[cj])); await sleep(500);
+      const box = $(tr.cells[cj]);
       const dd = (box.find("[data-role='dropdownlist']").data("kendoDropDownList")) || (box.find("[data-role='combobox']").data("kendoComboBox"));
       if (dd) { const vf = dd.options.dataValueField || "value", tf = dd.options.dataTextField || "text"; const raw = dd.dataSource.data(); list = [].slice.call(raw.toJSON ? raw.toJSON() : raw).map((x) => ({ v: String(x[vf] == null ? "" : x[vf]), t: String(x[tf] == null ? "" : x[tf]).slice(0, 20) })).filter((x) => x.v); }
     } catch (e) {}
@@ -246,6 +251,8 @@ async function hrsStep(op, a) {
   }
   if (op === "cardSave") { // a.emps: [{ empNo, days: [{ dow, code, in, out, brk }] }] → 행 모델에 넣고 workType 'U' → [저장] 한 번
     const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
+    // 누가 화면에서 고치다 만 내용이 있으면 [저장]에 같이 실려 가므로 멈춤 (우리 값만 저장해야 함)
+    try { if (g.dataSource.hasChanges()) return fail("save", "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — [검색]으로 새로 고친 뒤 다시"); } catch (e) {}
     const by = new Map([].slice.call(g.dataSource.data()).map((r) => [String(r.emp_code), r]));
     for (const e of a.emps) { // 넣기 전에 다 있는지·수정 가능한지 먼저 (하나라도 아니면 아무것도 안 넣음)
       const r = by.get(e.empNo); if (!r) return fail("save", `이 탭(${a.dept})에 없는 사번 ${e.empNo}`);

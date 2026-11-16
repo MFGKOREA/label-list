@@ -48,7 +48,7 @@ function draw(){const el=document.getElementById('hrt2325_info_list_html');el.in
   editCell(w){const td=w.el;const s=document.createElement('span');s.setAttribute('data-role','dropdownlist');s.__k={kendoDropDownList:{options:{dataValueField:'time_item_code',dataTextField:'time_item_name'},dataSource:{data(){const L=[{time_item_code:'10',time_item_name:'출근'},{time_item_code:'17',time_item_name:'휴무'},{time_item_code:'18',time_item_name:'주휴일'},{time_item_code:'19',time_item_name:'공휴일'}];return {toJSON(){return L;}};}}}};td.appendChild(s);window.__edited=(window.__edited||0)+1;},
   closeCell(){document.querySelectorAll('#hrt2325_info_list_html [data-role=dropdownlist]').forEach(x=>x.remove());},
   dataSource:{data(){return rows;},view(){return rows;},hasChanges(){return rows.some(r=>r.dirty);},cancelChanges(){window.__cancel=(window.__cancel||0)+1;search();}}}};}
-async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});rows=JSON.parse(decParam(mr.j.data.infoEnc)).map(obs);draw();btns();}
+async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});rows=JSON.parse(decParam(mr.j.data.infoEnc)).map(obs);if(${JSON.stringify(!!S.preDirty)}&&rows[1]&&!window.__pd){window.__pd=1;rows[1].dirty=true;}draw();btns();}
 function render(){document.getElementById('app').innerHTML=\`
  <input type="hidden" id="hrt2325_search_site_code" value="5090"><input type="hidden" id="hrt2325_dept_category" value="\${dept}">
  <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}">
@@ -201,6 +201,10 @@ ok(x.res && !x.res.ok && x.res.stage === "save" && /edit_yn N/.test(x.res.messag
 reset({ dropDay: "FRI" });
 x = await send({ mode: "saveOnly", employees: all3() });
 ok(x.res && !x.res.ok && x.res.stage === "save" && x.res.rowErrors.some((e) => e.day === "FRI"), "저장 뒤 다시 읽어 값이 다르면 알림(FRI)", brief(x));
+// 10b) 누가 HR 표를 고치다 만 상태(저장 안 된 변경) → 같이 저장되지 않게 멈춤
+reset({ preDirty: true });
+x = await send({ mode: "test", employees: all3() });
+ok(x.res && !x.res.ok && x.res.stage === "save" && /저장 안 된 변경/.test(x.res.message) && S.saves.length === 0, "HR 표에 남의 저장 안 된 변경 → 저장 안 하고 멈춤", brief(x));
 // 11) 로그인 풀림 · 같은 requestId
 reset({ login: false }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0, "HR 로그인 화면 → 바로 멈춤(login)", brief(x));

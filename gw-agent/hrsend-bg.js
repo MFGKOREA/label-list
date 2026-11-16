@@ -166,7 +166,11 @@ async function hrsPublish(req, board, boardWin) {
     if (!w0.ok) { res = res0({ stage: "precheck", message: w0.message }); return; }
     const tabs = [{ dept: "전체", rows: w0.rows, labels: w0.labels }];
     await step("precheck", `전체 검색: ${wk0} · ${w0.rows.length}명 · 상태 ${st0.join(",") || "없음"}`);
-    const chk = hrsPublishCheck(tabs, req.codes || null);
+    // 근태 코드표(주휴일·공휴일): 근태 칸 드롭다운 목록에서 (보드가 codes로 주면 그게 우선)
+    const lc = await hrsExec(tabId, "learnCodes", {}, 30e3), over = {};
+    (lc.list || []).forEach((x) => { if (/주휴/.test(x.t)) over[x.v] = "주휴일"; else if (/공휴/.test(x.t)) over[x.v] = "공휴일"; else if (/^출근/.test(x.t)) over[x.v] = "출근"; else if (/^휴무/.test(x.t)) over[x.v] = "휴무"; });
+    Object.entries(req.codes || {}).forEach(([k, v]) => { over[v] = k; }); // req.codes: { 주휴일: "18" } 모양
+    const chk = hrsPublishCheck(tabs, Object.keys(over).length ? over : null);
     await step("precheck", `점검 ${chk.n}명 · 걸린 것 ${chk.errors.length}건 · 코드 ${Object.entries(chk.codes).map(([c, k]) => c + "=" + k).join(" ")}`);
     if (!chk.ok) { res = res0({ stage: "precheck", message: `공지 전 점검에서 ${chk.errors.length}건 — 공지·확정을 누르지 않았어요`, rowErrors: chk.errors.map((e) => ({ empNo: e.empNo, name: e.name, dept: e.dept, day: e.day, msg: e.msg })) }); return; }
     // 2) 같은 전체 화면에서 공지 → 확정 (HR의 validateConfirm은 화면에 불러온 행만 검사)
