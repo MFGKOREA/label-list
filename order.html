@@ -2959,29 +2959,38 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     const by = new Map(); misItems().forEach((w) => { const v = w.vendor || "기타"; if (!by.has(v)) by.set(v, []); by.get(v).push(w); });
     return [...by].map(([v, ws]) => `[${v}] ${ws.length}개\n` + ws.sort((a, b) => a.name.localeCompare(b.name, "ko")).map((w) => `${w.name} ${w.q}${w.unit}`).join("\n")).join("\n\n");
   };
+  // ===== 상태 한 곳에서 (11/16 "상태 머신 헌터": 화면마다 그 자리에서 다시 판단하던 것을 함수 하나로. 목록·전환은 order-src/STATES.md) =====
+  // 매장 PC가 살아 있나: 확장(ondemand)은 10분마다 신호 → 20분 안이면 켜짐. 예전 북마크 방식은 2분마다 → 3분. (collect.py·gw-agent도 같은 값 — test/states.mjs가 맞춰 봄)
+  const PC_ALIVE = { ondemand: 20 * 60e3, legacy: 180000 };
+  function pcAlive(ondemandMs) { const ag = db.misAgent || {}; return !!ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? ondemandMs || PC_ALIVE.ondemand : PC_ALIVE.legacy); }
+  // 발주 GW 전송(misPush) 상태: idle 없음 · run PC가 넣는 중 · wait PC가 꺼져 있어 기다림 · ok 저장 완료 · bad 오류 또는 응답 없음(stale)  (매출 쪽 salesState와 같은 낱말)
+  //  응답 없음: 확장은 6분(입력 시작 뒤 12분) 안에 끝내거나 멈춘 곳을 적고 닫음 → 그보다 1분 넘으면(7분·13분). 예전 북마크 방식은 5분
+  const MIS_STALE = { pending: 7 * 60e3, running: 13 * 60e3, legacy: 300000, slow: 2 * 60e3 };
+  function misState() {
+    const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, agOn = pcAlive();
+    const act = !!p && /pending|running/.test(p.status), age = act ? Date.now() - (p.startAt || p.at) : 0;
+    const stale = act && age > (ag.mode === "ondemand" ? MIS_STALE[p.status] : MIS_STALE.legacy);
+    const st = !p ? "idle" : act && !stale ? (agOn ? "run" : "wait") : p.status === "done" ? "ok" : p.status === "error" || stale ? "bad" : "idle";
+    return { st, p, agOn, stale, busy: !!p && p.status === "running" && !stale, failed: !!p && (p.status === "error" || stale), slow: act && age > MIS_STALE.slow };
+  }
   let misTick = 0;
   function renderMis() {
     const el = $("misBar"); if (!el) return;
     clearTimeout(misTick); // 11/12: 기다리는 중이면 30초 뒤 다시 그림 (시트가 안 바뀌어도 시간 기준 상태가 바뀜)
     if (db.misPush && db.misPush.date === TODAY && /pending|running/.test(db.misPush.status)) misTick = setTimeout(() => { if (!$("v-main").hidden) renderMis(); }, 30e3);
     if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
-    el.hidden = false;
-    const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, list = misItems();
-    const agOn = ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? 20 * 60e3 : 180000); // 확장 1.3: 평소 10분마다 "대기 중" 기록
+    el.hidden = false; el.dataset.phase = misState().st;
+    const ag = db.misAgent || {}, ms = misState(), { p, agOn, stale, busy, failed, slow } = ms, list = misItems();
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    // 확장 1.7: 누르면 창 하나만 열어 6분(입력 시작 뒤 12분) 안에 끝내고, 못 끝내면 멈춘 곳을 적고 닫음 → 그보다 조금 넘으면 응답 없음
-    const stale = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > (ag.mode === "ondemand" ? (p.status === "running" ? 13 : 7) * 60e3 : 300000);
     const stepNow = ag.step && ag.stepAt > ((p && p.at) || 0) && Date.now() - ag.stepAt < 4 * 60e3 ? ag.step : ""; // 확장 1.7이 적는 지금 단계 (GW 로그인 시도, 경영정보 열기 …)
     // 11/13 KM: 평소엔 상태 글 없이 버튼만 · 보내서 들어가는 중일 때만 "입력중" · 끝났거나 확인 필요할 때만 결과
     let st = "", cls = "";
-    if (p && /pending|running/.test(p.status) && !stale) { st = agOn ? "입력중" : "PC 켜면 자동 입력"; cls = "run"; }
-    else if (p && p.status === "done") { st = `✓ ${hhmm(p.doneAt)} 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
-    else if (p && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
-    else if (stale) { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
-    const busy = p && p.status === "running" && !stale; // 기다리는 중(pending)이어도 다시 누를 수 있게
-    const failed = p && (p.status === "error" || stale); // 안 됐으면 MIS 직접 입력용 목록 복사 버튼
+    if (ms.st === "run" || ms.st === "wait") { st = ms.st === "run" ? "입력중" : "PC 켜면 자동 입력"; cls = "run"; }
+    else if (ms.st === "ok") { st = `✓ ${hhmm(p.doneAt)} 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
+    else if (ms.st === "bad" && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
+    else if (ms.st === "bad") { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
+    // busy: 넣는 중(running)에만 버튼을 잠금 — 기다리는 중(pending)이어도 다시 누를 수 있게 · failed: 안 됐으면 MIS 직접 입력용 목록 복사 버튼
     // 11/12: 실패·응답 없음이 아니어도 PC 꺼짐·확장 없음이거나 보낸 지 2분 넘게 안 끝나면 작은 [목록 복사]를 미리 보임 (6~13분 기다리지 않고 직접 넣을 수 있게)
-    const slow = p && /pending|running/.test(p.status) && Date.now() - (p.startAt || p.at) > 2 * 60e3;
     const copyCls = failed ? "" : !agOn || slow ? " soft" : null;
     el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b>${st ? `<span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span>` : ""}</div>` +
       (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
@@ -3246,6 +3255,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   }
   // est: 센 값이 아니라 예상 재고로 채운 칸(11/7 KM "재고 예상재고로 다반영") — 발주 계산엔 쓰되 채점·학습·다음 날 예상의 출발점으론 안 씀
   const counted = (v) => !!v && !v.est && v.s !== "" && v.s != null && isFinite(num(v.s));
+  // 재고 칸 상태: none 빈칸 · counted 센 값 · est 앱이 채운 예상 재고 (발주 계산엔 쓰되 채점·학습엔 안 씀)
+  const cellState = (v) => (!v || v.s === "" || v.s == null || !isFinite(num(v.s)) ? "none" : v.est ? "est" : "counted");
   // 박스째로만 세는 품목(버터라이스 40·스파게티니 20·시즐링 25 등): 예상 재고(estStock)를 셈 단위로 반올림 (11/14부터 계산도 같이, 예전엔 칩만 내림)
   //  칩: 한 단위가 안 되면 반올림한 0 대신 계산값 그대로 (0으로 보이지 않게)
   //  itemCfg.countStep이 없으면 최근 5번(4번 이상) 센 값이 모두 40·25·20·10·5의 배수인지로 짐작 (40·40·40만 보면 40으로 잘못 봄) (2팀 G 백테스트: 해당 품목 적중 26%→47%)
@@ -3330,7 +3341,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       return !r0.none && r0.packs > 0 && r0.orderQty - num(v.o) > 1e-9 ? 2 : 3;
     }
     // 센 값이 없어도 예상 재고(est)로 채운 칸이면 그 값으로 발주 필요를 가름 (11/13 KM: 예상 재고 채운 뒤 발주 필요순이 안 먹힘)
-    if (!counted(v) && !(v && v.est && v.s !== "" && v.s != null && isFinite(num(v.s)))) return -1;
+    if (cellState(v) === "none") return -1;
     const w = orderWindowFor(it, TODAY); if (!w.canOrder) return -1; // 오늘이 그 업체 발주일이 아니면 위로 안 올림
     const s = availOf(it, v), inc = incNow(it), r = calc(it, w, s, inc);
     if (r.none) return -1;
@@ -3344,37 +3355,34 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     const v = { s: "", o: "", ...(inp[it.key] || {}) };
     const unit = it.pk.stock || "재고단위", ou = it.pk.order || unit;
     const inc = incNow(it);
+    // 필요량 칸 상태 (한 곳에서 판단, 그리기는 아래 draw): none 계산 못 함 · idle 재고 안 넣음(이번 기간 필요량만) · unknown 재고는 있는데 계산 못 함 ·
+    //  done 발주 넣음 · low 앱 예상보다 적게 넣음 · enough 발주 안 해도 됨 · offday 오늘은 그 업체 발주일 아님 · buy 발주필요   (카드 data-need에도 적음 — 시험·에이전트가 읽음)
+    const needOf = () => {
+      const est = estFor(it, v), s = est ? est.v : availOf(it, v);
+      if (!isFinite(s) && num(v.o) > 0) return { st: "done" };
+      if (!isFinite(s)) { const r = calc(it, win, 0, 0); return r.none ? { st: "none" } : { st: "idle", r }; }
+      const r = calc(it, win, s, inc);
+      if (r.none) return { st: "unknown" };
+      if (num(v.o) > 0) { const lack = r.packs > 0 ? r.orderQty - num(v.o) : 0; return lack > 1e-9 ? { st: "low", lack } : { st: "done" }; } // 앱 예상보다 적게 넣으면 표시 (11/12 KM)
+      if (!r.packs) return { st: "enough" }; // 필요(사용+안전재고) − 재고 − 입고예정이 0 이하
+      return { st: offDay ? "offday" : "buy", r };
+    };
     const draw = () => {
-      const est = estFor(it, v);
-      const s = est ? est.v : availOf(it, v), i = inc;
-      let need;
-      // 재고를 아직 안 넣었으면 이번 기간 필요량만 회색으로 보여줌
+      const n = needOf(), r = n.r; d.dataset.need = n.st;
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
       const m = it.pk.mult || 1, rm = (v) => (it.useStep && v > 0 ? Math.ceil(v / m - 1e-9) * m : m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v)); // 한 번에 쓰는 품목은 발주 단위로 올림 (11/16 KM "발주는 1통 단위")
       // 몇 포션인지 (itemCfg.portionG): 보이는 필요량 × 1단위 g ÷ 1포션 g
       const por = (q) => (it.portionG && it.pk.g && q > 0 ? `<em class="por">${Math.ceil(q * it.pk.g / it.portionG - 1e-9)}${esc(it.portionLabel)}</em>` : "");
-      if (!isFinite(s) && num(v.o) > 0) return `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
-      if (!isFinite(s)) { const r = calc(it, win, 0, 0); need = r.none ? '<span class="need none"><b>–</b></span>' : `<span class="need none need-idle">${por(+rm(r.need))}<b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`; }
-      else {
-        const r = calc(it, win, s, i);
-        if (r.none) need = '<span class="need none"><b>?</b></span>';
-        else if (num(v.o) > 0) {
-          // 앱 예상보다 적게 넣으면 표시 (11/12 KM): "발주완료"는 그대로, 아래 줄에 몇 개 적은지
-          const lack = r.packs > 0 ? r.orderQty - num(v.o) : 0;
-          need = lack > 1e-9
-            ? `<span class="need done low"><b>${CK}발주완료</b><span class="lack">예상 −${r1(lack)}${esc(ou)} 부족</span></span>`
-            : `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
-        }
-        else if (!r.packs) {
-          // 필요량 = 주말 영업까지 다 하고 이번 입고일(월)에 들어와야 할 양 = 필요(사용+안전재고) − 재고 − 입고예정. 발주 안 해도 되면 0
-          need = `<span class="need enough"><b>충분</b><span>필요 0${esc(unit)}</span></span>`;
-        }
-        else if (offDay) need = `<span class="need none need-idle"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>${DOW[dow(win.orderDay)]}요일 발주</span></span>`;
-        else {
-          need = `<span class="need buy">${por(ordToStock(it, r.orderQty))}<b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>발주필요</span></span>`;
-        }
+      switch (n.st) {
+        case "none": return '<span class="need none"><b>–</b></span>';
+        case "idle": return `<span class="need none need-idle">${por(+rm(r.need))}<b>${rm(r.need)}<small>${esc(unit)}</small></b><span>필요량</span></span>`;
+        case "unknown": return '<span class="need none"><b>?</b></span>';
+        case "low": return `<span class="need done low"><b>${CK}발주완료</b><span class="lack">예상 −${r1(n.lack)}${esc(ou)} 부족</span></span>`;
+        case "done": return `<span class="need done"><b>${CK}발주완료</b><span>${esc(v.o)}${esc(ou)} 발주</span></span>`;
+        case "enough": return `<span class="need enough"><b>충분</b><span>필요 0${esc(unit)}</span></span>`;
+        case "offday": return `<span class="need none need-idle"><b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>${DOW[dow(win.orderDay)]}요일 발주</span></span>`;
+        default: return `<span class="need buy">${por(ordToStock(it, r.orderQty))}<b>${r.orderQty}<small>${esc(it.pk.order || unit)}</small></b><span>발주필요</span></span>`;
       }
-      return need;
     };
     const c0 = calc(it, win, 0, 0);
     // 작업 중 재고 (꺼내 둔 팩·박스): 발주 계산에 더한 만큼 회색 글씨로
@@ -3581,9 +3589,15 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // 밤 (11/15 KM "저녁 9시면 영업이 끝난 시간인데 아직 당일 86위험 떠있는건 이해가 안가. 밤에는 다음날 기준"):
   //  영업 끝(CLOSE_H 20:30) 뒤엔 오늘 바닥 시각이 모두 지난 시각(계산이 20:30까지로 자름) → 내일 문 열 때 예상 재고(오늘 센 값 − 오늘 남은 사용 + 내일 아침 입고)로
   //  내일 발주가 들어오기 전까지 봄 = 내일 아침에 열어 본 것과 같은 계산. 시간대별 매출(11/12까지): 21시까지 평일 98.1% · 토 98.7% · 일 99.9%가 끝남. 자정이 지나면 그날이 오늘이 되어 원래대로
-  const nightNow = () => { const n = new Date(); return n.getHours() + n.getMinutes() / 60 >= CLOSE_H; };
+  // 하루 시간대: pre 문 열기 전 · open 영업 중 · night 영업 끝(20:30~자정, 86은 내일 기준)
+  const nowH = () => { const n = new Date(); return n.getHours() + n.getMinutes() / 60; };
+  const dayPhase = (h = nowH()) => (h < OPEN_H ? "pre" : h < CLOSE_H ? "open" : "night");
+  const nightNow = () => dayPhase() === "night";
   const riskNight = (it) => { const d1 = addDays(TODAY, 1), e = estStock(it, d1); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H, d1); return r ? { ...r, est: true, night: true, from: e.from } : null; };
-  const risk1 = (it, v) => (nightNow() ? riskNight(it) : riskOf(it, v) || riskEst(it, v));
+  // 86 위험 한 건의 모드: counted 오늘 센 값 · est 예상 재고(최근 3일 센 값에서) · night 밤(내일 문 열 때 예상). label = 화면 낱말
+  //  "확인필요" = 세어 봐야 아는 것(예상 기준). 밤이라도 오늘 센 값에서 나온 예상이면 "86 위험"
+  const riskTag = (k) => (k ? { ...k, mode: k.night ? "night" : k.est ? "est" : "counted", label: k.est && !(k.night && k.from === TODAY) ? "확인필요" : "86 위험" } : null);
+  const risk1 = (it, v) => riskTag(nightNow() ? riskNight(it) : riskOf(it, v) || riskEst(it, v));
   function risk86(M, inp) {
     return M.items.filter((i) => !i.ledgerOnly).map((it) => risk1(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
   }
@@ -3749,7 +3763,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>${night ? "내일 86 위험" : "86 위험"}</b>${night ? "<span>영업 끝 · 내일 문 열 때 예상 재고 기준</span>" : ""}</div>` +
         rk.map((x) => { const u = esc(x.it.pk.stock || ""), nw = (s) => `<span class="nw">${s}</span>`; // 줄바꿈은 덩어리 사이에서만 ("월 입고 / 전"처럼 끊기지 않게)
           const why = [nw(`${x.est ? "예상 " : ""}재고 ${r1(x.have)}${u}`), nw(`<b>${r1(x.shortS != null ? x.shortS : Math.max(0.1, x.use - x.have))}${u} 부족</b> 예상`), x.by !== x.out ? nw(`${DOW[dow(x.by)]} 입고 전`) : ""].filter(Boolean).join(" · ") + (x.est ? " " + nw(`(${esc(x.from.slice(5).replace("-", "/"))} 센 값 기준)`) : "");
-          return `<button type="button" data-key="${esc(x.it.key)}"><span>${esc(x.it.name)}<em>${why}</em></span><small><i>${x.est && !(x.night && x.from === TODAY) ? "확인필요" : "86 위험"}</i>${esc(x.when)}${x.thaw ? `<span class="thaw">입고당일 해동필요</span>` : ""}</small></button>`; }).join("") + `</div>`);
+          return `<button type="button" data-key="${esc(x.it.key)}" data-mode="${x.mode}"><span>${esc(x.it.name)}<em>${why}</em></span><small><i>${x.label}</i>${esc(x.when)}${x.thaw ? `<span class="thaw">입고당일 해동필요</span>` : ""}</small></button>`; }).join("") + `</div>`);
       box.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
@@ -4098,7 +4112,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   //        PC가 못 받은 요청은 PC가 살아난 걸 보면 앱이 다시 보냄(두 번까지) · 요청은 통째로 새로 씀(set), 덧붙이기만 merge
   //  salesPush = { id, at, status, kind("menu"|"now"|없음=gross), from, to, also: { gross|menu: { from, to } }, parts: { gross|menu: { status, text, doneAt } }, cur, prog, re }
   const SP = Object.assign({ pendMax: 6 * 60e3, runMax: 14 * 60e3, offMax: 18 * 3600e3, bgMax: 29 * 60e3, aliveWait: 5 * 60e3, quickMax: 150e3, alive: 20 * 60e3, tick: 20000, redraw: 15000, want: 15 * 60e3 }, window.__spTest || {}); // __spTest: 시험에서 시간을 줄여 씀
-  const agAlive = () => { const ag = db.misAgent || {}; return !!ag.at && Date.now() - ag.at < (ag.mode === "ondemand" ? SP.alive : 180000); };
+  const agAlive = () => pcAlive(SP.alive); // 시험(__spTest)에서 시간을 줄일 수 있게 SP.alive로
   const spKind = (p) => (p && p.kind) || "gross";
   // PC가 이 요청을 받아 움직이는 중인가: 확장은 창을 열면 바로 단계 기록(misAgent.step·stepAt)을 남김. 요청 뒤로 기록이 없으면 PC가 조용한 것
   //  (11/12 실제: PC가 켜져 있고 신호도 오는데 요청을 10분 넘게 안 받음 → 새로 보내자 바로 받음)
@@ -4874,7 +4888,21 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       if (!busy(db.misPush) && !busy(db.salesPush)) misFastUntil = 0;
     } finally { polling = false; }
   }, 2000);
-  window.__orderCalc = { wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth };
+  // 앱 상태를 한 번에 (11/16 "상태 머신 헌터", 에이전트·시험용): 화면 글자를 긁지 않고 상태 낱말로 읽음. 낱말 뜻은 order-src/STATES.md
+  function appState() {
+    const ag = db.misAgent || {}, rk = preMode ? [] : risk86(model(), todayInput()), hl = gwHealth();
+    return {
+      today: TODAY, hour: Math.round(nowH() * 100) / 100, day: dayPhase(),
+      view: Object.keys(views).find((k) => !$(views[k]).hidden) || "main", tab: $("pPrep").hidden ? "order" : "prep",
+      pc: { alive: pcAlive(), agoMin: ag.at ? Math.round((Date.now() - ag.at) / 6e4) : null, ver: ag.ver || null, auto: !!ag.auto },
+      order: misState().st, sales: { gross: salesState("gross").st, menu: salesState("menu").st },
+      sync: { api: !!API, online, pulled, unsent: Object.keys(pend.set).length + Object.values(pend.add).reduce((t, x) => t + x.length, 0), sending: Object.keys(inflight).length },
+      list: { pre: preMode, sort: sortSel, loc: locSel, vendor: cat, q: $("q").value.trim() },
+      risk: { n: rk.length, modes: [...new Set(rk.map((x) => x.mode))] },
+      health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
+    };
+  }
+  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth };
 })();
 
 </script>
