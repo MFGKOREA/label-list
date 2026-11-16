@@ -29,8 +29,8 @@ async function hrsTabReady(tabId, ms) { // 다 열릴 때까지. 오류 화면(�
 async function hrsRun(req, board, boardWin) {
   const id = String(req.requestId || "").slice(0, 80), now = Date.now(), trail = []; // (이름 주의: log는 bg.js의 기록 함수)
   const mode = req.mode === "test" ? "test" : "saveOnly"; // 11/16 KM: 부서별 전송은 입력·저장까지만. 공지·확정은 매장 전체라 MFG_HR_PUBLISH로 따로 (예전 "full"은 saveOnly로 받음)
-  const savedDays = [];
-  const res0 = (o) => Object.assign({ type: "MFG_HR_SEND_RESULT", requestId: id, ok: false, stage: "precheck", day: null, message: "", rowErrors: [], savedDays: savedDays.slice(), noticed: false, confirmed: false, savedEmpNos: [], mode, log: trail }, o);
+  const savedDays = []; let warnsOut = [];
+  const res0 = (o) => Object.assign({ type: "MFG_HR_SEND_RESULT", requestId: id, ok: false, stage: "precheck", day: null, message: "", rowErrors: [], warns: warnsOut, savedDays: savedDays.slice(), noticed: false, confirmed: false, savedEmpNos: [], mode, log: trail }, o);
   const step = async (stage, msg, day, ajax) => { const it = { t: hrsT(), stage, day: day || null, msg: String(msg || "").slice(0, 200) }; if (ajax && ajax.length) it.ajax = ajax.map((x) => `${x.ep} ${x.http}${x.rc != null ? "/" + x.rc : ""}`).join(", "); trail.push(it); await hrsSend(board, { q: "hrSendProgress", requestId: id, item: it }); };
   if (!id) return hrsSend(board, { q: "hrSendResult", res: res0({ message: "requestId가 없어요" }) });
   const { hrSend = {} } = await get("hrSend");
@@ -45,6 +45,7 @@ async function hrsRun(req, board, boardWin) {
     const chk = hrsCheck(req);
     if (!chk.ok) { res = res0({ stage: "precheck", message: `보낼 수 없어요: ${chk.errors.length}건 — ${chk.errors.slice(0, 3).map((e) => (e.name || e.empNo || "") + " " + e.msg).join(" / ")}`, rowErrors: chk.errors }); return; }
     const plan = chk.plan, empNos = plan.emps.map((e) => e.empNo);
+    warnsOut = chk.warns.map((w) => ({ empNo: w.empNo, name: w.name, day: w.day || null, msg: w.msg }));
     await step("precheck", `${plan.dept} ${plan.weekStart}~${plan.weekEnd} · ${empNos.length}명 · ${mode === "test" ? "시험(월요일만)" : "7일 저장"}${chk.warns.length ? " · 경고 " + chk.warns.length + "건" : ""}`);
     chk.warns.forEach((w) => trail.push({ t: hrsT(), stage: "precheck", day: null, msg: `경고: ${w.name || w.empNo} ${w.msg}` }));
     // 2) HR 탭 (있으면 그 탭, 없으면 보드 창에 새 탭). 화면이 그려져야 해서 앞으로 띄움
@@ -81,12 +82,12 @@ async function hrsRun(req, board, boardWin) {
     if (!m.ok) { res = res0({ stage: "week", message: m.message }); return; }
     if (m.dirty) { res = res0({ stage: "save", message: "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — 같이 저장되지 않게 멈춤. HR에서 [검색]으로 새로 고친 뒤 다시", code: "dirty" }); return; }
     const inHr = new Set(m.rows.map((x) => x.empNo));
-    const nowhere = empNos.filter((n) => !inHr.has(n));
-    if (nowhere.length) { res = res0({ stage: "week", message: `HR 주간스케쥴(전체)에 없는 사번 ${nowhere.length}명: ${nowhere.join(", ")} — 저장 전에 멈춤`, rowErrors: nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "HR에 없는 사번(재직·휴직 확인)" })) }); return; }
+    const nowhere = empNos.filter((n) => !inHr.has(n)); // 표에 없는 사람은 건너뛰고 보고 (11/17 KM: HR '누락건 추가'로 따로)
+    if (nowhere.length) await step("week", `표에 없는 사번 ${nowhere.length}명은 건너뜀: ${nowhere.join(", ")}`);
     // (11/17 KM) 부서 칸으로 "안 보낸 직원"을 가리는 검사는 하지 않음 — 보낸 직원만 넣고, 안 보낸 직원 행은 건드리지 않음
     await step("week", `표 ${m.rows.length}명(전체) · 보낸 ${empNos.length}명 모두 있음`);
     // 4) 근태 코드: 출근 10·휴무 17은 확인됨. 주휴일·공휴일은 표의 근태 칸 드롭다운 목록에서 (보드가 codes로 줄 수도 있음)
-    const CODE = { 출근: "10", 휴무: "17" }, need = new Set(); plan.emps.forEach((e) => e.days.forEach((d) => { if (!CODE[d.kind]) need.add(d.kind); }));
+    const CODE = { 출근: "10", 휴무: "17", 주휴일: "18" }, need = new Set(); // 11/17 KM 확인: 18 = 주휴일 plan.emps.forEach((e) => e.days.forEach((d) => { if (!CODE[d.kind]) need.add(d.kind); }));
     if (need.size) {
       Object.assign(CODE, req.codes || {});
       if ([...need].some((k) => !CODE[k])) {
@@ -97,22 +98,20 @@ async function hrsRun(req, board, boardWin) {
       const unk = [...need].filter((k) => !CODE[k]);
       if (unk.length) { res = res0({ stage: "week", message: `근태 코드를 몰라요: ${unk.join(", ")} — 저장 전에 멈춤`, code: "nocode" }); return; }
     }
-    // 5) 카드 입력 → [저장] 한 번 → 다시 읽어 맞는지 확인 (전체 화면 그대로)
-    const days = mode === "test" ? ["MON"] : ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], saved = [];
+    // 5) 바뀐 칸만 카드 입력(d.set) → 그 행 workType 'U' → hrt2325.saveData() → 다시 읽어 확인 (11/17 KM 실제 방식)
+    const days = mode === "test" ? ["MON"] : ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+    const KN = { 출근: "출근", 휴무: "휴무", 주휴일: "주휴일", 공휴일: "공휴일" };
     await setRun({ stage: "save", tab: tabId });
-    const emps = plan.emps.map((e) => ({ empNo: e.empNo, days: e.days.filter((d) => days.indexOf(d.dow) >= 0).map((d) => ({ dow: d.dow, code: CODE[d.kind], in: d.in, out: d.out, brk: d.brk })) }));
-    r = await hrsExec(tabId, "cardSave", { dept: "전체", emps }, 90e3);
-    if (!r.ok) { res = res0({ stage: "save", message: `저장: ${r.message}` }); return; }
-    await step("save", `${emps.length}명 ${days.length === 7 ? "7일" : "월요일"} 카드 입력 → 저장: ${r.toast}`, null, r.ajax);
-    const w = await hrsExec(tabId, "weekRows", {}, 30e3), bad = [];
-    const got = new Map((w.rows || []).map((x) => [x.empNo, x]));
-    emps.forEach((e) => { const g = got.get(e.empNo); if (!g) { bad.push({ empNo: e.empNo, msg: "저장 뒤 표에 없음" }); return; } e.days.forEach((d) => { const gd = g.days.find((x) => x.dow === d.dow) || {}; const hm = (v) => String(v || "").replace(/\D/g, ""); if (String(gd.code) !== String(d.code) || hm(gd.in) !== hm(d.in) || hm(gd.out) !== hm(d.out) || hm(gd.brk) !== hm(d.brk)) bad.push({ empNo: e.empNo, day: d.dow, msg: `저장 뒤 값이 달라요 (보냄 ${d.code} ${d.in || "-"}~${d.out || "-"}/${d.brk || "-"} · 표 ${gd.code || "-"} ${gd.in || "-"}~${gd.out || "-"}/${gd.brk || "-"})` }); }); });
-    if (bad.length) { res = res0({ stage: "save", message: `저장 뒤 다시 읽었더니 ${bad.length}건이 달라요`, rowErrors: bad.map((b) => ({ ...b, name: (plan.emps.find((e) => e.empNo === b.empNo) || {}).name })) }); return; }
-    emps.forEach((e) => saved.push(e.empNo));
-    await step("save", `다시 읽어 확인: ${emps.length}명 맞음`);
+    const emps = plan.emps.filter((e) => inHr.has(e.empNo)).map((e) => ({ empNo: e.empNo, name: e.name, days: e.days.filter((d) => days.indexOf(d.dow) >= 0).map((d) => ({ dow: d.dow, code: CODE[d.kind], kname: KN[d.kind], in: d.in, out: d.out, brk: d.brk })) }));
+    const keep = chk.warns.filter((w) => w.keepWeekly).map((w) => w.empNo);
+    r = await hrsExec(tabId, "cardApply", { emps, keep, weekly: CODE["주휴일"] }, 90e3);
+    const extra = { skipped: [...(r.skipped || []), ...nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "표에 없음 — 건너뜀" }))], kept: r.kept || [], locked: r.locked || [], changed: (r.changes || []).length };
+    if (!r.ok) { res = res0(Object.assign({ stage: "save", message: `저장: ${r.message}`, code: r.code, rowErrors: (r.notSaved || []).map((x) => ({ empNo: x.empNo, name: x.name, day: x.dow, msg: "저장 뒤 값이 다름 · " + x.msg })) }, extra)); return; }
+    await step("save", `바뀐 칸 ${r.applied}개(${r.rowsTouched || 0}명) 입력 → 저장 → 다시 읽어 확인 맞음${extra.kept.length ? ` · 주휴일 유지 ${extra.kept.length}` : ""}${extra.locked.length ? ` · 수정 불가 ${extra.locked.length}` : ""}${extra.skipped.length ? ` · 건너뜀 ${extra.skipped.length}명` : ""}`, null, r.ajax);
+    const saved = emps.map((e) => e.empNo).filter((n) => !extra.skipped.some((x) => x.empNo === n));
     days.forEach((d) => savedDays.push(d));
-    if (mode === "test") { res = res0({ ok: true, stage: "save", day: "MON", message: `시험: 월요일만 카드 입력·저장했어요 (${saved.length}명, 공지·확정 안 함)`, test: true }); return; }
-    res = res0({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${saved.length}명). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: saved });
+    if (mode === "test") { res = res0(Object.assign({ ok: true, stage: "save", day: "MON", message: `시험: 월요일만 넣고 저장했어요 (바뀐 칸 ${extra.changed}개, 공지·확정 안 함)`, test: true }, extra)); return; }
+    res = res0(Object.assign({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${saved.length}명 · 바뀐 칸 ${extra.changed}개${extra.kept.length || extra.skipped.length || extra.locked.length ? " · 확인 필요 있음" : ""}). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: saved }, extra));
   } catch (e) {
     res = res0({ stage: "week", message: "확장 오류: " + String((e && e.message) || e).slice(0, 200) });
   } finally {

@@ -250,31 +250,85 @@ async function hrsStep(op, a) {
     await sleep(200);
     return { ok: true, list };
   }
-  if (op === "cardSave") { // a.emps: [{ empNo, days: [{ dow, code, in, out, brk }] }] → 행 모델에 넣고 workType 'U' → [저장] 한 번
-    const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
-    // 누가 화면에서 고치다 만 내용이 있으면 [저장]에 같이 실려 가므로 멈춤 (우리 값만 저장해야 함)
-    try { if (g.dataSource.hasChanges()) return fail("save", "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — [검색]으로 새로 고친 뒤 다시"); } catch (e) {}
-    const by = new Map([].slice.call(g.dataSource.data()).map((r) => [String(r.emp_code), r]));
-    for (const e of a.emps) { // 넣기 전에 다 있는지·수정 가능한지 먼저 (하나라도 아니면 아무것도 안 넣음)
-      const r = by.get(e.empNo); if (!r) return fail("save", `이 탭(${a.dept})에 없는 사번 ${e.empNo}`);
-      const no = e.days.filter((d) => String(r[d.dow + "_edit_yn"]) === "N").map((d) => d.dow);
-      if (no.length) return fail("save", `사번 ${e.empNo}: ${no.join(",")}는 수정할 수 없는 날이에요(edit_yn N)`);
+  // ---- 바뀐 칸 계산 (11/17 KM 실제 운영 방식) ----
+  //  a.emps: [{ empNo?, name, days: [{ dow, code, kname, in, out, brk }] }] · a.keep: 기존 주휴일을 덮어쓰지 않을 직원(사번 또는 이름) · a.weekly: 주휴일 코드(기본 18)
+  //  직원 찾기: 사번이 있으면 emp_code, 없으면 이름(emp_name의 <br> 앞, 같은 이름이 둘이면 건너뜀). 표에 없으면 건너뛰고 보고
+  const nameOf = (r) => String(r.emp_name == null ? "" : r.emp_name).split(/<br\s*\/?>/i)[0].replace(/<[^>]+>/g, "").trim();
+  const T = (x) => { const v = String(x == null ? "" : x).trim(); const m = /^(\d{1,2}):?(\d{2})$/.exec(v); return m ? m[1].padStart(2, "0") + ":" + m[2] : v; }; // 'HH:MM'로
+  function diffOf(g, a) {
+    const rows = [].slice.call(g.dataSource.data()), byNo = new Map(), byName = new Map();
+    rows.forEach((r) => { byNo.set(String(r.emp_code), r); const n = nameOf(r); byName.set(n, byName.has(n) ? null : r); });
+    const keep = new Set(a.keep || []), weekly = String(a.weekly || "18");
+    const changes = [], skipped = [], kept = [], locked = [];
+    for (const e of a.emps) {
+      const r = e.empNo ? byNo.get(String(e.empNo)) : byName.get(e.name);
+      if (!r) { skipped.push({ empNo: e.empNo || "", name: e.name, msg: r === null ? "같은 이름이 표에 둘 이상 — 건너뜀" : "표에 없음 — 건너뜀 (HR '누락건 추가'로 따로)" }); continue; }
+      const who = { empNo: String(r.emp_code), name: e.name || nameOf(r) };
+      for (const d of e.days) {
+        const D = d.dow, cur = { code: String(r[D + "_time_item_code_p"] == null ? "" : r[D + "_time_item_code_p"]), in: T(r[D + "_work_on_p_hhmm"]), out: T(r[D + "_work_off_p_hhmm"]), brk: T(r[D + "_break_time_p_hhmm"]) };
+        const to = { code: String(d.code), kname: d.kname || "", in: T(d.in), out: T(d.out), brk: T(d.brk) };
+        if (cur.code === to.code && cur.in === to.in && cur.out === to.out && cur.brk === to.brk) continue;
+        if ((keep.has(who.empNo) || keep.has(e.name)) && cur.code === weekly && to.code !== weekly) { kept.push({ ...who, dow: D, msg: "입력에 주휴일이 없어 기존 주휴일을 그대로 둠 (확인 필요)" }); continue; }
+        if (String(r[D + "_edit_yn"]) === "N") { locked.push({ ...who, dow: D, msg: "수정 불가 칸(edit_yn N) — 건너뜀" }); continue; }
+        changes.push({ ...who, dow: D, from: cur, to });
+      }
     }
-    const put = (r, f, val) => { if (typeof r.set === "function") r.set(f, val); else { r[f] = val; r.dirty = true; } };
-    for (const e of a.emps) { const r = by.get(e.empNo); for (const d of e.days) { put(r, d.dow + "_time_item_code_p", d.code); put(r, d.dow + "_work_on_p_hhmm", d.in); put(r, d.dow + "_work_off_p_hhmm", d.out); put(r, d.dow + "_break_time_p_hhmm", d.brk); } put(r, "workType", "U"); }
-    await sleep(400);
-    try { if (typeof window.hrt2325.btnEnable === "function") window.hrt2325.btnEnable(); } catch (e) {}
-    const sv = $id("hrt2325_btn_save");
-    for (let k = 0; k < 20 && (!sv || off(sv)); k++) await sleep(150);
-    if (!sv || off(sv)) { try { g.dataSource.cancelChanges(); } catch (e) {} return fail("save", "값을 넣었는데 [저장] 단추가 안 켜져요"); }
-    const m0 = mark();
-    const seen = await withConfirm(/저장/, async () => { tap(sv); });
-    if (seen.length && !/저장/.test(seen[0])) return fail("save", "저장 확인 문구가 달라 멈춤: " + clean(seen[0]));
-    const r = await waitMsg(m0, /저장되었습니다/, 30e3); await idle(15e3);
-    const ax = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc");
-    if (!r.ok) { try { g.dataSource.cancelChanges(); } catch (e) {} return fail("save", r.timeout ? (ax ? `저장 응답(saveData_prc ${ax.http}/${ax.rc}) 뒤 '저장되었습니다'가 안 떴어요` : "[저장]을 눌렀는데 서버 호출이 없었어요(화면이 저장을 막음)") : r.msg, { confirms: seen }); }
-    const re = await waitAjax(m0, "getMasterList_prc", 30e3); await idle(15e3);
-    return { ok: true, toast: r.msg, http: ax ? ax.http : null, reload: re ? re.http : null, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) };
+    return { changes, skipped, kept, locked };
+  }
+  const dialogs = () => [...document.querySelectorAll(".k-dialog, .k-window, [role=dialog]")].filter(vis).map((x) => clean(tx(x))).filter(Boolean);
+
+  if (op === "panelInfo") { // 사이드패널: 지금 HR 탭이 주간스케쥴(시간)인지, 몇 주인지 (읽기만)
+    const re = /(\d{1,2})\s*주\s*\(\s*(\d{2})\/(\d{2})\s*~\s*(\d{2})\/(\d{2})\s*\)/;
+    let lab = null; for (const el of document.querySelectorAll("span, div, label, input, button, a, strong, p, td")) { if (!vis(el)) continue; const t = el.tagName === "INPUT" ? el.value : tx(el); const m = re.exec(t || ""); if (m && (t || "").length < 60) { lab = m; break; } }
+    const g = mainGrid(), y = +(($id("hrt2325_yyyy") || {}).value || new Date().getFullYear());
+    let weekStart = "";
+    if (lab) { const cands = [y - 1, y, y + 1].map((yy) => `${yy}-${lab[2]}-${lab[3]}`).filter((d) => !isNaN(Date.parse(d + "T00:00:00Z"))); const want = Date.parse(`${y}-07-01T00:00:00Z`); weekStart = cands.sort((p1, p2) => Math.abs(Date.parse(p1 + "T00:00:00Z") - Date.parse(`${y}-${lab[2]}-${lab[3]}T00:00:00Z`)) - Math.abs(Date.parse(p2 + "T00:00:00Z") - Date.parse(`${y}-${lab[2]}-${lab[3]}T00:00:00Z`)))[0]; if (+lab[1] === 1 && lab[2] === "12") weekStart = `${y - 1}-${lab[2]}-${lab[3]}`; void want; }
+    return { ok: true, screen: !!g, week: lab ? lab[0] : "", weekStart, rows: g ? g.dataSource.data().length : 0, dept: (($id("hrt2325_dept_category") || {}).value || "") };
+  }
+
+  if (op === "cardDiff") { // 미리보기: 바뀔 칸만 (아무것도 안 바꿈)
+    const g = mainGrid(); if (!g) return fail("week", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
+    let dirty = false; try { dirty = !!g.dataSource.hasChanges(); } catch (e) {}
+    return Object.assign({ ok: true, dirty, rows: g.dataSource.data().length }, diffOf(g, a));
+  }
+
+  if (op === "cardApply") { // 바뀐 칸만 d.set → 그 행 workType 'U' → hrt2325.saveData() 직접 → 다시 읽어 확인
+    const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
+    try { if (g.dataSource.hasChanges()) return fail("save", "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — [검색]으로 새로 고친 뒤 다시", { code: "dirty" }); } catch (e) {}
+    const df = diffOf(g, a);
+    if (!df.changes.length) return Object.assign({ ok: true, applied: 0, msg: "바뀔 칸이 없어요 (이미 같음)" }, df);
+    const rows = [].slice.call(g.dataSource.data()), byNo = new Map(rows.map((r) => [String(r.emp_code), r])), touched = new Set();
+    const put = (r, f, v) => { if (typeof r.set === "function") r.set(f, v); else { r[f] = v; r.dirty = true; } };
+    for (const c of df.changes) {
+      const r = byNo.get(c.empNo), D = c.dow;
+      put(r, D + "_time_item_code_p", c.to.code);
+      if (c.to.kname) put(r, D + "_time_item_name_p", c.to.kname);
+      put(r, D + "_work_on_p_hhmm", c.to.in); put(r, D + "_work_off_p_hhmm", c.to.out); put(r, D + "_break_time_p_hhmm", c.to.brk);
+      touched.add(c.empNo);
+    }
+    touched.forEach((no) => put(byNo.get(no), "workType", "U")); // 이게 없으면 저장 요청에 안 들어감
+    await sleep(300);
+    const m0 = mark(), dlg0 = new Set(dialogs());
+    const seen = await withConfirm(/저장/, async () => { try { window.hrt2325.saveData(); } catch (e) { note("msg", "saveData 오류: " + (e && e.message)); } });
+    // 확인: 서버에서 다시 받은 표(바꾼 행의 workType이 비고, 값이 입력값과 같음). 오류: 새 대화창·오류 문구·returnCode
+    const t0 = Date.now(); let bad = null, okNow = false, why = "";
+    while (Date.now() - t0 < 40e3) {
+      await sleep(400);
+      const nd = dialogs().filter((x) => !dlg0.has(x)); if (nd.length) { why = nd[0]; break; }
+      const em = H.msgs.slice(m0.m).find((x) => errText(x.msg) && !/저장되었습니다/.test(x.msg)); if (em) { why = em.msg; break; }
+      const rc = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc" && ((x.rc != null && x.rc !== "0") || x.http >= 400)); if (rc) { await sleep(400); why = rc.err || (H.msgs.slice(m0.m).pop() || {}).msg || `saveData_prc ${rc.http}/${rc.rc}`; break; }
+      const g2 = mainGrid(); if (!g2) continue;
+      const by2 = new Map([].slice.call(g2.dataSource.data()).map((r) => [String(r.emp_code), r]));
+      const fresh = [...touched].every((no) => { const r = by2.get(no); return r && (r.workType == null || r.workType === ""); });
+      if (!fresh) continue;
+      bad = df.changes.filter((c) => { const r = by2.get(c.empNo), D = c.dow; return !r || String(r[D + "_time_item_code_p"] == null ? "" : r[D + "_time_item_code_p"]) !== c.to.code || T(r[D + "_work_on_p_hhmm"]) !== c.to.in || T(r[D + "_work_off_p_hhmm"]) !== c.to.out || T(r[D + "_break_time_p_hhmm"]) !== c.to.brk; });
+      okNow = true; break;
+    }
+    await idle(10e3);
+    if (why) { try { const b1 = $id("jl_noti_footer_btn1"); if (b1 && vis(b1)) tap(b1); } catch (e) {} try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "HR이 저장을 막음: " + why, { confirms: seen }), df); }
+    if (!okNow) { try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "저장 뒤 40초 안에 표가 다시 안 불려 왔어요 (workType이 그대로)", { confirms: seen }), df); }
+    if (bad.length) return Object.assign(fail("save", `저장 뒤 다시 읽었더니 ${bad.length}칸이 달라요`, { notSaved: bad.map((c) => ({ empNo: c.empNo, name: c.name, dow: c.dow, msg: `보냄 ${c.to.code} ${c.to.in || "-"}~${c.to.out || "-"}/${c.to.brk || "-"}` })) }), df);
+    return Object.assign({ ok: true, applied: df.changes.length, rowsTouched: touched.size, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) }, df);
   }
 
   if (op === "status") { // 다시 검색해서 지금 상태 (공지·확정 전 확인)

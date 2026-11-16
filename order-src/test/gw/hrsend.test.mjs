@@ -13,9 +13,9 @@ ok(r.ok && r.plan.emps.length === 2 && r.plan.emps[0].min === 5 * 8 * 60, "정�
 let q = base(); q.employees[0].days[1].kind = "연차"; r = G.hrsCheck(q);
 ok(!r.ok && /연차/.test(r.errors[0].msg) && r.errors[0].empNo === "90000001", "HR에 없는 근태유형(연차) → 그 직원 에러", r.errors);
 q = base(); q.employees[0].days[6].kind = "주휴일"; r = G.hrsCheck(q);
-ok(!r.ok && /주휴일이 주에 정확히 1일/.test(r.errors[0].msg), "주휴일 2일 → 에러", r.errors);
+ok(!r.ok && /주휴일이 주에 2일/.test(r.errors[0].msg), "주휴일 2일 → 에러", r.errors);
 q = base(); q.employees[1].days[2].kind = "휴무"; r = G.hrsCheck(q);
-ok(!r.ok && /0일/.test(r.errors[0].msg), "주휴일 0일 → 에러", r.errors);
+ok(r.ok && r.warns.some((w) => w.keepWeekly && w.empNo === "90000002"), "주휴일 0일 → 막지 않고 '기존 주휴일 유지·확인 필요' 경고", r.warns);
 q = base(); q.employees[0] = emp("90000001", "시험일", ["출근", "출근", "주휴일", "출근", "출근", "출근", "출근"], ["08:00", "19:00"]); r = G.hrsCheck(q);
 ok(!r.ok && /52시간/.test(r.errors[0].msg), "주 60시간 → 52시간 넘음 에러", r.errors);
 q = base(); q.employees[0].days[0].brk = ""; r = G.hrsCheck(q);
@@ -40,6 +40,17 @@ q = base(); q.mode = "test"; q.employees[0].days[6].kind = "주휴일"; r = G.hr
 ok(r.ok && r.warns.some((w) => /주휴일/.test(w.msg)), "test 모드: 주휴일 2일은 경고만");
 q = base(); q.mode = "saveOnly"; r = G.hrsCheck(q); ok(r.ok && G.hrsFiles(r.plan).length === 7, "saveOnly: 7일 파일");
 q = base(); q.mode = "save"; r = G.hrsCheck(q); ok(!r.ok, "모르는 mode → 에러");
+// 9시간 넘는데 휴게 30분 → 경고
+q = base(); q.employees[0].days[0] = { date: dates[0], kind: "출근", in: "08:00", out: "18:30", brk: "00:30" }; r = G.hrsCheck(q);
+ok(r.ok && r.warns.some((w) => /9시간/.test(w.msg)), "9시간 넘게 근무 + 휴게 30분 → 경고", r.warns);
+// 붙여넣기 글 (사이드패널)
+const paste = ["시험일\t휴무", "시험일\t출근\t09:00\t15:00\t00:30\t5:30", "시험일\t주휴일", "시험일\t출근\t9:00\t18:00\t01:00\t8:00", "시험일\t휴무", "시험일\t휴무", "시험일\t출근\t10:00\t20:00\t01:00\t8:00",
+  "시험이\t휴무", "시험이\t휴무"].join("\n");
+let pp = G.hrsParsePaste(paste, W);
+ok(!pp.ok && pp.emps.length === 1 && pp.emps[0].days[1].in === "09:00" && pp.errors.some((e) => /시험이: 2줄/.test(e.msg)) && pp.warns.some((w) => w.day === "SUN" && /순근무 8:00/.test(w.msg)), "붙여넣기: 7줄씩 읽고, 줄 수 틀리면 오류, 순근무 다르면 경고", JSON.stringify(pp).slice(0, 400));
+pp = G.hrsParsePaste(paste.split("\n").slice(0, 7).join("\n"), W);
+r = G.hrsCheck({ dept: "BOH", weekStart: W, mode: "saveOnly", employees: pp.emps.map((e) => ({ ...e })), byName: true });
+ok(r.ok && r.plan.emps[0].name === "시험일" && r.plan.emps[0].days[3].in === "09:00", "이름으로 찾는 요청(사번 없음)도 검사 통과", r.errors);
 // 파일
 r = G.hrsCheck(base()); let fl = G.hrsFiles(r.plan);
 ok(fl.length === 7 && fl[0].name === "BOH_2026-11-23_MON.xlsx" && fl[6].name === "BOH_2026-11-29_SUN.xlsx", "full: 요일별 파일 7개, 이름 BOH_날짜_요일.xlsx");

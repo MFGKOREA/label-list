@@ -39,7 +39,7 @@ window.doClientMsg=function(m){const s=typeof m==='object'?m.message:m;const d=d
 async function ajax(ep,body){const url='/HRT/W_HRT2325/W_HRT2325/'+ep;const st={url};HS.forEach(h=>h({},{},st));const r=await fetch(url,{method:'POST',body:JSON.stringify(body||{})});const t=await r.text();H.forEach(h=>h({}, {status:r.status,responseText:t}, st));try{return {status:r.status,j:JSON.parse(t)};}catch(e){return {status:r.status,j:null};}}
 document.querySelector('a[menu-app-id="HRT/W_HRT2325"]').addEventListener('click',(e)=>{e.preventDefault();setTimeout(render,300);});
 let rows=[];
-function btns(){document.getElementById('hrt2325_btn_notice').disabled=status!=='EDIT';document.getElementById('hrt2325_btn_confirm').disabled=status!=='NOTICE';document.getElementById('hrt2325_btn_init').disabled=!(wk>=47);document.getElementById('hrt2325_btn_save').disabled=!rows.some(r=>r.dirty);}
+function btns(){document.getElementById('hrt2325_btn_notice').disabled=status!=='EDIT';document.getElementById('hrt2325_btn_confirm').disabled=status!=='NOTICE';document.getElementById('hrt2325_btn_init').disabled=!(wk>=47);document.getElementById('hrt2325_btn_save').disabled=true;} /* 실제 화면처럼 꺼져 있을 수 있음 → saveData() 직접 */
 // kendo ObservableObject 흉내: set() → dirty
 function obs(x){x.dirty=false;x.set=function(f,v){this[f]=v;this.dirty=true;btns();};return x;}
 const cols=[{field:'workType'},{field:'emp_name'},{field:'duty_name'}].concat(DOWS.map(d=>({field:d+'_time_item_code_p'})));
@@ -62,14 +62,13 @@ function render(){document.getElementById('app').innerHTML=\`
  document.querySelectorAll('#ddl li').forEach(li=>li.onclick=()=>{dept=li.textContent==='전체'?'':li.textContent;document.getElementById('hrt2325_dept_category').value=dept;document.getElementById('ddb').textContent=dept||'전체';document.getElementById('ddl').style.display='none';});
  document.getElementById('hrt2325_btn_search').onclick=search;
  document.getElementById('hrt2325_btn_pop').onclick=()=>{window.__pop=1;};
- document.getElementById('hrt2325_btn_save').onclick=async()=>{if(!confirm('저장하시겠습니까?'))return;const ch=rows.filter(r=>r.dirty&&r.workType==='U').map(r=>{const o={emp_code:r.emp_code};DOWS.forEach(d=>['_time_item_code_p','_work_on_p_hhmm','_work_off_p_hhmm','_break_time_p_hhmm'].forEach(f=>o[d+f]=r[d+f]));return o;});
-   const r=await ajax('saveData_prc',{dept,wk,rows:ch});if(!r.j||r.j.returnCode!==0){doClientMsg({message:(r.j&&r.j.p_error_str)||'저장 오류'});return;}doClientMsg('저장되었습니다.');search();};
+ document.getElementById('hrt2325_btn_save').onclick=()=>hrt2325.saveData();
  document.getElementById('hrt2325_btn_notice').onclick=async()=>{if(!confirm('공지 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'NOTICE',wk});await search();doClientMsg('공지 되었습니다.');};
  document.getElementById('hrt2325_btn_confirm').onclick=async()=>{if(!confirm('확정 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'CONFIRM',wk});await search();doClientMsg('확정 되었습니다.');};
  document.getElementById('hrt2325_btn_init').onclick=async()=>{if(!confirm('기존에 등록된 자료가 있다면 삭제 후 초기화가 진행됩니다.'))return;await ajax('init_prc',{wk});await search();doClientMsg('초기화 되었습니다.');};
  document.getElementById('hrt2325_btn_copy').onclick=()=>ajax('copy_prc',{});
 }
-window.hrt2325={moveWeek(d){wk+=d==='next'?1:-1;document.getElementById('wk').textContent=wk+'주('+W[wk][0]+'~'+W[wk][1]+')';document.getElementById('hrt2325_year_week_seq').value=wk;},btnEnable(){btns();},getMasterList(){},saveData(){},validateConfirm(){},statusChangeData(){},openMdl(){}};
+window.hrt2325={async saveData(){window.__saveCalls=(window.__saveCalls||0)+1;const ch=rows.filter(r=>r.workType==='U').map(r=>{const o={emp_code:r.emp_code};DOWS.forEach(d=>['_time_item_code_p','_time_item_name_p','_work_on_p_hhmm','_work_off_p_hhmm','_break_time_p_hhmm'].forEach(f=>o[d+f]=r[d+f]));return o;});const sp=document.createElement('div');sp.className='k-loading-mask';sp.style.cssText='position:fixed;inset:0';document.body.appendChild(sp);const r=await ajax('saveData_prc',{dept,wk,rows:ch});sp.remove();if(!r.j||r.j.returnCode!==0){const d=document.createElement('div');d.className='k-window';d.setAttribute('role','dialog');d.textContent=(r.j&&r.j.p_error_str)||'저장 오류';document.body.appendChild(d);return;}search();},moveWeek(d){wk+=d==='next'?1:-1;document.getElementById('wk').textContent=wk+'주('+W[wk][0]+'~'+W[wk][1]+')';document.getElementById('hrt2325_year_week_seq').value=wk;},btnEnable(){btns();},getMasterList(){},validateConfirm(){},statusChangeData(){},openMdl(){}};
 </script></body>`;
 const boardPage = `<!doctype html><meta charset="utf-8"><title>HR Board</title><body>board<script>window.__msgs=[];addEventListener('message',e=>{if(e.source===window&&/^MFG_HR_(AGENT_READY|SEND_ACK|SEND_PROGRESS|SEND_RESULT|PUBLISH_RESULT)/.test((e.data||{}).type))window.__msgs.push(e.data);});window.send=(o)=>window.postMessage(Object.assign({type:'MFG_HR_SEND'},o),location.origin);</script></body>`;
 const hits = [];
@@ -89,7 +88,7 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
       const regRows = () => { const reg = S.reg[b.dept] || {}; return Object.keys(reg).map((no) => ({ emp_code: no, emp_name: reg[no], chk_message: "" })); };
       if (ep === "getMasterList_prc" && b.workType === "MAINROWS") {
         const depts = b.dept ? [b.dept] : Object.keys(S.reg), rows = [];
-        if (!S.emptyWeek) depts.forEach((d) => Object.entries(S.reg[d] || {}).forEach(([no, nm]) => { const r = { emp_code: no, emp_name: nm, duty_name: "직책 010-xxxx", dept_name: d, workType: "" }; const w = S.week[no] || {}; DOWS0.forEach((D) => { const x = w[D] || { code: "", on: "", off: "", brk: "" }; r[D + "_edit_yn"] = S.lockDay === D ? "N" : x.code ? "Y" : ""; r[D + "_time_item_code_p"] = x.code; r[D + "_work_on_p_hhmm"] = x.on; r[D + "_work_off_p_hhmm"] = x.off; r[D + "_break_time_p_hhmm"] = x.brk; }); rows.push(r); }));
+        if (!S.emptyWeek) depts.forEach((d) => Object.entries(S.reg[d] || {}).forEach(([no, nm]) => { const r = { emp_code: no, emp_name: nm + "<br>(" + d + " 직책)", duty_name: "직책 010-xxxx", dept_name: d }; const w = S.week[no] || {}; DOWS0.forEach((D) => { const x = w[D] || { code: "", on: "", off: "", brk: "" }; r[D + "_edit_yn"] = S.lockDay === D ? "N" : x.code ? "Y" : ""; r[D + "_time_item_code_p"] = x.code; r[D + "_time_item_name_p"] = KNAME[x.code] || ""; r[D + "_work_on_p_hhmm"] = x.on; r[D + "_work_off_p_hhmm"] = x.off; r[D + "_break_time_p_hhmm"] = x.brk; }); rows.push(r); }));
         return json({ returnCode: 0, data: { infoEnc: enc(rows) } });
       }
       if (ep === "uploadDayExcelFile_prc") { S.uploads++; return json({ returnCode: 0 }); }
@@ -159,20 +158,24 @@ reset();
 let x = await send({ mode: "test", employees: all3() });
 ok(x.res && x.res.ok && x.res.test && x.res.savedDays.join() === "MON" && S.saves.length === 1 && S.saves[0].dept === "" && S.saves[0].wk === 48 && S.uploads === 0 && S.notice === 0 && !S.deptPicked, `test: 소속구분 빈칸(전체)에서 카드 입력·저장 1번(48주), 업로드 0 · 공지 0 (저장 ${S.saves.length})`, brief(x));
 ok(S.week["90000001"] && S.week["90000001"].MON.code === "10" && S.week["90000001"].MON.on === "09:00" && ["TUE", "WED", "SUN"].every((d) => !S.week["90000001"][d] || S.week["90000001"][d].code === ""), "test: 월요일만 들어가고 화~일은 그대로", JSON.stringify(S.week["90000001"]));
-ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.res.log.some((l) => /saveData_prc 200/.test(l.ajax || "")) && x.res.log.some((l) => /다시 읽어 확인: 3명 맞음/.test(l.msg)), "보드가 ACK·단계를 받고, 저장 뒤 다시 읽어 확인", brief(x));
+ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.res.log.some((l) => /saveData_prc 200/.test(l.ajax || "")) && x.res.log.some((l) => /다시 읽어 확인 맞음/.test(l.msg)), "보드가 ACK·단계를 받고, [저장]이 꺼져 있어도 saveData()로 저장 뒤 다시 읽어 확인", brief(x));
 // 2) saveOnly: 7일 한 번에, 주휴일 코드(18)는 근태 칸 드롭다운에서 읽음
 reset();
 x = await send({ mode: "saveOnly", employees: all3() });
-ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.length === 1 && S.week["90000001"].WED.code === "18" && S.week["90000001"].SUN.code === "17" && S.week["90000001"].SUN.on === "" && x.res.log.some((l) => /18=주휴일/.test(l.msg)), "saveOnly: 7일을 저장 한 번에, 주휴일 코드 18은 드롭다운 목록에서", brief(x));
+ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.length === 1 && S.week["90000001"].WED.code === "18" && S.week["90000001"].SUN.code === "17" && S.week["90000001"].SUN.on === "" , "saveOnly: 7일을 저장 한 번에, 주휴일 코드 18", brief(x));
 ok(!S.copy && !S.init && S.uploads === 0, "전주복사·초기화·업로드 안 누름");
 // 3) 부서를 고르지 않음: BOH 3명 + 관리자(STORE) 1명 → 전체 화면에서 저장 한 번
 reset();
 x = await send({ mode: "saveOnly", employees: [...all3(), mgr()] });
 ok(x.res && x.res.ok && S.saves.length === 1 && S.saves[0].dept === "" && S.saves[0].n === 4 && x.res.savedEmpNos.length === 4, `BOH 3명 + STORE 관리자 1명 → 전체 화면에서 한 번에 저장 (${S.saves.map((q) => (q.dept || "전체") + q.n).join(",")})`, brief(x));
-// 4) HR 어디에도 없는 사번 → 저장 전에 멈춤
+// 4) 표에 없는 사번 → 그 사람만 건너뛰고 보고, 나머지는 저장 (11/17 KM)
 reset();
 x = await send({ mode: "test", employees: [...all3(), emp("99999999", "없는사람")] });
-ok(x.res && !x.res.ok && x.res.stage === "week" && /99999999/.test(x.res.message) && S.saves.length === 0, "HR에 없는 사번 → 저장 전에 멈춤", brief(x));
+ok(x.res && x.res.ok && S.saves.length === 1 && S.saves[0].n === 3 && (x.res.skipped || []).some((k) => k.empNo === "99999999"), "표에 없는 사번 → 건너뛰고 보고, 나머지 3명 저장", brief(x));
+// 4b) 입력에 주휴일이 없는 직원 → HR의 기존 주휴일(수)은 덮어쓰지 않고 '확인 필요'
+reset({ week: { "90000001": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]), "90000020": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]) } });
+x = await send({ mode: "saveOnly", employees: [emp("90000001", "시험일", ["출근", "출근", "휴무", "출근", "출근", "출근", "휴무"]), emp("90000002", "시험이"), emp("90000003", "시험삼")] });
+ok(x.res && x.res.ok && S.week["90000001"].WED.code === "18" && S.week["90000001"].MON.code === "10" && (x.res.kept || []).some((k) => k.empNo === "90000001" && k.dow === "WED"), "주휴일 없는 입력 → 기존 수요일 주휴일 유지·확인 필요", brief(x));
 // 5) 일부만 보내면 → 보낸 직원만 저장, 안 보낸 직원 행은 그대로 (부서 칸 검사 없음, 11/17 KM)
 reset({ week: { "90000003": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]), "90000020": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]) } });
 x = await send({ mode: "test", employees: [emp("90000001", "시험일"), emp("90000002", "시험이")] });
@@ -192,12 +195,16 @@ ok(x.res && x.res.ok && S.week["90000001"].MON.on === "09:00" && S.week["9000000
 // 8) HR이 저장을 거부(오류 문구) → 그 문구 그대로 멈춤
 reset({ saveErr: "시험이님의 주휴일을 설정해주세요" });
 x = await send({ mode: "saveOnly", employees: all3() });
-ok(x.res && !x.res.ok && x.res.stage === "save" && /주휴일을 설정해주세요/.test(x.res.message), "HR 저장 오류 → save에서 문구 그대로", brief(x));
-// 9) 수정할 수 없는 날(edit_yn N) → 아무것도 안 넣고 멈춤
+ok(x.res && !x.res.ok && x.res.stage === "save" && /주휴일을 설정해주세요/.test(x.res.message), "HR 저장 오류(대화창) → save에서 문구 그대로", brief(x));
+// 9) 수정할 수 없는 날(edit_yn N) → 그 칸만 건너뛰고 보고
 reset({ lockDay: "MON", week: { "90000001": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]), "90000020": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]) } });
 x = await send({ mode: "test", employees: all3() });
-ok(x.res && !x.res.ok && x.res.stage === "save" && /edit_yn N/.test(x.res.message) && S.saves.length === 0, "edit_yn N인 날 → 넣지 않고 멈춤", brief(x));
-// 10) 저장은 됐는데 다시 읽어 보니 한 요일이 안 들어감 → 알림
+ok(x.res && x.res.ok && (x.res.locked || []).some((k) => k.empNo === "90000001" && k.dow === "MON") && S.week["90000001"].MON.code === "17", "edit_yn N인 칸 → 건너뛰고 보고(값 그대로)", brief(x));
+// 9b) 이미 같은 값 → 바꿀 칸 0개 (저장 안 누름)
+reset({ week: { "90000001": weekOf(["출근", "출근", "주휴일", "출근", "출근", "출근", "휴무"]), "90000002": weekOf(["출근", "출근", "주휴일", "출근", "출근", "출근", "휴무"]), "90000003": weekOf(["출근", "출근", "주휴일", "출근", "출근", "출근", "휴무"]) } });
+x = await send({ mode: "saveOnly", employees: all3() });
+ok(x.res && x.res.ok && S.saves.length === 0 && x.res.changed === 0, "이미 같으면 바꿀 칸 0개, 저장 호출 안 함", brief(x));
+// 10) 저장은 됐는데 다시 읽어 보니 한 요일이 안 들어감 → 알림 (9시간 넘는 근무 휴게 경고도 결과에)
 reset({ dropDay: "FRI" });
 x = await send({ mode: "saveOnly", employees: all3() });
 ok(x.res && !x.res.ok && x.res.stage === "save" && x.res.rowErrors.some((e) => e.day === "FRI"), "저장 뒤 다시 읽어 값이 다르면 알림(FRI)", brief(x));
@@ -229,6 +236,24 @@ await send({ mode: "saveOnly", dept: "FOH", employees: [emp("90000009", "시험�
 x = await send({ type: "MFG_HR_PUBLISH", action: "notice" }); const n5 = S.notice, c5 = S.confirm;
 const y = await send({ type: "MFG_HR_PUBLISH", action: "confirm" });
 ok(x.res && x.res.ok && !x.res.confirmed && n5 === 1 && c5 === 0 && y.res && y.res.ok && y.res.confirmed && S.notice === 1 && S.confirm === 1, "PUBLISH: 공지만 → 다음에 확정만", brief(y));
+// 15) 사이드패널: 붙여넣기 → HR 화면 주차 확인 → 미리보기(바뀔 칸만) → 체크 → [반영 후 저장]
+reset({ week: { "90000002": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]), "90000020": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]) } });
+for (const q of ctx.pages()) if (/hr\.pljec/.test(q.url())) await q.close().catch(() => {});
+const hp = await ctx.newPage(); await hp.goto("https://hr.pljec.cloud/");
+await hp.click('a[menu-app-id="HRT/W_HRT2325"]'); await hp.waitForSelector("#hrt2325_btn_search");
+await hp.click("#ddb"); await hp.click("#ddl li:has-text('전체')");
+await hp.evaluate(() => { hrt2325.moveWeek("next"); hrt2325.moveWeek("next"); }); await hp.click("#hrt2325_btn_search"); await sleep(1200);
+const spg = await ctx.newPage(); await spg.goto(`chrome-extension://${extId}/sidepanel.html`); await sleep(800);
+const rowsOf = (nm, ks, times) => ks.map((k, i) => [nm, k, ...(k === "출근" ? (times || ["9:00", "18:00", "01:00", "8:00"]) : [])].join("\t")).join("\n");
+const pasteTxt = [rowsOf("시험일", ["출근", "출근", "주휴일", "출근", "출근", "출근", "휴무"]), rowsOf("시험이", ["휴무", "출근", "휴무", "출근", "출근", "출근", "휴무"]), rowsOf("없는사람", ["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"])].join("\n");
+await spg.fill("#paste", pasteTxt); await spg.click("#preview");
+await spg.waitForFunction(() => /바뀔 칸|오류|못/.test(document.getElementById("out").textContent), null, { timeout: 40000 });
+const pv = await spg.evaluate(() => ({ out: document.getElementById("out").textContent, week: document.getElementById("week").textContent, rows: document.querySelectorAll("#out table tr").length - 1, applyDisabled: document.getElementById("apply").disabled }));
+ok(/48주\(11\/23~11\/29\)/.test(pv.week) && pv.rows > 0 && /시험이 WED/.test(pv.out) && /없는사람: 표에 없음/.test(pv.out) && pv.applyDisabled && S.saves.length === 0, `사이드패널 미리보기: 48주, 바뀔 칸 ${pv.rows}개, 주휴일 유지·건너뜀 표시, 체크 전엔 저장 단추 꺼짐, 아직 저장 0`, JSON.stringify(pv).slice(0, 500));
+await spg.check("#weekOk"); await spg.click("#apply");
+await spg.waitForFunction(() => /저장 됨|저장 안 됨/.test(document.getElementById("out").textContent), null, { timeout: 60000 }).catch(() => {});
+const ap = await spg.evaluate(() => document.getElementById("out").textContent);
+ok(/저장 됨/.test(ap) && S.saves.length === 1 && S.week["90000001"].MON.code === "10" && S.week["90000001"].MON.on === "09:00" && S.week["90000002"].WED.code === "18" && S.week["90000002"].TUE.code === "10", "사이드패널 [반영 후 저장]: saveData() 한 번, 9:00→09:00, 시험이 수요일 주휴일 유지", ap.slice(0, 400) + " " + JSON.stringify(S.week["90000002"]));
 // 14) 진짜 서버로 안 나감 + 다른 칸은 안 건드림
 const hosts = [...new Set(hits.map((h) => h.split("/")[0]))];
 ok(hosts.every((h) => ["hr.pljec.cloud", "hr-board-teal.vercel.app", "script.google.com", "mfgkorea.github.io", "gw.madforgarlic.com", "mis.madforgarlic.com", "script.googleusercontent.com"].includes(h)), "요청은 모두 가짜 서버로 (" + hosts.join(", ") + ")");

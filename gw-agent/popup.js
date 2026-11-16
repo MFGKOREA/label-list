@@ -30,3 +30,5 @@ $("save").addEventListener("click", async () => {
 $("hrnow").addEventListener("click", async () => { const r = await chrome.runtime.sendMessage({ q: "hrNow" }).catch(() => null); $("st").textContent = r && r.busy ? "발주·매출 자동 창이 도는 중이라 잠깐 뒤에 해요" : "플젝 HR을 지금 읽어요 (창 뒤에서 조용히)"; setTimeout(load, 2500); });
 $("open").addEventListener("click", async () => { await chrome.storage.local.set({ on: true }); $("on").checked = true; await chrome.runtime.sendMessage({ q: "show" }); });
 load();
+// 1.15.0: HR 근무표 입력 사이드패널 열기 (붙여넣기 → 미리보기 → 반영 후 저장)
+{ const b = document.getElementById("hrpanel"); if (b) b.onclick = async () => { try { const w = await chrome.windows.getCurrent(); await chrome.sidePanel.open({ windowId: w.id }); window.close(); } catch (e) { b.textContent = "사이드패널을 못 엶: " + (e && e.message); } }; }
