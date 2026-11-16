@@ -37,7 +37,8 @@ async function hrsStep(op, a) {
         const url = String((st && st.url) || ""), m = /\/(\w+_prc)\b/.exec(url); if (!m) return;
         let j = null; try { j = xhr.responseJSON || JSON.parse(xhr.responseText || "null"); } catch (e) {}
         const rc = j && (j.returnCode != null ? j.returnCode : j.data && j.data.returnCode);
-        const ent = { t: Date.now(), ep: m[1], http: xhr.status, rc: rc == null ? null : String(rc), id: (st && st.__gw) || 0 };
+        const pd = (j && (j.data || j)) || {}, ec = pd.p_error_code != null ? pd.p_error_code : j && j.p_error_code, rn = pd.p_row_count != null ? pd.p_row_count : j && j.p_row_count;
+        const ent = { t: Date.now(), ep: m[1], http: xhr.status, rc: rc == null ? null : String(rc), id: (st && st.__gw) || 0, ec: ec == null ? null : String(ec), rows: rn == null ? null : +rn };
         if (m[1] === "getMasterList_prc" && j && j.data && j.data.infoEnc != null) { const d = decode(j.data.infoEnc); if (Array.isArray(d)) { ent.st = [...new Set(d.map((r) => String((r && r.schedule_status) || "")).filter(Boolean))]; ent.n = d.length; } }
         H.ajax.push(ent);
       });
@@ -192,7 +193,13 @@ async function hrsStep(op, a) {
     if (ax.http >= 400) return fail("week", `검색 응답 HTTP ${ax.http}`);
     const bad = H.msgs.slice(m0.m).find((x) => errText(x.msg)); if (bad) { dismiss(); return fail("week", "검색 중: " + bad.msg); }
     if (!ax.st && ax.n == null) return fail("week", "주차 상태를 못 읽었어요 (infoEnc를 풀지 못함)");
-    return { ok: true, week: L.text, dept: hid.value, status: ax.st || [], moves, init: !off($id("hrt2325_btn_init")), ajax: [{ ep: ax.ep, http: ax.http, rc: ax.rc }] };
+    // 메인 표의 사번만 (직책 칸에 휴대폰 번호가 있어 다른 칸은 읽지 않음). 0행이면 빈 주
+    let mainEmp = null;
+    for (const g of [$id("hrt2325_master_list_html"), $id("hrt2325_list_html"), $id("hrt2325_main_list_html"), ...document.querySelectorAll("[data-role='grid'], .k-grid")]) {
+      if (!g || g.closest("#hrt2325_pop_sub")) continue;
+      try { const w = $(g).data("kendoGrid"); if (!w) continue; const d = [].slice.call(w.dataSource.data()); if (!d.length) { if (mainEmp == null) mainEmp = []; continue; } if (!("emp_code" in d[0])) continue; mainEmp = d.map((r) => String(r.emp_code || "")).filter(Boolean); break; } catch (e) {}
+    }
+    return { ok: true, week: L.text, dept: hid.value, status: ax.st || [], moves, mainEmp, init: !off($id("hrt2325_btn_init")), ajax: [{ ep: ax.ep, http: ax.http, rc: ax.rc }] };
   }
 
   if (op === "init") { // allowInit일 때만: 업로드 전에 초기화 (미래 주차에서만 켜짐)
@@ -210,15 +217,19 @@ async function hrsStep(op, a) {
     //  그 응답이 끝나고 표가 다시 그려진 뒤(행 workType이 '')에 label[for="hrt2325_pop_title_{DAY}"]를 눌러야 함. 그 전 표를 읽으면 지난 시도의 행이 섞임
     const D = a.dow;
     const cur = () => (document.querySelector('input[name="hrt2325_pop_title"]:checked') || {}).value || "";
-    const fresh = () => { const rs = popRows(); return !!rs && rs.length > 0 && rs.every((r) => (r.workType == null ? "" : String(r.workType)) === ""); }; // 빈 표는 아직 안 그려진 것
+    // 로딩 끝 = 태그한 getMasterList_prc 응답(HTTP 200·returnCode 0). p_error_code MSG0001(행 있음)·MSG0006(0행) 둘 다 정상 → 0행인 요일도 정상 (11/16 KM)
+    const okResp = (ax) => !!ax && ax.http === 200 && (ax.rc == null || ax.rc === "0");
+    const drawn = () => { const rs = popRows(); return !!rs && rs.every((r) => (r.workType == null ? "" : String(r.workType)) === ""); }; // 다시 그려짐 (0행도 됨)
     const sig = () => { const rs = popRows() || []; return rs.length + ":" + rs.map((r) => r.emp_code).join(","); };
-    async function settle(from, ms) { // 그 뒤 온 DETAIL 응답 + 로딩 덮개 + 표가 다시 그려짐(workType '') + 0.4초 동안 그대로
+    async function settle(from, ms) { // 태그한 응답 → 로딩 덮개 → 표가 0.3초 동안 그대로
       const ax = await waitAjax(from, "getMasterList_prc", ms);
+      if (!ax) return null;
       await idle(10e3);
       const t0 = Date.now(); let last = sig(), since = Date.now();
-      while (Date.now() - t0 < 8e3) { await sleep(120); const g = sig(); if (g !== last) { last = g; since = Date.now(); } if (fresh() && Date.now() - since >= 400) break; }
+      while (Date.now() - t0 < 5e3) { await sleep(100); const g = sig(); if (g !== last) { last = g; since = Date.now(); } if (drawn() && Date.now() - since >= 300) break; }
       return ax;
     }
+    const why = (ax) => (ax ? `HTTP ${ax.http}${ax.rc != null ? " · returnCode " + ax.rc : ""}${ax.ec ? " · " + ax.ec : ""}` : "응답 없음");
     let opened = false;
     if (!popOpen()) {
       // 앞 요일 팝업이 완전히 닫힐 때까지 (isShown false · display none · backdrop 0). 멈췄으면 정리하고 다시
@@ -231,7 +242,7 @@ async function hrsStep(op, a) {
       if (!popOpen()) return fail("upload", "[일자별 수정] 창이 안 열렸어요");
       const ax = await settle(m0, 60e3); opened = true; // 첫 로딩(DETAIL) 실측 7~21초 → 한도 60초
       if (!ax) return fail("upload", "팝업 첫 로딩(MON) 응답이 60초 안에 안 왔어요");
-      if (ax.http >= 400) return fail("upload", `팝업 첫 로딩 HTTP ${ax.http}`);
+      if (!okResp(ax)) return fail("upload", `팝업 첫 로딩 실패 (${why(ax)})`);
     }
     let loaded = opened && cur() === D; // 새로 열었고 바라던 요일(MON)이 이미 눌려 로딩됨
     for (let t = 0; t < 3 && !loaded; t++) {
@@ -242,13 +253,13 @@ async function hrsStep(op, a) {
       const seen = await withConfirm(a.prevSaved ? /수정중인 데이터가 존재합니다/ : null, async () => { tap(lb); });
       if (seen.length && !(a.prevSaved && /수정중인 데이터가 존재합니다/.test(seen[0]))) return fail("upload", `${D}로 바꾸려는데 확인창이 떠서 멈춤 (앞 요일 저장 안 됨): ${clean(seen[0])}`);
       const ax = await settle(m1, 30e3); // 요일 전환 실측 2~4초 → 한도 30초
-      if (ax && ax.http >= 400) return fail("upload", `${D} 자료 로딩 HTTP ${ax.http}`);
-      loaded = cur() === D && !!ax && fresh();
+      if (ax && !okResp(ax)) return fail("upload", `${D} 자료 로딩 실패 (${why(ax)})`);
+      loaded = cur() === D && okResp(ax);
     }
     if (!loaded) return fail("upload", `요일 탭(${D})으로 바꾸고 그날 자료를 불러오지 못했어요 (지금 ${cur() || "선택 없음"}, 3번 시도)`);
     const rows = popRows();
     if (!rows) return fail("upload", "팝업 표(#hrt2325_pop_list_html)를 못 읽었어요");
-    return { ok: true, day: cur(), before: rows.map((r) => String(r.emp_code || "")).filter(Boolean) };
+    return { ok: true, day: cur(), before: rows.map((r) => String(r.emp_code || "")).filter(Boolean), rows0: rows.length };
   }
 
   if (op === "dayUpload") { // 숨은 파일 칸에 엑셀 → change → 화면 반영 (저장 아님)
@@ -280,8 +291,8 @@ async function hrsStep(op, a) {
     }
     const gotSet = new Set(got.map((g) => g.empNo));
     a.rows.forEach((s) => { if (!gotSet.has(s.empNo)) errs.push({ empNo: s.empNo, name: s.name, msg: "보낸 행이 표에 없어요" }); });
-    const missing = (a.before || []).filter((x) => !sent.has(x)); // 업로드 전 HR에 있던 직원이 파일에 없음(신규 입사자 등)
-    if (errs.length || missing.length) { await closePop(); return fail("upload", errs.length ? `${D} 행 오류 ${errs.length}건 — 저장 안 함` : `${D} 업로드 전 HR 표에 있던 직원 ${missing.length}명이 보낸 명단에 없어요(신규 입사자 등) — 저장 안 함`, { rowErrors: errs, missing }); }
+    if (got.length !== a.rows.length) errs.push({ msg: `표 ${got.length}행 · 파일 ${a.rows.length}명 — 수가 달라요` });
+    if (errs.length) { await closePop(); return fail("upload", `${D} 행 오류 ${errs.length}건 — 저장 안 함`, { rowErrors: errs.filter((e) => e.empNo) }); }
     return { ok: true, n: got.length };
   }
 

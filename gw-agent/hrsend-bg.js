@@ -4,7 +4,7 @@
 //  mode: test(월요일 1일) · saveOnly(7일 저장까지) · full(+ 공지·확정). 상태 없는 주는 full이면 멈춤(allowInit일 때만 업로드 전에 초기화)
 //  안전: 요청 하나씩(requestId 잠금) · 로그인·망이 끊기면 바로 멈춤(자동 로그인 안 함) · 이미 확정된 주는 손대지 않음 · 개인정보(이름)는 기록에 남기지 않음
 //  bg.js의 get·put·log·VER를 씀 (bg.js가 importScripts로 불러옴)
-const HRS = { budget: 15 * 60e3, site: "5090", board: /^https:\/\/hr-board-teal\.vercel\.app\//, hr: /^https:\/\/hr\.pljec\.cloud\// };
+const HRS = { budget: 25 * 60e3, site: "5090", board: /^https:\/\/hr-board-teal\.vercel\.app\//, hr: /^https:\/\/hr\.pljec\.cloud\// };
 const hrsB64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 const hrsT = () => new Date().toLocaleTimeString("ko-KR", { hour12: false });
 async function hrsSend(board, msg) { if (board != null) await chrome.tabs.sendMessage(board, msg).catch(() => {}); }
@@ -67,6 +67,10 @@ async function hrsRun(req, board, boardWin) {
     if (!r.ok) { res = res0({ stage: "week", message: r.message }); return; }
     let st = r.status;
     await step("week", `검색: ${r.dept} · ${r.week} · 상태 ${st.join(",") || "없음"}`, null, r.ajax);
+    // HR에 있는데 보낸 명단에 없는 직원(신규 입사자 등): 메인 표 기준, 업로드 전에 멈춤. 메인 표가 0행(완전히 빈 주)이면 건너뜀
+    const mainEmp = r.mainEmp;
+    if (Array.isArray(mainEmp) && mainEmp.length) { const sentSet = new Set(empNos), missing = mainEmp.filter((x) => !sentSet.has(x)); if (missing.length) { res = res0({ stage: "week", message: `HR 메인 표에 있는데 보낸 명단에 없는 직원 ${missing.length}명이 있어요(신규 입사자 등) — 업로드 전에 멈춤`, missing }); return; } }
+    await step("week", `메인 표 직원 ${mainEmp == null ? "모름" : mainEmp.length + "명"} · 보낸 ${empNos.length}명`);
     if (st.indexOf("CONFIRM") >= 0) { res = res0({ stage: "week", message: `이미 확정된 주예요 (${r.week}) — 확정취소는 자동으로 하지 않아요`, code: "confirmed" }); return; }
     if (st.indexOf("NOTICE") >= 0) { res = res0({ stage: "week", message: `공지된 주라 수정할 수 없어요 (${r.week}) — 공지취소는 자동으로 하지 않아요`, code: "noticed" }); return; }
     if (!st.length && mode === "full") {
@@ -81,17 +85,17 @@ async function hrsRun(req, board, boardWin) {
     // 3) 요일마다: 탭 로딩 → 업로드 → 행 검증 → 팝업 저장
     for (const f of files) {
       await setRun({ stage: "upload", tab: tabId, day: f.dow });
-      r = await hrsExec(tabId, "dayOpen", { dow: f.dow, prevSaved: savedDays.length === files.indexOf(f) }, 130e3); // 첫 로딩 60초 + 요일 전환 30초 × 3번까지 // 앞 요일이 다 저장됐을 때만 "수정중인 데이터" 확인창에 예
+      r = await hrsExec(tabId, "dayOpen", { dow: f.dow, prevSaved: savedDays.length === files.indexOf(f) }, 220e3); // 첫 로딩 60초 + 요일 전환 30초 × 3번 + 정리 // 앞 요일이 다 저장됐을 때만 "수정중인 데이터" 확인창에 예
       if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
-      const before = r.before;
+      const before = r.before, rows0 = r.rows0;
       r = await hrsExec(tabId, "dayUpload", { b64: hrsB64(f.bytes), name: f.name }, D);
       if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
-      r = await hrsExec(tabId, "dayCheck", { dow: f.dow, rows: f.rows, before }, D);
+      r = await hrsExec(tabId, "dayCheck", { dow: f.dow, rows: f.rows }, D);
       if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}`, rowErrors: (r.rowErrors || []).map((e) => ({ empNo: e.empNo, name: e.name, day: f.dow, msg: e.msg })), missing: r.missing || [] }); return; }
       r = await hrsExec(tabId, "daySave", {}, D);
       if (!r.ok) { res = res0({ stage: "save", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
       savedDays.push(f.dow);
-      await step("save", `${f.dow} ${f.date.slice(5)} 업로드·검증 ${before.length}→${f.rows.length}행·저장: ${r.toast}`, f.dow, r.ajax);
+      await step("save", `${f.dow} ${f.date.slice(5)} 업로드·검증 ${rows0}→${f.rows.length}행·저장: ${r.toast}`, f.dow, r.ajax);
     }
     if (mode === "test") { res = res0({ ok: true, stage: "save", day: "MON", message: "시험: 월요일 1일 업로드·검증·팝업 저장까지 했어요 (공지·확정 안 함)", test: true }); return; }
     if (mode === "saveOnly") { res = res0({ ok: true, stage: "save", message: `7일 저장까지 했어요 (공지·확정 안 함, ${empNos.length}명)`, savedEmpNos: empNos }); return; }

@@ -92,9 +92,9 @@ export const pingAgent = () => window.postMessage({ type: "MFG_HR_PING" }, locat
 export const agentVersion = () => agentVer;
 export function onAgent(f: Listener) { listeners.add(f); return () => listeners.delete(f); }
 
-// 걸리는 시간 (11/16 KM 실측): 팝업 첫 로딩 7~21초, 요일 전환 2~4초 → 7일 약 2분 30초~3분, test(1일) 약 30~60초
-export const HR_EXPECT_SEC: Record<Mode, [number, number]> = { test: [30, 60], saveOnly: [150, 180], full: [170, 210] };
-const HR_WAIT_MS: Record<Mode, number> = { test: 4 * 60e3, saveOnly: 8 * 60e3, full: 9 * 60e3 }; // 이 안에 결과가 없으면 "아직 모름"으로 돌려줌 (확장은 계속 돌 수 있음)
+// 걸리는 시간 (11/16 KM 실측): 하루 약 45~50초(첫 로딩 ~27초 + 요일 전환 ~15초 + 업로드·저장) → 7일 5~6분, test(1일) 약 1분
+export const HR_EXPECT_SEC: Record<Mode, [number, number]> = { test: [50, 90], saveOnly: [300, 360], full: [330, 420] };
+const HR_WAIT_MS: Record<Mode, number> = { test: 5 * 60e3, saveOnly: 12 * 60e3, full: 13 * 60e3 }; // 이 안에 결과가 없으면 "아직 모름"으로 돌려줌 (확장은 계속 돌 수 있음)
 
 export function sendToAgent(p: { dept: Dept; weekStart: string; weekEnd: string; mode: Mode; employees: HrEmp[]; allowInit?: boolean },
   onProgress?: (item: HrResult["log"][number]) => void): Promise<HrResult> {
