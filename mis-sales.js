@@ -242,7 +242,8 @@
     // 합계 대조: 날짜 줄(기간 밖 포함, 화면에 보인 것 전부)의 Gross 합 = 화면 합계 줄?
     const chk = sumCheck(rows, (() => { try { return $(gUsed).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), grossCol.field, (r) => !isTotal(r) && !!toIso(r[dateCol.field]));
     // 11/12 KM: kind "now" = 오늘 지금까지 Gross만 보기. 영업 중 값이라 Forecast 실제 칸(학습)에는 넣지 않고 결과 글에만 적음
-    if (job.kind === "now") { const v = got[job.to] || 0; return finish(true, `${job.to.slice(5).replace("-", "/")} 지금까지 Gross ${v.toLocaleString("ko-KR")}원 (${new Date().toTimeString().slice(0, 5)} 조회 · 학습엔 안 씀)`, { now: v, nowAt: Date.now() }); }
+    //  1.11.0: 같은 값을 시트 nowSales = { at, day, gross } 에도 둠 → 폰·피클·대시보드가 매출현황 화면을 다시 열지 않고 오늘 Gross를 바로 읽음 (학습엔 안 씀)
+    if (job.kind === "now") { const v = got[job.to] || 0; await set("nowSales", { at: Date.now(), day: job.to, gross: v, by: "gw-agent" }).catch(() => {}); return finish(true, `${job.to.slice(5).replace("-", "/")} 지금까지 Gross ${v.toLocaleString("ko-KR")}원 (${new Date().toTimeString().slice(0, 5)} 조회 · 학습엔 안 씀)`, { now: v, nowAt: Date.now() }); }
     // 말이 안 되는 값이면 안 씀: 하루 Gross가 10만 원 미만·1억 초과, 또는 기존 값의 1/3~3배 밖
     const fc0 = (await get()).forecast || {};
     const odd = Object.entries(got).filter(([dt, v]) => { const old = num((fc0[dt] || {}).act); return v < 1e5 || v > 1e8 || (old > 0 && (v / old > 3 || v / old < 1 / 3)); });
@@ -721,6 +722,8 @@
   //   (ROANDPRE·ROMANTIC·ROMANTIC_SL·PREMIUM·ROMANTIC_CK·MGGGR 골고루·MTDB 미트더블·WINESET·WINE). 구성 메뉴는 이 화면에 없음
   //  하루씩 조회해서 이 매장(1345090) 줄의 세트별 수량·고객수만 시트 setDay.날짜 = { at, cust, tot, rows: [{ s 세트 칸, q 수량 }] } 에 둠. 금액·다른 매장은 저장 안 함
   //  메뉴 경로: 매출정보관리 › 매출분석(폴더) › Set판매현황. 조회·쪽 넘김 말고는 아무것도 누르지 않음. 최근 날부터 읽고 하루마다 바로 저장(창이 닫혀도 남게)
+  //  1.11.0: job.today = 1이면 오늘 중간값 → setDay(완결된 하루)가 아니라 setNow = { at, day, partial: 1, cust, tot, rows } 에 둠 (매시간 되풀이 수집)
+  //   오늘 줄이 아직 안 나오는 경우(영업 중 잠김)는 실패로 안 적고 그렇다고 적음 → 다음 시간대에 다시
   //  세트 칸 제목(겹 머리글)은 setProbe.heads에. 결과가 계속 비면 저장하지 않고 화면 모양만 setProbe.diag에 남김
   async function runSets() {
     try {
@@ -760,10 +763,13 @@
       const rowsOf = (g) => { try { if ($(g).data("treegrid")) { const out = [], walk = (a) => (a || []).forEach((r) => { out.push(r); walk(r.children); }); walk($(g).treegrid("getData")); return out; } } catch (e) {} try { return $(g).datagrid("getRows") || []; } catch (e) { return []; } };
       const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total/i.test(String(v ?? "").trim()));
       const to = job.to, from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 27); return t.toISOString().slice(0, 10); })();
+      // 1.11.0 (매시간 당일 되풀이): job.today = 1이면 오늘 중간값 → 하루 합계 기록(setDay.날짜)에 섮지 않고 setNow에 둠
+      const today = !!job.today;
+      const keyOf = (day) => (today ? "setNow" : "setDay." + day); // setDay.*는 완결된 하루만
       const have = await get();
       // 첫 판(11/15 15:2x)이 treegrid 줄을 못 읽고 28일을 빈 기록 { at, rows: [] }로 남겼음 → tot 칸이 없는 예전 기록은 다시 읽음
       const fresh = (v) => v && typeof v === "object" && "tot" in v;
-      const days = []; for (let x = from; x <= to && days.length < 31; ) { if (job.force || !fresh(have["setDay." + x])) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      const days = []; for (let x = from; x <= to && days.length < 31; ) { if (job.force || !fresh(have[keyOf(x)])) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
       days.reverse(); // 최근 날부터 (창 시간이 모자라면 옛날 쪽이 다음으로 밀림)
       const L = loader($, d);
       const heads = (g) => (optsOf(g).columns || []).map((row) => row.map((c) => `${c.field || ""}=${title(c)}${c.colspan ? "*" + c.colspan : ""}`));
@@ -806,7 +812,7 @@
         if (off) chkBad.push(day);
         hits++;
         if (off && SUM_BLOCK) return "chk"; // 켜져 있으면 그날은 저장 안 함
-        await set("setDay." + day, { at: Date.now(), cust: byF(/^CUST_CNT$/i) ? q(byF(/^CUST_CNT$/i).field) : null, tot: byF(/^TOT_CNT$/i) ? q(byF(/^TOT_CNT$/i).field) : null, rows: out });
+        await set(keyOf(day), { at: Date.now(), ...(today ? { day, partial: 1 } : {}), cust: byF(/^CUST_CNT$/i) ? q(byF(/^CUST_CNT$/i).field) : null, tot: byF(/^TOT_CNT$/i) ? q(byF(/^TOT_CNT$/i).field) : null, rows: out });
         saved++; return "ok";
       };
       const again = []; let stuck = 0;
@@ -820,17 +826,17 @@
       }
       for (const day of again) { if (replaced || left() < T.q + T.reserve) { failed.push(day); continue; } const r = await readDay(day); if (r === "empty") empty.push(day); else if (r !== "ok" && r !== "chk") failed.push(day); }
       // 이 매장 줄이 없는 날: 다른 날은 읽혔으면(hits) 그날은 세트 없음으로 남김. 한 날도 안 읽혔으면 저장하지 않고 화면 모양만 남김(조회가 안 된 것일 수 있음)
-      if (hits) { for (const day of empty) await set("setDay." + day, { at: Date.now(), cust: null, tot: 0, rows: [] }).catch(() => {}); }
+      if (hits) { for (const day of empty) await set(keyOf(day), { at: Date.now(), ...(today ? { day, partial: 1 } : {}), cust: null, tot: 0, rows: [] }).catch(() => {}); }
       else {
         const diag = { at: Date.now(), days: days.length, empty: empty.length, failed: failed.length, grids: L.grids().map((x) => ({ id: x.id || "", tree: !!$(x).data("treegrid"), dg: (() => { try { return ($(x).datagrid("getRows") || []).length; } catch (e) { return -1; } })(), tg: (() => { try { return $(x).data("treegrid") ? ($(x).treegrid("getData") || []).length : -1; } catch (e) { return -2; } })() })),
           dates: dbs().map((i) => $(i).datebox("getValue")), inputs: [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password" && /store|stor|shop|str|매장|brand|area|sel|cmb|gubun|type/i.test(i.id + i.name)).map((i) => `${i.tagName.toLowerCase()}#${i.id || "-"}=${String(i.value).slice(0, 20)}`).slice(0, 12) };
         await merge("setProbe", { diag }).catch(() => {});
       }
-      await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used, chkBad: chkBad.sort(), rule: 2 }).catch(() => {}); // rule 2: 소계·와인을 뺀 새 대조 기준(11/16)으로 본 결과
+      if (!today) await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used, chkBad: chkBad.sort(), rule: 2 }).catch(() => {}); // 당일 중간값(today)은 이 기록을 덮지 않음 · rule 2: 소계·와인을 뺀 새 대조 기준(11/16)으로 본 결과
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set(failed)].sort();
-      const text = `Set판매현황 ${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? " · 이 매장 줄이 한 번도 안 나옴(저장 안 함, 화면 모양만 기록)" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
+      const text = (today ? "Set판매현황(오늘) " : "Set판매현황 ") + `${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? ` · 이 매장 줄이 한 번도 안 나옴(${today ? "영업 중엔 잠겨 있을 수 있음 · " : ""}저장 안 함)` : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
         (chkBad.length ? ` · ⚠ 세트 합계 다른 날 ${chkBad.map(md).join(", ")} (${SUM_BLOCK ? "저장 안 함, " : ""}MIS 화면 확인)` : "");
-      if (!hits && days.length) return finish(false, text, { days: 0 });
+      if (!hits && days.length) return today ? finish(true, text, { days: 0 }) : finish(false, text, { days: 0 }); // 오늘 줄이 아직 없음은 실패가 아님(영업 중엔 잠겨 있을 수 있음)
       return finish(true, text, { days: saved, more: rem.length });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);

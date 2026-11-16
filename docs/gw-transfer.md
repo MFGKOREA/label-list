@@ -82,3 +82,12 @@ Forecast 탭 [메뉴 판매 불러오기] → salesPush {kind: "menu", 최근 4�
 - 앱: 실패(또는 7분 넘게 응답 없음)면 GW 칸에 [MIS 입력용 목록 복사] (업체별 "품목 수량단위").
 - 시험: 가짜 GW·MIS (scratchpad/e2e-17.mjs) — 전송 없을 때 창 0개, 전송 때 최대 1개, 메뉴 없는 GW에서 시간 초과 → error + 창 닫힘. GW→MIS 이동은 시험 도구 한계로 실제 PC에서 확인.
 - 업데이트: gw-agent.zip을 받아 예전 gw-agent 폴더에 덮어쓰기 → chrome://extensions → GW Agent [새로고침] → 1.7.0 확인. 지킴이도 바뀌어서 install.bat 한 번 더.
+
+## 당일 되풀이 수집 (11/16, 확장 1.11.0)
+- 왜: 당일 Gross와 오늘 Set판매현황은 지금까지 폰에서 [Gross 불러오기]를 누르거나 MIS 화면을 직접 열어야만 볼 수 있었음 → 상시 조회용 캐시가 없어 질의할 때마다 원격 조회로 떨어짐.
+- 무엇을: 영업시간(08:30~23:00)에 매시간 :40에 **창 하나**로 ① 오늘 지금까지 Gross(`salesPush.kind = "now"`) ② 오늘 Set판매현황(`kind = "sets"`, `today: 1`)을 차례로 읽고 닫음.
+- 어디에: 결과는 시트 `nowSales = { at, day, gross }`(오늘 Gross, 학습엔 안 씀)와 `setNow = { at, day, partial: 1, cust, tot, rows }`(오늘 중간값). **`setDay.날짜`(완결된 하루)와 `forecast` 학습 칸은 건드리지 않음.**
+- 언제·얼마나 자주: `gw-plan.json`의 되풀이 항목(`kind: now`·`setsToday`, `everyMin`·`at`·`from`·`to`)이 정함. 항목이 없거나 계획을 못 받으면 기본값(둘 다 1시간·:40)으로 동작 → 무인 수집이 계획 배포에 묶이지 않음.
+- 양보·제한: 발주 시간대(12:30~14:45)·밤에는 창을 안 띄움. 자동 창이 돌거나 매출 요청 pending/running·발주 전송 중이면 미룸. 한 시간대 한 번만(실패해도 같은 시간대 재시도 없음), 하루 20번 상한. 팝업 [당일 되풀이 수집]으로 끔.
+- 시험: `node order-src/test/gw/periodic.test.mjs` (33가지: 시각·발주 시간대·이미 함·주기·상한·양보·요청 모양·계획 해석), `node order-src/test/gw/auto.test.mjs` (기존 29). 확장을 실제로 올리는 `e2e-auto.mjs`는 크롬이 있는 곳에서.
+- 남은 확인(매장 PC): 오늘 Set판매현황이 영업 중에도 MIS에 보이는지(잠겨 있으면 "이 매장 줄이 아직 안 나옴"으로 적고 다음 시간대에 다시). 매출이 아직 없는 이른 시각은 `runGross`가 "값이 없어요"로 실패로 적고 `nowSales`를 쓰지 않음(0을 지어 넣지 않음).
