@@ -4,7 +4,7 @@
 
 - 상태를 물을 땐 아래 **함수 하나**만 부릅니다. 같은 조건을 새로 쓰지 않습니다.
 - 낱말이나 시간 값을 바꾸면 `node order-src/test/states.mjs [kv.json]`이 어긋난 곳을 알려 줍니다.
-- 에이전트·시험은 화면 글자를 긁지 말고 `window.__orderCalc.appState()`와 `data-need` · `data-mode` · `data-phase`를 읽습니다.
+- 에이전트·시험은 화면 글자를 긁지 말고 `window.__orderCalc.appState()`와 `data-need` · `data-mode` · `data-phase`, 그리고 버튼 로딩바의 `[data-live]`(`run`·`wait`·`ok`·`bad`)를 읽습니다.
 
 ## 한눈에
 

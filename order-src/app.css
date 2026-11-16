@@ -846,3 +846,33 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt thead { display: table-header-group; }
   body.log-print .logt tr { break-inside: avoid; }
 }
+
+/* ---------- 버튼 로딩바 (11/16 KM) ---------- */
+/* [GW 전송] · [Gross Sales 불러오기] · [메뉴 판매 불러오기]를 누르면 그 줄 아래에 진행 막대가 생깁니다.
+   누른 즉시 보이고 → 도는 동안 연두 막대가 흐르고 → 끝나면 초록(성공)·빨강(실패)으로 한 번 채운 뒤 접힙니다.
+   결과 글은 위 .mis-s에 그대로 남습니다. 상태는 misState()·salesState()의 낱말(run·wait·ok·bad)만 씁니다. */
+.misbar:has(.lbar) { flex-wrap: wrap; }
+.misbar .lbar { order: 4; flex: 1 1 100%; display: grid; gap: 6px; margin-top: 8px; letter-spacing: -0.03em;
+  max-height: 48px; opacity: 1; overflow: hidden; transition: opacity .3s ease, max-height .3s ease, margin-top .3s ease; }
+.misbar .lbar.gone { opacity: 0; max-height: 0; margin-top: 0; }
+.misbar .lb-trk { position: relative; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.misbar .lb-fil { position: absolute; top: 0; bottom: 0; left: -36%; width: 36%; border-radius: inherit; background: var(--accent); animation: lbSlide 1.15s ease-in-out infinite; }
+.misbar .lb-txt { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.misbar .lb-sp { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--fill); border-top-color: var(--accent); animation: lbSpin .9s linear infinite; }
+/* PC가 꺼져 기다리는 중: 흐르지 않고 천천히 숨쉬듯 */
+.misbar .lbar[data-live="wait"] .lb-fil { width: 22%; background: var(--muted); animation: lbBreathe 2.6s ease-in-out infinite; }
+.misbar .lbar[data-live="wait"] .lb-sp { border-top-color: var(--muted); animation-duration: 2.2s; }
+/* 끝: 한 번 가득 채우고 접힘 */
+.misbar .lbar[data-live="ok"] .lb-fil { left: 0; width: 100%; background: var(--ok-ink); animation: none; }
+.misbar .lbar[data-live="ok"] .lb-sp { display: none; }
+.misbar .lbar[data-live="ok"] .lb-txt { color: var(--ok-ink); }
+.misbar .lbar[data-live="bad"] .lb-fil { left: 0; width: 100%; background: var(--rose-ink); animation: none; }
+.misbar .lbar[data-live="bad"] .lb-sp { display: none; }
+.misbar .lbar[data-live="bad"] .lb-txt { color: var(--rose-ink); }
+@keyframes lbSlide { 0% { left: -36%; } 100% { left: 100%; } }
+@keyframes lbSpin { to { transform: rotate(360deg); } }
+@keyframes lbBreathe { 0%, 100% { left: 0; opacity: .45; } 50% { left: 56%; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .misbar .lb-fil { animation: none; left: 0; width: 100%; opacity: .5; }
+  .misbar .lbar[data-live="run"] .lb-sp { animation: none; }
+}
