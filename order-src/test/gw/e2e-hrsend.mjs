@@ -23,7 +23,7 @@ reset();
 const WEEKS = { 45: ["11/02", "11/08"], 46: ["11/09", "11/15"], 47: ["11/16", "11/22"], 48: ["11/23", "11/29"], 49: ["11/30", "12/06"] };
 const hrPage = () => `<!doctype html><meta charset="utf-8"><title>HR</title><body>
 <ul id="gnb"><li menu-desc="근태관리"><span class="menu-step1">근태관리</span><ul><li><a href="#" menu-app-id="HRT/W_HRT6300"><span>출퇴근상세조회</span></a></li><li><a href="#" menu-app-id="HRT/W_HRT2325"><span>주간스케쥴(시간)</span></a></li></ul></li></ul>
-<div id="app"></div><div id="toasts"></div><div id="jl_noti" style="display:none"><span id="jl_noti_msg"></span><button id="jl_noti_footer_btn1">확인</button><button id="jl_noti_report">오류 신고</button></div>
+<input type="password" id="jlamp_autocomplete_2" style="opacity:0;width:0;height:0;border:0;padding:0"><div id="app"></div><div id="toasts"></div><div id="jl_noti" style="display:none"><span id="jl_noti_msg"></span><button id="jl_noti_footer_btn1">확인</button><button id="jl_noti_report">오류 신고</button></div>
 <script>
 const W=${JSON.stringify(WEEKS)}; let wk=${S.weekStart}, dept=${JSON.stringify(S.deptStart)}, status='';
 const KIND={'출근':'10','휴무':'17','주휴일':'18','공휴일':'19'}, DOWS=['MON','TUE','WED','THU','FRI','SAT','SUN'];

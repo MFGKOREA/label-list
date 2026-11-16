@@ -89,19 +89,39 @@ async function hrsStep(op, a) {
     return !popOpen();
   }
 
+  // 로그인 판정 (11/16 KM): HR에는 자동완성 방지용 #jlamp_autocomplete_2(type=password, 투명도 0, 0×0)가 늘 있음 → 비밀번호 칸이 있다는 것만으론 안 됨
+  //  로그인됨 = window.hrt2325 또는 #hrt2325_btn_search 또는 메뉴(a[menu-app-id]). 로그아웃 = 진짜로 보이는 아이디 칸 + [로그인] 단추 (+ 보이는 비밀번호 칸)
+  const realVis = (el) => {
+    if (!el || /^jlamp_autocomplete/.test(el.id || "")) return false;
+    const r = el.getBoundingClientRect(); if (r.width <= 1 || r.height <= 1) return false;
+    for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+      let s; try { s = getComputedStyle(n); } catch (e) { break; }
+      if (s.display === "none" || s.visibility === "hidden" || parseFloat(s.opacity) === 0) return false;
+      if (n.getAttribute && n.getAttribute("aria-hidden") === "true" && /modal|popup|window|dialog|layer/i.test(n.className || "")) return false; // 닫힌 모달
+    }
+    return true;
+  };
+  const loggedIn = () => !!window.hrt2325 || !!$id("hrt2325_btn_search") || !!document.querySelector("a[menu-app-id]");
+  const loggedOut = () => {
+    if (loggedIn()) return false;
+    const pw = [...document.querySelectorAll('input[type="password"]')].filter(realVis);
+    const idIn = [...document.querySelectorAll('#login_id, input[type="text"], input[type="email"], input:not([type])')].filter(realVis).find((i) => !pw.length || (i.compareDocumentPosition(pw[0]) & Node.DOCUMENT_POSITION_FOLLOWING));
+    const btn = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a')].filter(realVis).find((b) => /로그인|login/i.test(tx(b) || b.value || "") || /login_btn/.test(b.className || ""));
+    return (!!idIn && !!btn) || (pw.length > 0 && /^\/main\/login/.test(location.pathname));
+  };
+
   if (op === "done") { H.quiet = false; return { ok: true }; }
   H.quiet = true; // 자동으로 도는 동안 alert 창은 띄우지 않고 문구만 받아 둠
 
   if (op === "probe") {
-    const pw = [...document.querySelectorAll('input[type="password"]')].some(vis);
-    return { ok: true, login: pw || /^\/main\/login/.test(location.pathname), menu: !!document.querySelector("a[menu-app-id]"), screen: !!$id("hrt2325_btn_search"), api: !!window.hrt2325, jq: !!$ };
+    return { ok: true, login: loggedOut(), loggedIn: loggedIn(), menu: !!document.querySelector("a[menu-app-id]"), screen: !!$id("hrt2325_btn_search"), api: !!window.hrt2325, jq: !!$ };
   }
 
   if (op === "open") { // 근태관리 → 주간스케쥴(시간)
     const t0 = Date.now(); let i = 0;
     while (Date.now() - t0 < 40e3) {
       if ($id("hrt2325_btn_search") && $id("hrt2325_dept_category")) { await idle(15e3); return { ok: true }; }
-      if ([...document.querySelectorAll('input[type="password"]')].some(vis)) return fail("week", "HR 로그인이 풀려 있어요 (HR에 로그인한 뒤 다시 전송)", { code: "login" });
+      if (loggedOut()) return fail("week", "HR 로그인이 풀려 있어요 (HR에 로그인한 뒤 다시 전송)", { code: "login" });
       const lk = document.querySelector('a[menu-app-id="HRT/W_HRT2325"]') || [...document.querySelectorAll("a[menu-app-id], a")].find((x) => /주간\s*스케[쥴줄]\s*\(\s*시간\s*\)/.test(tx(x)));
       if (!lk) { const top = document.querySelector('li[menu-desc="근태관리"]'); tap(top && (top.querySelector(".menu-step1") || top)); }
       else if (i % 2 === 0) { const ul = lk.closest("ul"), grp = ul && ul.previousElementSibling; if (grp && i === 0) tap(grp.querySelector(".jlamp-gnb-menu-label") || grp); await sleep(250); tap(lk); }

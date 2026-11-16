@@ -60,7 +60,7 @@ async function hrsRun(req, board, boardWin) {
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
     for (let k = 0; k < 20 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 500)); pr = await hrsExec(tabId, "probe", {}, 15e3); }
     if (!pr.ok) { res = res0({ stage: "week", message: pr.message, code: pr.code || "inject" }); return; }
-    if (pr.login || (!pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 전송해 주세요 (자동 로그인은 하지 않음)", code: "login" }); return; }
+    if (pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 전송해 주세요 (자동 로그인은 하지 않음)", code: "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
     r = await hrsExec(tabId, "cond", { dept: plan.dept, weekStart: plan.weekStart, weekEnd: plan.weekEnd, site: HRS.site }, 120e3);
