@@ -3597,9 +3597,12 @@
     const evAt = num((db.events || {}).at);
     rows.push({ k: "events", t: "행사 일정", sub: "데스크위젯 → 컨벤션센터", v: evAt > 0 ? `${ago(evAt)} 갱신` : "없음", s: !(evAt > 0) ? "none" : Date.now() - evAt < 2 * 864e5 ? "ok" : Date.now() - evAt < 7 * 864e5 ? "warn" : "bad" });
     const sp = db.salesPush || {}, mp = (sp.parts || {}).menu || {}, ss = db.misSetScan || {};
-    const nBad = (num(mp.chkBad) || 0) + (sp.chk && sp.chk.ok === false ? 1 : 0) + (Array.isArray(ss.chkBad) ? ss.chkBad.length : 0);
-    const seen = !!sp.chk || "chkBad" in mp || Array.isArray(ss.chkBad);
-    rows.push({ k: "sum", t: "합계 대조", sub: "MIS 화면 합계 = 읽은 값의 합", v: nBad ? `다른 날 ${nBad}` : seen ? "맞음" : "아직 결과 없음", s: nBad ? "bad" : seen ? "ok" : "none" });
+    // 세트(Set판매현황)는 빨강에서 뺌 (11/16 첫 실제 수집: 28일 중 26일이 "다름" — 표 합계가 줄 합보다 늘 작음 = 읽기 오류가 아니라 세트끼리 겹쳐 세는 대조 기준 문제.
+    //  그대로 두면 상황판이 매일 빨강·아침 알림도 매일 → 기준을 확인할 때까지 참고 글로만. 매출·메뉴 합계는 그대로 빨강)
+    const setBad = Array.isArray(ss.chkBad) ? ss.chkBad.length : 0;
+    const nBad = (num(mp.chkBad) || 0) + (sp.chk && sp.chk.ok === false ? 1 : 0);
+    const seen = !!sp.chk || "chkBad" in mp;
+    rows.push({ k: "sum", t: "합계 대조", sub: `MIS 화면 합계 = 읽은 값의 합${setBad ? ` · 세트 ${setBad}일은 기준 확인 중` : ""}`, v: nBad ? `다른 날 ${nBad}` : seen ? "맞음" : "아직 결과 없음", s: nBad ? "bad" : seen ? "ok" : "none" });
     // 자동 수집 (11/15 KM "진행", 기획안 7번): 예약 작업(10:23·15:23)의 collect.py가 돌 때마다 남기는 collectLog(최근 60개)의 마지막 결과·원인
     //  미룸(발주 시간대·다른 요청)·한 번 못 받음은 다음 차례가 다시 받으니 노랑까지. 로그인 풀림·MIS 화면 바뀜·합계 다름(사람이 봐야 함)이나 두 번 연속 못 받음 → 빨강
     //  마지막 기록이 21시간 넘게 없으면 노랑, 45시간 넘으면 빨강(예약 작업이 멈춤). collectLog가 아직 없으면 예전처럼 학습 기록("자동")으로 봄

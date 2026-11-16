@@ -109,7 +109,9 @@ ok(B.errs.length === 0, "페이지 오류 " + (B.errs.length ? B.errs.slice(0, 2
 await B.ctx.close();
 
 // ---------- 3) 같은 자료를 낮 1시에 열면: 어제 매출이 아직 없음 · 영업 중 PC 신호 없음 → 노랑 ----------
-const C3 = await open(null, "13:00");
+// (사본에 어제 매출·합계 결과가 이미 들어 있어도 같은 조건이 되게: 어제 매출·메뉴와 매출 요청 기록을 뺌)
+const yest = (() => { const x = new Date(day + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); })();
+const C3 = await open((d) => { delete d.salesPush; delete d["menuDay." + yest]; if ((d.forecast || {})[yest]) d.forecast[yest] = { ...d.forecast[yest], act: "" }; }, "13:00");
 await report(C3.p);
 bd = await board(C3.p);
 const g3 = (t) => bd.rows.find((r) => r.t === t) || {};
