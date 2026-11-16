@@ -224,7 +224,8 @@ async function hrsStep(op, a) {
   if (op === "cardMap") { // 지금 탭(소속구분)의 메인 표: 사번 + 요일별 수정 가능(edit_yn). 이름·직책은 안 읽음
     const g = mainGrid(); if (!g) return fail("week", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
     const v = (x) => (x == null ? "" : String(x));
-    return { ok: true, dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), dept: v(r.dept_code || r.dept_name).slice(0, 20), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
+    let dirty = false; try { dirty = !!g.dataSource.hasChanges(); } catch (e) {}
+    return { ok: true, dirty, dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), dept: v(r.dept_code || r.dept_name).slice(0, 20), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
   }
   if (op === "learnCodes") { // 근태유형 코드표: 표의 근태 칸 편집기(드롭다운)를 잠깐 열어 목록만 읽고 닫음 (값은 안 바꿈)
     const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요");

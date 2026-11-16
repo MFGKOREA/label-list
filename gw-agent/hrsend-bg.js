@@ -79,6 +79,7 @@ async function hrsRun(req, board, boardWin) {
     } else if (!st.length) await step("week", "주차 상태 없음 — 저장은 되지만 공지·확정이 안 켜질 수 있어요 (HR에서 초기화·전주복사 또는 allowInit)");
     const m = await hrsExec(tabId, "cardMap", {}, 30e3);
     if (!m.ok) { res = res0({ stage: "week", message: m.message }); return; }
+    if (m.dirty) { res = res0({ stage: "save", message: "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — 같이 저장되지 않게 멈춤. HR에서 [검색]으로 새로 고친 뒤 다시", code: "dirty" }); return; }
     const inHr = new Set(m.rows.map((x) => x.empNo));
     const nowhere = empNos.filter((n) => !inHr.has(n));
     if (nowhere.length) { res = res0({ stage: "week", message: `HR 주간스케쥴(전체)에 없는 사번 ${nowhere.length}명: ${nowhere.join(", ")} — 저장 전에 멈춤`, rowErrors: nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "HR에 없는 사번(재직·휴직 확인)" })) }); return; }
