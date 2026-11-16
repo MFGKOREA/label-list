@@ -50,7 +50,9 @@ jobs:
         run: python3 tools/banned-words.py
 
       - name: YAML 검사 도구 준비
-        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml \
+            || python3 -m pip install --quiet --disable-pip-version-check --break-system-packages pyyaml
 
       - name: JSON·YAML 문법과 태스크 패킷 스키마
         run: python3 tools/ci-checks.py
