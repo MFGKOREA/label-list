@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "GW Agent",
-  "version": "1.9.0",
-  "description": "매장 PC에서 GW·MIS 일을 대신합니다: 폰 발주앱의 GW 전송을 MIS 주문등록에 넣고, 어제 매출·메뉴 판매·시간대별 매출을 스스로 받아 옵니다. 필요할 때만 창 하나를 열어 로그인부터 끝까지 하고 닫습니다.",
+  "version": "1.10.0",
+  "description": "매장 PC에서 GW·MIS·플젝 HR 일을 대신합니다: 폰 발주앱의 GW 전송을 MIS 주문등록에 넣고, 어제 매출·메뉴 판매·시간대별 매출과 플젝 HR 출퇴근·스케줄 변경 신청을 스스로 읽어 옵니다. 필요할 때만 창 하나를 열어 로그인부터 끝까지 하고 닫습니다.",
   "permissions": ["storage", "alarms", "tabs", "scripting", "webNavigation", "background"],
-  "host_permissions": ["https://mis.madforgarlic.com/*", "https://gw.madforgarlic.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],
+  "host_permissions": ["https://mis.madforgarlic.com/*", "https://gw.madforgarlic.com/*", "https://hr.pljec.cloud/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],
   "background": { "service_worker": "bg.js" },
   "action": { "default_popup": "popup.html", "default_title": "GW Agent" },
   "options_page": "popup.html",
   "content_scripts": [
     { "matches": ["https://gw.madforgarlic.com/*", "https://mis.madforgarlic.com/*"], "js": ["login.js"], "all_frames": true, "run_at": "document_idle" },
-    { "matches": ["https://mis.madforgarlic.com/*"], "js": ["start.js"], "run_at": "document_idle" }
+    { "matches": ["https://mis.madforgarlic.com/*"], "js": ["start.js"], "run_at": "document_idle" },
+    { "matches": ["https://hr.pljec.cloud/*"], "js": ["hr.js"], "run_at": "document_idle" }
   ]
 }
