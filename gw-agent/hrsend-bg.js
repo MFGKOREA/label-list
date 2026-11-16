@@ -1,6 +1,6 @@
 // HR 주간스케쥴 전송 — 배경 쪽 (GW Agent 1.12.0, 11/16 KM)
 //  보드(hr-board-teal.vercel.app)의 [전송] → hrsend-board.js → 여기(q "hrSend") → HR 탭에서 hrsStep을 한 단계씩 → 결과를 보드로
-//  순서: 검사(hrsCheck) → HR 탭 → 주간스케쥴(시간) → 소속구분·주차 → 검색·상태 → 월~일 [탭 로딩 → 엑셀 → 행 검증 → 팝업 저장] → 메인 저장 → 공지 → 확정
+//  순서(1.14.0, 11/17 KM: 업로드 방식 안 씀): 검사 → HR 탭 → 주간스케쥴(시간) → 부서 탭·STORE 탭에서 직원 위치 → 근태 코드 → 탭마다 메인 표 행에 카드 입력(workType U) → [저장] 한 번 → 다시 읽어 확인
 //  mode: test(월요일 1일) · saveOnly(7일 저장까지) · full(+ 공지·확정). 상태 없는 주는 full이면 멈춤(allowInit일 때만 업로드 전에 초기화)
 //  안전: 요청 하나씩(requestId 잠금) · 로그인·망이 끊기면 바로 멈춤(자동 로그인 안 함) · 이미 확정된 주는 손대지 않음 · 개인정보(이름)는 기록에 남기지 않음
 //  bg.js의 get·put·log·VER를 씀 (bg.js가 importScripts로 불러옴)
@@ -40,13 +40,12 @@ async function hrsRun(req, board, boardWin) {
   await setRun({ stage: "precheck" });
   const alive = setInterval(() => { chrome.runtime.getPlatformInfo(() => {}); }, 20e3);
   let tabId = null, res = null;
-  const D = 60e3; // 업로드·검증·저장 단계 하나의 한도 (저장 뒤 메인 표 재조회 30초 포함)
-  try {
+    try {
     // 1) 보내기 전 검사
     const chk = hrsCheck(req);
     if (!chk.ok) { res = res0({ stage: "precheck", message: `보낼 수 없어요: ${chk.errors.length}건 — ${chk.errors.slice(0, 3).map((e) => (e.name || e.empNo || "") + " " + e.msg).join(" / ")}`, rowErrors: chk.errors }); return; }
-    const plan = chk.plan, files = hrsFiles(plan), empNos = plan.emps.map((e) => e.empNo);
-    await step("precheck", `${plan.dept} ${plan.weekStart}~${plan.weekEnd} · ${empNos.length}명 · ${mode === "test" ? "시험(월요일 1일)" : mode === "saveOnly" ? "7일 저장까지" : "7일 + 공지·확정"}${chk.warns.length ? " · 경고 " + chk.warns.length + "건" : ""}`);
+    const plan = chk.plan, empNos = plan.emps.map((e) => e.empNo);
+    await step("precheck", `${plan.dept} ${plan.weekStart}~${plan.weekEnd} · ${empNos.length}명 · ${mode === "test" ? "시험(월요일만)" : "7일 저장"}${chk.warns.length ? " · 경고 " + chk.warns.length + "건" : ""}`);
     chk.warns.forEach((w) => trail.push({ t: hrsT(), stage: "precheck", day: null, msg: `경고: ${w.name || w.empNo} ${w.msg}` }));
     // 2) HR 탭 (있으면 그 탭, 없으면 보드 창에 새 탭). 화면이 그려져야 해서 앞으로 띄움
     const { hrTab } = await get("hrTab");
@@ -63,41 +62,72 @@ async function hrsRun(req, board, boardWin) {
     if (pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 전송해 주세요 (자동 로그인은 하지 않음)", code: "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
-    r = await hrsExec(tabId, "cond", { dept: plan.dept, weekStart: plan.weekStart, weekEnd: plan.weekEnd, site: HRS.site }, 120e3);
-    if (!r.ok) { res = res0({ stage: "week", message: r.message }); return; }
-    let st = r.status;
-    await step("week", `검색: ${r.dept} · ${r.week} · 상태 ${st.join(",") || "없음"}`, null, r.ajax);
-    // HR에 있는데 보낸 명단에 없는 직원(신규 입사자 등): 메인 표 기준, 업로드 전에 멈춤. 메인 표가 0행(완전히 빈 주)이면 건너뜀
-    const mainEmp = r.mainEmp;
-    if (Array.isArray(mainEmp) && mainEmp.length) { const sentSet = new Set(empNos), missing = mainEmp.filter((x) => !sentSet.has(x)); if (missing.length) { res = res0({ stage: "week", message: `HR 메인 표에 있는데 보낸 명단에 없는 직원 ${missing.length}명이 있어요(신규 입사자 등) — 업로드 전에 멈춤`, missing }); return; } }
-    await step("week", `메인 표 직원 ${mainEmp == null ? "모름" : mainEmp.length + "명"} · 보낸 ${empNos.length}명`);
-    if (st.indexOf("CONFIRM") >= 0) { res = res0({ stage: "week", message: `이미 확정된 주예요 (${r.week}) — 확정취소는 자동으로 하지 않아요`, code: "confirmed" }); return; }
-    if (st.indexOf("NOTICE") >= 0) { res = res0({ stage: "week", message: `공지된 주라 수정할 수 없어요 (${r.week}) — 공지취소는 자동으로 하지 않아요`, code: "noticed" }); return; }
-    if (!st.length && plan.allowInit) { // 상태 없는 주: 이대로 저장하면 공지·확정이 안 켜짐 → allowInit일 때만 업로드 전에 [초기화]
-      const ini = await hrsExec(tabId, "init", {}, 40e3);
-      if (!ini.ok) { res = res0({ stage: "week", message: ini.message, code: "nostatus" }); return; }
-      const s2 = await hrsExec(tabId, "status", {}, 40e3);
-      st = s2.status || [];
-      await step("week", `초기화: ${ini.toast || "완료"} → 상태 ${st.join(",") || "없음"}`);
-      if (st.indexOf("EDIT") < 0) { res = res0({ stage: "week", message: "초기화했는데도 주차 상태가 EDIT가 아니에요", code: "nostatus" }); return; }
-    } else if (!st.length) await step("week", "주차 상태 없음 — 저장은 되지만 공지·확정이 안 켜질 수 있어요 (HR에서 초기화·전주복사 또는 allowInit)");
-    // 3) 요일마다: 탭 로딩 → 업로드 → 행 검증 → 팝업 저장
-    for (const f of files) {
-      await setRun({ stage: "upload", tab: tabId, day: f.dow });
-      r = await hrsExec(tabId, "dayOpen", { dow: f.dow, prevSaved: savedDays.length === files.indexOf(f) }, 220e3); // 첫 로딩 60초 + 요일 전환 30초 × 3번 + 정리 // 앞 요일이 다 저장됐을 때만 "수정중인 데이터" 확인창에 예
-      if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
-      const before = r.before, rows0 = r.rows0;
-      r = await hrsExec(tabId, "dayUpload", { b64: hrsB64(f.bytes), name: f.name }, D);
-      if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
-      r = await hrsExec(tabId, "dayCheck", { dow: f.dow, rows: f.rows }, D);
-      if (!r.ok) { res = res0({ stage: "upload", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}`, rowErrors: (r.rowErrors || []).map((e) => ({ empNo: e.empNo, name: e.name, day: f.dow, msg: e.msg })), missing: r.missing || [] }); return; }
-      r = await hrsExec(tabId, "daySave", {}, D);
-      if (!r.ok) { res = res0({ stage: "save", day: f.dow, message: `${f.dow}(${f.date.slice(5)}) ${r.message}` }); return; }
-      savedDays.push(f.dow);
-      await step("save", `${f.dow} ${f.date.slice(5)} 업로드·검증 ${rows0}→${f.rows.length}행·저장: ${r.toast}`, f.dow, r.ajax);
+    // 3) 직원마다 어느 탭(소속구분)에 있는지: 부서 탭 → 거기 없는 사람은 STORE 탭 (11/17 KM: 관리자 2명은 STORE. 한 탭에 다 올리면 "소속구분이 다름")
+    const sentSet = new Set(empNos), where = new Map();
+    let st = null, week = "";
+    for (const dept of [plan.dept, "STORE"]) {
+      if (dept === "STORE" && empNos.every((n) => where.has(n))) break;
+      r = await hrsExec(tabId, "cond", { dept, weekStart: plan.weekStart, weekEnd: plan.weekEnd, site: HRS.site }, 120e3);
+      if (!r.ok) { res = res0({ stage: "week", message: `${dept} 탭: ${r.message}` }); return; }
+      if (st == null) {
+        st = r.status; week = r.week;
+        await step("week", `검색: ${r.dept} · ${r.week} · 상태 ${st.join(",") || "없음"}`, null, r.ajax);
+        if (st.indexOf("CONFIRM") >= 0) { res = res0({ stage: "week", message: `이미 확정된 주예요 (${week}) — 확정취소는 자동으로 하지 않아요`, code: "confirmed" }); return; }
+        if (st.indexOf("NOTICE") >= 0) { res = res0({ stage: "week", message: `공지된 주라 수정할 수 없어요 (${week}) — 공지취소는 자동으로 하지 않아요`, code: "noticed" }); return; }
+        if (!st.length && plan.allowInit) { // 상태 없는 주: 이대로 저장하면 공지·확정이 안 켜짐 → allowInit일 때만 저장 전에 [초기화]
+          const ini = await hrsExec(tabId, "init", {}, 40e3);
+          if (!ini.ok) { res = res0({ stage: "week", message: ini.message, code: "nostatus" }); return; }
+          const s2 = await hrsExec(tabId, "status", {}, 40e3); st = s2.status || [];
+          await step("week", `초기화: ${ini.toast || "완료"} → 상태 ${st.join(",") || "없음"}`);
+          if (st.indexOf("EDIT") < 0) { res = res0({ stage: "week", message: "초기화했는데도 주차 상태가 EDIT가 아니에요", code: "nostatus" }); return; }
+        } else if (!st.length) await step("week", "주차 상태 없음 — 저장은 되지만 공지·확정이 안 켜질 수 있어요 (HR에서 초기화·전주복사 또는 allowInit)");
+      }
+      const m = await hrsExec(tabId, "cardMap", {}, 30e3);
+      if (!m.ok) { res = res0({ stage: "week", message: `${dept} 탭: ${m.message}` }); return; }
+      m.rows.forEach((x) => { if (sentSet.has(x.empNo) && !where.has(x.empNo)) where.set(x.empNo, dept); });
+      if (dept === plan.dept) { // 이 부서 탭에 있는데 보낸 명단에 없는 직원(신규 입사자 등) → 저장 전에 멈춤. 0행(빈 주)이면 건너뜀
+        const missing = m.rows.map((x) => x.empNo).filter((x) => x && !sentSet.has(x));
+        if (missing.length) { res = res0({ stage: "week", message: `HR ${dept} 탭에 있는데 보낸 명단에 없는 직원 ${missing.length}명 — 저장 전에 멈춤(신규 입사자 등)`, missing }); return; }
+      }
+      await step("week", `${dept} 탭 ${m.rows.length}명 · 여기 저장할 사람 ${[...where.values()].filter((d) => d === dept).length}명`);
     }
-    if (mode === "test") { res = res0({ ok: true, stage: "save", day: "MON", message: "시험: 월요일 1일 업로드·검증·팝업 저장까지 했어요 (공지·확정 안 함)", test: true }); return; }
-    res = res0({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${empNos.length}명). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: empNos });
+    const nowhere = empNos.filter((n) => !where.has(n));
+    if (nowhere.length) { res = res0({ stage: "week", message: `HR ${plan.dept}·STORE 탭 어디에도 없는 사번 ${nowhere.length}명: ${nowhere.join(", ")} — 저장 전에 멈춤`, rowErrors: nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "HR에 없는 사번(소속구분 확인)" })) }); return; }
+    // 4) 근태 코드: 출근 10·휴무 17은 확인됨. 주휴일·공휴일은 표의 근태 칸 드롭다운 목록에서 (보드가 codes로 줄 수도 있음)
+    const CODE = { 출근: "10", 휴무: "17" }, need = new Set(); plan.emps.forEach((e) => e.days.forEach((d) => { if (!CODE[d.kind]) need.add(d.kind); }));
+    if (need.size) {
+      Object.assign(CODE, req.codes || {});
+      if ([...need].some((k) => !CODE[k])) {
+        const lc = await hrsExec(tabId, "learnCodes", {}, 30e3);
+        (lc.list || []).forEach((x) => { if (/주휴/.test(x.t) && !CODE["주휴일"]) CODE["주휴일"] = x.v; if (/공휴/.test(x.t) && !CODE["공휴일"]) CODE["공휴일"] = x.v; if (/^출근/.test(x.t) && x.v !== "10") trail.push({ t: hrsT(), stage: "week", day: null, msg: `참고: 출근 코드가 ${x.v}로 보임` }); });
+        await step("week", `근태 코드표 ${(lc.list || []).length}개 읽음: ${(lc.list || []).map((x) => x.v + "=" + x.t).join(" ").slice(0, 150)}`);
+      }
+      const unk = [...need].filter((k) => !CODE[k]);
+      if (unk.length) { res = res0({ stage: "week", message: `근태 코드를 몰라요: ${unk.join(", ")} — 저장 전에 멈춤`, code: "nocode" }); return; }
+    }
+    // 5) 탭마다 카드 입력 → [저장] 한 번 → 다시 읽어 맞는지 확인. 부서 탭 먼저, 그다음 STORE
+    const days = mode === "test" ? ["MON"] : ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], saved = [];
+    for (const dept of [plan.dept, "STORE"]) {
+      const group = plan.emps.filter((e) => where.get(e.empNo) === dept);
+      if (!group.length) continue;
+      await setRun({ stage: "save", tab: tabId, dept });
+      r = await hrsExec(tabId, "cond", { dept, weekStart: plan.weekStart, weekEnd: plan.weekEnd, site: HRS.site }, 120e3); // 그 탭으로 다시 [검색] (앞 탭 저장 뒤 화면을 새로)
+      if (!r.ok) { res = res0({ stage: "save", message: `${dept} 탭: ${r.message}`, savedEmpNos: saved }); return; }
+      const emps = group.map((e) => ({ empNo: e.empNo, days: e.days.filter((d) => days.indexOf(d.dow) >= 0).map((d) => ({ dow: d.dow, code: CODE[d.kind], in: d.in, out: d.out, brk: d.brk })) }));
+      r = await hrsExec(tabId, "cardSave", { dept, emps }, 90e3);
+      if (!r.ok) { res = res0({ stage: "save", message: `${dept} 탭 저장: ${r.message}`, savedEmpNos: saved }); return; }
+      await step("save", `${dept} 탭 ${group.length}명 ${days.length === 7 ? "7일" : "월요일"} 입력 → 저장: ${r.toast}`, null, r.ajax);
+      // 다시 읽어 확인 (사번·요일 코드·시간만)
+      const w = await hrsExec(tabId, "weekRows", {}, 30e3), bad = [];
+      const got = new Map((w.rows || []).map((x) => [x.empNo, x]));
+      emps.forEach((e) => { const g = got.get(e.empNo); if (!g) { bad.push({ empNo: e.empNo, msg: "저장 뒤 표에 없음" }); return; } e.days.forEach((d) => { const gd = g.days.find((x) => x.dow === d.dow) || {}; const hm = (v) => String(v || "").replace(/\D/g, ""); if (String(gd.code) !== String(d.code) || hm(gd.in) !== hm(d.in) || hm(gd.out) !== hm(d.out) || hm(gd.brk) !== hm(d.brk)) bad.push({ empNo: e.empNo, day: d.dow, msg: `저장 뒤 값이 달라요 (보냄 ${d.code} ${d.in || "-"}~${d.out || "-"}/${d.brk || "-"} · 표 ${gd.code || "-"} ${gd.in || "-"}~${gd.out || "-"}/${gd.brk || "-"})` }); }); });
+      if (bad.length) { res = res0({ stage: "save", message: `${dept} 탭: 저장 뒤 다시 읽었더니 ${bad.length}건이 달라요`, rowErrors: bad.map((b) => ({ ...b, name: (plan.emps.find((e) => e.empNo === b.empNo) || {}).name })), savedEmpNos: saved }); return; }
+      group.forEach((e) => saved.push(e.empNo));
+      await step("save", `${dept} 탭 다시 읽어 확인: ${emps.length}명 맞음`);
+    }
+    days.forEach((d) => savedDays.push(d));
+    if (mode === "test") { res = res0({ ok: true, stage: "save", day: "MON", message: `시험: 월요일만 카드 입력·저장했어요 (${saved.length}명, 공지·확정 안 함)`, test: true }); return; }
+    res = res0({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${saved.length}명${[...where.values()].includes("STORE") ? ", STORE 탭 포함" : ""}). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: saved });
   } catch (e) {
     res = res0({ stage: "week", message: "확장 오류: " + String((e && e.message) || e).slice(0, 200) });
   } finally {

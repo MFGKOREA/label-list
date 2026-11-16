@@ -38,7 +38,8 @@ async function hrsStep(op, a) {
         let j = null; try { j = xhr.responseJSON || JSON.parse(xhr.responseText || "null"); } catch (e) {}
         const rc = j && (j.returnCode != null ? j.returnCode : j.data && j.data.returnCode);
         const pd = (j && (j.data || j)) || {}, ec = pd.p_error_code != null ? pd.p_error_code : j && j.p_error_code, rn = pd.p_row_count != null ? pd.p_row_count : j && j.p_row_count;
-        const ent = { t: Date.now(), ep: m[1], http: xhr.status, rc: rc == null ? null : String(rc), id: (st && st.__gw) || 0, ec: ec == null ? null : String(ec), rows: rn == null ? null : +rn };
+        const es = pd.p_error_str != null ? pd.p_error_str : j && j.p_error_str;
+        const ent = { t: Date.now(), ep: m[1], http: xhr.status, rc: rc == null ? null : String(rc), id: (st && st.__gw) || 0, ec: ec == null ? null : String(ec), rows: rn == null ? null : +rn, err: es ? clean(es) : "" };
         if (m[1] === "getMasterList_prc" && j && j.data && j.data.infoEnc != null) { const d = decode(j.data.infoEnc); if (Array.isArray(d)) { ent.st = [...new Set(d.map((r) => String((r && r.schedule_status) || "")).filter(Boolean))]; ent.n = d.length; } }
         H.ajax.push(ent);
       });
@@ -57,6 +58,9 @@ async function hrsStep(op, a) {
       if (bad) { dismiss(); return { ok: false, msg: bad.msg }; }
       const a5 = H.ajax.slice(from.a).find((x) => x.http >= 400);
       if (a5) return { ok: false, msg: `${a5.ep} HTTP ${a5.http}${a5.http === 500 ? " (Internal Server Error)" : ""}` };
+      // 저장·상태 변경 응답의 returnCode가 0이 아니면 오류 (문구에 '오류'가 없어도: 예 "OOO님의 주휴일을 설정해주세요")
+      const rcBad = H.ajax.slice(from.a).find((x) => /^(saveData_prc|statusChangeData_prc|uploadDayExcelFile_prc)$/.test(x.ep) && x.rc != null && x.rc !== "0");
+      if (rcBad) { await sleep(400); const m2 = H.msgs.slice(from.m).filter((x) => !good.test(x.msg)).pop(); dismiss(); return { ok: false, msg: rcBad.err || (m2 && m2.msg) || `${rcBad.ep} returnCode ${rcBad.rc}` }; }
       if (okIf && okIf()) return { ok: true, msg: "" };
       await sleep(150);
     }
@@ -214,102 +218,55 @@ async function hrsStep(op, a) {
     return { ok: true, toast: r.msg, confirms: seen };
   }
 
-  if (op === "dayOpen") { // 팝업 열기 → (openMdl이 MON을 눌러 첫 로딩) → 그 로딩이 끝난 뒤 그 요일 label → 그날 자료 → 업로드 전 사번
-    //  11/16 KM 실제 확인: 팝업 저장 뒤 [일자별 수정]을 다시 열면 openMdl이 요일 라디오를 새로 만들고 MON을 눌러 getMasterList(DETAIL)로 로딩함.
-    //  그 응답이 끝나고 표가 다시 그려진 뒤(행 workType이 '')에 label[for="hrt2325_pop_title_{DAY}"]를 눌러야 함. 그 전 표를 읽으면 지난 시도의 행이 섞임
-    const D = a.dow;
-    const cur = () => (document.querySelector('input[name="hrt2325_pop_title"]:checked') || {}).value || "";
-    // 로딩 끝 = 태그한 getMasterList_prc 응답(HTTP 200·returnCode 0). p_error_code MSG0001(행 있음)·MSG0006(0행) 둘 다 정상 → 0행인 요일도 정상 (11/16 KM)
-    const okResp = (ax) => !!ax && ax.http === 200 && (ax.rc == null || ax.rc === "0");
-    const drawn = () => { const rs = popRows(); return !!rs && rs.every((r) => (r.workType == null ? "" : String(r.workType)) === ""); }; // 다시 그려짐 (0행도 됨)
-    const sig = () => { const rs = popRows() || []; return rs.length + ":" + rs.map((r) => r.emp_code).join(","); };
-    async function settle(from, ms) { // 태그한 응답 → 로딩 덮개 → 표가 0.3초 동안 그대로
-      const ax = await waitAjax(from, "getMasterList_prc", ms);
-      if (!ax) return null;
-      await idle(10e3);
-      const t0 = Date.now(); let last = sig(), since = Date.now();
-      while (Date.now() - t0 < 5e3) { await sleep(100); const g = sig(); if (g !== last) { last = g; since = Date.now(); } if (drawn() && Date.now() - since >= 300) break; }
-      return ax;
-    }
-    const why = (ax) => (ax ? `HTTP ${ax.http}${ax.rc != null ? " · returnCode " + ax.rc : ""}${ax.ec ? " · " + ax.ec : ""}` : "응답 없음");
-    let opened = false;
-    if (!popOpen()) {
-      // 앞 요일 팝업이 완전히 닫힐 때까지 (isShown false · display none · backdrop 0). 멈췄으면 정리하고 다시
-      if (!(await waitClosed(3000))) { await unstick(); if (!(await waitClosed(2000))) return fail("upload", "앞 팝업이 닫히지 않아요 (modal-backdrop이 남음)"); }
-      const btn = $id("hrt2325_btn_pop"); if (!btn || off(btn)) return fail("upload", "[일자별 수정] 단추가 없거나 꺼져 있어요");
-      const m0 = mark();
-      const seen = await withConfirm(null, async () => { tap(btn); await sleep(300); });
-      if (seen.length) return fail("upload", "저장 안 된 내역이 있다고 해서 멈춤: " + clean(seen[0]));
-      for (let k = 0; k < 50 && !popOpen(); k++) await sleep(150);
-      if (!popOpen()) return fail("upload", "[일자별 수정] 창이 안 열렸어요");
-      const ax = await settle(m0, 60e3); opened = true; // 첫 로딩(DETAIL) 실측 7~21초 → 한도 60초
-      if (!ax) return fail("upload", "팝업 첫 로딩(MON) 응답이 60초 안에 안 왔어요");
-      if (!okResp(ax)) return fail("upload", `팝업 첫 로딩 실패 (${why(ax)})`);
-    }
-    let loaded = opened && cur() === D; // 새로 열었고 바라던 요일(MON)이 이미 눌려 로딩됨
-    for (let t = 0; t < 3 && !loaded; t++) {
-      const lb = document.querySelector(`label[for="hrt2325_pop_title_${D}"]`) || (() => { const r = document.querySelector(`input[name="hrt2325_pop_title"][value="${D}"]`); return r && ((r.id && document.querySelector(`label[for="${r.id}"]`)) || r.closest("label") || r); })();
-      if (!lb) return fail("upload", `요일 탭(${D})을 못 찾았어요`);
-      const m1 = mark();
-      // "수정중인 데이터가 존재합니다. 초기화하고 다른 일자로 변경 하시겠습니까?" → 앞 요일 저장이 확인된 경우에만 예
-      const seen = await withConfirm(a.prevSaved ? /수정중인 데이터가 존재합니다/ : null, async () => { tap(lb); });
-      if (seen.length && !(a.prevSaved && /수정중인 데이터가 존재합니다/.test(seen[0]))) return fail("upload", `${D}로 바꾸려는데 확인창이 떠서 멈춤 (앞 요일 저장 안 됨): ${clean(seen[0])}`);
-      const ax = await settle(m1, 30e3); // 요일 전환 실측 2~4초 → 한도 30초
-      if (ax && !okResp(ax)) return fail("upload", `${D} 자료 로딩 실패 (${why(ax)})`);
-      loaded = cur() === D && okResp(ax);
-    }
-    if (!loaded) return fail("upload", `요일 탭(${D})으로 바꾸고 그날 자료를 불러오지 못했어요 (지금 ${cur() || "선택 없음"}, 3번 시도)`);
-    const rows = popRows();
-    if (!rows) return fail("upload", "팝업 표(#hrt2325_pop_list_html)를 못 읽었어요");
-    return { ok: true, day: cur(), before: rows.map((r) => String(r.emp_code || "")).filter(Boolean), rows0: rows.length };
+  // ---- 카드 입력 (11/17 KM: 업로드 방식은 쓰지 않음) — 메인 표(#hrt2325_info_list_html) 행 모델에 값을 넣고 workType='U' → [저장] 한 번 ----
+  const mainGrid = () => { const el = $id("hrt2325_info_list_html"); return el && $ ? $(el).data("kendoGrid") : null; };
+  const DAYS7 = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+  if (op === "cardMap") { // 지금 탭(소속구분)의 메인 표: 사번 + 요일별 수정 가능(edit_yn). 이름·직책은 안 읽음
+    const g = mainGrid(); if (!g) return fail("week", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
+    const v = (x) => (x == null ? "" : String(x));
+    return { ok: true, dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
   }
-
-  if (op === "dayUpload") { // 숨은 파일 칸에 엑셀 → change → 화면 반영 (저장 아님)
-    const inp = $id("hrt2325_day_excel_file");
-    if (!inp) return fail("upload", "엑셀 업로드 칸(#hrt2325_day_excel_file)이 없어요");
-    const bin = atob(a.b64), u8 = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
-    const dt = new DataTransfer(); dt.items.add(new File([u8], a.name, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  if (op === "learnCodes") { // 근태유형 코드표: 표의 근태 칸 편집기(드롭다운)를 잠깐 열어 목록만 읽고 닫음 (값은 안 바꿈)
+    const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요");
+    const leaf = (cs) => [].concat(...(cs || []).map((c) => (c.columns ? leaf(c.columns) : [c])));
+    const unl = leaf(g.columns || []).filter((c) => !c.hidden && !c.locked), ci = unl.findIndex((c) => c.field === "MON_time_item_code_p");
+    const tbl = g.table && g.table[0] ? g.table[0] : null, tr = tbl && tbl.querySelector("tr[data-uid]");
+    if (ci < 0 || !tr) return { ok: true, list: [], why: "표가 비어 있거나 근태 칸을 못 찾음" };
+    let list = [];
+    try {
+      g.editCell($(tr.cells[ci])); await sleep(500);
+      const box = $(tr.cells[ci]);
+      const dd = (box.find("[data-role='dropdownlist']").data("kendoDropDownList")) || (box.find("[data-role='combobox']").data("kendoComboBox"));
+      if (dd) { const vf = dd.options.dataValueField || "value", tf = dd.options.dataTextField || "text"; const raw = dd.dataSource.data(); list = [].slice.call(raw.toJSON ? raw.toJSON() : raw).map((x) => ({ v: String(x[vf] == null ? "" : x[vf]), t: String(x[tf] == null ? "" : x[tf]).slice(0, 20) })).filter((x) => x.v); }
+    } catch (e) {}
+    try { g.closeCell(); } catch (e) {}
+    try { if (g.dataSource.hasChanges()) g.dataSource.cancelChanges(); } catch (e) {}
+    await sleep(200);
+    return { ok: true, list };
+  }
+  if (op === "cardSave") { // a.emps: [{ empNo, days: [{ dow, code, in, out, brk }] }] → 행 모델에 넣고 workType 'U' → [저장] 한 번
+    const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
+    const by = new Map([].slice.call(g.dataSource.data()).map((r) => [String(r.emp_code), r]));
+    for (const e of a.emps) { // 넣기 전에 다 있는지·수정 가능한지 먼저 (하나라도 아니면 아무것도 안 넣음)
+      const r = by.get(e.empNo); if (!r) return fail("save", `이 탭(${a.dept})에 없는 사번 ${e.empNo}`);
+      const no = e.days.filter((d) => String(r[d.dow + "_edit_yn"]) === "N").map((d) => d.dow);
+      if (no.length) return fail("save", `사번 ${e.empNo}: ${no.join(",")}는 수정할 수 없는 날이에요(edit_yn N)`);
+    }
+    const put = (r, f, val) => { if (typeof r.set === "function") r.set(f, val); else { r[f] = val; r.dirty = true; } };
+    for (const e of a.emps) { const r = by.get(e.empNo); for (const d of e.days) { put(r, d.dow + "_time_item_code_p", d.code); put(r, d.dow + "_work_on_p_hhmm", d.in); put(r, d.dow + "_work_off_p_hhmm", d.out); put(r, d.dow + "_break_time_p_hhmm", d.brk); } put(r, "workType", "U"); }
+    await sleep(400);
+    try { if (typeof window.hrt2325.btnEnable === "function") window.hrt2325.btnEnable(); } catch (e) {}
+    const sv = $id("hrt2325_btn_save");
+    for (let k = 0; k < 20 && (!sv || off(sv)); k++) await sleep(150);
+    if (!sv || off(sv)) { try { g.dataSource.cancelChanges(); } catch (e) {} return fail("save", "값을 넣었는데 [저장] 단추가 안 켜져요"); }
     const m0 = mark();
-    try { inp.value = ""; } catch (e) {}
-    inp.files = dt.files; inp.dispatchEvent(new Event("change", { bubbles: true }));
-    const r = await waitMsg(m0, /엑셀 데이터가 화면에 반영/, 17e3); await idle(10e3);
-    const ax = H.ajax.slice(m0.a).find((x) => x.ep === "uploadDayExcelFile_prc");
-    if (!r.ok) return fail("upload", r.timeout ? "엑셀을 올렸는데 '화면에 반영' 문구가 안 떴어요" : r.msg, { http: ax && ax.http });
-    return { ok: true, toast: r.msg, http: ax ? ax.http : null };
-  }
-
-  if (op === "dayCheck") { // 행마다: chk_message · 사번 집합 · 근태 코드 · 시간
-    const rows = popRows(); if (!rows) return fail("upload", "업로드 뒤 팝업 표를 못 읽었어요");
-    const D = a.dow, sent = new Map(a.rows.map((r) => [r.empNo, r])), errs = [];
-    const got = rows.map((r) => ({ empNo: String(r.emp_code || ""), name: String(r.emp_name || ""), chk: clean(r.chk_message), code: r[D + "_time_item_code_p"], on: r[D + "_work_on_p_hhmm"], offT: r[D + "_work_off_p_hhmm"], brk: r[D + "_break_time_p_hhmm"] }));
-    for (const g of got) {
-      const s = sent.get(g.empNo);
-      if (g.chk) errs.push({ empNo: g.empNo, name: s ? s.name : g.name, msg: g.chk });
-      else if (!s) errs.push({ empNo: g.empNo, name: g.name, msg: "보낸 파일에 없는 행이 표에 있어요" });
-      else if (g.code == null || g.code === "") errs.push({ empNo: g.empNo, name: s.name, msg: `근태유형 '${s.kind}'이 HR 코드로 안 바뀌었어요` });
-      else if (s.kind === "출근" && String(g.code) !== "10") errs.push({ empNo: g.empNo, name: s.name, msg: `출근인데 근태 코드가 ${g.code}` });
-      else if (s.kind === "휴무" && String(g.code) !== "17") errs.push({ empNo: g.empNo, name: s.name, msg: `휴무인데 근태 코드가 ${g.code}` });
-      else if (hm(g.on) !== hm(s.in) || hm(g.offT) !== hm(s.out) || hm(g.brk) !== hm(s.brk)) errs.push({ empNo: g.empNo, name: s.name, msg: `시간이 달라요 (보냄 ${s.in || "-"}~${s.out || "-"}/${s.brk || "-"} · 표 ${g.on || "-"}~${g.offT || "-"}/${g.brk || "-"})` });
-    }
-    const gotSet = new Set(got.map((g) => g.empNo));
-    a.rows.forEach((s) => { if (!gotSet.has(s.empNo)) errs.push({ empNo: s.empNo, name: s.name, msg: "보낸 행이 표에 없어요" }); });
-    if (got.length !== a.rows.length) errs.push({ msg: `표 ${got.length}행 · 파일 ${a.rows.length}명 — 수가 달라요` });
-    if (errs.length) { await closePop(); return fail("upload", `${D} 행 오류 ${errs.length}건 — 저장 안 함`, { rowErrors: errs.filter((e) => e.empNo) }); }
-    return { ok: true, n: got.length };
-  }
-
-  if (op === "daySave") { // 팝업 저장 (선택한 요일만, 창은 스스로 닫히고 메인 표 다시 조회)
-    const sv = $id("hrt2325_pop_btn_save"); if (!sv || off(sv)) return fail("save", "팝업 [저장] 단추가 없거나 꺼져 있어요");
-    const m0 = mark();
-    const seen = await withConfirm(/저장\s*하시겠습니까/, async () => { tap(sv); });
-    const r = await waitMsg(m0, /저장되었습니다/, 17e3); await idle(10e3);
+    const seen = await withConfirm(/저장/, async () => { tap(sv); });
+    if (seen.length && !/저장/.test(seen[0])) return fail("save", "저장 확인 문구가 달라 멈춤: " + clean(seen[0]));
+    const r = await waitMsg(m0, /저장되었습니다/, 30e3); await idle(15e3);
     const ax = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc");
-    if (!r.ok) { await closePop(); return fail("save", r.timeout ? (ax ? `저장 응답(saveData_prc HTTP ${ax.http}) 뒤 '저장되었습니다'가 안 떴어요` : "저장 단추를 눌렀는데 서버 호출이 없었어요(화면이 저장을 막음)") : r.msg, { confirms: seen }); }
-    // 팝업이 다 닫히고(hidden.bs.modal 뒤 상태) 메인 표 다시 조회(getMasterList_prc) 응답까지
-    let closed = await waitClosed(5000);
-    if (!closed) closed = await unstick();
+    if (!r.ok) { try { g.dataSource.cancelChanges(); } catch (e) {} return fail("save", r.timeout ? (ax ? `저장 응답(saveData_prc ${ax.http}/${ax.rc}) 뒤 '저장되었습니다'가 안 떴어요` : "[저장]을 눌렀는데 서버 호출이 없었어요(화면이 저장을 막음)") : r.msg, { confirms: seen }); }
     const re = await waitAjax(m0, "getMasterList_prc", 30e3); await idle(15e3);
-    return { ok: true, toast: r.msg, http: ax ? ax.http : null, closed, reload: re ? re.http : null, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) };
+    return { ok: true, toast: r.msg, http: ax ? ax.http : null, reload: re ? re.http : null, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) };
   }
 
   if (op === "status") { // 다시 검색해서 지금 상태 (공지·확정 전 확인)
