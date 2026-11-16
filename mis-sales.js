@@ -598,13 +598,13 @@
         const qty = f(/주문\s*수량|발주\s*수량|ORD_?QTY|QTY_?ORD|수량|QTY/i, /단가|금액|AMT|PRICE|합계/i);
         const od = f(/주문\s*일|발주\s*일|ORD_?DT|DT_?ORD|일자/i, /입고|납품|배송|DLV|IN_?DT/i);
         const dd = f(/입고|납품|배송|DLV|IN_?DT/i);
-        const name = f(/품목\s*명|상품\s*명|ITEM_?NM|GOODS_?NM|NM_?ITEM|NM_?GOODS/i), unit = f(/단위|UNIT/i, /단가/i);
-        if (code && qty && (od || dd)) { use = { rs, code, qty, od: od || dd, dd, name, unit, all: !(o.pagination && totalOf(g) > rs.length) }; break; }
+        const name = f(/품목\s*명|상품\s*명|ITEM_?NM|GOODS_?NM|NM_?ITEM|NM_?GOODS/i), unit = f(/단위|UNIT/i, /단가/i); const cust = f(/거래처\s*명|NM_?CUST/i); // 11/16 KM "유한락스는 온세물류" — 업체(거래처명)도 남김(직원 이름 아님)
+        if (code && qty && (od || dd)) { use = { rs, code, qty, od: od || dd, dd, name, unit, cust, all: !(o.pagination && totalOf(g) > rs.length) }; break; }
       }
       if (!use) return finish(false, `주문현황 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
       const by = new Map();
       use.rs.forEach((r) => { const dt = toIso(r[use.od.field]), q = num(r[use.qty.field]), c = String(r[use.code.field] ?? "").trim(); if (!dt || !c || !(q > 0) || dt < from || dt > to) return; if (!by.has(dt)) by.set(dt, []);
-        by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "", deliv: use.dd && use.dd !== use.od ? toIso(r[use.dd.field]) : null }); });
+        by.get(dt).push({ code: c, name: use.name ? String(r[use.name.field] ?? "").trim().slice(0, 60) : "", qty: q, unit: use.unit ? String(r[use.unit.field] ?? "").trim().slice(0, 10) : "", deliv: use.dd && use.dd !== use.od ? toIso(r[use.dd.field]) : null, ...(use.cust && r[use.cust.field] ? { v: String(r[use.cust.field]).trim().slice(0, 30) } : {}) }); });
       step = "시트 저장";
       let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misOrder." + dt, { at: Date.now(), rows }); saved++; }
       // 다 읽었고(쪽 나눔 없음) 주문일 칸이 있으면, 기간 안에서 발주가 없던 날도 "발주 없음"으로 남김 (앱이 그날 입고를 '모름' 대신 '없음'으로 앎). 오늘은 아직 더 시킬 수 있어 뺌
