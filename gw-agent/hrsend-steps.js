@@ -163,14 +163,16 @@ async function hrsStep(op, a) {
       try { const w = $(hid).data("kendoDropDownList") || $(hid).data("kendoComboBox"); if (w) { w.value(a.dept); w.trigger("change"); done = true; } } catch (e) {}
       if (!done || String(hid.value) !== a.dept) {
         const box = hid.closest("td, li, .search-item, .form-group, div") || document.body;
-        const trig = [...box.querySelectorAll("button, a, span, .k-dropdown, .k-picker, [role=listbox], [role=combobox]")].find((b) => vis(b) && /^(BOH|FOH)\b/.test(tx(b))) || [...document.querySelectorAll("button, a, .k-dropdown, .k-picker, [role=combobox]")].find((b) => vis(b) && /^(BOH|FOH)$/.test(tx(b)));
+        const DEPT = /^(BOH|FOH|STORE|전체|소속구분|선택)?$/;
+        const trig = [...box.querySelectorAll("button, a, span, .k-dropdown, .k-picker, [role=listbox], [role=combobox]")].find((b) => vis(b) && /^(BOH|FOH|STORE|전체)$/.test(tx(b))) || [...document.querySelectorAll("button, a, .k-dropdown, .k-picker, [role=combobox]")].find((b) => vis(b) && /^(BOH|FOH|STORE|전체)$/.test(tx(b)));
         if (trig) { tap(trig); await sleep(300); }
-        const opt = [...document.querySelectorAll("li, a, button, [role=option], label, span")].find((x) => vis(x) && tx(x) === a.dept && x !== trig && !(trig && trig.contains(x)));
+        const want = a.dept === "" ? (x) => /^(전체|-\s*전체\s*-|)$/.test(tx(x)) && (x.tagName === "LI" || x.getAttribute("role") === "option") : (x) => tx(x) === a.dept; // 빈칸 = 전체 (11/16 KM)
+        const opt = [...document.querySelectorAll("li, a, button, [role=option], label, span")].find((x) => vis(x) && want(x) && x !== trig && !(trig && trig.contains(x)) && DEPT.test(tx(x)));
         if (opt) tap(opt);
         await sleep(400);
       }
     }
-    if (String(hid.value) !== a.dept) return fail("week", `소속구분을 ${a.dept}로 못 맞췄어요 (지금 ${hid.value || "빈칸"})`);
+    if (String(hid.value) !== a.dept) return fail("week", `소속구분을 ${a.dept || "전체(빈칸)"}로 못 맞췄어요 (지금 ${hid.value || "빈칸"})`);
     const md = (d) => d.slice(5, 7) + "/" + d.slice(8, 10);
     const label = () => { const re = /(\d{1,2})\s*주\s*\(\s*(\d{2})\/(\d{2})\s*~\s*(\d{2})\/(\d{2})\s*\)/; for (const el of document.querySelectorAll("span, div, label, input, button, a, strong, p, td")) { if (!vis(el)) continue; const s = el.tagName === "INPUT" ? el.value : tx(el); const m = re.exec(s || ""); if (m && (s || "").length < 60) return { text: m[0], from: m[2] + "/" + m[3], to: m[4] + "/" + m[5] }; } return null; };
     const want = { from: md(a.weekStart), to: md(a.weekEnd) };
@@ -316,7 +318,24 @@ async function hrsStep(op, a) {
     return { ok: !!ax, status: ax && ax.st ? ax.st : [], notice: !off($id("hrt2325_btn_notice")), confirm: !off($id("hrt2325_btn_confirm")), save: !off($id("hrt2325_btn_save")) };
   }
 
-  if (op === "final") { // 메인 저장(켜져 있을 때만) → 공지 → 확정
+  if (op === "weekRows") { // 지금 [검색]한 메인 표에서 공지 전 점검에 필요한 칸만: 사번·이름·요일별 근태 코드·시간 (+ 화면에 보이는 근태 이름으로 코드→이름표)
+    //  직책(duty_name) 칸은 휴대폰 번호가 같이 있어 읽지 않음. 이름은 보드에 "어느 직원" 알려 줄 때만 씀(확장 기록에는 안 남김)
+    const el = $id("hrt2325_info_list_html"), g = el && $ && $(el).data("kendoGrid");
+    if (!g) return fail("precheck", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
+    const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], data = [].slice.call(g.dataSource.data());
+    const leaf = (cs) => [].concat(...(cs || []).map((c) => (c.columns ? leaf(c.columns) : [c])));
+    const cols = leaf(g.columns || []).filter((c) => !c.hidden), unl = cols.filter((c) => !c.locked);
+    const labels = {};
+    const tbl = g.table && g.table[0] ? g.table[0] : el.querySelector(".k-grid-content table") || el.querySelector("table");
+    [...(tbl ? tbl.querySelectorAll("tr[data-uid]") : [])].forEach((tr) => {
+      let di = null; try { di = g.dataItem(tr); } catch (e) {} if (!di) return;
+      unl.forEach((c, i) => { if (!/^(MON|TUE|WED|THU|FRI|SAT|SUN)_time_item_code_p$/.test(c.field || "")) return; const code = String(di[c.field] == null ? "" : di[c.field]); const t = tx(tr.cells[i]).replace(/\d{1,2}:\d{2}.*$/, "").trim(); if (code && t && !labels[code]) labels[code] = t.slice(0, 20); });
+    });
+    const v = (x) => (x == null ? "" : String(x));
+    return { ok: true, dept: v(($id("hrt2325_dept_category") || {}).value), labels, rows: data.map((r) => ({ empNo: v(r.emp_code), name: v(r.emp_name).slice(0, 30), days: DAYS.map((D) => ({ dow: D, code: v(r[D + "_time_item_code_p"]), in: v(r[D + "_work_on_p_hhmm"]), out: v(r[D + "_work_off_p_hhmm"]), brk: v(r[D + "_break_time_p_hhmm"]) })) })) };
+  }
+
+  if (op === "final") { // 메인 저장(켜져 있을 때만) → 공지 → 확정 (a.skipNotice: 이미 공지된 주면 확정만)
     const steps = [];
     const main = $id("hrt2325_btn_save");
     if (main && vis(main) && !off(main)) {
@@ -325,13 +344,16 @@ async function hrsStep(op, a) {
       if (!r.ok) return fail("save", r.timeout ? "메인 저장 뒤 문구가 안 떴어요" : r.msg, { steps, confirms: seen });
       steps.push({ stage: "save", msg: r.msg });
     } else steps.push({ stage: "save", msg: "메인 저장 꺼져 있음 → 건너뜀" });
+    let m0, seen, r;
+    if (!a.skipNotice) {
     const nb = $id("hrt2325_btn_notice");
     if (!nb || off(nb)) return fail("notice", "[공지] 단추가 꺼져 있어요 (주차 상태 확인)", { steps });
-    let m0 = mark(); let seen = await withConfirm(/공지\s*하시겠습니까/, async () => { tap(nb); });
+    m0 = mark(); seen = await withConfirm(/공지\s*하시겠습니까/, async () => { tap(nb); });
     if (seen.length && !/공지\s*하시겠습니까/.test(seen[0])) return fail("notice", "공지 확인 문구가 달라 멈춤: " + clean(seen[0]), { steps });
-    let r = await waitMsg(m0, /공지\s*되었습니다/, 20e3); await idle(15e3);
+    r = await waitMsg(m0, /공지\s*되었습니다/, 20e3); await idle(15e3);
     if (!r.ok) return fail("notice", r.timeout ? "공지 뒤 '공지 되었습니다'가 안 떴어요" : r.msg, { steps, confirms: seen });
     steps.push({ stage: "notice", msg: r.msg });
+    }
     if (a.stopBefore === "confirm") return { ok: true, steps, noticed: true };
     const cb = $id("hrt2325_btn_confirm");
     for (let k = 0; k < 40 && (!cb || off(cb)); k++) await sleep(150);

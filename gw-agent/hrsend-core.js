@@ -140,5 +140,32 @@
     }
     return out;
   }
+
+  // ---- 공지 전 매장 전체 점검 (11/16 KM: 공지·확정은 매장 전체에 한 번에 적용) ----
+  //  tabs: [{ dept: "BOH"|"FOH"|"STORE", rows: [{ empNo, name, days: [{ dow, code, in, out, brk }] }], labels: { code: "화면 이름" } }]
+  //  codes: 근태 코드 → 종류. 출근 10·휴무 17은 확인됨, 나머지는 화면에 보이는 이름(주휴·공휴)으로 알아냄. over로 덮어쓸 수 있음
+  //  점검: 시간 없는 출근 0개 · 직원마다 주휴일 정확히 1일 · 주 52시간 이하. 걸리면 직원·요일 목록
+  function hrsPublishCheck(tabs, over) {
+    const labels = {}; (tabs || []).forEach((t) => Object.assign(labels, t.labels || {}));
+    const kindOf = (code) => { const c = String(code || ""); if (!c) return ""; if (over && over[c]) return over[c]; if (c === "10") return "출근"; if (c === "17") return "휴무"; const l = String(labels[c] || ""); if (/주휴/.test(l)) return "주휴일"; if (/공휴/.test(l)) return "공휴일"; if (/출근/.test(l)) return "출근"; if (/휴무/.test(l)) return "휴무"; return "?" + c + (l ? "(" + l + ")" : ""); };
+    const DK = { MON: "월", TUE: "화", WED: "수", THU: "목", FRI: "금", SAT: "토", SUN: "일" };
+    const errors = [], seen = new Map(); let n = 0;
+    for (const t of tabs || []) for (const r of t.rows || []) {
+      if (!r.empNo || seen.has(r.empNo)) continue; seen.set(r.empNo, t.dept); n++;
+      const who = { empNo: r.empNo, name: r.name, dept: t.dept };
+      let wk = 0, min = 0;
+      for (const d of r.days || []) {
+        const k = kindOf(d.code), tin = hhmm(d.in), tout = hhmm(d.out), brk = hhmm(d.brk);
+        if (k[0] === "?") errors.push({ ...who, day: d.dow, msg: `${DK[d.dow]} 근태 코드 ${k.slice(1)}가 무엇인지 몰라요` });
+        if (k === "주휴일") wk++;
+        if (k === "출근" && (!tin || !tout)) errors.push({ ...who, day: d.dow, msg: `${DK[d.dow]} 출근인데 출근·퇴근 시간이 없어요` });
+        if ((k === "출근" || k === "공휴일") && tin && tout) min += workMin({ in: tin, out: tout, brk: brk || "" });
+      }
+      if (wk !== 1) errors.push({ ...who, day: null, msg: `주휴일이 주에 ${wk}일 (정확히 1일이어야 함)` });
+      if (min > 52 * 60) errors.push({ ...who, day: null, msg: `주 ${Math.floor(min / 60)}시간 ${min % 60}분 (52시간 넘음)` });
+    }
+    return { ok: !errors.length, errors, n, codes: Object.fromEntries(Object.keys(labels).map((c) => [c, kindOf(c)])) };
+  }
+  G.hrsPublishCheck = hrsPublishCheck;
   G.hrsCheck = hrsCheck; G.hrsFiles = hrsFiles; G.hrsXlsx = hrsXlsx; G.hrsHHMM = hhmm; G.HRS_DOWS = DOWS;
 })(typeof self !== "undefined" ? self : globalThis);

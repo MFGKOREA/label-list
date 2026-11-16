@@ -17,8 +17,11 @@ execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyo
 // ---- 가짜 HR 상태 ----
 //  REG: HR에 등록된 직원(부서별 사번→이름). status: 주차별 상태(EDIT·NOTICE·CONFIRM, ""=상태 없음)
 let S;
-const REG0 = { BOH: { "90000001": "시험일", "90000002": "시험이", "90000003": "시험삼" }, FOH: { "90000009": "시험구" } };
-const reset = (o) => { S = Object.assign({ login: true, status: { 48: "EDIT" }, reg: JSON.parse(JSON.stringify(REG0)), saves: [], notice: 0, confirm: 0, init: 0, uploads: 0, uploadHttp: 200, deptStart: "FOH", weekStart: 46, calls: [] }, o || {}); };
+const REG0 = { BOH: { "90000001": "시험일", "90000002": "시험이", "90000003": "시험삼" }, FOH: { "90000009": "시험구" }, STORE: { "90000020": "시험점" } };
+const KCODE = { 출근: "10", 휴무: "17", 주휴일: "18", 공휴일: "19" }, KNAME = { 10: "출근", 17: "휴무", 18: "주휴일", 19: "공휴일" }, DOWS0 = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+// 저장된 주 자료 (메인 표에 보이는 값): week[사번][요일] = { code, on, off, brk }. STORE 직원은 미리 채워 둠(정상: 수 주휴일·나머지 휴무)
+const weekOf = (pat) => Object.fromEntries(DOWS0.map((d, i) => [d, pat[i] === "출근" ? { code: "10", on: "09:00", off: "18:00", brk: "01:00" } : { code: KCODE[pat[i]] || pat[i], on: "", off: "", brk: "" }]));
+const reset = (o) => { S = Object.assign({ week: { "90000020": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]) }, login: true, status: { 48: "EDIT" }, reg: JSON.parse(JSON.stringify(REG0)), saves: [], notice: 0, confirm: 0, init: 0, uploads: 0, uploadHttp: 200, deptStart: "FOH", weekStart: 46, calls: [] }, o || {}); };
 reset();
 const WEEKS = { 45: ["11/02", "11/08"], 46: ["11/09", "11/15"], 47: ["11/16", "11/22"], 48: ["11/23", "11/29"], 49: ["11/30", "12/06"] };
 const hrPage = () => `<!doctype html><meta charset="utf-8"><title>HR</title><body>
@@ -41,7 +44,10 @@ const enc=(o)=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
 let pop=[];const grid={dataSource:{view(){return pop;}}};
 document.querySelector('a[menu-app-id="HRT/W_HRT2325"]').addEventListener('click',(e)=>{e.preventDefault();setTimeout(render,300);});
 function btns(){document.getElementById('hrt2325_btn_notice').disabled=status!=='EDIT';document.getElementById('hrt2325_btn_confirm').disabled=status!=='NOTICE';document.getElementById('hrt2325_btn_init').disabled=!(wk>=47);}
-async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';btns();document.getElementById('hrt2325_master_list_html').innerHTML='<table><tbody><tr><td>직원 (휴대폰 칸)</td></tr></tbody></table>';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});const rows=JSON.parse(decParam(mr.j.data.infoEnc));document.getElementById('hrt2325_master_list_html').__k={kendoGrid:{dataSource:{data(){return rows.map(x=>({emp_code:x.emp_code,emp_name:x.emp_name,title:'직책 (휴대폰)'}));},view(){return this.data();}}}};}
+async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';btns();const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});const rows=JSON.parse(decParam(mr.j.data.infoEnc));
+ const cols=[{field:'workType'},{field:'emp_name'},{field:'duty_name'}].concat(DOWS.map(d=>({field:d+'_time_item_code_p'})));const KN={'10':'출근','17':'휴무','18':'주휴일','19':'공휴일'};
+ const el=document.getElementById('hrt2325_info_list_html');el.innerHTML='<table><tbody>'+rows.map((x,i)=>'<tr data-uid="u'+i+'"><td></td><td>'+x.emp_name+'</td><td>직책 010-xxxx</td>'+DOWS.map(d=>'<td>'+(KN[x[d+'_time_item_code_p']]||'')+(x[d+'_work_on_p_hhmm']?' '+x[d+'_work_on_p_hhmm']+'~'+x[d+'_work_off_p_hhmm']:'')+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+ const tbl=el.querySelector('table');el.__k={kendoGrid:{columns:cols,table:[tbl],dataItem(tr){return rows[+tr.getAttribute('data-uid').slice(1)];},dataSource:{data(){return rows;},view(){return rows;}}}};}
 let dirty=false,curDow='MON';
 async function loadDay(dow){const r=await ajax('getMasterList_prc',{workType:'DETAIL',dept,wk,dow});await new Promise(r=>setTimeout(r,250));pop=JSON.parse(decParam(r.j.data.infoEnc)).map(x=>Object.assign(x,{workType:''}));dirty=false;curDow=dow;}
 // openMdl 흉내: 요일 라디오를 새로 만들고 MON을 눌러 로딩. 로딩 전까지는 지난 표(workType 'U')가 남아 있음
@@ -52,17 +58,17 @@ function render(){document.getElementById('app').innerHTML=\`
  <input type="hidden" id="hrt2325_search_site_code" value="5090"><input type="hidden" id="hrt2325_dept_category" value="\${dept}">
  <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}">
  <label><input type="checkbox" id="hrt2325_search_leave_yn" checked>휴직자 미포함</label>
- <span class="dd"><button type="button" id="ddb">\${dept}</button><ul id="ddl" style="display:none"><li>BOH</li><li>FOH</li></ul></span>
+ <span class="dd"><button type="button" id="ddb">\${dept||"전체"}</button><ul id="ddl" style="display:none"><li>전체</li><li>BOH</li><li>FOH</li><li>STORE</li></ul></span>
  <button onclick="hrt2325.moveWeek('prev')">‹</button><span id="wk">\${wk}주(\${W[wk][0]}~\${W[wk][1]})</span><button onclick="hrt2325.moveWeek('next')">›</button>
  <button id="hrt2325_btn_search">검색</button><button id="hrt2325_btn_pop">일자별 수정</button><button id="hrt2325_btn_save" disabled>저장</button>
  <button id="hrt2325_btn_notice" disabled>공지</button><button id="hrt2325_btn_confirm" disabled>확정</button><button id="hrt2325_btn_init" disabled>초기화</button><button id="hrt2325_btn_copy">전주복사</button>
- <div class="k-grid" id="hrt2325_master_list_html"></div>
+ <div class="k-grid" id="hrt2325_info_list_html"></div>
  <div id="hrt2325_pop_sub" style="display:none"><div id="tabs"></div>
    <form id="hrt2325_day_frm_file_upload"><input type="file" id="hrt2325_day_excel_file" style="display:none"></form>
    <div id="hrt2325_pop_list_html" class="k-grid"></div><button id="hrt2325_pop_btn_save">저장</button><button class="btn-close">닫기</button></div>\`;
  document.getElementById('hrt2325_pop_list_html').__k={kendoGrid:grid};const MD=mkModal(document.getElementById('hrt2325_pop_sub'));window.__saves=0;
  document.getElementById('ddb').onclick=()=>{document.getElementById('ddl').style.display='block';};
- document.querySelectorAll('#ddl li').forEach(li=>li.onclick=()=>{dept=li.textContent;document.getElementById('hrt2325_dept_category').value=dept;document.getElementById('ddb').textContent=dept;document.getElementById('ddl').style.display='none';});
+ document.querySelectorAll('#ddl li').forEach(li=>li.onclick=()=>{dept=li.textContent==='전체'?'':li.textContent;document.getElementById('hrt2325_dept_category').value=dept;document.getElementById('ddb').textContent=dept||'전체';document.getElementById('ddl').style.display='none';});
  document.getElementById('hrt2325_btn_search').onclick=search;
  document.getElementById('hrt2325_btn_pop').onclick=()=>{if(document.querySelectorAll('.modal-backdrop').length){window.__dblBackdrop=1;}MD.show();curDow='';openMdl();};
  document.querySelector('#hrt2325_pop_sub .btn-close').onclick=()=>MD.hide();
@@ -86,7 +92,7 @@ function parseXlsx(u8){const files={};let p=0;const dv=new DataView(u8.buffer);w
  for(const m of files['xl/worksheets/sheet1.xml'].matchAll(/<c r="([A-Z]+)(\\d+)"([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/c>)/g)){const r=+m[2]-1,c=m[1].charCodeAt(0)-65;rows[r]=rows[r]||['','','','','','',''];const v=/<v>(\\d+)<\\/v>/.exec(m[4]||'');rows[r][c]=v&&/t="s"/.test(m[3])?ss[+v[1]]:'';}
  return rows;}
 </script></body>`;
-const boardPage = `<!doctype html><meta charset="utf-8"><title>HR Board</title><body>board<script>window.__msgs=[];addEventListener('message',e=>{if(e.source===window&&/^MFG_HR_(AGENT_READY|SEND_ACK|SEND_PROGRESS|SEND_RESULT)/.test((e.data||{}).type))window.__msgs.push(e.data);});window.send=(o)=>window.postMessage(Object.assign({type:'MFG_HR_SEND'},o),location.origin);</script></body>`;
+const boardPage = `<!doctype html><meta charset="utf-8"><title>HR Board</title><body>board<script>window.__msgs=[];addEventListener('message',e=>{if(e.source===window&&/^MFG_HR_(AGENT_READY|SEND_ACK|SEND_PROGRESS|SEND_RESULT|PUBLISH_RESULT)/.test((e.data||{}).type))window.__msgs.push(e.data);});window.send=(o)=>window.postMessage(Object.assign({type:'MFG_HR_SEND'},o),location.origin);</script></body>`;
 const hits = [];
 const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: fs.readFileSync(TMP + "/cert.pem") }, async (rq, rs) => {
   const host = String(rq.headers.host || "").replace(/:\d+$/, ""), u = new URL(rq.url, "https://x"), ck = rq.headers.cookie || "";
@@ -102,10 +108,14 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
       const enc = (o) => Buffer.from(JSON.stringify(o), "utf8").toString("base64");
       if (ep === "getMasterList_prc" && b.workType === "MASTER") { const st = S.status[b.wk] || ""; return json({ returnCode: 0, data: { infoEnc: enc(st ? [{ schedule_status: st }] : []) } }); }
       const regRows = () => { const reg = S.reg[b.dept] || {}; return Object.keys(reg).map((no) => ({ emp_code: no, emp_name: reg[no], chk_message: "" })); };
-      if (ep === "getMasterList_prc" && b.workType === "MAINROWS") return json({ returnCode: 0, data: { infoEnc: enc(S.emptyWeek ? [] : regRows()) } });
+      if (ep === "getMasterList_prc" && b.workType === "MAINROWS") {
+        const depts = b.dept ? [b.dept] : Object.keys(S.reg), rows = [];
+        if (!S.emptyWeek) depts.forEach((d) => Object.entries(S.reg[d] || {}).forEach(([no, nm]) => { const r = { emp_code: no, emp_name: nm, duty_name: "직책 010-xxxx", workType: "" }; const w = S.week[no] || {}; DOWS0.forEach((D) => { const x = w[D] || { code: "", on: "", off: "", brk: "" }; r[D + "_time_item_code_p"] = x.code; r[D + "_work_on_p_hhmm"] = x.on; r[D + "_work_off_p_hhmm"] = x.off; r[D + "_break_time_p_hhmm"] = x.brk; }); rows.push(r); }));
+        return json({ returnCode: 0, data: { infoEnc: enc(rows) } });
+      }
       if (ep === "getMasterList_prc") { await new Promise((r) => setTimeout(r, S.detailMs || 300)); const rows = S.emptyDays || S.emptyWeek ? [] : regRows(); return json({ returnCode: 0, data: { p_error_code: rows.length ? "MSG0001" : "MSG0006", p_row_count: rows.length, infoEnc: enc(rows) } }); }
       if (ep === "uploadDayExcelFile_prc") { S.uploads++; if (S.uploadHttp !== 200 || !b.ss) { rs.writeHead(500); return rs.end("Internal Server Error"); } return json({ returnCode: 0 }); }
-      if (ep === "saveData_prc") { S.saves.push(b); return json({ returnCode: 0 }); }
+      if (ep === "saveData_prc") { S.saves.push(b); (b.rows || []).forEach((x) => { const [, no, , kind, i, o, k] = x; (S.week[no] = S.week[no] || {})[b.dow] = { code: KCODE[kind] || "", on: i, off: o, brk: k }; }); return json({ returnCode: 0 }); }
       if (ep === "statusChangeData_prc") { S.status[b.wk] = b.to; if (b.to === "NOTICE") S.notice++; else S.confirm++; return json({ returnCode: 0 }); }
       if (ep === "init_prc") { S.init++; S.status[b.wk] = "EDIT"; return json({ returnCode: 0 }); }
       if (ep === "copy_prc") { S.copy = 1; return json({ returnCode: 0 }); }
@@ -147,7 +157,7 @@ async function send(o, ms = +(process.env.HRS_MS || 150000)) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
     const m = await board.evaluate((id) => window.__msgs.filter((x) => x.requestId === id), r.requestId).catch(() => []);
-    const res = m.find((x) => x.type === "MFG_HR_SEND_RESULT");
+    const res = m.find((x) => /^MFG_HR_(SEND|PUBLISH)_RESULT$/.test(x.type));
     if (res) { if (V) console.log("   결과:", JSON.stringify({ ...res, log: undefined }).slice(0, 400), "\n   기록:", res.log.map((l) => `${l.stage}${l.day ? "/" + l.day : ""} ${l.msg}`).join(" | ").slice(0, 700)); return { req: r, res, msgs: m }; }
     await sleep(500);
   }
@@ -169,20 +179,46 @@ ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.msgs.filter((m)
 reset({ status: {} });
 x = await send({ mode: "saveOnly", employees: all3() });
 ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.map((q) => q.dow).join() === "MON,TUE,WED,THU,FRI,SAT,SUN" && S.notice === 0 && !x.res.confirmed && x.res.savedEmpNos.length === 3, "saveOnly: 상태 없어도 7일 저장(팝업 다시 열 때마다 MON 첫 로딩 뒤 요일 label), 공지·확정 안 함", brief(x));
-// 3) full: EDIT → 7일 저장 → 공지 → 확정
+// 3) 예전 full → 이제 부서 전송은 저장까지만 (공지·확정은 매장 전체 PUBLISH로 따로)
 reset();
 x = await send({ employees: all3() });
-ok(x.res && x.res.ok && x.res.noticed && x.res.confirmed && x.res.stage === "confirm" && x.res.savedDays.join() === "MON,TUE,WED,THU,FRI,SAT,SUN", "full: 저장·공지·확정 ok", brief(x));
-ok(S.saves.map((s) => s.dow).join() === "MON,TUE,WED,THU,FRI,SAT,SUN" && S.notice === 1 && S.confirm === 1 && !S.init && !S.copy, `full: 요일 7번 저장(월~일) + 공지 1 + 확정 1, 초기화·전주복사 안 누름`);
+ok(x.res && x.res.ok && !x.res.noticed && !x.res.confirmed && x.res.stage === "save" && x.res.savedDays.length === 7 && S.notice === 0 && S.confirm === 0 && !S.init && !S.copy, "부서 전송(full 요청도)은 7일 저장까지만, 공지·확정 안 누름", brief(x));
 ok(S.saves[2] && JSON.stringify(S.saves[2].rows[0].slice(3)) === JSON.stringify(["주휴일", "", "", ""]), "수요일 주휴일은 시간 \"\"");
-// 4) full인데 상태 없는 주 → 업로드 전에 멈춤
+// 4) 상태 없는 주 + allowInit → 업로드 전에 초기화 → 7일 저장
 reset({ status: {} });
-x = await send({ employees: all3() });
-ok(x.res && !x.res.ok && x.res.code === "nostatus" && x.res.stage === "week" && S.uploads === 0 && S.saves.length === 0, "full + 상태 없음 → 업로드 전에 멈춤(nostatus)", brief(x));
-// 5) full + allowInit → 업로드 전에 초기화 → 끝까지
+x = await send({ mode: "saveOnly", employees: all3(), allowInit: true });
+ok(x.res && x.res.ok && S.init === 1 && S.saves.length === 7 && S.status[48] === "EDIT", "allowInit: 초기화 1번 뒤 7일 저장 (상태 EDIT)", brief(x));
+// 5) 매장 전체 공지·확정 (PUBLISH): BOH·FOH 저장 → 세 탭 점검 → 전체 화면에서 공지 → 확정
+reset();
+await send({ mode: "saveOnly", employees: all3() });
+await send({ mode: "saveOnly", dept: "FOH", employees: [emp("90000009", "시험구")] });
+const saves5 = S.saves.length;
+x = await send({ type: "MFG_HR_PUBLISH", action: "both" });
+ok(saves5 === 14 && x.res && x.res.type === "MFG_HR_PUBLISH_RESULT" && x.res.ok && x.res.noticed && x.res.confirmed && S.notice === 1 && S.confirm === 1, `PUBLISH: BOH·FOH·STORE 점검 통과 → 공지 1 · 확정 1 (부서 저장 ${saves5})`, brief(x));
+ok(x.res && x.res.log.some((l) => /BOH .*3명/.test(l.msg)) && x.res.log.some((l) => /FOH .*1명/.test(l.msg)) && x.res.log.some((l) => /STORE .*1명/.test(l.msg)) && x.res.log.some((l) => /전체 검색/.test(l.msg)) && x.res.log.some((l) => /18=주휴일/.test(l.msg)), "PUBLISH: 세 탭을 읽고, 주휴일 코드(18)를 화면 이름으로 알아내고, 전체 화면에서 누름", brief(x));
+// 5b) 점검에 걸림 (STORE 직원: 주휴일 0일 · 출근인데 시간 없음) → 공지 안 누름, 직원·요일 회신
+reset({ week: { "90000020": Object.assign(weekOf(["휴무", "휴무", "휴무", "휴무", "휴무", "휴무", "휴무"]), { FRI: { code: "10", on: "", off: "", brk: "" } }) } });
+await send({ mode: "saveOnly", employees: all3() });
+await send({ mode: "saveOnly", dept: "FOH", employees: [emp("90000009", "시험구")] });
+x = await send({ type: "MFG_HR_PUBLISH", action: "both" });
+ok(x.res && !x.res.ok && x.res.stage === "precheck" && S.notice === 0 && x.res.rowErrors.some((e) => e.empNo === "90000020" && /주휴일이 주에 0일/.test(e.msg)) && x.res.rowErrors.some((e) => e.empNo === "90000020" && e.day === "FRI" && /시간이 없어요/.test(e.msg)), "PUBLISH 점검: 주휴일 0일·시간 없는 출근 → 공지 안 누르고 직원·요일 회신", brief(x));
+// 5c) FOH를 아직 안 보냄(빈 주) → FOH 직원 주휴일 0일로 걸림
+reset();
+await send({ mode: "saveOnly", employees: all3() });
+x = await send({ type: "MFG_HR_PUBLISH", action: "both" });
+ok(x.res && !x.res.ok && x.res.stage === "precheck" && x.res.rowErrors.some((e) => e.empNo === "90000009") && S.notice === 0, "PUBLISH 점검: FOH 저장 전이면 걸림", brief(x));
+// 5d) 공지만 → 그다음 확정만
+reset();
+await send({ mode: "saveOnly", employees: all3() });
+await send({ mode: "saveOnly", dept: "FOH", employees: [emp("90000009", "시험구")] });
+x = await send({ type: "MFG_HR_PUBLISH", action: "notice" });
+const n5 = S.notice, c5 = S.confirm;
+const y = await send({ type: "MFG_HR_PUBLISH", action: "confirm" });
+ok(x.res && x.res.ok && x.res.noticed && !x.res.confirmed && n5 === 1 && c5 === 0 && y.res && y.res.ok && y.res.confirmed && S.notice === 1 && S.confirm === 1, "PUBLISH: 공지만 → 다음에 확정만 (공지 다시 안 누름)", brief(y));
+// 5e) 상태 없는 주 → 공지 못 함(nostatus)
 reset({ status: {} });
-x = await send({ employees: all3(), allowInit: true });
-ok(x.res && x.res.ok && x.res.confirmed && S.init === 1 && S.saves.length === 7, "full + allowInit: 초기화 1번 뒤 저장·공지·확정", brief(x));
+x = await send({ type: "MFG_HR_PUBLISH", action: "both" });
+ok(x.res && !x.res.ok && (x.res.code === "nostatus" || x.res.stage === "precheck") && S.notice === 0, "PUBLISH: 상태 없는 주 → 공지 안 누름", brief(x));
 // 6) 확정된 주 / 공지된 주 → 손대지 않음
 reset({ status: { 48: "CONFIRM" } }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "confirmed" && S.uploads === 0, "이미 확정된 주 → 멈춤", brief(x));

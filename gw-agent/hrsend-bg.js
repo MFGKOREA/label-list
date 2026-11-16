@@ -28,7 +28,7 @@ async function hrsTabReady(tabId, ms) { // 다 열릴 때까지. 오류 화면(�
 }
 async function hrsRun(req, board, boardWin) {
   const id = String(req.requestId || "").slice(0, 80), now = Date.now(), trail = []; // (이름 주의: log는 bg.js의 기록 함수)
-  const mode = req.mode === "test" || req.mode === "saveOnly" ? req.mode : "full";
+  const mode = req.mode === "test" ? "test" : "saveOnly"; // 11/16 KM: 부서별 전송은 입력·저장까지만. 공지·확정은 매장 전체라 MFG_HR_PUBLISH로 따로 (예전 "full"은 saveOnly로 받음)
   const savedDays = [];
   const res0 = (o) => Object.assign({ type: "MFG_HR_SEND_RESULT", requestId: id, ok: false, stage: "precheck", day: null, message: "", rowErrors: [], savedDays: savedDays.slice(), noticed: false, confirmed: false, savedEmpNos: [], mode, log: trail }, o);
   const step = async (stage, msg, day, ajax) => { const it = { t: hrsT(), stage, day: day || null, msg: String(msg || "").slice(0, 200) }; if (ajax && ajax.length) it.ajax = ajax.map((x) => `${x.ep} ${x.http}${x.rc != null ? "/" + x.rc : ""}`).join(", "); trail.push(it); await hrsSend(board, { q: "hrSendProgress", requestId: id, item: it }); };
@@ -73,15 +73,14 @@ async function hrsRun(req, board, boardWin) {
     await step("week", `메인 표 직원 ${mainEmp == null ? "모름" : mainEmp.length + "명"} · 보낸 ${empNos.length}명`);
     if (st.indexOf("CONFIRM") >= 0) { res = res0({ stage: "week", message: `이미 확정된 주예요 (${r.week}) — 확정취소는 자동으로 하지 않아요`, code: "confirmed" }); return; }
     if (st.indexOf("NOTICE") >= 0) { res = res0({ stage: "week", message: `공지된 주라 수정할 수 없어요 (${r.week}) — 공지취소는 자동으로 하지 않아요`, code: "noticed" }); return; }
-    if (!st.length && mode === "full") {
-      if (!plan.allowInit) { res = res0({ stage: "week", message: `주차 상태가 없어요 (${r.week}) — 이대로 저장하면 공지·확정이 안 켜져요. HR에서 초기화나 전주복사를 하거나, allowInit으로 다시 보내 주세요`, code: "nostatus" }); return; }
+    if (!st.length && plan.allowInit) { // 상태 없는 주: 이대로 저장하면 공지·확정이 안 켜짐 → allowInit일 때만 업로드 전에 [초기화]
       const ini = await hrsExec(tabId, "init", {}, 40e3);
       if (!ini.ok) { res = res0({ stage: "week", message: ini.message, code: "nostatus" }); return; }
       const s2 = await hrsExec(tabId, "status", {}, 40e3);
       st = s2.status || [];
       await step("week", `초기화: ${ini.toast || "완료"} → 상태 ${st.join(",") || "없음"}`);
       if (st.indexOf("EDIT") < 0) { res = res0({ stage: "week", message: "초기화했는데도 주차 상태가 EDIT가 아니에요", code: "nostatus" }); return; }
-    }
+    } else if (!st.length) await step("week", "주차 상태 없음 — 저장은 되지만 공지·확정이 안 켜질 수 있어요 (HR에서 초기화·전주복사 또는 allowInit)");
     // 3) 요일마다: 탭 로딩 → 업로드 → 행 검증 → 팝업 저장
     for (const f of files) {
       await setRun({ stage: "upload", tab: tabId, day: f.dow });
@@ -98,13 +97,7 @@ async function hrsRun(req, board, boardWin) {
       await step("save", `${f.dow} ${f.date.slice(5)} 업로드·검증 ${rows0}→${f.rows.length}행·저장: ${r.toast}`, f.dow, r.ajax);
     }
     if (mode === "test") { res = res0({ ok: true, stage: "save", day: "MON", message: "시험: 월요일 1일 업로드·검증·팝업 저장까지 했어요 (공지·확정 안 함)", test: true }); return; }
-    if (mode === "saveOnly") { res = res0({ ok: true, stage: "save", message: `7일 저장까지 했어요 (공지·확정 안 함, ${empNos.length}명)`, savedEmpNos: empNos }); return; }
-    // 4) 메인 저장(켜져 있을 때만) → 공지 → 확정
-    await setRun({ stage: "notice", tab: tabId });
-    r = await hrsExec(tabId, "final", {}, 90e3);
-    (r.steps || []).forEach((x) => trail.push({ t: hrsT(), stage: x.stage, day: null, msg: x.msg }));
-    if (!r.ok) { res = res0({ stage: r.stage || "notice", message: r.message, savedEmpNos: empNos, noticed: !!r.noticed }); return; }
-    res = res0({ ok: true, stage: "confirm", message: `${plan.dept} ${plan.weekStart}~${plan.weekEnd} 저장·공지·확정까지 끝났어요 (${empNos.length}명)`, savedEmpNos: empNos, noticed: true, confirmed: true });
+    res = res0({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${empNos.length}명). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: empNos });
   } catch (e) {
     res = res0({ stage: "week", message: "확장 오류: " + String((e && e.message) || e).slice(0, 200) });
   } finally {
@@ -117,12 +110,84 @@ async function hrsRun(req, board, boardWin) {
     if (board != null) chrome.tabs.update(board, { active: true }).catch(() => {}); // 보드로 돌아감 (HR 탭은 결과 확인용으로 열어 둠)
   }
 }
+
+// ---- 공지·확정 (매장 전체, 11/16 KM) ----
+//  보드 → { type: "MFG_HR_PUBLISH", requestId, weekStart, weekEnd, action: "notice"|"confirm"|"both", codes? }
+//  1) BOH·FOH·STORE 탭을 하나씩 [검색]해서 메인 표를 읽고 점검(시간 없는 출근 0 · 주휴일 1일 · 52시간). 걸리면 누르지 않고 직원·요일을 회신
+//  2) 소속구분 빈칸(전체)로 [검색] → 상태가 EDIT면 공지, NOTICE면 확정만. HR의 validateConfirm이 화면에 불러온 행만 검사하므로 전체 화면에서 누름
+async function hrsPublish(req, board, boardWin) {
+  const id = String(req.requestId || "").slice(0, 80), now = Date.now(), trail = [];
+  const action = /^(notice|confirm|both)$/.test(req.action) ? req.action : "both";
+  const res0 = (o) => Object.assign({ type: "MFG_HR_PUBLISH_RESULT", requestId: id, ok: false, stage: "precheck", message: "", rowErrors: [], noticed: false, confirmed: false, action, log: trail }, o);
+  const step = async (stage, msg) => { const it = { t: hrsT(), stage, day: null, msg: String(msg || "").slice(0, 200) }; trail.push(it); await hrsSend(board, { q: "hrSendProgress", requestId: id, item: it }); };
+  if (!id) return hrsSend(board, { q: "hrSendResult", res: res0({ message: "requestId가 없어요" }) });
+  const ws = String(req.weekStart || ""), we = /^\d{4}-\d\d-\d\d$/.test(ws) ? new Date(Date.parse(ws + "T00:00:00Z") + 6 * 864e5).toISOString().slice(0, 10) : "";
+  if (!we || new Date(Date.parse(ws + "T00:00:00Z")).getUTCDay() !== 1) return hrsSend(board, { q: "hrSendResult", res: res0({ message: `주 시작일(월요일)이 틀려요: ${ws}` }) });
+  const { hrSend = {} } = await get("hrSend");
+  if (hrSend.last && hrSend.last.id === id) return hrsSend(board, { q: "hrSendResult", res: hrSend.last.res });
+  if (hrSend.run && now - hrSend.run.at < HRS.budget) return hrsSend(board, { q: "hrSendResult", res: res0({ stage: "week", message: "다른 HR 전송이 도는 중이에요", busy: true }) });
+  await put({ hrSend: { last: hrSend.last || null, run: { id, at: now, stage: "precheck", kind: "publish" } } });
+  const alive = setInterval(() => { chrome.runtime.getPlatformInfo(() => {}); }, 20e3);
+  let tabId = null, res = null;
+  try {
+    const { hrTab } = await get("hrTab");
+    let t = (await chrome.tabs.query({ url: "https://hr.pljec.cloud/*" }).catch(() => [])).filter((x) => x.id !== hrTab)[0];
+    if (t) await chrome.tabs.update(t.id, { active: true }).catch(() => {});
+    else t = await chrome.tabs.create({ url: "https://hr.pljec.cloud/", active: true, windowId: boardWin != null ? boardWin : undefined });
+    tabId = t.id; chrome.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
+    const rd = await hrsTabReady(tabId, 40e3);
+    if (!rd || rd.err) { res = res0({ stage: "week", message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 확인", code: "network" }); return; }
+    let pr = await hrsExec(tabId, "probe", {}, 15e3);
+    for (let k = 0; k < 20 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 500)); pr = await hrsExec(tabId, "probe", {}, 15e3); }
+    if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
+    let r = await hrsExec(tabId, "open", {}, 50e3);
+    if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
+    // 1) 세 탭 점검
+    const tabs = [];
+    for (const dept of ["BOH", "FOH", "STORE"]) {
+      r = await hrsExec(tabId, "cond", { dept, weekStart: ws, weekEnd: we, site: HRS.site }, 120e3);
+      if (!r.ok) { res = res0({ stage: "precheck", message: `${dept} 탭: ${r.message}` }); return; }
+      const w = await hrsExec(tabId, "weekRows", {}, 30e3);
+      if (!w.ok) { res = res0({ stage: "precheck", message: `${dept} 탭: ${w.message}` }); return; }
+      tabs.push({ dept, rows: w.rows, labels: w.labels });
+      await step("precheck", `${dept} ${r.week} · ${w.rows.length}명 · 상태 ${r.status.join(",") || "없음"}`);
+    }
+    const chk = hrsPublishCheck(tabs, req.codes || null);
+    await step("precheck", `점검 ${chk.n}명 · 걸린 것 ${chk.errors.length}건 · 코드 ${Object.entries(chk.codes).map(([c, k]) => c + "=" + k).join(" ")}`);
+    if (!chk.ok) { res = res0({ stage: "precheck", message: `공지 전 점검에서 ${chk.errors.length}건 — 공지·확정을 누르지 않았어요`, rowErrors: chk.errors.map((e) => ({ empNo: e.empNo, name: e.name, dept: e.dept, day: e.day, msg: e.msg })) }); return; }
+    // 2) 전체 화면에서 공지 → 확정
+    r = await hrsExec(tabId, "cond", { dept: "", weekStart: ws, weekEnd: we, site: HRS.site }, 120e3);
+    if (!r.ok) { res = res0({ stage: "week", message: "전체(소속구분 빈칸) 검색: " + r.message }); return; }
+    const st = r.status;
+    await step("week", `전체 검색: ${r.week} · 상태 ${st.join(",") || "없음"}`);
+    if (st.indexOf("CONFIRM") >= 0) { res = res0({ ok: true, stage: "confirm", message: `이미 확정된 주예요 (${r.week})`, noticed: true, confirmed: true, already: true }); return; }
+    if (!st.length) { res = res0({ stage: "week", message: `주차 상태가 없어요 (${r.week}) — 공지·확정 단추가 안 켜져요. HR에서 초기화·전주복사가 필요해요`, code: "nostatus" }); return; }
+    const noticed = st.indexOf("NOTICE") >= 0;
+    if (action === "notice" && noticed) { res = res0({ ok: true, stage: "notice", message: "이미 공지된 주예요", noticed: true }); return; }
+    if (action === "confirm" && !noticed) { res = res0({ stage: "confirm", message: "아직 공지 전이라 확정할 수 없어요 (공지 먼저)" }); return; }
+    await put({ hrSend: { last: hrSend.last || null, run: { id, at: now, stage: "notice", kind: "publish", tab: tabId } } });
+    r = await hrsExec(tabId, "final", { skipNotice: noticed, stopBefore: action === "notice" ? "confirm" : null }, 90e3);
+    (r.steps || []).forEach((x) => trail.push({ t: hrsT(), stage: x.stage, day: null, msg: x.msg }));
+    if (!r.ok) { res = res0({ stage: r.stage || "notice", message: r.message, noticed: noticed || !!r.noticed }); return; }
+    res = res0({ ok: true, stage: r.confirmed ? "confirm" : "notice", message: r.confirmed ? `${ws}~${we} 매장 전체 공지·확정 끝 (${chk.n}명)` : `${ws}~${we} 매장 전체 공지 끝 (${chk.n}명)`, noticed: true, confirmed: !!r.confirmed });
+  } catch (e) {
+    res = res0({ stage: "week", message: "확장 오류: " + String((e && e.message) || e).slice(0, 200) });
+  } finally {
+    clearInterval(alive);
+    if (tabId != null) await hrsExec(tabId, "done", {}, 5e3).catch(() => {});
+    if (!res) res = res0({ stage: "week", message: "끝까지 못 갔어요" });
+    await put({ hrSend: { run: null, last: { id, at: Date.now(), res } } });
+    await log(`HR 공지·확정 ${res.ok ? "끝" : "멈춤"}: ${res.action} · ${res.stage} · ${res.stage === "precheck" ? "점검 " + res.rowErrors.length + "건" : String(res.message).replace(/[^\s(]+님/g, "○○님").slice(0, 80)}`, { quiet: true });
+    await hrsSend(board, { q: "hrSendResult", res });
+    if (board != null) chrome.tabs.update(board, { active: true }).catch(() => {});
+  }
+}
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
-  if (!m || (m.q !== "hrSend" && m.q !== "hrSendLast")) return false;
+  if (!m || (m.q !== "hrSend" && m.q !== "hrSendLast" && m.q !== "hrPublish")) return false;
   const t = sender.tab;
   if (!t || !HRS.board.test(t.url || "")) { reply({ ok: false, error: "보드 화면에서만 보낼 수 있어요" }); return false; }
   if (m.q === "hrSendLast") { get("hrSend").then(({ hrSend = {} }) => reply({ ok: true, run: hrSend.run ? { id: hrSend.run.id, stage: hrSend.run.stage, day: hrSend.run.day || null, at: hrSend.run.at } : null, last: hrSend.last && hrSend.last.id === m.requestId ? hrSend.last.res : null })); return true; }
   reply({ ok: true, accepted: true, ver: VER });
-  hrsRun(m.req || {}, t.id, t.windowId);
+  if (m.q === "hrPublish") hrsPublish(m.req || {}, t.id, t.windowId); else hrsRun(m.req || {}, t.id, t.windowId);
   return false;
 });

@@ -5,7 +5,7 @@
 //  지금 HR전송 탭이 직원별로 만드는 days({kind, in, out, brk})를 그대로 받아, kind를 "HR 표기"로 바꾼 뒤 검사한다.
 
 export type Dept = "BOH" | "FOH";
-export type Mode = "test" | "saveOnly" | "full";
+export type Mode = "test" | "saveOnly" | "full"; // full은 예전 이름: 확장이 saveOnly로 받음 (공지·확정은 publishToAgent)
 export type HrDay = { date: string; kind: string; in: string; out: string; brk: string };
 export type HrEmp = { empNo: string; name: string; days: HrDay[] };
 export type RowError = { empNo?: string; name?: string; day?: string; msg: string };
@@ -125,9 +125,46 @@ export function applyResult(prev: Record<string, { state: string; hash: string; 
   const next = { ...prev }, at = Date.now(), saved = new Set(r.savedEmpNos || []);
   const allSaved = (r.savedDays || []).length === 7;
   for (const s of sent) {
-    if (r.ok && r.confirmed) next[s.empId] = { state: "confirmed", hash: s.hash, at };
-    else if (allSaved && saved.has(s.empNo)) next[s.empId] = { state: "saved", hash: s.hash, at }; // 저장까지만 (saveOnly 또는 공지·확정 실패)
+    if (r.ok && allSaved && saved.has(s.empNo)) next[s.empId] = { state: "saved", hash: s.hash, at }; // 부서 전송은 저장까지 (확정은 applyPublish)
     // 업로드·저장 실패(일부 요일만 저장 포함): 상태 그대로
   }
+  return next;
+}
+
+// ---- 매장 전체 공지·확정 (11/16 KM: 공지·확정은 매장 전체에 한 번에 적용) ----
+//  부서 전송(MFG_HR_SEND)은 입력·저장까지만. 공지·확정은 BOH·FOH가 모두 '저장'일 때만 켜는 별도 버튼 → MFG_HR_PUBLISH
+//  확장이 BOH·FOH·STORE 세 탭을 모두 읽어 점검(시간 없는 출근 0 · 주휴일 1일 · 52시간)한 뒤, 소속구분 빈칸(전체) 화면에서 공지 → 확정
+export type PublishAction = "notice" | "confirm" | "both";
+export type PublishResult = {
+  type: "MFG_HR_PUBLISH_RESULT"; requestId: string; ok: boolean; stage: "precheck" | "week" | "notice" | "confirm"; message: string;
+  rowErrors: { empNo?: string; name?: string; dept?: string; day?: string | null; msg: string }[]; noticed: boolean; confirmed: boolean; action: PublishAction;
+  code?: string; already?: boolean; log: HrResult["log"];
+};
+type HrState = { state: string; hash: string; at: number };
+// BOH·FOH 재직 직원이 모두 '저장'(또는 이미 '확정')이어야 켜짐
+export function canPublish(hr: Record<string, HrState>, bohIds: string[], fohIds: string[]) {
+  const ok = (ids: string[]) => ids.length > 0 && ids.every((id) => hr[id] && (hr[id].state === "saved" || hr[id].state === "confirmed"));
+  return { boh: ok(bohIds), foh: ok(fohIds), ready: ok(bohIds) && ok(fohIds) };
+}
+export function publishToAgent(p: { weekStart: string; weekEnd: string; action: PublishAction; codes?: Record<string, string> }, onProgress?: (item: HrResult["log"][number]) => void): Promise<PublishResult> {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve) => {
+    let last = Date.now();
+    const timer = setInterval(() => { if (Date.now() - last < 6 * 60e3) return; clearInterval(timer); off(); resolve({ type: "MFG_HR_PUBLISH_RESULT", requestId, ok: false, stage: "week", message: "6분 동안 결과가 없어요 — HR 탭을 확인해 주세요", rowErrors: [], noticed: false, confirmed: false, action: p.action, log: [], code: "timeout" }); }, 5000);
+    const off = onAgent((d) => {
+      if (d.requestId !== requestId) return;
+      last = Date.now();
+      if (d.type === "MFG_HR_SEND_PROGRESS") onProgress?.(d.item);
+      if (d.type === "MFG_HR_SEND_ACK" && !d.ok) { clearInterval(timer); off(); resolve({ type: "MFG_HR_PUBLISH_RESULT", requestId, ok: false, stage: "precheck", message: d.error || "확장이 요청을 안 받았어요", rowErrors: [], noticed: false, confirmed: false, action: p.action, log: [] }); }
+      if (d.type === "MFG_HR_PUBLISH_RESULT") { clearInterval(timer); off(); resolve(d as PublishResult); }
+    });
+    window.postMessage({ type: "MFG_HR_PUBLISH", requestId, ...p }, location.origin);
+  });
+}
+// 확정 성공 → 두 부서 전원 'confirmed' (hash는 그대로: 나중에 스케쥴이 바뀌면 기존처럼 '수정 필요')
+export function applyPublish(hr: Record<string, HrState>, ids: string[], r: PublishResult) {
+  if (!r.ok || !r.confirmed) return hr;
+  const next = { ...hr }, at = Date.now();
+  ids.forEach((id) => { if (next[id]) next[id] = { ...next[id], state: "confirmed", at }; });
   return next;
 }

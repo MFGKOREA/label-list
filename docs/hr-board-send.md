@@ -66,3 +66,17 @@
 5. **full**: 상태 EDIT인 주에서 공지 → 확정 (상태 없는 주는 nostatus로 멈추는지)
 
 멈추면 결과의 stage·message·rowErrors·log(엔드포인트 상태 포함)를 그대로 보내 주면 고친다.
+
+## 공지·확정은 매장 전체로 따로 (1.13.0, 11/16 KM)
+- 공지·확정은 **매장 전체에 한 번에** 적용된다. 그래서 부서 전송(`MFG_HR_SEND`)은 **입력·저장까지만** 한다(예전 `mode: "full"`도 saveOnly로 받음).
+- 공지·확정은 별도 요청 `{ type: "MFG_HR_PUBLISH", requestId, weekStart, weekEnd, action: "both" | "notice" | "confirm", codes? }` → 결과 `MFG_HR_PUBLISH_RESULT { ok, stage: precheck|week|notice|confirm, message, rowErrors:[{empNo,name,dept,day,msg}], noticed, confirmed, log }`
+- 확장 순서:
+  1. 소속구분 **BOH → FOH → STORE**를 하나씩 [검색]해서 메인 표(`#hrt2325_info_list_html`)를 읽음. 사번·이름·요일별 근태 코드·시간만 읽고, 직책 칸은 안 읽음
+  2. 점검: 시간 없는 출근 0개 · 직원마다 주휴일 정확히 1일 · 주 52시간 이하. 하나라도 걸리면 **공지를 누르지 않고** 직원·요일을 회신
+  3. 소속구분 **빈칸(전체)**로 [검색] → 상태가 EDIT면 공지 → 확정, NOTICE면 확정만, CONFIRM이면 "이미 확정", 상태 없으면 멈춤
+     - HR의 validateConfirm은 화면에 불러온 행만 검사하므로 전체 화면에서 누름. 이 부분은 KM이 코드로 확인했고 실제로 눌러 보지는 않음
+- 근태 코드: 출근 10·휴무 17은 확인됨. 주휴일·공휴일 코드는 메인 표 칸에 보이는 이름("주휴일"·"공휴일")으로 알아냄. 모르는 코드가 나오면 점검에서 멈춤(`codes`로 지정 가능)
+- 보드:
+  - `HrPublishPanel.tsx`: BOH·FOH 재직 직원이 모두 '저장'(또는 '확정')일 때만 [공지·확정]·[공지만]·[확정만] 단추를 켬
+  - `applyPublish()`: 확정에 성공하면 두 부서 전원을 '확정'으로
+  - `HrSendPanel.tsx`: [시험]·[전송(7일 저장)]만 남김
