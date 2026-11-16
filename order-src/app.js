@@ -2603,13 +2603,22 @@
     const M = model(), all = M.items.filter((i) => !i.ledgerOnly), order = [], byV = new Map();
     all.forEach((it) => { const v = it.vendor || "업체 미지정"; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
     byV.forEach((list) => order.push(...list)); // 발주품목순: 업체(처음 나온 순) 안에서 발주 시트 순서
+    // (11/16 KM "소모품 세제들도 발주시트에 포함, 업체·소모품 구분") 앱 목록에서 숨긴 소모품·세제(발주 시트 master.order)와, 앱에 없지만 MIS에서 발주한 품목도 줄로 넣음. 재고는 안 세니 발주 칸만.
+    const sel0 = weeks.filter((m) => logWeekSel.has(m)), have = new Set(); all.forEach((it) => (it.codes || []).forEach((c) => have.add(String(c))));
+    const SUP = /장갑|봉투|호일|냅킨|물티슈|타올|용기|박스|쇼핑백|수세미|포션백|유산지|유니랩|랩\(|쌀포대|도마|스쿱|페퍼밀|빨대|컵|세제|광택제|클리너|린스|락스/, DRK = /시럽|주스|커피|녹차|그린티|탄산|농축액|테너베이스|에이드|\(생\)|쥬시/;
+    const extra = new Map(); // 코드 → { name, unit, vendor }
+    ((db["master.order"] || {}).rows || []).forEach((r) => { const c = String(r.code || ""); if (/^\d{6,}$/.test(c) && !have.has(c) && /소모품|세제/.test(r.vendor || "")) extra.set(c, { name: r.name, unit: r.unit || "", vendor: r.vendor }); });
+    sel0.forEach((m) => { for (let k = 0; k < 7; k++) ((db["misOrder." + addDays(m, k)] || {}).rows || []).forEach((r) => { const c = String((r && r.code) || ""); if (!c || have.has(c) || extra.has(c) || !(num(r.qty) > 0)) return;
+      extra.set(c, { name: r.name || c, unit: r.unit || "", vendor: SUP.test(r.name || "") ? "소모품" : /BTL/i.test(r.unit || "") || DRK.test(r.name || "") ? "음료·주류" : "기타 식자재" }); }); });
+    extra.forEach((x, c) => { const v = x.vendor, it = { key: "\u0001x" + c, name: x.name, vendor: v, xcode: c, pk: { stock: x.unit }, box: 0 }; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); order.push(it); });
+    order.sort((a, b) => [...byV.keys()].indexOf(a.vendor || "업체 미지정") - [...byV.keys()].indexOf(b.vendor || "업체 미지정")); // 업체별로 모음(안에서는 넣은 순서 그대로)
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
-    all.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
+    order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
     const f1 = (x) => String(Math.round(x * 10) / 10), md = (d) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}`;
     const fcOf = (d) => num(((db.forecast || {})[d] || {}).fc);
     const stockCell = (it, d) => {
-      if (d > TODAY) return "";
+      if (d > TODAY || it.xcode) return "";
       const v = (db["input." + d] || {})[it.key] || {};
       if (counted(v)) return `<b>${f1(num(v.s))}</b>`;
       const e = estStock(it, d, null, false, d), u = it.box || 1;
@@ -2618,6 +2627,7 @@
     };
     const orderCell = (it, d) => {
       if (d > TODAY) return "";
+      if (it.xcode) { const q = ((db["misOrder." + d] || {}).rows || []).reduce((t, r) => t + (r && String(r.code) === it.xcode ? num(r.qty) : 0), 0); return q > 0 ? f1(q) : ""; }
       const appO = num(((db["input." + d] || {})[it.key] || {}).o);
       if (appO > 0) return f1(appO);
       const rows = misOn(d) ? misRowsOf(it.key, d) : null, q = rows ? rows.reduce((t, r) => t + num(r.qty), 0) : 0;
@@ -2629,7 +2639,8 @@
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
       const h2 = days.map(() => `<th class="sub ds">재고</th><th class="sub">발주</th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
-      const rows = order.map((it) => `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`).join("");
+      let lastV = null;
+      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
         `<div class="logscroll"><table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;

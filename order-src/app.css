@@ -820,6 +820,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
 .logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
 .logt td.o { color: var(--accent-text); font-weight: 800; }
+.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); } .logt tr.vrow .nm small { font-weight: 600; }
 .logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
 @media print {
   @page { size: A4 landscape; margin: 7mm; }
@@ -837,6 +838,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt th, body.log-print .logt td { padding: 1.4px 2.5px; min-width: 0; border-bottom: .4pt solid #999; border-right: .4pt solid #ccc; position: static !important; color: #000 !important; background: #fff !important; }
   body.log-print .logt .ds { border-left: .8pt solid #555; }
   body.log-print .logt .nm { width: 34mm; max-width: 34mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: .8pt solid #555; }
+  body.log-print .logt tr.vrow td, body.log-print .logt tr.vrow .nm { background: #ddd !important; border-top: .8pt solid #555; font-weight: 800; }
   body.log-print .logt .nm small { font-size: 6px; color: #444 !important; }
   body.log-print .logt thead tr + tr th { font-size: 6.5px; }
   body.log-print .logt tbody tr:nth-child(even) td, body.log-print .logt tbody tr:nth-child(even) .nm { background: #f3f3f3 !important; }
