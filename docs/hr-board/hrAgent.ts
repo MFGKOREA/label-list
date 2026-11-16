@@ -22,10 +22,12 @@ const DOW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const DOW_KO = ["월", "화", "수", "목", "금", "토", "일"];
 
 // 근태 → HR 근태유형: 운영 설정의 "HR 표기"(settings.lists[dept]의 각 항목). 출근은 그대로.
-//  지금 설정: D/O→휴무, 고정→휴무, 주휴일→주휴일, 공휴일→공휴일, 교육→출근, 연차→"연차"(HR에 없음 → 전송 차단)
+//  KM 정한 값(11/16): D/O→휴무, 고정→휴무, 주휴일→주휴일, 공휴일→공휴일, 교육→출근, 연차→휴무
+//  설정의 HR 표기가 4개 중 하나면 그것, 아니면(예: 아직 "연차"로 남아 있음) 아래 기본값, 그것도 없으면 그대로(→ 전송 차단)
+export const HR_KIND_DEFAULT: Record<string, string> = { 출근: "출근", "D/O": "휴무", 고정: "휴무", 주휴일: "주휴일", 공휴일: "공휴일", 교육: "출근", 연차: "휴무" };
 export function hrKindMap(list: { name: string; hr?: string }[] | undefined): Record<string, string> {
-  const m: Record<string, string> = { 출근: "출근" };
-  (list || []).forEach((x) => { if (x && x.name) m[x.name] = (x.hr || "").trim() || x.name; });
+  const m: Record<string, string> = { ...HR_KIND_DEFAULT };
+  (list || []).forEach((x) => { if (!x || !x.name) return; const v = (x.hr || "").trim(); if ((HR_KINDS as readonly string[]).includes(v)) m[x.name] = v; else if (!(x.name in m)) m[x.name] = v || x.name; });
   return m;
 }
 
