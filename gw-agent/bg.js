@@ -1,3 +1,4 @@
+// 배경 (1.10.1 — 11/16 #18: 매출 자동 창이 닫히거나 창을 못 열면 발주와 같게 salesPush에 "멈춤"을 적음 → 폰이 영원히 "받는 중"에 갇히지 않음)
 // 배경 (1.10.0 — 11/14 KM: 플젝 HR 출퇴근·스케줄 변경 신청을 매장 PC가 읽어 시트(hrStatus)에 남김 → 아래 "플젝 HR 덤프")
 //          영업시간(08:30~22:30)에 15분마다(:05·:20·:35·:50) 사람이 쓰는 창 뒤 탭 하나로 조용히 읽고 닫음. 감시 시각(09:10·12:00·13:00·16:10·17:10·18:10·20:10·22:10) 직전 값이 남음
 // 배경 (1.8.0 — 11/13 KM "크롬이 켜져 있으면 상시 연동": 폰에서 누르지 않아도 PC가 스스로 어제 매출·메뉴 판매와 계획(gw-plan.json)에 있는 것을 받아 옴 → 아래 "상시 수집")
@@ -321,6 +322,9 @@ async function tickOnce(why) {
   if (closed) {
     await lock(() => chrome.storage.local.remove("job"));
     if (closed.kind === "order" && "o" + p.id === closed.id && p.status === "pending") await post("misPush", { ...p, status: "error", doneAt: now, text: `PC 자동입력이 ${Math.round((now - closed.openedAt) / 1000)}초 만에 멈춤 · 멈춘 곳: 자동 창이 닫힘 (${closed.step || ""}) → MIS에 직접 넣어 주세요` });
+    // 11/16 #18: 매출 자동 창이 닫혀도 발주와 같게 알림 (예전엔 시트에 아무것도 안 적혀 폰에서 영원히 "받는 중"으로 남음)
+    //  작업 단계 글(closed.step)은 매출 첫 줄이 늘 "Gross 불러오기 받음"이라 메뉴 요청에 잘못 붙으므로 안 넣음
+    if (closed.kind === "sales" && "s" + sp.id === closed.id && /pending|running/.test(sp.status)) await postMerge("salesPush", { status: "error", doneAt: now, text: `PC가 ${Math.round((now - closed.openedAt) / 1000)}초 만에 멈춤 · 멈춘 곳: 자동 창이 닫힘 · 다시 눌러 주세요`, cur: null, prog: null });
     await log("자동 창이 닫혀 있음 → 작업 끝");
     return;
   }
@@ -337,6 +341,8 @@ async function tickOnce(why) {
     catch (e) { // 창을 못 엶 → 바로 알림 (예전엔 아무 말 없이 끝)
       await log("자동 창을 못 엶: " + ((e && e.message) || e));
       if (req.kind === "order") await post("misPush", { ...p, status: "error", doneAt: now, text: "PC 크롬이 자동 창을 못 엶 · 멈춘 곳: 창 열기 → MIS에 직접 넣어 주세요" });
+      // 11/16 #18: 매출 요청도 창을 못 열었으면 알림 (예전엔 발주만 적어 매출은 pending으로 남음)
+      if (req.kind === "sales") await postMerge("salesPush", { status: "error", doneAt: now, text: "PC 크롬이 자동 창을 못 엶 · 멈춘 곳: 창 열기 · 다시 눌러 주세요", cur: null, prog: null });
     }
     return;
   }
