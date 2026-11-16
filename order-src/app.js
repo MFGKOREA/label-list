@@ -2640,8 +2640,8 @@
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
       const h2 = days.map(() => `<th class="sub ds">재고</th><th class="sub">발주</th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
-      let lastV = null;
-      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
+      let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩"
+      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
         `<div class="logscroll"><table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
