@@ -7,7 +7,8 @@ Set판매현황
 <script>
 $("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
 $.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
-var SETS = ["ROMANTIC", "PREMIUM", "MGGGR", "MTDB", "WINESET"], NAMES = ["[안심]로맨틱", "매드 프리미엄", "골고루", "미트 더블", "나잇 앤 와인"];
+// 진짜 화면처럼(11/16 확인): ROANDPRE = 로맨틱·프리미엄 소계, WINE = 와인(세트 합계에 안 들어감)
+var SETS = ["ROANDPRE", "ROMANTIC", "PREMIUM", "MGGGR", "MTDB", "WINESET", "WINE"], NAMES = ["로맨틱&프리미엄", "[안심]로맨틱", "매드 프리미엄", "골고루", "미트 더블", "나잇 앤 와인", "와인"];
 var G1 = [{ title: "매장", colspan: 2 }, { title: "매출", colspan: 6 }, { title: "세트 합계", colspan: 3 }].concat(NAMES.map(function (n) { return { title: n, colspan: 3 }; }));
 var G2 = [{ field: "CD_STORE", title: "매장코드" }, { field: "NM_STORE", title: "매장명" }, { field: "GROSS_SALES", title: "Gross Sales" }, { field: "TOTAL_SALES", title: "Total Sales" }, { field: "RESTAURANT_SALES", title: "RESTAURANT Sales" }, { field: "DELIVERY_SALES", title: "DELIVERY Sales" }, { field: "CUST_CNT", title: "매장고객수" }, { field: "TOTAL_PPA", title: "TOTAL PPA" },
   { field: "TOT_CNT", title: "수량" }, { field: "TOT_AMT", title: "금액" }, { field: "TOT_PER", title: "%" }];
@@ -22,7 +23,7 @@ function fn_Search() {
   if (!window.event) throw new Error("no event");
   var s = $("#sDate").val(), v = DAY[s], kids = [];
   var row = function (cd, nm, c, gg, mt, ro, pr, tt) { var r = { CD_STORE: cd, NM_STORE: nm, GROSS_SALES: "9,000,000", TOTAL_SALES: "9,500,000", RESTAURANT_SALES: "9,000,000", DELIVERY_SALES: "0", CUST_CNT: c, TOTAL_PPA: "50,000", TOT_CNT: tt != null ? tt : gg + mt + ro + pr, TOT_AMT: "1,000,000", TOT_PER: "10.0" };
-    SETS.forEach(function (k) { r[k + "_CNT"] = 0; r[k + "_AMT"] = "0"; r[k + "_PER"] = "0"; }); r.MGGGR_CNT = gg; r.MTDB_CNT = mt; r.ROMANTIC_CNT = ro; r.PREMIUM_CNT = pr; r.MGGGR_AMT = (gg * 120000).toLocaleString(); return r; };
+    SETS.forEach(function (k) { r[k + "_CNT"] = 0; r[k + "_AMT"] = "0"; r[k + "_PER"] = "0"; }); r.MGGGR_CNT = gg; r.MTDB_CNT = mt; r.ROMANTIC_CNT = ro; r.PREMIUM_CNT = pr; r.ROANDPRE_CNT = ro + pr; r.WINE_CNT = 3; r.MGGGR_AMT = (gg * 120000).toLocaleString(); return r; };
   kids.push(row("1111111", "다른매장", 300, 50, 50, 5, 5));
   if (v) kids.push(row("1345090", "MG수원컨벤션센터점", v[0], v[1], v[2], v[3], v[4], v[5]));
   var tot = row("", "합계", 0, 0, 0, 0, 0); tot.children = kids;

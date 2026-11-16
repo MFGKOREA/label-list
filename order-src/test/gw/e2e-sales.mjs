@@ -135,6 +135,7 @@ ok(!JSON.stringify(d).includes("다른매장") && ![s13, s14].some((x) => JSON.s
 ok(d.setProbe && d.setProbe.grids[0].tree === true && d.setProbe.grids[0].cols.includes("MGGGR_CNT=수량") && JSON.stringify(d.setProbe.grids[0].heads).includes("골고루*3") && d.misSetScan && d.misSetScan.to === "2026-11-14" && d.misSetScan.days === 2 && d.misSetScan.empty === 1 && d.misSetScan.cols.sets.includes("MTDB_CNT"), "열 이름·겹 머리글(세트 이름)은 setProbe에 · 스캔 기록(끝날·저장 2일·빈 날 1일)");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "Set판매현황 읽기도 KM 입력(input.날짜)은 안 건드림");
 ok(!/⚠/.test(d.salesPush.text) && Array.isArray(d.misSetScan.chkBad) && d.misSetScan.chkBad.length === 0, "합계 대조: 세트별 합 = 세트 합계면 경고 없음");
+ok(d.misSetScan.rule === 2 && (d["setDay.2026-11-13"].rows.find((r) => r.s === "ROANDPRE") || {}).sub === 1 && qOf(d["setDay.2026-11-13"], "WINE") === 3, "세트 짜임(11/16 실제 화면): 소계 ROANDPRE 줄엔 sub 표시 · 와인 3은 세트 합계(7)에 안 들어가도 경고 없음 · 새 기준 표시 rule 2");
 d = await run({ kind: "sets", from: "2026-11-10", to: "2026-11-10" }, "sets-main.html", null, true);
 ok(/⚠ 세트 합계 다른 날 11\/10 \(저장 안 함/.test(d.salesPush.text) && !d["setDay.2026-11-10"] && d.misSetScan.chkBad.join() === "2026-11-10", "합계 대조 켬: 세트 합계가 다른 11/10은 저장 안 함 · " + d.salesPush.text);
 d = await run({ kind: "sets", from: "2026-11-10", to: "2026-11-10" }, "sets-main.html");

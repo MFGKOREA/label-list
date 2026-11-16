@@ -791,10 +791,18 @@
         if (!cnt.length) throw new Error(`세트 수량 칸(_CNT)을 못 찾았어요 (머리글: ${cs.map((c) => c.field + "=" + title(c)).join(", ").slice(0, 200)})`);
         used = { store: stCd.field, sets: cnt.map((c) => c.field) };
         const r = mine[0], q = (f) => { const v = num(r[f]); return isFinite(v) ? v : 0; };
-        const out = cnt.map((c) => ({ s: c.field.replace(/_CNT$/i, ""), q: q(c.field) })).filter((x) => x.q);
-        // 합계 대조: 세트별 수량 합 = 이 줄의 '세트 합계' 수량(TOT_CNT)?
+        // 세트 칸의 짜임 (11/16 첫 실제 수집 28일로 확인, 28/28): ROANDPRE = 로맨틱·프리미엄 소계(ROMANTIC + ROMANTIC_SL + PREMIUM + ROMANTIC_CK),
+        //  세트 합계 수량(TOT_CNT) = ROANDPRE + 나머지 세트(MGGGR · MTDB · WINESET …), WINE(와인)은 세트 합계에 안 들어감.
+        //  예전엔 모든 칸을 그냥 더해 소계·와인이 겹쳐 28일 중 26일이 "합계 다름"으로 나왔음(읽기 오류가 아니었음). 새 세트 칸이 생기면 합계에 든다고 보고 더함 → 안 맞으면 ⚠로 알게 됨
+        const SET_SUB = { ROANDPRE: ["ROMANTIC", "ROMANTIC_SL", "PREMIUM", "ROMANTIC_CK"] }, SET_OUT = ["WINE"];
+        const nameOf = (c) => c.field.replace(/_CNT$/i, "").toUpperCase(), fOf = new Map(cnt.map((c) => [nameOf(c), c.field])), qn = (n) => (fOf.has(n) ? q(fOf.get(n)) : 0);
+        const out = cnt.map((c) => ({ s: c.field.replace(/_CNT$/i, ""), q: q(c.field), ...(SET_SUB[nameOf(c)] ? { sub: 1 } : {}) })).filter((x) => x.q); // sub: 소계 줄(더할 때 빼야 함)
+        // 합계 대조: 소계 = 그 부분의 합, 세트 합계 = 소계 + 나머지(소계에 든 칸·와인 빼고)
         const tf = byF(/^TOT_CNT$/i);
-        const off = tf && Math.abs(q(tf.field) - cnt.reduce((a, c) => a + q(c.field), 0)) > 0;
+        const inSub = new Set(Object.entries(SET_SUB).filter(([k]) => fOf.has(k)).flatMap(([, v]) => v));
+        const leafSum = [...fOf.keys()].filter((n) => !inSub.has(n) && !SET_OUT.includes(n)).reduce((a, n) => a + qn(n), 0);
+        const subOk = Object.entries(SET_SUB).every(([k, v]) => !fOf.has(k) || qn(k) === v.reduce((a, n) => a + qn(n), 0));
+        const off = tf && (Math.abs(q(tf.field) - leafSum) > 0 || !subOk);
         if (off) chkBad.push(day);
         hits++;
         if (off && SUM_BLOCK) return "chk"; // 켜져 있으면 그날은 저장 안 함
@@ -818,7 +826,7 @@
           dates: dbs().map((i) => $(i).datebox("getValue")), inputs: [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password" && /store|stor|shop|str|매장|brand|area|sel|cmb|gubun|type/i.test(i.id + i.name)).map((i) => `${i.tagName.toLowerCase()}#${i.id || "-"}=${String(i.value).slice(0, 20)}`).slice(0, 12) };
         await merge("setProbe", { diag }).catch(() => {});
       }
-      await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used, chkBad: chkBad.sort() }).catch(() => {});
+      await set("misSetScan", { at: Date.now(), from, to: hits ? to : null, days: saved, empty: empty.length, left: rem.length, cols: used, chkBad: chkBad.sort(), rule: 2 }).catch(() => {}); // rule 2: 소계·와인을 뺀 새 대조 기준(11/16)으로 본 결과
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set(failed)].sort();
       const text = `Set판매현황 ${saved}일 저장` + (hits && empty.length ? ` · 세트 판매 없음 ${empty.length}일` : "") + (!hits && days.length ? " · 이 매장 줄이 한 번도 안 나옴(저장 안 함, 화면 모양만 기록)" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")}` : "") + (rem.length ? ` · 남은 ${rem.length}일은 다음에` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
         (chkBad.length ? ` · ⚠ 세트 합계 다른 날 ${chkBad.map(md).join(", ")} (${SUM_BLOCK ? "저장 안 함, " : ""}MIS 화면 확인)` : "");
