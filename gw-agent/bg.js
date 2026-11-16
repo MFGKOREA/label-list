@@ -16,7 +16,7 @@
 //   ③ 단계(stage)마다 시간 제한과 다시 하기: GW 화면(gw) → MIS 탭 열림(open) → 주문등록 화면(mis) → 전송 받음(start) → 입력(run).
 //      3초마다 탭 상태를 직접 살펴(probe) 스크립트가 안 돌았으면 다시 넣고, 새 탭이 안 생기면 경영정보를 다시 누르고, 그래도 없으면 MIS 주소를 직접 엶.
 //   ④ 안 되면 6분을 기다리지 않고 바로 misPush를 error로 올림. 글에 "멈춘 곳"과 "무엇을 기다리다 멈췄는지"를 적음(주소는 GW·MIS 구분만, 아이디·비밀번호·주소 뒤 값은 안 적음).
-importScripts("common.js", "auto.js", "periodic.js");
+importScripts("common.js", "auto.js", "periodic.js", "hrsend-core.js", "hrsend-steps.js", "hrsend-bg.js"); // 1.12.0: HR 주간스케쥴 전송
 const get = (k) => chrome.storage.local.get(k);
 const put = (o) => chrome.storage.local.set(o);
 const VER = chrome.runtime.getManifest().version;
@@ -444,6 +444,7 @@ async function hrTick(now) {
     return;
   }
   if (job) return; // 발주·매출 자동 창이 도는 중이면 양보
+  { const { hrSend } = await get("hrSend"); if (hrSend && hrSend.run && now - hrSend.run.at < 15 * 60e3) return; } // HR 전송(1.12.0)이 도는 중이면 양보
   if (now < (hrSt.next || 0)) return;
   if (!hrDue(now, hrSt)) return;
   await hrStart("정기", now);
