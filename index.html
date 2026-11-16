@@ -824,7 +824,9 @@ li.expired .name { text-decoration: none; }
   </div>
 </div>
 
+<script src="ocr-preprocess.js?v=1"></script>
 <script src="trace-nos.js"></script>
+<script src="barcode-decoder.js?v=1"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -1262,6 +1264,51 @@ li.expired .name { text-decoration: none; }
     if (onLocal) onLocal();
     try { return await localOcr(dataUrl, sparse); } catch { return ""; }
   }
+  // ---- 두 번째 읽기: 1차에서 글자가 비었거나 날짜를 못 찾았을 때, 그림자·구김을 편 사본으로 한 번 더 (ocr-preprocess.js) ----
+  // 원본 사진(dataUrl)은 그대로 두고 복사본에서만 계산한다. 모듈·캔버스가 없거나 실패하면 빈 문자열 → 1차 결과 유지.
+  async function ocrPreprocessed(dataUrl, sparse) {
+    const P = window.OcrPreprocess;
+    if (!P || typeof P.preprocessDataUrl !== "function") return "";
+    try {
+      const pre = await P.preprocessDataUrl(dataUrl);
+      if (!pre) return "";
+      return String(await localOcr(pre, sparse) || "");
+    } catch { return ""; }
+  }
+
+  // ---- 포장 바코드 해독 (barcode-decoder.js): (17) 유통기한은 소비기한 후보 1순위, 12자리 이력번호는 이력 조회로 ----
+  async function barcodeOf(dataUrl) {
+    const B = window.BarcodeScan;
+    if (!B || typeof B.decode !== "function" || !dataUrl) return null;
+    try { return await B.decode(dataUrl); } catch { return null; }
+  }
+  // 사진 글자 + 바코드에서 이력번호를 모은다. 바코드 값이 있으면 맨 앞 (박스 포장은 바코드가 더 정확).
+  async function traceFound(text, dataUrl) {
+    const out = traceNos(text);
+    const bc = await barcodeOf(dataUrl);
+    const no = bc && bc.traceNo;
+    if (no && !out.some((f) => f.no === no)) out.unshift({ no: no, kind: "" });
+    return out;
+  }
+  // 이력번호 → "이력 0021 4746 0101 · 2등급 · 도축 2026.05.23" 한 줄. 서버가 "미확정"이면 그대로 보여 준다.
+  // 같은 번호는 앱을 다시 열기 전까지 한 번만 묻는다.
+  const trInfoCache = {};
+  async function traceInfo(no) {
+    const key = String(no || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+    if (!key) return "";
+    if (trInfoCache[key]) return trInfoCache[key];
+    let d = null;
+    try { d = await hubPost({ action: "trace_lookup", traceNo: key }); } catch { }
+    if (!d) return ""; // 서버에 못 물었으면 아무 말도 더하지 않는다 (사진에서 읽은 결과 그대로)
+    const head = "이력 " + fmtNo(key);
+    if (!d.ok) { trInfoCache[key] = head + " · " + (d.note || "미확정"); return trInfoCache[key]; }
+    const parts = [];
+    if (d.grade) parts.push(d.grade + (/^\d+$/.test(d.grade) ? "등급" : ""));
+    if (d.butcherDate) parts.push("도축 " + fmt(d.butcherDate));
+    if (d.partName) parts.push(d.partName);
+    trInfoCache[key] = head + " · " + parts.join(" · ") + (d.source === "cache" ? " (캐시)" : "");
+    return trInfoCache[key];
+  }
 
   async function takeFormPhoto(file) {
     if (!file) return;
@@ -1275,13 +1322,36 @@ li.expired .name { text-decoration: none; }
     try { d = await uploadPhoto(id, data, true, color); }
     catch { showOcr({ img: data, title: "사진을 올리지 못했습니다", err: true, note: "인터넷 확인 후 다시 찍어 주세요" }); return; }
     if (!editId) formPhotoNew = id;
-    const text = await readText(d, data, false, () => showOcr({ img: data, title: "휴대폰에서 날짜를 읽는 중…", note: "처음 한 번은 10초쯤 걸려요", busy: true }));
+    let text = await readText(d, data, false, () => showOcr({ img: data, title: "휴대폰에서 날짜를 읽는 중…", note: "처음 한 번은 10초쯤 걸려요", busy: true }));
+    let r = parseLabel(text);
+    let prepped = false;
+    // 1차에서 글자가 비었거나 날짜를 못 찾았을 때만: 그림자·구김을 편 사본으로 한 번 더 읽는다 (자동 2차, 실패하면 1차 결과 그대로)
+    if (!r.found || !String(text || "").trim()) {
+      showOcr({ img: data, title: "사진을 한 번 더 읽는 중…", note: "구김·그림자를 편 사본으로 읽어요. 처음 한 번은 10초쯤 걸려요", busy: true });
+      const alt = await ocrPreprocessed(data, false);
+      const r2 = parseLabel(alt);
+      if (String(alt || "").trim() && (r2.found || !String(text || "").trim())) { text = alt; r = r2; prepped = true; }
+    }
     d = { ...d, text, ocrError: text.trim() ? "" : d.ocrError };
     formOcr = { text: d.text || "", color };
     await Promise.race([loadCatalog(), new Promise((z) => setTimeout(z, 1500))]); // 이름 목록이 늦으면 기다리지 않음
     suggestNames(d.text || "", d.suggest || []);
-    const r = parseLabel(d.text);
-    if (d.ocrError) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자를 읽지 못했어요. 날짜는 직접 입력해 주세요" }); return; }
+    // 바코드(포장)에서 읽은 값: (17) 유통기한이 있으면 사진 글자보다 먼저 믿는다 ("바코드에서 읽은 날짜")
+    const bc = await barcodeOf(data);
+    const bcExp = bc && bc.gs1 ? bc.gs1.expiry : "";
+    const bcLine = bc && bc.traceNo ? await traceInfo(bc.traceNo) : "";
+    if (bcExp) {
+      setMode("date"); modeTouched = true;
+      $("fExpiry").value = bcExp;
+      showOcr({
+        img: data, title: "바코드에서 읽었어요", sub: "유통기한 " + fmt(bcExp),
+        note: "포장 바코드 (17) 유통기한이에요. 라벨과 다르면 직접 고치세요" + (bcLine ? " · " + bcLine : ""),
+        choices: [{ iso: bcExp, tag: "바코드에서 읽은 날짜" }].concat((r.choices || []).filter((c) => c.iso !== bcExp)),
+        role: "exp", pre: bcExp,
+      });
+      return;
+    }
+    if (d.ocrError && !String(text || "").trim()) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자를 읽지 못했어요. 날짜는 직접 입력해 주세요" + (bcLine ? " · " + bcLine : "") }); return; }
     if (r.mode) { setMode(r.mode); modeTouched = true; }
     if (r.mode === "period") {
       if (r.mfg) $("fMfg").value = r.mfg;
@@ -1289,11 +1359,13 @@ li.expired .name { text-decoration: none; }
       else catApply(true);
     } else if (r.expiry) $("fExpiry").value = r.expiry;
     updatePreview();
-    if (!r.found) { showOcr({ img: data, title: "날짜를 찾지 못했어요", err: true, note: "사진은 저장했어요. 날짜는 직접 입력해 주세요" }); return; }
+    if (!r.found) { showOcr({ img: data, title: "날짜를 찾지 못했어요", err: true, note: "사진은 저장했어요. 날짜는 직접 입력해 주세요" + (bcLine ? " · " + bcLine : "") }); return; }
     showOcr({
       img: data, title: "사진에서 읽었어요", sub: roleText(r) || (r.role === "mfg" ? "제조일자를 골라 주세요" : "유통기한을 골라 주세요"),
-      note: r.pre ? "년.월.일 순서로 채웠어요. 라벨과 다르면 다른 날짜를 눌러 주세요"
-        : r.choices.length ? "날짜 순서가 나라마다 달라요. 라벨과 맞는 날짜를 눌러 주세요" : (r.mode === "period" ? "제조일+기간으로 채웠어요. " : "") + "맞는지 보고 [" + $("submit").textContent + "]",
+      note: (prepped ? "구김·그림자를 편 사본에서 읽었어요. " : "") + (r.pre
+        ? "년.월.일 순서로 채웠어요. 라벨과 다르면 다른 날짜를 눌러 주세요"
+        : r.choices.length ? "날짜 순서가 나라마다 달라요. 라벨과 맞는 날짜를 눌러 주세요"
+          : (r.mode === "period" ? "제조일+기간으로 채웠어요. " : "") + "맞는지 보고 [" + $("submit").textContent + "]") + (bcLine ? " · " + bcLine : ""),
       choices: r.choices, role: r.role, pre: r.pre,
     });
   }
@@ -2414,7 +2486,7 @@ li.expired .name { text-decoration: none; }
     c.photos.push(key); trNewPhotos.push(key);
     const text = await readText(d, shrunk.data, true, () => { job.detail = "휴대폰에서 읽는 중"; renderJobs(); });
     if (!alive()) { trInFlight--; return; }
-    const found = traceNos(text);
+    const found = await traceFound(text, shrunk.data);
     if (kind === "doc") {
       c.docPhotos.push(d.photo);
       found.forEach(placeDocNo);
@@ -2431,6 +2503,9 @@ li.expired .name { text-decoration: none; }
       relinkFromBoxes();
       job.detail = nos.length ? `번호 ${nos.length}개` : "번호 없음";
     }
+    // 이력 조회: 박스 번호(없으면 명세서 번호)로 도축일·등급 또는 "미확정"을 한 줄로
+    const info = await traceInfo(kind === "doc" ? (found[0] && found[0].no) : (c.cuts[kind].boxNo || ""));
+    if (info) job.detail = (job.detail || "") + " · " + info;
     job.state = "done"; trInFlight--;
     refreshCuts();
     if (!typingCut() && TraceNos.traceVerdict(c.cuts) === "wait") {
@@ -2455,7 +2530,8 @@ li.expired .name { text-decoration: none; }
     trInFlight--;
     if (!trCur || trCur.id !== shotId) { hubPost({ action: "unphoto", store: STORE, id: key }).catch(() => {}); maybeAutoSave(); return; }
     c.photos.push(key); trNewPhotos.push(key);
-    const found = traceNos(await readText(d, data, true, () => { hint.textContent = "휴대폰에서 읽는 중…"; }));
+    const text = await readText(d, data, true, () => { hint.textContent = "휴대폰에서 읽는 중…"; });
+    const found = await traceFound(text, data);
     if (kind === "doc") {
       c.docPhotos.push(d.photo);
       found.forEach((f) => { if (!c.doc.some((x) => x.no === f.no)) c.doc.push(f); });
