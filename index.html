@@ -1341,14 +1341,13 @@ li.expired .name { text-decoration: none; }
     const bcExp = bc && bc.gs1 ? bc.gs1.expiry : "";
     const bcLine = bc && bc.traceNo ? await traceInfo(bc.traceNo) : "";
     if (bcExp) {
-      setMode("expiry"); modeTouched = true;
+      setMode("date"); modeTouched = true;
       $("fExpiry").value = bcExp;
-      updatePreview();
       showOcr({
         img: data, title: "바코드에서 읽었어요", sub: "유통기한 " + fmt(bcExp),
         note: "포장 바코드 (17) 유통기한이에요. 라벨과 다르면 직접 고치세요" + (bcLine ? " · " + bcLine : ""),
         choices: [{ iso: bcExp, tag: "바코드에서 읽은 날짜" }].concat((r.choices || []).filter((c) => c.iso !== bcExp)),
-        role: "expiry", pre: bcExp,
+        role: "exp", pre: bcExp,
       });
       return;
     }
