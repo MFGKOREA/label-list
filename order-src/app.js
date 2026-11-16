@@ -2104,6 +2104,7 @@
   //  그 품목의 지난 예상 재고 구간(어제까지 끝난 최근 8개, 입고를 아는 구간, 28일 안)에서 w = 0·¼·½·¾·1 중 센 값과 가장 맞은 것. 5구간 미만이거나 레시피 연결(B)이 없으면 0
   //  되돌려 보기(10/27~11/12 센 날 1011건, 그날 전 구간만으로 배움): 평균 오차 1.87→1.83 · 반 단위 안 47.2→48.9% · 덜 시킬 위험 296→283 · 더 시킬 쪽 238→234
   //  스테이크·폭립 66건: 반 단위 안 16.7→31.8% · 덜 시킬 위험 30→24 (등심·안심·채끝·우대갈비는 1개 단위라 메뉴와 잘 맞음. 부채살·버터라이스는 안 맞아 w가 0 쪽으로)
+  //  (11/16 고침) 끝 날을 10시 전에 셌으면(미트카운트) 그날 입고는 센 뒤에 온 것 → 구간 입고에서 뺌. 예전엔 그 입고가 이 구간과 다음 구간에 두 번 잡혀 부채살 10/29→31 실사용이 73개(메뉴 13.3)로 보였음
   const menuW = (it) => {
     if (menuWMemo.has(it.key)) return menuWMemo.get(it.key);
     let res = { w: 0, n: 0 };
@@ -2115,7 +2116,7 @@
         const v = (db["input." + d] || {})[it.key]; if (!counted(v)) continue;
         for (let x = addDays(d, -1); x >= addDays(d, -7); x = addDays(x, -1)) {
           if (!counted((db["input." + x] || {})[it.key])) continue;
-          if (!unknownArr(it, x, d)) { const e = estWin(it, x, d), um = e ? menuUseSpan(it, x, e.left, d) : null; if (e && um != null) wins.push({ a: stockOf(it, v), base: e.base, use: e.use, um }); }
+          if (!unknownArr(it, x, d)) { const e = estWin(it, x, d, null, meatOn(it, d)), um = e ? menuUseSpan(it, x, e.left, d) : null; if (e && um != null) wins.push({ a: stockOf(it, v), base: e.base, use: e.use, um }); }
           break;
         }
       }
