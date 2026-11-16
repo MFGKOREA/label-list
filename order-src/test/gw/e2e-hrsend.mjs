@@ -89,7 +89,7 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
       const regRows = () => { const reg = S.reg[b.dept] || {}; return Object.keys(reg).map((no) => ({ emp_code: no, emp_name: reg[no], chk_message: "" })); };
       if (ep === "getMasterList_prc" && b.workType === "MAINROWS") {
         const depts = b.dept ? [b.dept] : Object.keys(S.reg), rows = [];
-        if (!S.emptyWeek) depts.forEach((d) => Object.entries(S.reg[d] || {}).forEach(([no, nm]) => { const r = { emp_code: no, emp_name: nm, duty_name: "직책 010-xxxx", workType: "" }; const w = S.week[no] || {}; DOWS0.forEach((D) => { const x = w[D] || { code: "", on: "", off: "", brk: "" }; r[D + "_edit_yn"] = S.lockDay === D ? "N" : x.code ? "Y" : ""; r[D + "_time_item_code_p"] = x.code; r[D + "_work_on_p_hhmm"] = x.on; r[D + "_work_off_p_hhmm"] = x.off; r[D + "_break_time_p_hhmm"] = x.brk; }); rows.push(r); }));
+        if (!S.emptyWeek) depts.forEach((d) => Object.entries(S.reg[d] || {}).forEach(([no, nm]) => { const r = { emp_code: no, emp_name: nm, duty_name: "직책 010-xxxx", dept_name: d, workType: "" }; const w = S.week[no] || {}; DOWS0.forEach((D) => { const x = w[D] || { code: "", on: "", off: "", brk: "" }; r[D + "_edit_yn"] = S.lockDay === D ? "N" : x.code ? "Y" : ""; r[D + "_time_item_code_p"] = x.code; r[D + "_work_on_p_hhmm"] = x.on; r[D + "_work_off_p_hhmm"] = x.off; r[D + "_break_time_p_hhmm"] = x.brk; }); rows.push(r); }));
         return json({ returnCode: 0, data: { infoEnc: enc(rows) } });
       }
       if (ep === "uploadDayExcelFile_prc") { S.uploads++; return json({ returnCode: 0 }); }
@@ -157,7 +157,7 @@ const mgr = () => emp("90000020", "시험점");
 // 1) test: 월요일만 카드 입력 → [저장] 한 번. 업로드·팝업은 안 씀. 부서 FOH→BOH, 주차 46→48
 reset();
 let x = await send({ mode: "test", employees: all3() });
-ok(x.res && x.res.ok && x.res.test && x.res.savedDays.join() === "MON" && S.saves.length === 1 && S.saves[0].dept === "BOH" && S.saves[0].wk === 48 && S.uploads === 0 && S.notice === 0, `test: BOH 탭 카드 입력·저장 1번(48주), 업로드 0 · 공지 0 (저장 ${S.saves.length})`, brief(x));
+ok(x.res && x.res.ok && x.res.test && x.res.savedDays.join() === "MON" && S.saves.length === 1 && S.saves[0].dept === "" && S.saves[0].wk === 48 && S.uploads === 0 && S.notice === 0 && !S.deptPicked, `test: 소속구분 빈칸(전체)에서 카드 입력·저장 1번(48주), 업로드 0 · 공지 0 (저장 ${S.saves.length})`, brief(x));
 ok(S.week["90000001"] && S.week["90000001"].MON.code === "10" && S.week["90000001"].MON.on === "09:00" && ["TUE", "WED", "SUN"].every((d) => !S.week["90000001"][d] || S.week["90000001"][d].code === ""), "test: 월요일만 들어가고 화~일은 그대로", JSON.stringify(S.week["90000001"]));
 ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.res.log.some((l) => /saveData_prc 200/.test(l.ajax || "")) && x.res.log.some((l) => /다시 읽어 확인: 3명 맞음/.test(l.msg)), "보드가 ACK·단계를 받고, 저장 뒤 다시 읽어 확인", brief(x));
 // 2) saveOnly: 7일 한 번에, 주휴일 코드(18)는 근태 칸 드롭다운에서 읽음
@@ -165,10 +165,10 @@ reset();
 x = await send({ mode: "saveOnly", employees: all3() });
 ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.length === 1 && S.week["90000001"].WED.code === "18" && S.week["90000001"].SUN.code === "17" && S.week["90000001"].SUN.on === "" && x.res.log.some((l) => /18=주휴일/.test(l.msg)), "saveOnly: 7일을 저장 한 번에, 주휴일 코드 18은 드롭다운 목록에서", brief(x));
 ok(!S.copy && !S.init && S.uploads === 0, "전주복사·초기화·업로드 안 누름");
-// 3) STORE 나누기: BOH 3명 + 관리자(STORE) 1명 → BOH 탭 저장 → STORE 탭 저장
+// 3) 부서를 고르지 않음: BOH 3명 + 관리자(STORE) 1명 → 전체 화면에서 저장 한 번
 reset();
 x = await send({ mode: "saveOnly", employees: [...all3(), mgr()] });
-ok(x.res && x.res.ok && S.saves.length === 2 && S.saves[0].dept === "BOH" && S.saves[0].n === 3 && S.saves[1].dept === "STORE" && S.saves[1].emps.join() === "90000020" && x.res.savedEmpNos.length === 4, `STORE 관리자는 STORE 탭에서 따로 저장 (${S.saves.map((q) => q.dept + q.n).join(",")})`, brief(x));
+ok(x.res && x.res.ok && S.saves.length === 1 && S.saves[0].dept === "" && S.saves[0].n === 4 && x.res.savedEmpNos.length === 4, `BOH 3명 + STORE 관리자 1명 → 전체 화면에서 한 번에 저장 (${S.saves.map((q) => (q.dept || "전체") + q.n).join(",")})`, brief(x));
 // 4) HR 어디에도 없는 사번 → 저장 전에 멈춤
 reset();
 x = await send({ mode: "test", employees: [...all3(), emp("99999999", "없는사람")] });
@@ -176,7 +176,7 @@ ok(x.res && !x.res.ok && x.res.stage === "week" && /99999999/.test(x.res.message
 // 5) 부서 탭에 있는데 안 보낸 직원 → 저장 전에 멈춤
 reset();
 x = await send({ mode: "test", employees: [emp("90000001", "시험일"), emp("90000002", "시험이")] });
-ok(x.res && !x.res.ok && (x.res.missing || []).join() === "90000003" && S.saves.length === 0, "BOH 탭에 있는데 안 보낸 직원 → 저장 전에 멈춤", brief(x));
+ok(x.res && !x.res.ok && (x.res.missing || []).join() === "90000003" && S.saves.length === 0, "BOH인데 안 보낸 직원 → 저장 전에 멈춤 (FOH·STORE 직원은 안 셈)", brief(x));
 // 6) 확정·공지된 주
 reset({ status: { 48: "CONFIRM" } }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "confirmed" && S.saves.length === 0, "이미 확정된 주 → 멈춤", brief(x));

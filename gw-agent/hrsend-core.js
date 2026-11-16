@@ -152,7 +152,7 @@
     const errors = [], seen = new Map(); let n = 0;
     for (const t of tabs || []) for (const r of t.rows || []) {
       if (!r.empNo || seen.has(r.empNo)) continue; seen.set(r.empNo, t.dept); n++;
-      const who = { empNo: r.empNo, name: r.name, dept: t.dept };
+      const who = { empNo: r.empNo, name: r.name, dept: r.dept || t.dept };
       let wk = 0, min = 0;
       for (const d of r.days || []) {
         const k = kindOf(d.code), tin = hhmm(d.in), tout = hhmm(d.out), brk = hhmm(d.brk);
