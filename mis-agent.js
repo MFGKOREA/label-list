@@ -40,6 +40,8 @@
   };
   const getFull = async () => { const j = await (await fetch(withKey(API + "?api=1&t=" + Date.now()))).json(); if (!j.ok && j.auth) { state = "가게 키 필요 (확장 창에서 입력)"; throw new Error("auth"); } return j.data || {}; };
   const set = (key, value) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value, k: KEY }) });
+  // 바뀐 칸만 씀 (11/16 #16): 결과를 통째로 set 하면 그새 들어온 새 요청을 지움 → 남의 칸·새 요청을 건드리지 않게
+  const merge = (key, patch) => fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "merge", key, patch, k: KEY }) });
 
   // 화면 표시: 탭 제목 앞에 [자동대기], 주문등록 화면 오른쪽 아래에 상태 배지
   const baseTitle = document.title.replace(/^\[[^\]]*\]\s*/, "");
@@ -79,7 +81,10 @@
         try { r = await window.__misFill(true); } catch (e) { r = { ok: false, text: "중간에 멈춤: " + (e && e.message ? e.message : e) }; }
         if (!r) r = { ok: false, text: "실행 안 됨" };
         if (/이미 입력 중/.test(r.text || "")) { await set("misPush", { ...p, status: "pending" }); state = "대기 중"; return; } // 다른 입력이 끝나면 다음 확인 때 다시
-        await set("misPush", { ...p, status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, saved: r.saved, total: r.total });
+        // 결과를 적기 직전에 요청이 아직 내 것인지 다시 봄 (11/16 #16): 입력하는 사이 새 요청이 들어왔으면 이 결과는 넘김 — 덮어써서 새 요청이 사라지지 않게
+        const q2 = (await get()).misPush || {};
+        if (q2.id !== p.id || q2.by !== ME) { state = "새 요청이 들어와 이 결과는 넘김"; badge(); return; }
+        await merge("misPush", { status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, saved: r.saved, total: r.total });
         state = r.ok ? `${hm(Date.now())} 저장 완료` : `${hm(Date.now())} 확인 필요`;
       }
       // MIS 로그인 유지: 10분마다 지금 화면 주소를 다시 요청 (화면은 안 바뀜)
