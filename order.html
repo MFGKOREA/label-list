@@ -3777,15 +3777,15 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     // (11/16 KM "소모품 세제들도 발주시트에 포함, 업체·소모품 구분") 앱 목록에서 숨긴 소모품·세제(발주 시트 master.order)와, 앱에 없지만 MIS에서 발주한 품목도 줄로 넣음. 재고는 안 세니 발주 칸만.
     const sel0 = weeks.filter((m) => logWeekSel.has(m)), have = new Set(); all.forEach((it) => (it.codes || []).forEach((c) => have.add(String(c))));
     // (11/16 KM "유한락스는 온세물류(소모품)", "발주현황표 다시 확인") 업체는 MIS 주문현황의 거래처명(misOrder 줄의 v)이 우선, 없으면 발주 품목 파일(소모품 = 한성물산, 세제 = 이콜랩)
-    const SUP = /장갑|봉투|호일|냅킨|물티슈|타올|용기|박스|쇼핑백|수세미|포션백|유산지|유니랩|랩\(|쌀포대|도마|스쿱|페퍼밀|빨대|스트로우|컵|행주|세제|광택제|클리너|린스|락스|국자|그레이터|타이머|나인팬/;
+    const SUP = /장갑|봉투|호일|냅킨|물티슈|타올|용기|박스|쇼핑백|수세미|포션백|유산지|유니랩|랩\(|쌀포대|도마|스쿱|페퍼밀|빨대|스트로우|컵|행주|세제|광택제|클리너|린스|락스/;
     const custOf = new Map(); Object.keys(db).filter((k) => /^misOrder\.\d{4}-\d\d-\d\d$/.test(k)).sort().forEach((k) => ((db[k] || {}).rows || []).forEach((r) => { if (r && r.v) custOf.set(String(r.code), String(r.v)); }));
-    const grpOf = (c, fileV, name) => { const v = custOf.get(c) || ""; if (/이콜랩/.test(v) || (!v && /세제/.test(fileV || ""))) return "세제"; if (/한성/.test(v) || (!v && /소모품/.test(fileV || ""))) return "한성물산 (소모품)"; if (/바이맥스/.test(v)) return "바이맥스 (기물)";
+    const grpOf = (c, fileV, name) => { const v = custOf.get(c) || ""; if (/이콜랩/.test(v) || (!v && /세제/.test(fileV || ""))) return "세제"; if (/한성/.test(v) || (!v && /소모품/.test(fileV || ""))) return "한성물산 (소모품)"; 
       if (/온세/.test(v) && (SUP.test(name || "") || /소모품|세제/.test(fileV || ""))) return "온세물류 (소모품)"; return null; }; // 음료·주류·기타 식자재(롯데칠성·주류·온세물류 식자재)는 넣지 않음 (11/16 KM "제외")
     const extra = new Map(); // 코드 → { name, unit, vendor }
     ((db["master.order"] || {}).rows || []).forEach((r) => { const c = String(r.code || ""); if (!/^\d{6,}$/.test(c) || have.has(c) || !/소모품|세제/.test(r.vendor || "")) return; const g = grpOf(c, r.vendor, r.name); if (g) extra.set(c, { name: r.name, unit: r.unit || "", vendor: g }); });
     sel0.forEach((m) => { for (let k = 0; k < 7; k++) ((db["misOrder." + addDays(m, k)] || {}).rows || []).forEach((r) => { const c = String((r && r.code) || ""); if (!c || have.has(c) || extra.has(c) || !(num(r.qty) > 0)) return;
       const g = grpOf(c, "", r.name) || (!custOf.get(c) && SUP.test(r.name || "") ? "한성물산 (소모품)" : null); if (g) extra.set(c, { name: r.name || c, unit: r.unit || "", vendor: g }); }); });
-    const GORD = ["세제", "한성물산 (소모품)", "온세물류 (소모품)", "바이맥스 (기물)"];
+    const GORD = ["세제", "한성물산 (소모품)", "온세물류 (소모품)"]; // 11/16 KM "소모품은 두 종류: 한성, 온세" (바이맥스 기물은 뺌)
     [...extra].sort((x, y) => GORD.indexOf(x[1].vendor) - GORD.indexOf(y[1].vendor)).forEach(([c, x]) => { const v = x.vendor, it = { key: "\u0001x" + c, name: x.name, vendor: v, xcode: c, pk: { stock: x.unit }, box: 0 }; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); order.push(it); });
     order.sort((a, b) => [...byV.keys()].indexOf(a.vendor || "업체 미지정") - [...byV.keys()].indexOf(b.vendor || "업체 미지정")); // 업체별로 모음(안에서는 넣은 순서 그대로)
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
