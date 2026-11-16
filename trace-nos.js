@@ -122,5 +122,108 @@
     return mismatch ? "fix" : "save";
   }
 
-  g.TraceNos = { STEAKS: STEAKS, normTrace: normTrace, traceNos: traceNos, compareTrace: compareTrace, kindNear: kindNear, nextTraceShot: nextTraceShot, traceVerdict: traceVerdict };
+  // ---- GS1-128 바코드 (축산물·식자재 포장의 (01) GTIN / (10) 로트 / (17) 유통기한) ----
+  // 포장 바코드를 읽었거나 라벨 글자에 AI 표기가 찍혀 있을 때 쓴다. 없는 값은 빈 문자열로 두고, 읽은 AI 는 순서대로 남긴다.
+  const GS1_FNC1 = "\u001d";
+  const GS1_AI = {
+    "00": { name: "sscc", len: 18 },
+    "01": { name: "gtin", len: 14, key: "gtin" },
+    "02": { name: "content", len: 14 },
+    "10": { name: "lot", var: true, max: 20, key: "lot" },
+    "11": { name: "prodDate", len: 6, date: true },
+    "13": { name: "packDate", len: 6, date: true },
+    "15": { name: "bestBefore", len: 6, date: true },
+    "17": { name: "expiry", len: 6, date: true, key: "expiry" },
+    "20": { name: "variant", len: 2 },
+    "21": { name: "serial", var: true, max: 20, key: "serial" },
+    "30": { name: "count", var: true, max: 8 },
+    "37": { name: "countUnit", var: true, max: 8 },
+    "7003": { name: "processDate", len: 10, date: true },
+  };
+
+  const gs1Pad = (n) => String(n).padStart(2, "0");
+  // YYMMDD → YYYY-MM-DD. 두 자리 연도는 79 이하를 2000년대로 (26→2026, 99→1999).
+  function gs1Date(value) {
+    const dg = String(value || "").replace(/\D/g, "");
+    if (dg.length < 6) return "";
+    let y = +dg.slice(0, 2), mo = +dg.slice(2, 4), d = +dg.slice(4, 6);
+    y += y <= 79 ? 2000 : 1900;
+    const dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return "";
+    return y + "-" + gs1Pad(mo) + "-" + gs1Pad(d);
+  }
+
+  // GTIN-14 검증숫자 (오독이면 false — 버리지는 않고 표시만 한다)
+  function gs1GtinValid(digits) {
+    const g = String(digits || "");
+    if (!/^\d{14}$/.test(g)) return false;
+    let sum = 0;
+    for (let i = 0; i < 13; i++) sum += +g[i] * (i % 2 === 0 ? 3 : 1);
+    return (10 - (sum % 10)) % 10 === +g[13];
+  }
+
+  function parseGs1Barcode(raw) {
+    const res = { ok: false, gtin: "", gtinValid: false, lot: "", expiry: "", expiryRaw: "", serial: "", ais: [], warning: "" };
+    let s = String(raw == null ? "" : raw).replace(/[\u001d\u001e]|<GS>|\[GS\]/gi, GS1_FNC1).trim();
+    s = s.replace(/^\]C[0-9A-Za-z]/, "").trim(); // 바코드 리더가 붙이는 심볼로지 식별자(]C1 등)는 버린다
+    if (!s) { res.warning = "빈 문자열"; return res; }
+
+    const take = (ai, value) => {
+      const spec = GS1_AI[ai];
+      const v = String(value == null ? "" : value).replace(/\u001d/g, "").trim();
+      if (!v) return;
+      res.ais.push({ ai: ai, value: v });
+      if (!spec) { res.warning = res.warning || ("모르는 AI (" + ai + ")"); return; }
+      if (spec.key && !spec.date && !res[spec.key]) res[spec.key] = v;
+      if (spec.key === "gtin") res.gtinValid = gs1GtinValid(v.replace(/\D/g, ""));
+      if (spec.date && ai === "17") {
+        const iso = gs1Date(v);
+        res.expiryRaw = v.replace(/\D/g, "").slice(0, 6);
+        if (iso) { if (!res.expiry) res.expiry = iso; }
+        else res.warning = res.warning || ("(17) 날짜를 읽지 못함: " + v);
+      }
+    };
+
+    // 괄호 표기: (01)08801234567890(17)261030(10)LOT1
+    if (s.indexOf("(") >= 0) {
+      const marks = [], re = /\((\d{2,4})\)/g;
+      let m;
+      while ((m = re.exec(s))) marks.push({ ai: m[1], at: m.index, from: re.lastIndex });
+      marks.forEach((mk, i) => {
+        let value = s.slice(mk.from, i + 1 < marks.length ? marks[i + 1].at : s.length);
+        const spec = GS1_AI[mk.ai];
+        if (spec && !spec.var) {
+          // 사이에 낀 공백·줄바꿈은 버리고 정해진 길이만큼만 (뒤에 줄글이 붙어도 날짜는 앞 6자리)
+          value = value.replace(/[^0-9A-Za-z]/g, "").slice(0, spec.len);
+        } else {
+          value = value.split(/[\n\r]/)[0];
+        }
+        take(mk.ai, value);
+      });
+    } else {
+      // 무괄호 연속 문자열: FNC1(\u001d) 또는 정해진 길이로 끊는다. 01088012345678901726103010ABC
+      let i = 0, guard = 0;
+      while (i < s.length && guard++ < 64) {
+        if (s[i] === GS1_FNC1 || /\s/.test(s[i])) { i++; continue; }
+        const four = s.slice(i, i + 4), two = s.slice(i, i + 2);
+        const ai = GS1_AI[four] ? four : GS1_AI[two] ? two : "";
+        const spec = GS1_AI[ai];
+        if (!spec) { res.warning = res.warning || ("AI를 찾지 못함: " + two); break; }
+        const from = i + ai.length;
+        let end;
+        if (spec.var) {
+          const gsAt = s.indexOf(GS1_FNC1, from);
+          end = gsAt >= 0 ? Math.min(gsAt, from + spec.max) : Math.min(s.length, from + spec.max);
+        } else {
+          end = Math.min(s.length, from + spec.len);
+        }
+        take(ai, s.slice(from, end));
+        i = end + (s[end] === GS1_FNC1 ? 1 : 0);
+      }
+    }
+    res.ok = !!(res.gtin || res.lot || res.expiry || res.serial || res.ais.length);
+    return res;
+  }
+
+  g.TraceNos = { STEAKS: STEAKS, normTrace: normTrace, traceNos: traceNos, compareTrace: compareTrace, kindNear: kindNear, nextTraceShot: nextTraceShot, traceVerdict: traceVerdict, parseGs1Barcode: parseGs1Barcode };
 })(typeof globalThis !== "undefined" ? globalThis : this);

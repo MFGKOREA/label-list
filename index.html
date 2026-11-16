@@ -824,6 +824,7 @@ li.expired .name { text-decoration: none; }
   </div>
 </div>
 
+<script src="ocr-preprocess.js?v=1"></script>
 <script src="trace-nos.js"></script>
 <script>
 (() => {
@@ -1262,6 +1263,17 @@ li.expired .name { text-decoration: none; }
     if (onLocal) onLocal();
     try { return await localOcr(dataUrl, sparse); } catch { return ""; }
   }
+  // ---- 두 번째 읽기: 1차에서 글자가 비었거나 날짜를 못 찾았을 때, 그림자·구김을 편 사본으로 한 번 더 (ocr-preprocess.js) ----
+  // 원본 사진(dataUrl)은 그대로 두고 복사본에서만 계산한다. 모듈·캔버스가 없거나 실패하면 빈 문자열 → 1차 결과 유지.
+  async function ocrPreprocessed(dataUrl, sparse) {
+    const P = window.OcrPreprocess;
+    if (!P || typeof P.preprocessDataUrl !== "function") return "";
+    try {
+      const pre = await P.preprocessDataUrl(dataUrl);
+      if (!pre) return "";
+      return String(await localOcr(pre, sparse) || "");
+    } catch { return ""; }
+  }
 
   async function takeFormPhoto(file) {
     if (!file) return;
@@ -1275,13 +1287,21 @@ li.expired .name { text-decoration: none; }
     try { d = await uploadPhoto(id, data, true, color); }
     catch { showOcr({ img: data, title: "사진을 올리지 못했습니다", err: true, note: "인터넷 확인 후 다시 찍어 주세요" }); return; }
     if (!editId) formPhotoNew = id;
-    const text = await readText(d, data, false, () => showOcr({ img: data, title: "휴대폰에서 날짜를 읽는 중…", note: "처음 한 번은 10초쯤 걸려요", busy: true }));
+    let text = await readText(d, data, false, () => showOcr({ img: data, title: "휴대폰에서 날짜를 읽는 중…", note: "처음 한 번은 10초쯤 걸려요", busy: true }));
+    let r = parseLabel(text);
+    let prepped = false;
+    // 1차에서 글자가 비었거나 날짜를 못 찾았을 때만: 그림자·구김을 편 사본으로 한 번 더 읽는다 (자동 2차, 실패하면 1차 결과 그대로)
+    if (!r.found || !String(text || "").trim()) {
+      showOcr({ img: data, title: "사진을 한 번 더 읽는 중…", note: "구김·그림자를 편 사본으로 읽어요. 처음 한 번은 10초쯤 걸려요", busy: true });
+      const alt = await ocrPreprocessed(data, false);
+      const r2 = parseLabel(alt);
+      if (String(alt || "").trim() && (r2.found || !String(text || "").trim())) { text = alt; r = r2; prepped = true; }
+    }
     d = { ...d, text, ocrError: text.trim() ? "" : d.ocrError };
     formOcr = { text: d.text || "", color };
     await Promise.race([loadCatalog(), new Promise((z) => setTimeout(z, 1500))]); // 이름 목록이 늦으면 기다리지 않음
     suggestNames(d.text || "", d.suggest || []);
-    const r = parseLabel(d.text);
-    if (d.ocrError) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자를 읽지 못했어요. 날짜는 직접 입력해 주세요" }); return; }
+    if (d.ocrError && !String(text || "").trim()) { showOcr({ img: data, title: "사진은 저장했어요", note: "글자를 읽지 못했어요. 날짜는 직접 입력해 주세요" }); return; }
     if (r.mode) { setMode(r.mode); modeTouched = true; }
     if (r.mode === "period") {
       if (r.mfg) $("fMfg").value = r.mfg;
@@ -1292,8 +1312,10 @@ li.expired .name { text-decoration: none; }
     if (!r.found) { showOcr({ img: data, title: "날짜를 찾지 못했어요", err: true, note: "사진은 저장했어요. 날짜는 직접 입력해 주세요" }); return; }
     showOcr({
       img: data, title: "사진에서 읽었어요", sub: roleText(r) || (r.role === "mfg" ? "제조일자를 골라 주세요" : "유통기한을 골라 주세요"),
-      note: r.pre ? "년.월.일 순서로 채웠어요. 라벨과 다르면 다른 날짜를 눌러 주세요"
-        : r.choices.length ? "날짜 순서가 나라마다 달라요. 라벨과 맞는 날짜를 눌러 주세요" : (r.mode === "period" ? "제조일+기간으로 채웠어요. " : "") + "맞는지 보고 [" + $("submit").textContent + "]",
+      note: (prepped ? "구김·그림자를 편 사본에서 읽었어요. " : "") + (r.pre
+        ? "년.월.일 순서로 채웠어요. 라벨과 다르면 다른 날짜를 눌러 주세요"
+        : r.choices.length ? "날짜 순서가 나라마다 달라요. 라벨과 맞는 날짜를 눌러 주세요"
+          : (r.mode === "period" ? "제조일+기간으로 채웠어요. " : "") + "맞는지 보고 [" + $("submit").textContent + "]"),
       choices: r.choices, role: r.role, pre: r.pre,
     });
   }
