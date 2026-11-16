@@ -15,41 +15,65 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "gw-hrs-")), sleep = (ms) => n
 execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", TMP + "/key.pem", "-out", TMP + "/cert.pem", "-days", "2", "-subj", "/CN=localhost"], { stdio: "ignore" });
 
 // ---- 가짜 HR 상태 ----
+//  REG: HR에 등록된 직원(부서별 사번→이름). status: 주차별 상태(EDIT·NOTICE·CONFIRM, ""=상태 없음)
 let S;
-const reset = (o) => { S = Object.assign({ login: true, status: "EDIT", hrEmp: { BOH: ["90000001", "90000002"], FOH: ["90000009"] }, saves: [], notice: 0, confirm: 0, confirms: [], saveErr: "", deptStart: "FOH", weekStart: 46 }, o || {}); };
+const REG0 = { BOH: { "90000001": "시험일", "90000002": "시험이", "90000003": "시험삼" }, FOH: { "90000009": "시험구" } };
+const reset = (o) => { S = Object.assign({ login: true, status: { 48: "EDIT" }, reg: JSON.parse(JSON.stringify(REG0)), saves: [], notice: 0, confirm: 0, init: 0, uploads: 0, uploadHttp: 200, deptStart: "FOH", weekStart: 46, calls: [] }, o || {}); };
 reset();
 const WEEKS = { 45: ["11/02", "11/08"], 46: ["11/09", "11/15"], 47: ["11/16", "11/22"], 48: ["11/23", "11/29"], 49: ["11/30", "12/06"] };
 const hrPage = () => `<!doctype html><meta charset="utf-8"><title>HR</title><body>
 <ul id="gnb"><li menu-desc="근태관리"><span class="menu-step1">근태관리</span><ul><li><a href="#" menu-app-id="HRT/W_HRT6300"><span>출퇴근상세조회</span></a></li><li><a href="#" menu-app-id="HRT/W_HRT2325"><span>주간스케쥴(시간)</span></a></li></ul></li></ul>
-<div id="app"></div><div id="toasts"></div>
+<div id="app"></div><div id="toasts"></div><div id="jl_noti" style="display:none"><span id="jl_noti_msg"></span><button id="jl_noti_footer_btn1">확인</button><button id="jl_noti_report">오류 신고</button></div>
 <script>
-const W=${JSON.stringify(WEEKS)}; let wk=${S.weekStart}, dept=${JSON.stringify(S.deptStart)}, status=${JSON.stringify(S.status)}, hrEmp=${JSON.stringify(S.hrEmp)}, saveErr=${JSON.stringify(S.saveErr)};
-window.doClientMsg=function(m){const d=document.createElement('div');d.className='toast-msg';d.textContent=m;document.getElementById('toasts').appendChild(d);setTimeout(()=>d.remove(),3000);};
-const post=(u,o)=>fetch(u,{method:'POST',body:JSON.stringify(o)});
+const W=${JSON.stringify(WEEKS)}; let wk=${S.weekStart}, dept=${JSON.stringify(S.deptStart)}, status='';
+const KIND={'출근':'10','휴무':'17','주휴일':'18','공휴일':'19'}, DOWS=['MON','TUE','WED','THU','FRI','SAT','SUN'];
+// 사이트 전역 흉내: jq(ajaxComplete·data('kendoGrid')), decParam, doClientMsg
+const H=[]; window.jq=function(sel){ if(sel===document) return {ajaxComplete(fn){H.push(fn);}}; const el=typeof sel==='string'?document.querySelector(sel):sel; return {data(k){return el&&el.__k&&el.__k[k];}}; };
+window.decParam=(s)=>decodeURIComponent(escape(atob(s)));
+window.doClientMsg=function(m){const s=typeof m==='object'?m.message:m;const d=document.createElement('div');d.className='toast-msg';d.textContent=s;document.getElementById('toasts').appendChild(d);setTimeout(()=>d.remove(),3000);if(/불가|오류|Error/.test(s)){document.getElementById('jl_noti_msg').textContent=s;document.getElementById('jl_noti').style.display='block';}};
+document.getElementById('jl_noti_footer_btn1').onclick=()=>{document.getElementById('jl_noti').style.display='none';};
+document.getElementById('jl_noti_report').onclick=()=>{window.__reported=1;};
+async function ajax(ep,body){const url='/HRT/W_HRT2325/W_HRT2325/'+ep;const r=await fetch(url,{method:'POST',body:JSON.stringify(body||{})});const t=await r.text();H.forEach(h=>h({}, {status:r.status,responseText:t}, {url}));try{return {status:r.status,j:JSON.parse(t)};}catch(e){return {status:r.status,j:null};}}
+const enc=(o)=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+let pop=[];const grid={dataSource:{view(){return pop;}}};
 document.querySelector('a[menu-app-id="HRT/W_HRT2325"]').addEventListener('click',(e)=>{e.preventDefault();setTimeout(render,300);});
+function btns(){document.getElementById('hrt2325_btn_notice').disabled=status!=='EDIT';document.getElementById('hrt2325_btn_confirm').disabled=status!=='NOTICE';document.getElementById('hrt2325_btn_init').disabled=!(wk>=47);}
+async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';btns();document.getElementById('mg').innerHTML='<table><tbody><tr><td>직원 (휴대폰 칸)</td></tr></tbody></table>';}
+async function loadDay(dow){const r=await ajax('getMasterList_prc',{workType:'DETAIL',dept,wk,dow});pop=JSON.parse(decParam(r.j.data.infoEnc));}
 function render(){document.getElementById('app').innerHTML=\`
  <input type="hidden" id="hrt2325_search_site_code" value="5090"><input type="hidden" id="hrt2325_dept_category" value="\${dept}">
- <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}"><input type="hidden" id="hrt2325_schedule_status" value="">
+ <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}">
  <label><input type="checkbox" id="hrt2325_search_leave_yn" checked>휴직자 미포함</label>
  <span class="dd"><button type="button" id="ddb">\${dept}</button><ul id="ddl" style="display:none"><li>BOH</li><li>FOH</li></ul></span>
  <button onclick="hrt2325.moveWeek('prev')">‹</button><span id="wk">\${wk}주(\${W[wk][0]}~\${W[wk][1]})</span><button onclick="hrt2325.moveWeek('next')">›</button>
  <button id="hrt2325_btn_search">검색</button><button id="hrt2325_btn_pop">일자별 수정</button><button id="hrt2325_btn_save" disabled>저장</button>
- <button id="hrt2325_btn_notice">공지</button><button id="hrt2325_btn_confirm" disabled>확정</button><button id="hrt2325_btn_init">초기화</button>
+ <button id="hrt2325_btn_notice" disabled>공지</button><button id="hrt2325_btn_confirm" disabled>확정</button><button id="hrt2325_btn_init" disabled>초기화</button><button id="hrt2325_btn_copy">전주복사</button>
  <div class="k-grid" id="mg"></div>
- <div id="hrt2325_pop_sub" style="display:none"><div>\${['MON','TUE','WED','THU','FRI','SAT','SUN'].map((v,i)=>'<input type="radio" name="hrt2325_pop_title" id="pt'+i+'" value="'+v+'"'+(i==0?' checked':'')+'><label for="pt'+i+'">'+v+'</label>').join('')}</div>
-   <form id="hrt2325_day_frm_file_upload"><input type="file" id="hrt2325_day_excel_file" style="display:none"></form><button id="hrt2325_day_modal_excel_upload">엑셀업로드</button>
-   <div class="k-grid" id="pg"><table><thead><tr><th>사원코드</th><th>이름</th><th>근태유형</th></tr></thead><tbody></tbody></table></div><button id="hrt2325_pop_btn_save">저장</button></div>\`;
+ <div id="hrt2325_pop_sub" style="display:none"><div>\${DOWS.map((v,i)=>'<input type="radio" name="hrt2325_pop_title" id="pt'+i+'" value="'+v+'"'+(i==0?' checked':'')+'><label for="pt'+i+'">'+v+'</label>').join('')}</div>
+   <form id="hrt2325_day_frm_file_upload"><input type="file" id="hrt2325_day_excel_file" style="display:none"></form>
+   <div id="hrt2325_pop_list_html" class="k-grid"></div><button id="hrt2325_pop_btn_save">저장</button><button class="btn-close">닫기</button></div>\`;
+ document.getElementById('hrt2325_pop_list_html').__k={kendoGrid:grid};
  document.getElementById('ddb').onclick=()=>{document.getElementById('ddl').style.display='block';};
  document.querySelectorAll('#ddl li').forEach(li=>li.onclick=()=>{dept=li.textContent;document.getElementById('hrt2325_dept_category').value=dept;document.getElementById('ddb').textContent=dept;document.getElementById('ddl').style.display='none';});
- document.getElementById('hrt2325_btn_search').onclick=()=>{document.getElementById('hrt2325_schedule_status').value=status;document.getElementById('mg').innerHTML='<table><thead><tr><th>사번</th><th>이름</th></tr></thead><tbody>'+(hrEmp[dept]||[]).map(n=>'<tr><td>'+n+'</td><td>x</td></tr>').join('')+'</tbody></table>';};
- document.getElementById('hrt2325_btn_pop').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='block';};
- document.getElementById('hrt2325_day_excel_file').addEventListener('change',async(e)=>{const f=e.target.files[0];const rows=parseXlsx(new Uint8Array(await f.arrayBuffer()));window.__pop=rows;const have=new Set(rows.slice(1).map(r=>r[1]));const inHr=new Set(hrEmp[dept]||[]);const all=[...rows.slice(1).map(r=>r[1]).filter(n=>inHr.has(n)),...(hrEmp[dept]||[]).filter(n=>!have.has(n))];document.querySelector('#pg tbody').innerHTML=all.map(n=>'<tr><td>'+n+'</td><td>x</td><td>-</td></tr>').join('');window.__fname=f.name;doClientMsg('엑셀 데이터가 화면에 반영되었습니다.');});
- document.getElementById('hrt2325_pop_btn_save').onclick=async()=>{const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;if(saveErr){doClientMsg(saveErr);return;}await post('/__save',{dow,dept,wk,file:window.__fname,rows:window.__pop});doClientMsg('저장되었습니다.');document.getElementById('hrt2325_pop_sub').style.display='none';};
- document.getElementById('hrt2325_btn_notice').onclick=async()=>{if(!confirm('공지 하시겠습니까?'))return;await post('/__notice',{});status='NOTICE';document.getElementById('hrt2325_btn_confirm').disabled=false;doClientMsg('공지 되었습니다.');};
- document.getElementById('hrt2325_btn_confirm').onclick=async()=>{if(!confirm('확정 하시겠습니까?'))return;await post('/__confirm',{});status='CONFIRM';doClientMsg('확정 되었습니다.');};
- document.getElementById('hrt2325_btn_init').onclick=()=>post('/__init',{});
+ document.getElementById('hrt2325_btn_search').onclick=search;
+ document.getElementById('hrt2325_btn_pop').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='block';setTimeout(()=>loadDay('MON'),200);};
+ document.querySelectorAll('input[name=hrt2325_pop_title]').forEach(r=>r.addEventListener('change',()=>{pop=[];loadDay(r.value);}));
+ document.querySelector('#hrt2325_pop_sub .btn-close').onclick=()=>{document.getElementById('hrt2325_pop_sub').style.display='none';};
+ document.getElementById('hrt2325_day_excel_file').addEventListener('change',async(e)=>{const f=e.target.files[0];const raw=new Uint8Array(await f.arrayBuffer());const r=await ajax('uploadDayExcelFile_prc',{name:f.name,ss:/sharedStrings/.test(new TextDecoder().decode(raw))});if(r.status!==200){doClientMsg({message:'Internal Server Error'});return;}
+   const rows=parseXlsx(raw).slice(1);const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;
+   pop=rows.map(x=>{const [,no,nm,kind,i,o,b]=x;const row={emp_code:no,emp_name:nm,chk_message:''};const mine=REG[dept]||{},other=Object.keys(REG).filter(d=>d!==dept).some(d=>REG[d][no]);
+     if(!mine[no]&&other)row.chk_message='소속구분이 다름';else if(mine[no]!==nm)row.chk_message='사번, 이름 오류.';else if(!KIND[kind])row.chk_message='예외 근태유형';else if(kind==='출근'&&!(i&&o&&b))row.chk_message='출근인경우 출/퇴, 휴게 시간 필수 입력';
+     row[dow+'_time_item_code_p']=KIND[kind]||null;row[dow+'_work_on_p_hhmm']=i;row[dow+'_work_off_p_hhmm']=o;row[dow+'_break_time_p_hhmm']=b;return row;});
+   window.__fname=f.name;window.__rows=rows;doClientMsg('엑셀 데이터가 화면에 반영되었습니다.');});
+ document.getElementById('hrt2325_pop_btn_save').onclick=async()=>{const dow=document.querySelector('input[name=hrt2325_pop_title]:checked').value;const bad=pop.find(r=>r.chk_message);if(bad){doClientMsg(bad.emp_name+'('+bad.emp_code+')님의 스케줄 등록/수정이 불가합니다('+bad.chk_message+')');return;}
+   await ajax('saveData_prc',{dow,dept,wk,file:window.__fname,rows:window.__rows});doClientMsg('저장되었습니다.');document.getElementById('hrt2325_pop_sub').style.display='none';search();};
+ document.getElementById('hrt2325_btn_notice').onclick=async()=>{if(!confirm('공지 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'NOTICE',wk});await search();doClientMsg('공지 되었습니다.');};
+ document.getElementById('hrt2325_btn_confirm').onclick=async()=>{if(!confirm('확정 하시겠습니까?'))return;await ajax('statusChangeData_prc',{to:'CONFIRM',wk});await search();doClientMsg('확정 되었습니다.');};
+ document.getElementById('hrt2325_btn_init').onclick=async()=>{if(!confirm('기존에 등록된 자료가 있다면 삭제 후 초기화가 진행됩니다.'))return;await ajax('init_prc',{wk});await search();doClientMsg('초기화 되었습니다.');};
+ document.getElementById('hrt2325_btn_copy').onclick=()=>ajax('copy_prc',{});
 }
-window.hrt2325={moveWeek(d){wk+=d==='next'?1:-1;document.getElementById('wk').textContent=wk+'주('+W[wk][0]+'~'+W[wk][1]+')';document.getElementById('hrt2325_year_week_seq').value=wk;},getMasterList(){},saveData(){},validateConfirm(){}};
+let REG={};fetch('/__reg').then(r=>r.json()).then(o=>REG=o);
+window.hrt2325={moveWeek(d){wk+=d==='next'?1:-1;document.getElementById('wk').textContent=wk+'주('+W[wk][0]+'~'+W[wk][1]+')';document.getElementById('hrt2325_year_week_seq').value=wk;},getMasterList(){},saveData(){},validateConfirm(){},statusChangeData(){},openMdl(){}};
 function parseXlsx(u8){const files={};let p=0;const dv=new DataView(u8.buffer);while(p+30<u8.length&&dv.getUint32(p,true)===0x04034b50){const cs=dv.getUint32(p+18,true),nl=dv.getUint16(p+26,true),xl=dv.getUint16(p+28,true);const name=new TextDecoder().decode(u8.subarray(p+30,p+30+nl));files[name]=new TextDecoder().decode(u8.subarray(p+30+nl+xl,p+30+nl+xl+cs));p+=30+nl+xl+cs;}
  const ss=[...files['xl/sharedStrings.xml'].matchAll(/<t[^>]*>([\\s\\S]*?)<\\/t>/g)].map(m=>m[1].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'));const rows=[];
  for(const m of files['xl/worksheets/sheet1.xml'].matchAll(/<c r="([A-Z]+)(\\d+)"([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/c>)/g)){const r=+m[2]-1,c=m[1].charCodeAt(0)-65;rows[r]=rows[r]||['','','','','','',''];const v=/<v>(\\d+)<\\/v>/.exec(m[4]||'');rows[r][c]=v&&/t="s"/.test(m[3])?ss[+v[1]]:'';}
@@ -64,10 +88,19 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
   const html = (b, h) => { rs.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...(h || {}) }); rs.end(b); };
   const json = (o) => { rs.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); rs.end(JSON.stringify(o)); };
   if (host === "hr.pljec.cloud") {
-    if (u.pathname === "/__save") { S.saves.push(JSON.parse(body)); return json({ ok: 1 }); }
-    if (u.pathname === "/__notice") { S.notice++; return json({ ok: 1 }); }
-    if (u.pathname === "/__confirm") { S.confirm++; return json({ ok: 1 }); }
-    if (u.pathname === "/__init") { S.init = 1; return json({ ok: 1 }); }
+    if (u.pathname === "/__reg") return json(S.reg);
+    const ep = (/\/(\w+_prc)$/.exec(u.pathname) || [])[1];
+    if (ep) {
+      const b = JSON.parse(body || "{}"); S.calls.push(ep);
+      const enc = (o) => Buffer.from(JSON.stringify(o), "utf8").toString("base64");
+      if (ep === "getMasterList_prc" && b.workType === "MASTER") { const st = S.status[b.wk] || ""; return json({ returnCode: 0, data: { infoEnc: enc(st ? [{ schedule_status: st }] : []) } }); }
+      if (ep === "getMasterList_prc") { const reg = S.reg[b.dept] || {}; return json({ returnCode: 0, data: { infoEnc: enc(Object.keys(reg).map((no) => ({ emp_code: no, emp_name: reg[no], chk_message: "" }))) } }); }
+      if (ep === "uploadDayExcelFile_prc") { S.uploads++; if (S.uploadHttp !== 200 || !b.ss) { rs.writeHead(500); return rs.end("Internal Server Error"); } return json({ returnCode: 0 }); }
+      if (ep === "saveData_prc") { S.saves.push(b); return json({ returnCode: 0 }); }
+      if (ep === "statusChangeData_prc") { S.status[b.wk] = b.to; if (b.to === "NOTICE") S.notice++; else S.confirm++; return json({ returnCode: 0 }); }
+      if (ep === "init_prc") { S.init++; S.status[b.wk] = "EDIT"; return json({ returnCode: 0 }); }
+      if (ep === "copy_prc") { S.copy = 1; return json({ returnCode: 0 }); }
+    }
     if (!S.login) return html(`<!doctype html><meta charset="utf-8"><body><input type="text" id="login_id"><input type="password"><button class="login_btn">로그인</button></body>`);
     return html(hrPage());
   }
@@ -93,7 +126,7 @@ console.log(`# 확장 ${ver} · 가짜 서버 127.0.0.1:${port} (진짜 HR·보�
 const W = "2026-11-23", dates = Array.from({ length: 7 }, (_, i) => new Date(Date.parse(W + "T00:00:00Z") + i * 864e5).toISOString().slice(0, 10));
 const K = ["출근", "출근", "주휴일", "출근", "출근", "출근", "휴무"];
 const emp = (no, name, kinds) => ({ empNo: no, name, days: dates.map((d, i) => ({ date: d, kind: (kinds || K)[i], in: (kinds || K)[i] === "출근" ? "09:00" : "", out: (kinds || K)[i] === "출근" ? "18:00" : "", brk: (kinds || K)[i] === "출근" ? "01:00" : "" })) });
-const reqOf = (o) => Object.assign({ requestId: "r" + Math.random().toString(36).slice(2), dept: "BOH", weekStart: W, weekEnd: "2026-11-29", mode: "full", employees: [emp("90000001", "시험일"), emp("90000002", "시험이")] }, o || {});
+const reqOf = (o) => Object.assign({ requestId: "r" + Math.random().toString(36).slice(2), dept: "BOH", weekStart: W, weekEnd: "2026-11-29", mode: "full", employees: [emp("90000001", "시험일"), emp("90000002", "시험이"), emp("90000003", "시험삼")] }, o || {});
 let board = null;
 async function send(o, ms = +(process.env.HRS_MS || 150000)) {
   for (const p of ctx.pages()) if (/hr\.pljec/.test(p.url())) await p.close().catch(() => {}); // 지난 HR 탭은 닫고 새로
@@ -113,55 +146,71 @@ async function send(o, ms = +(process.env.HRS_MS || 150000)) {
   return { req: r, res: null, msgs: [] };
 }
 
-if (process.env.HRS_ONLY) { reset(); const y = await send({ mode: 'test' }); console.log(JSON.stringify(y.res).slice(0, 300)); process.exit(0); }
-// 1) 시험 모드: 월요일 1일만 → 팝업 저장까지, 공지·확정 안 함. 부서 FOH→BOH, 주차 46→48로 맞춤
+if (process.env.HRS_ONLY) { reset(); const y = await send({ mode: 'test' }); console.log(JSON.stringify(y.res).slice(0, 900)); process.exit(0); }
+const brief = (x) => JSON.stringify(x.res && { ...x.res, log: x.res.log.map((l) => `${l.stage}${l.day ? "/" + l.day : ""} ${l.msg}`) });
+const all3 = () => [emp("90000001", "시험일"), emp("90000002", "시험이"), emp("90000003", "시험삼")];
+// 1) 시험 모드: 월요일 1일 → 탭 로딩·업로드·검증·팝업 저장, 공지·확정 안 함. 부서 FOH→BOH, 주차 46→48
 reset();
-let x = await send({ mode: "test" });
-ok(x.res && x.res.ok && x.res.test && x.res.stage === "save" && !x.res.confirmed, "시험 모드: 월요일 1일 업로드·팝업 저장까지, ok", JSON.stringify(x.res && { ...x.res, log: x.res.log.map((l) => l.msg) }));
-ok(S.saves.length === 1 && S.saves[0].dow === "MON" && S.saves[0].dept === "BOH" && S.saves[0].wk === 48 && S.notice === 0 && S.confirm === 0, `시험 모드: HR에 저장 1번(MON·BOH·48주), 공지·확정 0번 (저장 ${S.saves.length})`, JSON.stringify(S.saves.map((s) => [s.dow, s.dept, s.wk])));
-ok(S.saves[0] && JSON.stringify(S.saves[0].rows[0]) === JSON.stringify(["..", "사원코드", "이름", "근태유형", "출근시각", "퇴근시각", "휴게시간"]) && JSON.stringify(S.saves[0].rows[1]) === JSON.stringify(["", "90000001", "시험일", "출근", "09:00", "18:00", "01:00"]) && S.saves[0].file === "BOH_2026-11-23_MON.xlsx", "올린 엑셀: 머리글·첫 줄·파일 이름이 양식대로", JSON.stringify(S.saves[0] && S.saves[0].rows.slice(0, 2)));
-ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.msgs.filter((m) => m.type === "MFG_HR_SEND_PROGRESS").length >= 3, "보드가 받음(ACK)·단계 알림을 받음");
-// 2) 전체: 7일 저장 → 공지 → 확정
+let x = await send({ mode: "test", employees: all3() });
+ok(x.res && x.res.ok && x.res.test && x.res.stage === "save" && x.res.savedDays.join() === "MON" && !x.res.noticed && !x.res.confirmed, "test: 월요일 업로드·검증·팝업 저장까지 ok, savedDays MON", brief(x));
+ok(S.saves.length === 1 && S.saves[0].dow === "MON" && S.saves[0].dept === "BOH" && S.saves[0].wk === 48 && S.notice === 0 && S.confirm === 0, `test: HR 저장 1번(MON·BOH·48주), 공지·확정 0번 (저장 ${S.saves.length})`, JSON.stringify(S.saves.map((s) => [s.dow, s.dept, s.wk])));
+ok(S.saves[0] && JSON.stringify(S.saves[0].rows[0]) === JSON.stringify(["", "90000001", "시험일", "출근", "09:00", "18:00", "01:00"]) && S.saves[0].file === "BOH_2026-11-23_MON.xlsx", "올린 엑셀(sharedStrings): 첫 줄·파일 이름이 양식대로", JSON.stringify(S.saves[0] && S.saves[0].rows.slice(0, 2)));
+ok(x.msgs.some((m) => m.type === "MFG_HR_SEND_ACK" && m.ok) && x.msgs.filter((m) => m.type === "MFG_HR_SEND_PROGRESS").length >= 2 && x.res.log.some((l) => /saveData_prc 200/.test(l.ajax || "")), "보드가 ACK·단계 알림을 받음 · 기록에 엔드포인트 상태", brief(x));
+// 2) saveOnly: 상태 없는 주라도 7일 저장, 공지·확정 안 함
+reset({ status: {} });
+x = await send({ mode: "saveOnly", employees: all3() });
+ok(x.res && x.res.ok && x.res.savedDays.length === 7 && S.saves.length === 7 && S.notice === 0 && !x.res.confirmed && x.res.savedEmpNos.length === 3, "saveOnly: 상태 없어도 7일 저장, 공지·확정 안 함", brief(x));
+// 3) full: EDIT → 7일 저장 → 공지 → 확정
 reset();
-x = await send({});
-ok(x.res && x.res.ok && x.res.confirmed && x.res.stage === "confirm" && x.res.savedEmpNos.join() === "90000001,90000002", "전체: 저장·공지·확정까지 ok, savedEmpNos 2명", JSON.stringify(x.res && { ...x.res, log: x.res.log.map((l) => l.msg) }));
-ok(S.saves.map((s) => s.dow).join() === "MON,TUE,WED,THU,FRI,SAT,SUN" && S.notice === 1 && S.confirm === 1, `전체: 요일 7번 저장(월~일 순서) + 공지 1 + 확정 1 (${S.saves.map((s) => s.dow).join()})`);
-ok(S.saves[2] && S.saves[2].rows[1][3] === "주휴일" && S.saves[2].rows[1][4] === "" && S.saves[6].rows[1][3] === "휴무", "수요일 주휴일·일요일 휴무는 시간 빈칸");
-ok(!S.init, "초기화 단추는 누르지 않음");
-// 3) 이미 확정된 주 → 손대지 않음
-reset({ status: "CONFIRM" });
-x = await send({});
-ok(x.res && !x.res.ok && x.res.code === "confirmed" && S.saves.length === 0 && S.notice === 0, "이미 확정된 주 → 멈춤, 저장 0번", JSON.stringify(x.res && x.res.message));
-// 4) 검사 실패(연차) → HR에 안 들어감
+x = await send({ employees: all3() });
+ok(x.res && x.res.ok && x.res.noticed && x.res.confirmed && x.res.stage === "confirm" && x.res.savedDays.join() === "MON,TUE,WED,THU,FRI,SAT,SUN", "full: 저장·공지·확정 ok", brief(x));
+ok(S.saves.map((s) => s.dow).join() === "MON,TUE,WED,THU,FRI,SAT,SUN" && S.notice === 1 && S.confirm === 1 && !S.init && !S.copy, `full: 요일 7번 저장(월~일) + 공지 1 + 확정 1, 초기화·전주복사 안 누름`);
+ok(S.saves[2] && JSON.stringify(S.saves[2].rows[0].slice(3)) === JSON.stringify(["주휴일", "", "", ""]), "수요일 주휴일은 시간 \"\"");
+// 4) full인데 상태 없는 주 → 업로드 전에 멈춤
+reset({ status: {} });
+x = await send({ employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "nostatus" && x.res.stage === "week" && S.uploads === 0 && S.saves.length === 0, "full + 상태 없음 → 업로드 전에 멈춤(nostatus)", brief(x));
+// 5) full + allowInit → 업로드 전에 초기화 → 끝까지
+reset({ status: {} });
+x = await send({ employees: all3(), allowInit: true });
+ok(x.res && x.res.ok && x.res.confirmed && S.init === 1 && S.saves.length === 7, "full + allowInit: 초기화 1번 뒤 저장·공지·확정", brief(x));
+// 6) 확정된 주 / 공지된 주 → 손대지 않음
+reset({ status: { 48: "CONFIRM" } }); x = await send({ employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "confirmed" && S.uploads === 0, "이미 확정된 주 → 멈춤", brief(x));
+reset({ status: { 48: "NOTICE" } }); x = await send({ mode: "saveOnly", employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "noticed" && S.uploads === 0, "공지된 주 → 멈춤", brief(x));
+// 7) 보내기 전 검사: 연차 → HR 안 건드림
 reset();
-const bad = emp("90000001", "시험일", ["출근", "연차", "주휴일", "출근", "출근", "출근", "휴무"]);
-x = await send({ employees: [bad, emp("90000002", "시험이")] });
-ok(x.res && !x.res.ok && x.res.stage === "validate" && /연차/.test(x.res.message) && x.res.errors && x.res.errors[0].empNo === "90000001" && S.saves.length === 0, "근태유형 '연차' → 검사에서 멈춤(직원 에러), HR 안 건드림", JSON.stringify(x.res && x.res.message));
-// 5) HR 로그인 풀림 → 바로 멈춤, 자동 로그인 안 함
+x = await send({ mode: "test", employees: [emp("90000001", "시험일", ["출근", "연차", "주휴일", "출근", "출근", "출근", "휴무"]), emp("90000002", "시험이"), emp("90000003", "시험삼")] });
+ok(x.res && !x.res.ok && x.res.stage === "precheck" && x.res.rowErrors[0].empNo === "90000001" && /연차/.test(x.res.rowErrors[0].msg) && S.uploads === 0, "근태유형 '연차' → precheck에서 멈춤", brief(x));
+// 8) HR이 행에 오류를 다는 경우(업로드 문구는 똑같이 '반영됨') → 저장 안 함
+reset();
+x = await send({ mode: "test", employees: [emp("90000001", "시험일"), emp("90000002", "다른이름"), emp("90000003", "시험삼")] });
+ok(x.res && !x.res.ok && x.res.stage === "upload" && x.res.rowErrors.some((e) => e.empNo === "90000002" && /사번, 이름 오류/.test(e.msg)) && S.saves.length === 0, "이름 불일치 → chk_message '사번, 이름 오류.' → 저장 안 함", brief(x));
+reset();
+x = await send({ mode: "test", employees: [...all3(), emp("90000009", "시험구")] });
+ok(x.res && !x.res.ok && x.res.rowErrors.some((e) => e.empNo === "90000009" && /소속구분이 다름/.test(e.msg)) && S.saves.length === 0, "FOH 직원 섞임 → '소속구분이 다름' → 저장 안 함", brief(x));
+reset();
+x = await send({ mode: "test", employees: [emp("90000001", "시험일"), emp("90000002", "시험이")] });
+ok(x.res && !x.res.ok && (x.res.missing || []).join() === "90000003" && S.saves.length === 0, "직원 1명 빠짐(HR엔 있음) → 명단 회신, 저장 안 함", brief(x));
+ok(await (async () => { const p = ctx.pages().find((q) => /hr\.pljec/.test(q.url())); return p ? await p.evaluate(() => !window.__reported && getComputedStyle(document.getElementById("hrt2325_pop_sub")).display === "none") : false; })(), "오류 뒤 팝업 닫음 · '오류 신고'는 안 누름");
+// 9) 업로드 500 (inlineStr 등) → 그 자리에서 멈춤
+reset({ uploadHttp: 500 });
+x = await send({ mode: "test", employees: all3() });
+ok(x.res && !x.res.ok && x.res.stage === "upload" && /500|Internal Server Error/.test(x.res.message) && S.saves.length === 0, "업로드 HTTP 500 → upload에서 멈춤", brief(x));
+// 10) 로그인 풀림
 reset({ login: false });
-x = await send({});
-ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0, "HR 로그인 화면 → 바로 멈춤(login)", JSON.stringify(x.res && x.res.message));
-// 6) 팝업 저장에서 오류 문구 → 그 문구 그대로 멈춤
-reset({ saveErr: "시험이님의 주휴일을 설정해주세요" });
-x = await send({});
-ok(x.res && !x.res.ok && x.res.stage === "save" && x.res.day === "MON" && /주휴일을 설정해주세요/.test(x.res.message) && S.notice === 0, "저장 오류 토스트 → save 단계에서 멈춤, 문구 그대로", JSON.stringify(x.res && x.res.message));
-// 7) HR엔 있는데 파일에 없는 직원 → 저장은 했지만 공지 전에 멈춤
-reset({ hrEmp: { BOH: ["90000001", "90000002", "90000003"] } });
-x = await send({});
-ok(x.res && !x.res.ok && x.res.stage === "notice" && (x.res.notInFile || []).join() === "90000003" && S.saves.length === 7 && S.notice === 0, "HR에만 있는 직원(90000003) → 공지 전에 멈춤, 목록 회신", JSON.stringify(x.res && x.res.message));
-// 8) 보낸 직원이 HR 부서에 없음 → 업로드 단계에서 멈춤(저장 전)
-reset({ hrEmp: { BOH: ["90000001"] } });
-x = await send({});
-ok(x.res && !x.res.ok && x.res.stage === "upload" && /90000002/.test(x.res.message) && S.saves.length === 0, "HR에 없는 사번(90000002) → 저장 전에 멈춤", JSON.stringify(x.res && x.res.message));
-// 9) 같은 requestId를 또 보내면 지난 결과만 다시 (중복 실행 안 함)
+x = await send({ employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "login" && S.uploads === 0, "HR 로그인 화면 → 바로 멈춤(login)", brief(x));
+// 11) 같은 requestId 두 번 → 한 번만
 reset();
-const r1 = await send({ mode: "test", requestId: "same-1" }), saves1 = S.saves.length;
-const r2 = await send({ mode: "test", requestId: "same-1" }, 20000);
-ok(r1.res && r2.res && r2.res.ok && S.saves.length === saves1, `같은 requestId 두 번 → 한 번만 실행 (저장 ${S.saves.length})`);
-// 10) 진짜 서버로 안 나감 + 다른 칸은 안 건드림
+const r1 = await send({ mode: "test", requestId: "same-1", employees: all3() }), saves1 = S.saves.length;
+const r2 = await send({ mode: "test", requestId: "same-1", employees: all3() }, 20000);
+ok(r1.res && r2.res && r2.res.ok && S.saves.length === saves1 && saves1 === 1, `같은 requestId 두 번 → 한 번만 실행 (저장 ${S.saves.length})`);
+// 12) 진짜 서버로 안 나감 + 다른 칸은 안 건드림
 const hosts = [...new Set(hits.map((h) => h.split("/")[0]))];
 ok(hosts.every((h) => ["hr.pljec.cloud", "hr-board-teal.vercel.app", "script.google.com", "mfgkorea.github.io", "gw.madforgarlic.com", "mis.madforgarlic.com", "script.googleusercontent.com"].includes(h)), "요청은 모두 가짜 서버로 (" + hosts.join(", ") + ")");
 const st = await sw(() => chrome.storage.local.get(["hrSend", "logs"]));
-ok(st && st.hrSend && !st.hrSend.run && !(st.logs || []).some((l) => /시험일|시험이/.test(l)), "끝나면 잠금 풀림 · 확장 기록에 이름 없음", JSON.stringify(st && { run: st.hrSend && st.hrSend.run, logs: (st.logs || []).slice(0, 4) }));
+ok(st && st.hrSend && !st.hrSend.run && !(st.logs || []).some((l) => /시험일|시험이|시험삼|다른이름/.test(l)), "끝나면 잠금 풀림 · 확장 기록에 이름 없음", JSON.stringify(st && { run: st.hrSend && st.hrSend.run, logs: (st.logs || []).slice(0, 4) }));
 await ctx.close(); srv.close();
 console.log(fails ? `실패 ${fails}개 / ${n}` : `모두 통과 (${n}개)`); process.exit(fails ? 1 : 0);

@@ -33,8 +33,9 @@
     else if (new Date(Date.parse(ws + "T00:00:00Z")).getUTCDay() !== 1) errors.push({ msg: `주 시작일 ${ws}이 월요일이 아니에요` });
     const we = isDate(ws) ? addDay(ws, 6) : "";
     if (r.weekEnd && we && r.weekEnd !== we) errors.push({ msg: `주 끝날(weekEnd) ${r.weekEnd}이 ${we}(일)와 달라요` });
-    const mode = r.mode === "test" ? "test" : "full";
-    if (r.mode && !/^(test|full)$/.test(r.mode)) errors.push({ msg: `mode는 full 또는 test여야 해요 (받은 값: ${r.mode})` });
+    const mode = r.mode === "test" || r.mode === "saveOnly" ? r.mode : "full";
+    if (r.mode && !/^(test|saveOnly|full)$/.test(r.mode)) errors.push({ msg: `mode는 full·saveOnly·test 중 하나여야 해요 (받은 값: ${r.mode})` });
+    const soft = mode === "test"; // test는 주휴일·52시간 위반을 경고만 (11/16 KM)
     const list = Array.isArray(r.employees) ? r.employees : [];
     if (!list.length) errors.push({ msg: "보낼 직원이 없어요 (employees 빈 목록)" });
     if (list.length > 300) errors.push({ msg: `직원이 너무 많아요 (${list.length}명)` });
@@ -74,13 +75,16 @@
       }
       if (!ok) continue;
       const wk = out.filter((d) => d.kind === "주휴일").length;
-      if (wk !== 1) { bad(`주휴일이 주에 정확히 1일이어야 해요 (지금 ${wk}일)`); continue; }
       const total = out.reduce((t, d) => t + workMin(d), 0);
-      if (total > 52 * 60) { bad(`주 근무가 52시간을 넘어요 (${Math.floor(total / 60)}시간 ${total % 60}분)`); continue; }
+      const rule = [];
+      if (wk !== 1) rule.push(`주휴일이 주에 정확히 1일이어야 해요 (지금 ${wk}일)`);
+      if (total > 52 * 60) rule.push(`주 근무가 52시간을 넘어요 (${Math.floor(total / 60)}시간 ${total % 60}분)`);
+      if (rule.length && !soft) { rule.forEach(bad); continue; }
+      rule.forEach((m) => warns.push({ empNo, name, msg: m + " (시험이라 경고만)" }));
       emps.push({ empNo, name, days: out, min: total });
     }
     const weekEnd = we;
-    return { ok: !errors.length, errors, warns, plan: { dept, weekStart: ws, weekEnd, mode, emps } };
+    return { ok: !errors.length, errors, warns, plan: { dept, weekStart: ws, weekEnd, mode, emps, allowInit: r.allowInit === true } };
   }
 
   // ---- 아주 작은 xlsx (압축 없는 zip) ----
@@ -109,10 +113,11 @@
     return out;
   }
   const colName = (i) => String.fromCharCode(65 + i);
-  // rows: 2차원 문자열 배열(첫 줄 머리글). 모든 칸은 공유 문자열 + 텍스트 서식(@). 빈 문자열은 칸을 비움
+  // rows: 2차원 문자열 배열(첫 줄 머리글). 모든 칸은 공유 문자열(t="s") + 텍스트 서식(@), 빈칸도 "" 공유 문자열
+  //  (11/16 KM 실제 확인: inlineStr·빈 칸 생략(openpyxl 기본)은 HR 서버가 500으로 거부, 양식 다운로드 파일처럼 sharedStrings면 됨)
   function hrsXlsx(rows, sheet) {
     const ss = [], idx = new Map(), si = (v) => { if (!idx.has(v)) { idx.set(v, ss.length); ss.push(v); } return idx.get(v); };
-    const body = rows.map((r, ri) => `<row r="${ri + 1}">` + r.map((v, ci) => (v === "" || v == null ? `<c r="${colName(ci)}${ri + 1}" s="1"/>` : `<c r="${colName(ci)}${ri + 1}" s="1" t="s"><v>${si(String(v))}</v></c>`)).join("") + "</row>").join("");
+    const body = rows.map((r, ri) => `<row r="${ri + 1}">` + r.map((v, ci) => `<c r="${colName(ci)}${ri + 1}" s="1" t="s"><v>${si(v == null ? "" : String(v))}</v></c>`).join("") + "</row>").join("");
     const W = (s) => enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + s);
     const nm = esc(sheet || "Sheet1"), last = colName(Math.max(1, rows[0] ? rows[0].length : 1) - 1) + Math.max(1, rows.length);
     return zip([
@@ -128,10 +133,10 @@
   const HEAD = ["..", "사원코드", "이름", "근태유형", "출근시각", "퇴근시각", "휴게시간"];
   // 요일별 파일: [{ dow, date, name, bytes, empNos }] (test 모드는 월요일 하나)
   function hrsFiles(plan) {
-    const n = plan.mode === "test" ? 1 : 7, out = [];
+    const n = plan.mode === "test" ? 1 : 7, out = []; // saveOnly·full은 7일
     for (let i = 0; i < n; i++) {
       const rows = [HEAD].concat(plan.emps.map((e) => { const d = e.days[i]; return ["", e.empNo, e.name, d.kind, d.in, d.out, d.brk]; }));
-      out.push({ dow: DOWS[i], date: plan.emps[0].days[i].date, name: `${plan.dept}_${plan.emps[0].days[i].date}_${DOWS[i]}.xlsx`, bytes: hrsXlsx(rows), empNos: plan.emps.map((e) => e.empNo) });
+      out.push({ dow: DOWS[i], date: plan.emps[0].days[i].date, name: `${plan.dept}_${plan.emps[0].days[i].date}_${DOWS[i]}.xlsx`, bytes: hrsXlsx(rows), empNos: plan.emps.map((e) => e.empNo), rows: plan.emps.map((e) => ({ empNo: e.empNo, name: e.name, kind: e.days[i].kind, in: e.days[i].in, out: e.days[i].out, brk: e.days[i].brk })) });
     }
     return out;
   }

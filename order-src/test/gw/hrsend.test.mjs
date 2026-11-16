@@ -36,6 +36,10 @@ q = base(); q.employees[1].empNo = "90000001"; r = G.hrsCheck(q);
 ok(!r.ok && /두 번/.test(r.errors[0].msg), "같은 사번 두 번 → 에러");
 q = base(); q.employees[0].days.pop(); r = G.hrsCheck(q);
 ok(!r.ok && /7일/.test(r.errors[0].msg), "6일만 → 에러");
+q = base(); q.mode = "test"; q.employees[0].days[6].kind = "주휴일"; r = G.hrsCheck(q);
+ok(r.ok && r.warns.some((w) => /주휴일/.test(w.msg)), "test 모드: 주휴일 2일은 경고만");
+q = base(); q.mode = "saveOnly"; r = G.hrsCheck(q); ok(r.ok && G.hrsFiles(r.plan).length === 7, "saveOnly: 7일 파일");
+q = base(); q.mode = "save"; r = G.hrsCheck(q); ok(!r.ok, "모르는 mode → 에러");
 // 파일
 r = G.hrsCheck(base()); let fl = G.hrsFiles(r.plan);
 ok(fl.length === 7 && fl[0].name === "BOH_2026-11-23_MON.xlsx" && fl[6].name === "BOH_2026-11-29_SUN.xlsx", "full: 요일별 파일 7개, 이름 BOH_날짜_요일.xlsx");
@@ -53,7 +57,7 @@ for f in sys.argv[1:]:
 print(json.dumps(res,ensure_ascii=False))`, tmp + "/mon.xlsx", tmp + "/wed.xlsx"]).toString();
   const x = JSON.parse(out), m = x["mon.xlsx"], w = x["wed.xlsx"];
   ok(m.sheet === "Sheet1" && JSON.stringify(m.rows[0]) === JSON.stringify(["..", "사원코드", "이름", "근태유형", "출근시각", "퇴근시각", "휴게시간"]), "엑셀: 시트 Sheet1, 머리글 7칸 그대로", m.rows[0]);
-  ok(JSON.stringify(m.rows[1]) === JSON.stringify([null, "90000001", "시험일", "출근", "09:00", "18:00", "01:00"]) && m.types.slice(1).every((t) => t === "s") && m.fmt.every((f) => f === "@"), "엑셀: 사번·시간이 텍스트(@) 칸, A열 빈칸", m);
-  ok(JSON.stringify(w.rows[1]) === JSON.stringify([null, "90000001", "시험일", "주휴일", null, null, null]) && w.rows.length === 3, "엑셀: 주휴일은 시간 빈칸, 직원 2명", w.rows);
+  ok(JSON.stringify(m.rows[1]) === JSON.stringify(["", "90000001", "시험일", "출근", "09:00", "18:00", "01:00"]) && m.types.every((t) => t === "s") && m.fmt.every((f) => f === "@"), "엑셀: 모든 칸이 공유 문자열(t=s)·텍스트(@), A열은 \"\"", m);
+  ok(JSON.stringify(w.rows[1]) === JSON.stringify(["", "90000001", "시험일", "주휴일", "", "", ""]) && w.rows.length === 3, "엑셀: 주휴일은 시간 빈칸, 직원 2명", w.rows);
 } catch (e) { ok(false, "엑셀 열어 보기 (openpyxl)", String(e.message || e)); }
 console.log(fails ? `실패 ${fails}개 / ${n}` : `모두 통과 (${n}개)`); process.exit(fails ? 1 : 0);

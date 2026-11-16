@@ -1,117 +1,66 @@
-# MFG HR Board [HR 전송] ↔ GW Agent 1.12.0 — 보드 쪽 수정안
+# MFG HR Board [HR 전송] ↔ GW Agent 1.12.0
 
-GW Agent 1.12.0부터 보드 [전송] 버튼을 확장이 받아, 플젝 HR 주간스케쥴(시간)에 요일별 엑셀로 올리고 **저장 → 공지 → 확정**까지 처리한다.
-확장 코드: `gw-agent/hrsend-core.js`(검사·엑셀), `hrsend-steps.js`(HR 화면 조작), `hrsend-bg.js`(순서·잠금), `hrsend-board.js`(보드 화면 다리).
-시험: `node order-src/test/gw/hrsend.test.mjs`(19개), `node order-src/test/gw/e2e-hrsend.mjs`(가짜 HR·보드, 17개).
+보드 [전송] → 확장(GW Agent) → 플젝 HR 주간스케쥴(시간)에 요일별 엑셀 업로드 → 행별 검증 → 팝업 저장 → (메인 저장) → 공지 → 확정 → 결과를 보드로.
+규격은 11/16 KM이 실제 HR 화면에서 확인한 사실(48주 BOH 월요일 업로드·팝업 저장 성공)을 따른다.
 
-## 1. 조건
-- 보드를 **확장이 깔린 크롬**(매장 PC 또는 KM PC)에서 열어야 한다. 폰에서 누르면 확장이 없어서 안 간다.
-- 그 크롬에서 HR(hr.pljec.cloud)에 로그인돼 있고 회사망(SSL VPN)이 붙어 있어야 한다. 확장은 자동 로그인을 하지 않는다.
-- 확장은 `https://hr-board-teal.vercel.app` 화면에서 온 메시지만 받는다. 보드 주소가 바뀌면 `manifest.json`과 `hrsend-bg.js`의 `HRS.board`를 같이 바꾼다.
-- 보드에 로그인이 없다면, 그 주소를 아는 사람이 확장이 깔린 PC에서 [전송]을 누를 수 있다는 뜻이다. 보드에 로그인이 있는지 확인할 것.
+| 어디 | 파일 |
+|---|---|
+| 확장 | `gw-agent/hrsend-core.js`(검사·엑셀) · `hrsend-steps.js`(HR 화면, MAIN world) · `hrsend-bg.js`(순서·잠금·회신) · `hrsend-board.js`(보드 다리) |
+| 보드 | `docs/hr-board/hrAgent.ts`(보내기 전 처리·주고받기·결과 반영) · `docs/hr-board/HrSendPanel.tsx`(전송 모달 내용) |
+| 시험 | `node order-src/test/gw/hrsend.test.mjs`(22) · `node order-src/test/gw/e2e-hrsend.mjs`(가짜 HR·보드에 확장을 올려 22) |
 
-## 2. 메시지
-보드 → 확장 (`window.postMessage(msg, location.origin)`):
-```json
-{ "type": "MFG_HR_SEND", "requestId": "uuid", "dept": "BOH", "weekStart": "2026-11-23", "weekEnd": "2026-11-29",
-  "mode": "full", "employees": [ { "empNo": "10260850", "name": "…", "days": [ { "date": "2026-11-23", "kind": "출근", "in": "09:00", "out": "18:00", "brk": "01:00" } ] } ] }
-```
-- `mode`: `"test"` = 월요일 1일만 업로드·팝업 저장(공지·확정 안 함), `"full"` = 7일 + 저장·공지·확정.
-- `kind`는 HR의 4개(출근·휴무·주휴일·공휴일)만. 그 밖의 값은 확장이 그 직원을 에러로 돌려준다.
-- 기타: `MFG_HR_PING` → `MFG_HR_AGENT_READY` 대답, `MFG_HR_SEND_STATUS {requestId}` → `MFG_HR_SEND_STATUS_RESULT {run, result}`(보드를 새로고침했을 때 결과 다시 받기).
+## 조건
+- 보드를 **확장이 깔린 크롬**에서 열 것(매장 PC 또는 KM PC). 그 크롬에서 HR 로그인 + 회사망(SSL VPN). 확장은 자동 로그인을 하지 않는다.
+- 확장은 `https://hr-board-teal.vercel.app` 화면에서 온 메시지만 받는다(주소가 바뀌면 `manifest.json`·`hrsend-bg.js HRS.board`도).
+- 보드에 로그인이 없으면 주소를 아는 사람이 확장 PC에서 공지·확정까지 누를 수 있다 → 보드 로그인 확인.
 
-확장 → 보드:
-| type | 언제 | 내용 |
+## 메시지
+보드 → 확장: `{ type: "MFG_HR_SEND", requestId, dept, weekStart, weekEnd, mode: "test"|"saveOnly"|"full", allowInit?: boolean, employees: [{ empNo, name, days: [7 × {date, kind, in, out, brk}] }] }`
+
+확장 → 보드: `MFG_HR_AGENT_READY {ver}` · `MFG_HR_SEND_ACK {ok, error}` · `MFG_HR_SEND_PROGRESS {item:{t, stage, day, msg, ajax}}` ·
+`MFG_HR_SEND_RESULT { requestId, ok, stage: precheck|week|upload|save|notice|confirm, day, message, rowErrors:[{empNo,name,day,msg}], savedDays:[], noticed, confirmed, savedEmpNos, mode, test?, code?, missing?, log }`
+- `code`: `login` · `network` · `confirmed`(확정된 주) · `noticed`(공지된 주) · `nostatus`(상태 없는 주, full)
+- 같은 requestId를 다시 보내면 실행하지 않고 지난 결과를 돌려줌. 다른 전송이 도는 중이면 `busy`.
+
+## 모드
+| mode | 하는 일 | 상태 없는 주 |
 |---|---|---|
-| `MFG_HR_AGENT_READY` | 보드가 열릴 때 | `ver` |
-| `MFG_HR_SEND_ACK` | 받자마자 | `ok`, `error` |
-| `MFG_HR_SEND_PROGRESS` | 단계마다 | `item: {t, stage, day, msg}` |
-| `MFG_HR_SEND_RESULT` | 끝 | `ok, stage, day, message, savedEmpNos, confirmed, mode, test?, code?, errors?, notInFile?, notInHr?, log` |
+| test | 월요일 1일 업로드·검증·팝업 저장 (주휴일·52시간은 경고만) | 진행 |
+| saveOnly | 7일 업로드·검증·팝업 저장 | 진행 |
+| full | + 메인 저장(켜져 있을 때만) → 공지 → 확정 | 멈춤. `allowInit: true`면 업로드 전에 [초기화](미래 주차만) 후 진행 |
 
-- `stage`: `validate`(보내기 전 검사) · `open`(HR 접속·화면·주차) · `upload` · `save` · `notice` · `confirm`
-- `code`: `login`(HR 로그인 풀림) · `network`(VPN 끊김) · `confirmed`(이미 확정된 주)
-- 같은 `requestId`를 다시 보내면 다시 실행하지 않고 지난 결과를 돌려준다. 다른 전송이 도는 중이면 `busy: true`.
+## 확장이 HR에서 하는 일 (확인된 사실대로)
+1. 주간스케쥴(시간) 열기 → 소속구분(BOH/FOH) → 라벨 `48주(11/23~11/29)`가 보드 주와 같아질 때까지 `hrt2325.moveWeek` → [검색]
+2. 주차 상태 = `getMasterList_prc` 응답 `data.infoEnc`를 `decParam`으로 푼 `[{schedule_status}]`. CONFIRM·NOTICE면 멈춤
+3. 요일마다(각 단계 30초 한도): [일자별 수정] → **요일 label 클릭 → 그날 자료 로딩(getMasterList_prc DETAIL) 대기** → 업로드 전 사번 기억 → 숨은 파일 칸에 엑셀 → "엑셀 데이터가 화면에 반영되었습니다." → **행별 검증** → 팝업 [저장] → "저장되었습니다."
+   - 행별 검증(`#hrt2325_pop_list_html` kendo view): `chk_message`가 있으면 오류(예: "사번, 이름 오류.", "소속구분이 다름", "예외 근태유형", "출근인경우 출/퇴, 휴게 시간 필수 입력") · 사번 집합 = 보낸 파일 · `{DAY}_time_item_code_p`(출근 10, 휴무 17, 없으면 null) · 출근·퇴근·휴게 시간
+   - 업로드 전 HR에 있던 직원이 파일에 없으면(신규 입사자 등) `missing`으로 회신
+   - 하나라도 걸리면 **저장하지 않고 팝업을 닫고** 회신. 이미 저장된 요일은 `savedDays`
+4. full: 메인 [저장](켜져 있을 때만) → [공지](confirm "공지 하시겠습니까?") → [확정](confirm "확정 하시겠습니까?")
+- confirm은 그 단추에서 예상한 문구에만 "예". 오류 알림은 `#jl_noti_footer_btn1`로 닫고 "오류 신고"는 안 누름
+- 문구는 `doClientMsg`(문자열·{message})를 감싸서, 서버 상태는 `jq(document).ajaxComplete`로 엔드포인트별 HTTP·returnCode를 모아 판단(기록에 남김)
+- 메인 표는 읽지 않음(직책 칸에 휴대폰 번호). 팝업 표에서 emp_code·emp_name·chk_message·근태·시간만. 확장 기록에는 이름을 남기지 않음
+- 누르지 않는 단추: 전주복사·확정취소·공지취소·누락건 추가 (초기화는 allowInit일 때만)
 
-## 3. 보드 코드 (React, 그대로 붙여 쓸 수 있는 모양)
-```tsx
-// hooks/useHrAgent.ts
-import { useCallback, useEffect, useRef, useState } from "react";
-type Day = { date: string; kind: string; in: string; out: string; brk: string };
-type Emp = { empNo: string; name: string; days: Day[] };
-export type HrResult = { requestId: string; ok: boolean; stage: string; day?: string | null; message: string; savedEmpNos: string[];
-  confirmed: boolean; mode: "full" | "test"; test?: boolean; code?: string; errors?: { empNo?: string; msg: string }[]; notInFile?: string[]; log: { t: string; stage: string; day: string | null; msg: string }[] };
+## 엑셀
+요일마다 1파일, 시트 `Sheet1`, 머리글 `.. | 사원코드 | 이름 | 근태유형 | 출근시각 | 퇴근시각 | 휴게시간`, 직원 1명 1행.
+**모든 칸을 공유 문자열(sharedStrings, t="s")로**, 빈칸도 `""`, 셀 서식 텍스트(@). inlineStr·빈 칸 생략(openpyxl 기본)은 HR 서버가 500으로 거부(KM 확인).
+확장은 SheetJS 없이 직접 만든다(`hrsXlsx`). 첫 실제 업로드에서 500이 나면 HR "엑셀양식 다운로드" 파일을 틀로 쓰고 sheet1·sharedStrings만 바꾸는 방식으로 바꾼다.
 
-export function useHrAgent() {
-  const [ver, setVer] = useState<string | null>(null);
-  const [progress, setProgress] = useState<HrResult["log"]>([]);
-  const wait = useRef(new Map<string, (r: HrResult) => void>());
-  useEffect(() => {
-    const on = (e: MessageEvent) => {
-      if (e.source !== window || e.origin !== location.origin) return;
-      const d = e.data || {};
-      if (d.type === "MFG_HR_AGENT_READY") setVer(d.ver);
-      if (d.type === "MFG_HR_SEND_PROGRESS") setProgress((p) => [...p, d.item]);
-      if (d.type === "MFG_HR_SEND_ACK" && !d.ok) wait.current.get(d.requestId)?.({ requestId: d.requestId, ok: false, stage: "validate", message: d.error || "확장이 안 받음", savedEmpNos: [], confirmed: false, mode: "full", log: [] });
-      if (d.type === "MFG_HR_SEND_RESULT") { wait.current.get(d.requestId)?.(d); wait.current.delete(d.requestId); }
-    };
-    window.addEventListener("message", on);
-    window.postMessage({ type: "MFG_HR_PING" }, location.origin);
-    return () => window.removeEventListener("message", on);
-  }, []);
-  const send = useCallback((p: { dept: "BOH" | "FOH"; weekStart: string; weekEnd: string; mode: "full" | "test"; employees: Emp[] }) =>
-    new Promise<HrResult>((resolve) => {
-      const requestId = crypto.randomUUID();
-      setProgress([]);
-      wait.current.set(requestId, resolve);
-      window.postMessage({ type: "MFG_HR_SEND", requestId, ...p }, location.origin);
-    }), []);
-  return { ver, ready: !!ver, progress, send };
-}
-```
+## 보드
+- `hrAgent.ts`
+  - `prepare()`: "HR 표기"로 바꾸고, 4개 밖이면 차단(직원·요일 표시). "9:00"은 "09:00"으로. 출근은 휴게가 없으면 00:00, 휴무·주휴일은 시간 "". 주휴일 1일·52시간(test는 경고)
+  - `sendToAgent()`: 확장으로 보내고 결과를 기다림
+  - `applyResult()`: 확정 → confirmed, 7일 저장까지 → saved, 그 밖은 그대로. hash는 보낸 시점 값
+- `HrSendPanel.tsx`: 확장 연결 표시, [시험]·[7일 저장만]·[전송] 단추, 진행 기록, 결과(실패 단계·행 오류·missing). nostatus면 [초기화 후 다시 전송] 단추
+- 대상은 그 부서·주의 **재직 직원 전원**. 이름은 HR 등록 이름과 똑같아야 함(다르면 "사번, 이름 오류.")
+- 운영 설정의 연차 HR 표기를 정해야 연차가 든 주를 보낼 수 있음(지금 "연차" → 차단)
 
-직원·근태유형 만들기 (지금 HR전송 탭이 만드는 `days`를 그대로 쓰고, 4개 밖의 값만 바꿈):
-```ts
-const HR_KINDS = ["출근", "휴무", "주휴일", "공휴일"];
-// 보드 설정에서 정하는 바꿈표 (예: 연차·D/O → 휴무, 교육 → 출근). 정해지지 않은 값은 그대로 보내면 확장이 그 직원을 에러로 돌려줌
-const KIND_MAP: Record<string, string> = settings.hrKindMap ?? {};
-const toHr = (d: Day): Day => {
-  const kind = HR_KINDS.includes(d.kind) ? d.kind : KIND_MAP[d.kind] ?? d.kind;
-  return kind === "출근" ? { ...d, kind, brk: d.brk || "00:00" } : kind === "공휴일" ? { ...d, kind } : { ...d, kind, in: "", out: "", brk: "" };
-};
-// HR 업로드는 그날 그 부서 전체를 덮어쓰므로: 그 부서·그 주의 재직 직원 전원을 보냄 (미전송·수정 필요만 보내지 않음)
-const employees = roster.filter((r) => r.active && r.dept === dept).map((r) => ({ empNo: String(r.empNo), name: r.name, days: hrDays(r).map(toHr) }));
-```
+## 시험 순서 (KM)
+1. 확장 1.12.0 덮어쓰기 → chrome://extensions 새로고침 → 버전 확인 → 그 크롬에서 HR 로그인·VPN
+2. **test**: 48주 BOH 월요일 → HR에서 월요일 값 눈으로 확인
+3. 틀린 자료로 검증 확인: 이름 다르게 · FOH 직원 섞기 · 직원 1명 빼기 → 저장 없이 오류 회신되는지 (연차는 보드에서 막힘)
+4. **saveOnly**: 48주 BOH 7일
+5. **full**: 상태 EDIT인 주에서 공지 → 확정 (상태 없는 주는 nostatus로 멈추는지)
 
-[전송] 버튼과 결과 반영 (`week.hr[empId] = { state, hash, at }`):
-```ts
-const hashOf = (days: Day[]) => days.map((d) => `${d.kind}|${d.in}|${d.out}|${d.brk}`).join(";");
-async function onSend(mode: "full" | "test") {
-  if (!agent.ready) return alert("이 크롬에 GW Agent 1.12.0이 없어요. 매장 PC 크롬에서 열어 주세요.");
-  const sent = employees.map((e) => ({ id: idOf(e.empNo), empNo: e.empNo, hash: hashOf(e.days) })); // 보낸 시점의 hash
-  const r = await agent.send({ dept, weekStart, weekEnd, mode, employees });
-  if (r.mode === "test" || r.test) return showResult(r); // 시험은 상태를 바꾸지 않음
-  const at = Date.now(), saved = new Set(r.savedEmpNos);
-  const next = { ...week.hr };
-  for (const s of sent) {
-    if (r.ok && r.confirmed) next[s.id] = { state: "confirmed", hash: s.hash, at };
-    else if (saved.has(s.empNo)) next[s.id] = { state: "saved", hash: s.hash, at }; // 저장까지만 됨 (공지·확정 실패)
-    // 업로드·저장 실패: 그대로
-  }
-  await saveWeek({ ...week, hr: next });
-  showResult(r); // r.stage · r.day · r.message · r.errors(직원별) · r.notInFile · r.log를 그대로 보여 줌
-}
-```
-
-지금의 전송 모달("HR 사이트에 직접 입력" 안내 + [전송 완료])은 위 `onSend`로 바꾼다. 모달에 넣을 것:
-- 확장 연결 표시: `agent.ready ? "GW Agent " + agent.ver : "확장 없음"`
-- [시험 (월요일만)] · [전송 (저장·공지·확정)] 두 단추. 처음 한 번은 시험부터.
-- 진행: `agent.progress`를 시각·단계·요일·문구로 한 줄씩.
-- 결과: 실패면 `stage`와 `message` 그대로. `errors`가 있으면 직원별 목록, `notInFile`이면 "HR에만 있는 사번" 목록.
-
-## 4. 시험 순서 (KM)
-1. 매장 PC(또는 KM PC) 크롬에 GW Agent 1.12.0 덮어쓰기 → chrome://extensions에서 새로고침 → 버전 1.12.0 확인
-2. 그 크롬에서 HR 로그인, 회사망 연결
-3. 보드에서 48주(11/23~11/29) BOH → [시험 (월요일만)] → HR 주간스케쥴(시간) 월요일에 들어갔는지 눈으로 확인 (공지·확정은 안 됨)
-4. 맞으면 [전송] (7일 + 저장·공지·확정)
-
-처음 실제 화면에서는 가짜 화면과 다른 곳이 있을 수 있다(소속구분 드롭다운 모양, 토스트 모양, 표에서 사번 읽기). 멈추면 결과의 `stage`·`message`·`log`를 그대로 보내 주면 고친다.
+멈추면 결과의 stage·message·rowErrors·log(엔드포인트 상태 포함)를 그대로 보내 주면 고친다.
