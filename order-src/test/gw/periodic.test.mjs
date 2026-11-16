@@ -20,6 +20,8 @@ t("C 09:40 → 둘 다 할 차례", due(`${T}T09:40`), (r) => r.go && r.jobs.len
 t("D 09:55에 이번 시간 이미 함 → 안 함", due(`${T}T09:55`, { day: T, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`) } }), (r) => !r.go && /이미 함/.test(r.why));
 t("E 10:40 → 다음 시간이므로 다시", due(`${T}T10:40`, { day: T, n: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`) } }), (r) => r.go && r.jobs.length === 2);
 t("F 한쪽만 했으면 안 한 쪽만", due(`${T}T10:43`, { day: T, jobAt: { now: ms(`${T}T10:40`) } }), (r) => r.go && r.jobs.length === 1 && r.jobs[0].kind === "setsToday");
+t("F3 발주 시간대를 건너뛰어 14:46에 했어도 다음은 15:40 (시각에 다시 맞춤)", due(`${T}T15:40`, { day: T, jobAt: { now: ms(`${T}T14:46`), setsToday: ms(`${T}T14:46`) } }), (r) => r.go && r.jobs.length === 2);
+t("F4 같은 시간대 15:55에는 둘 다 이미 함 → 안 함", due(`${T}T15:55`, { day: T, jobAt: { now: ms(`${T}T15:40`), setsToday: ms(`${T}T15:40`) } }), (r) => !r.go && r.jobs.length === 0);
 t("G 발주 시간대 12:40 → 창을 안 띄움", due(`${T}T12:40`), (r) => !r.go && /발주 시간대/.test(r.why));
 t("H 14:40도 발주 시간대 → 미룸", due(`${T}T14:40`), (r) => !r.go && /발주 시간대/.test(r.why));
 t("I 14:46 → 발주 시간대 끝, 할 차례", due(`${T}T14:46`), (r) => r.go);

@@ -46,7 +46,8 @@
       if (now < hourStart + j.at * MIN) { why.push(`${j.label}: 이번 시간 ${String(j.at).padStart(2, "0")}분 뒤`); continue; }
       const last = (S.jobAt || {})[j.kind] || 0;
       if (last >= hourStart) { why.push(`${j.label}: 이번 시간에 이미 함`); continue; }
-      if (now - last < j.everyMin * MIN) { why.push(`${j.label}: ${j.everyMin}분 주기`); continue; }
+      // 주기: 1시간(기본)은 "한 시간대 한 번"으로 충분 → 표시(minute)에 다시 맞춤. 2시간 같은 긴 주기만 시간 차이로 막음
+      if (j.everyMin > 60 && now - last < j.everyMin * MIN) { why.push(`${j.label}: ${j.everyMin}분 주기`); continue; }
       out.push(j);
     }
     if (!out.length) return { go: false, day, st: S, jobs: [], why: why[0] || "할 일 없음" };
