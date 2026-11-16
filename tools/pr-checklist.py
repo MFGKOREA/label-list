@@ -48,7 +48,7 @@ def main():
     missing = [s for s in SECTIONS if s not in body]
     # 체크박스를 하나라도 켰는가(- [x] 또는 - [X])
     checked = bool(re.search(r"^\s*[-*]\s*\[[xX]\]", body, re.M))
-    gpt_done = "[GPT 검증 완료]" in body or "GPT 검증 완료" in body
+    gpt_done = bool(re.search(r"^\s*[-*]\s*\[[xX]\][^\n]*GPT\s*검증\s*완료", body, re.M))
 
     if missing:
         say("PR 본문에 빠진 칸: " + ", ".join(missing) + " — 템플릿 칸을 그대로 두고 내용을 채워 주세요.")
