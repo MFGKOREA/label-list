@@ -38,5 +38,27 @@
     "label": "Set판매현황",
     "note": "이 매장 Set판매현황을 하루씩 읽어 세트별 구성 메뉴·수량을 setDay.날짜에 둠(처음엔 어제까지 28일, 다음부터 새 날만). 메뉴별 매출엔 세트 안의 밥·사이드·수프가 '셋트구성코드'로만 나와 레시피 계산에서 빠짐. 11/15 KM 승인. 하루 한 번(freshDays 2), 이 매장만, 조회만 (금액·직원 이름은 저장 안 함)",
     "freshDays": 2
+  },
+  {
+    "id": "now-1h",
+    "kind": "now",
+    "key": "nowSales",
+    "label": "당일 Gross",
+    "everyMin": 60,
+    "at": 40,
+    "from": "08:30",
+    "to": "23:00",
+    "note": "오늘 지금까지 Gross를 매시간 :40에 한 번 읽어 시트 nowSales = { at, day, gross } 에 둠. 영업 중 값이라 Forecast 학습 칸엔 안 넣음. 발주 시간대(12:30~14:45)와 밤에는 창을 안 띄움. 11/16 KM"
+  },
+  {
+    "id": "setnow-1h",
+    "kind": "setsToday",
+    "key": "setNow",
+    "label": "당일 Set판매현황",
+    "everyMin": 60,
+    "at": 40,
+    "from": "08:30",
+    "to": "23:00",
+    "note": "오늘 Set판매현황을 매시간 :40에 한 번 읽어 시트 setNow 에 둠(당일 중간값이라 하루 합계 setDay.날짜엔 안 넣음). 위 당일 Gross와 같은 창에서 이어서 읽음. 11/16 KM"
   }
 ]

@@ -1,0 +1,77 @@
+# [옮기는 파일] 이 파일을 .github/workflows/pr-check.yml 로 옮기면 PR 자동 검사가 켜집니다.
+#  트랙1(11/16)에서 만든 내용 그대로입니다. 피클의 GitHub 연결 앱에 "Workflows" 권한이 없어
+#  .github/workflows/ 아래로는 직접 푸시하지 못했습니다(git: refusing to allow a GitHub App to create or update workflow).
+#  옮긴 뒤에는 이 파일(docs/ci/pr-check.yml)을 지웁니다.
+# PR 자동 검사 (2026-11-16, AI 연동 최적화 2번)
+# PR이 열리거나 고쳐질 때, 그리고 main에 푸시될 때 보안·문법·시험을 자동으로 본다.
+# 규칙 본문: docs/ai-protocol.md 7장 · 검사 코드: tools/guard.py · tools/banned-words.py · tools/ci-checks.py
+# 같은 검사를 손으로 돌릴 때: python3 tools/guard.py --all && python3 tools/banned-words.py && python3 tools/ci-checks.py
+name: PR 검사
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 보안·문법·시험
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 저장소 내려받기
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 파이썬
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 노드
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 보안 지킴이 (비밀키·토큰·매장 자료·개인정보)
+        run: python3 tools/guard.py --all
+
+      - name: 금지어 (KM 지정)
+        run: python3 tools/banned-words.py
+
+      - name: YAML 검사 도구 준비
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml \
+            || python3 -m pip install --quiet --disable-pip-version-check --break-system-packages pyyaml
+
+      - name: JSON·YAML 문법과 태스크 패킷 스키마
+        run: python3 tools/ci-checks.py
+
+      - name: 검사기 자체 시험 (나쁜 패킷이 정말 걸리는지)
+        run: python3 tools/ci-checks.py --selftest
+
+      - name: 단위 시험 (node --test)
+        run: |
+          set -o pipefail
+          mapfile -t TESTS < <(git ls-files '*.test.mjs' | grep -v '^\.claude/skills/' || true)
+          if [ ${#TESTS[@]} -eq 0 ]; then
+            echo "시험 파일(*.test.mjs)이 없어 넘어갑니다."
+            exit 0
+          fi
+          printf '시험 파일 %d개\n' "${#TESTS[@]}"
+          printf ' - %s\n' "${TESTS[@]}"
+          node --test "${TESTS[@]}"
+
+      - name: PR 본문 체크리스트 (지금은 경고만)
+        if: github.event_name == 'pull_request'
+        run: python3 tools/pr-checklist.py

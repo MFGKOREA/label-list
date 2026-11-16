@@ -1,3 +1,6 @@
+// 배경 (1.11.0 — 11/16 KM "당일 Gross·SET판매현황도 PC가 스스로, 1시간마다": 매시간 :40에 창 하나로 오늘 지금까지 Gross와 오늘 Set판매현황을 읽어 시트(nowSales·setNow)에 남김 → 아래 "당일 되풀이 수집")
+//  1.11.0 원칙: 무엇을 얼마나 자주(gw-plan.json의 kind now·setsToday, everyMin·at·from·to)만 계획에서 받고, 판단은 periodic.js(순수 함수·시험 있음),
+//   창 열고 읽는 길은 폰 버튼과 같은 salesPush 그대로. 발주 시간대(12:30~14:45)와 밤에는 창을 띄우지 않고, 매출·발주 요청이 도는 중이면 양보
 // 배경 (1.10.1 — 11/16 #18: 매출 자동 창이 닫히거나 창을 못 열면 발주와 같게 salesPush에 "멈춤"을 적음 → 폰이 영원히 "받는 중"에 갇히지 않음)
 // 배경 (1.10.0 — 11/14 KM: 플젝 HR 출퇴근·스케줄 변경 신청을 매장 PC가 읽어 시트(hrStatus)에 남김 → 아래 "플젝 HR 덤프")
 //          영업시간(08:30~22:30)에 15분마다(:05·:20·:35·:50) 사람이 쓰는 창 뒤 탭 하나로 조용히 읽고 닫음. 감시 시각(09:10·12:00·13:00·16:10·17:10·18:10·20:10·22:10) 직전 값이 남음
@@ -13,7 +16,7 @@
 //   ③ 단계(stage)마다 시간 제한과 다시 하기: GW 화면(gw) → MIS 탭 열림(open) → 주문등록 화면(mis) → 전송 받음(start) → 입력(run).
 //      3초마다 탭 상태를 직접 살펴(probe) 스크립트가 안 돌았으면 다시 넣고, 새 탭이 안 생기면 경영정보를 다시 누르고, 그래도 없으면 MIS 주소를 직접 엶.
 //   ④ 안 되면 6분을 기다리지 않고 바로 misPush를 error로 올림. 글에 "멈춘 곳"과 "무엇을 기다리다 멈췄는지"를 적음(주소는 GW·MIS 구분만, 아이디·비밀번호·주소 뒤 값은 안 적음).
-importScripts("common.js", "auto.js");
+importScripts("common.js", "auto.js", "periodic.js");
 const get = (k) => chrome.storage.local.get(k);
 const put = (o) => chrome.storage.local.set(o);
 const VER = chrome.runtime.getManifest().version;
@@ -330,11 +333,14 @@ async function tickOnce(why) {
   }
   if (!job && now - lastBeat > 10 * 60e3) { await put({ lastBeat: now }); const { auto } = await get("auto"); post("misAgent", { at: now, mode: "ondemand", ver: VER, auto: auto === false ? 0 : 1 }); } // 폰에 "PC 대기 중" (auto: 상시 수집 켜짐)
   const orderWaiting = p.date === ymd() && p.status === "pending" && now - (p.at || 0) < 30 * 60e3;
-  const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 6 * 3600e3; // 1.7.3: 매출 요청은 6시간까지 받음 (PC가 꺼져 있다 켜져도. 예전엔 30분이 지나면 버림)
+  // 1.11.0: 내가 낸 당일 되풀이 요청이 20분 넘게 pending이면 버린 것으로 보고 받지 않게 (그러면 당일 되풀이가 새 요청을 낼 수 있음)
+  const { perSt: peri = {} } = await get("perSt");
+  const ownStale = peri.reqId != null && "s" + peri.reqId === "s" + sp.id && sp.status === "pending" && now - (sp.at || 0) > 20 * 60e3;
+  const salesWaiting = sp.status === "pending" && now - (sp.at || 0) < 6 * 3600e3 && !ownStale; // 1.7.3: 매출 요청은 6시간까지 받음 (PC가 꺼져 있다 켜져도. 예전엔 30분이 지나면 버림)
 
   if (!job) {
     const req = orderWaiting ? { kind: "order", id: "o" + p.id, msg: "폰 전송 받음 → GW·MIS 열기" } : salesWaiting ? { kind: "sales", id: "s" + sp.id, msg: "Gross 불러오기 받음 → GW·MIS 열기" } : null;
-    if (!req) return autoCheck(now, L); // 기다리는 요청이 없음 → 스스로 받아 올 게 있나 (1.8.0)
+    if (!req) { await periodicTick(now); if (!(await get("job")).job) await autoCheck(now, L); return; } // 1.11.0: 먼저 당일 되풀이(매시간), 그 다음 상시 수집(1.8.0)
     if (tried[req.id]) return; // 같은 요청은 한 번만 (안 되면 폰에 ⚠, 다시 누르면 새 요청)
     await put({ tried: Object.fromEntries([...Object.entries(tried), [req.id, now]].slice(-10)) });
     try { await openJob(req.kind, req.id, req.msg); }
@@ -366,8 +372,10 @@ async function tickOnce(why) {
     const same = "s" + sp.id === job.id;
     if (same && /done|error/.test(sp.status) && (sp.doneAt || 0) > job.openedAt) {
       // 1.8.0: 스스로 보낸 요청이었으면 설정 창에 보일 상태를 고침 (됐으면 1분 뒤 다시 확인해 "다 받아 둠"으로, 안 됐으면 정해 둔 30분 뒤에 다시)
-      const { autoSt = {} } = await get("autoSt");
+      const { autoSt = {}, perSt = {} } = await get(["autoSt", "perSt"]);
       if ("s" + autoSt.reqId === job.id) await put({ autoSt: { ...autoSt, msg: sp.status === "done" ? "스스로 받음" : "스스로 받다가 못 받음 · 조금 뒤 다시", doneAt: now, ...(sp.status === "done" ? { next: now + 60e3 } : {}) } });
+      // 1.11.0: 당일 되풀이로 낸 요청이면 팝업 상태에 남김 (받은 값은 mis-sales.js가 시트 nowSales·setNow에 적음)
+      if ("s" + perSt.reqId === job.id) await put({ perSt: { ...perSt, okAt: now, ok: sp.status === "done", why: "", msg: sp.status === "done" ? "스스로 받음" : "스스로 받다가 못 받음 · 다음 시간대에 다시" } });
       return endJob(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`);
     }
     // 1.8.0: 스스로 받던 중에 폰에서 [GW 전송]이 오면 발주가 먼저 (받던 것은 멈추고, 30분 뒤 스스로 다시 받음)
@@ -441,6 +449,38 @@ async function hrTick(now) {
   await hrStart("정기", now);
 }
 
+// ---- 당일 되풀이 수집 (1.11.0): 매시간 :40에 오늘 지금까지 Gross + 오늘 Set판매현황 ----
+//  판단은 periodic.js(순수 함수), 읽는 길은 폰 버튼과 같은 salesPush (mis-sales.js kind "now"·"sets" today)
+//  what/주기는 gw-plan.json 되풀이 항목(kind now·setsToday)에서 받아 옴 — 계획을 못 받았으면 planCache의 마지막 것, 그것도 없으면 둘 다 1시간
+//  양보: 자동 창이 도는 중(job)·매출 요청 pending/running·발주 전송 중이면 창을 열지 않음(periodicBlocked). 실패해도 같은 시간대에 다시 두드리지 않음
+//  끄기: 팝업의 [당일 되풀이 수집] (per === false) 또는 상시 수집 끔(auto === false)
+const PERIOD = { maxPerDay: 20, wait: 3 * 60e3 }; // 하루 상한 · 막혔을 때 다시 볼 때까지
+let perBusy = false; // 확인이 겹쳐도 요청을 두 번 내지 않음 (알람과 3초 확인이 같이 부를 수 있음)
+async function periodicTick(now) {
+  if (perBusy) return;
+  perBusy = true;
+  try { await periodicOnce(now); } finally { perBusy = false; }
+}
+async function periodicOnce(now) {
+  const { on, auto, per, perSt = {}, job, planCache } = await get(["on", "auto", "per", "perSt", "job", "planCache"]);
+  if (!on || auto === false || per === false || job) return;
+  if (now < (perSt.next || 0)) return;
+  const jobs = periodJobs(Array.isArray(planCache) ? planCache : undefined);
+  const r = periodDue(now, perSt, jobs, { maxPerDay: PERIOD.maxPerDay });
+  if (!r.go) { if (r.why !== perSt.why) await put({ perSt: { ...perSt, ...r.st, why: r.why } }); return; } // msg(마지막 결과)는 건드리지 않음
+  await put({ perSt: { ...perSt, ...r.st, next: now + PERIOD.wait } }); // 먼저 적어 둠: 시트를 읽는 동안 다음 확인이 겹쳐도 두 번 내지 않게
+  let d;
+  try { d = await readStatus(); } catch (e) { return; } // 인터넷 끊김: 다음에
+  const why = periodBlocked(d, now, perSt.reqId ? "s" + perSt.reqId : "");
+  if (why) { await put({ perSt: { ...perSt, ...r.st, why, msg: why + " · 조금 뒤 다시", next: now + PERIOD.wait } }); return; }
+  const req = periodBundle(now, r.jobs, "pc-hour");
+  if (!(await postOk("salesPush", req))) { await put({ perSt: { ...perSt, ...r.st, why: "요청을 시트에 못 적음", msg: "요청을 시트에 못 적음 (인터넷 확인)", next: now + PERIOD.wait } }); return; }
+  const jobAt = { ...(r.st.jobAt || {}) }; r.jobs.forEach((j) => { jobAt[j.kind] = now; });
+  await put({ perSt: { ...perSt, ...r.st, day: r.day, at: now, n: (r.st.n || 0) + 1, jobAt, reqId: req.id, reqAt: now, ok: null, why: r.why, msg: `스스로 받는 중: ${r.why}` } });
+  await log(`당일 되풀이 · ${r.why} → 스스로 요청`, { quiet: true });
+  fast(); setTimeout(() => tick("periodic"), 500); // 다음 확인이 창을 열게 (폰 버튼과 같은 길)
+}
+
 // ---- 상시 수집 (1.8.0): 크롬이 켜져 있는 동안 PC가 스스로 ----
 //  30분마다 시트를 한 번 읽어, 어제까지의 실제 매출·메뉴 판매가 비었거나 계획(gw-plan.json)에 아직 안 한 일이 있으면 스스로 요청(salesPush)을 적음
 //  → 그 뒤는 폰 버튼과 같은 길(창 하나 열어 GW·MIS에서 받아 오고 닫음). 다 받아 뒀으면 3시간 쉼. 하루 4번까지만 스스로 요청(MIS가 막혔을 때 계속 두드리지 않게)
@@ -465,7 +505,7 @@ async function autoCheck(now, L) {
     const ask = d.hrPush || {}, hs = (await get("hrSt")).hrSt || {};
     if (ask.id && (ask.at || 0) > (hs.reqId || 0) && now - (ask.at || 0) < 20 * 60e3) { await put({ hrSt: { ...hs, reqId: ask.id } }); hrStart("요청", now); }
   }
-  try { const p = await netGet(PLAN_URL + "?t=" + now, 8e3); if (Array.isArray(p)) plan = p; } catch (e) {} // 계획을 못 받으면 매출·메뉴만
+  try { const p = await netGet(PLAN_URL + "?t=" + now, 8e3); if (Array.isArray(p)) { plan = p; await put({ planCache: p }); } } catch (e) {} // 계획을 못 받으면 매출·메뉴만 (1.11.0: 마지막으로 받은 계획은 planCache에 두어 당일 되풀이 수집이 씀)
   const r = autoPlan(d, now, plan, { pc: true, forceTime: !!L.autoAnyTime });
   let go = false;
   if (r.act === "request") {
@@ -486,11 +526,11 @@ chrome.runtime.onStartup.addListener(async () => {
   { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null } }); } // 새로 켜졌으면 HR 덤프는 다음 차례에
   { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 60e3 } }); } // 크롬이 막 켜졌으면 1분 뒤에 첫 확인
   await sweep("크롬 시작", true); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 4000); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 12000);
-  tick("start"); hrTick(Date.now());
+  tick("start"); hrTick(Date.now()); periodicTick(Date.now());
 });
-chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); });
+chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); periodicTick(Date.now()); });
 chrome.alarms.create("watch", { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); hrTick(Date.now()); });
+chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); hrTick(Date.now()); periodicTick(Date.now()); });
 let fastOn = false;
 function fast() { // 매장 시간이거나 작업 중이면 3초마다 (배경이 잠들면 30초 알람이 다시 깨움)
   if (fastOn) return; fastOn = true;

@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mfgkorea.github.io/label-list/docs/aside/task-schema.json",
+  "title": "AI 표준 태스크 패킷",
+  "description": "네 AI(클로드 코드·어사이드/레미·GPT·피클)가 일을 주고받을 때 쓰는 고정 형식. 규칙 본문은 docs/ai-protocol.md 4장. 검사는 python3 tools/ci-checks.py --packets.",
+  "type": "object",
+  "required": [
+    "task_id",
+    "intent",
+    "assigned_to",
+    "verify_by",
+    "sla_sec",
+    "retry_count",
+    "max_retries",
+    "status",
+    "evidence"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "일 번호. 그날 순번 세 자리.",
+      "pattern": "^T-[0-9]{8}-[0-9]{3}$",
+      "examples": ["T-20261116-001"]
+    },
+    "intent": {
+      "type": "string",
+      "description": "무엇을 끝낼지. 동사 + 끝났는지 보는 기준을 한 문장에.",
+      "minLength": 8,
+      "maxLength": 500
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "맡는 AI.",
+      "enum": ["claude-code", "aside", "remi", "gpt", "pickle"]
+    },
+    "verify_by": {
+      "type": "string",
+      "description": "검증할 AI. assigned_to와 달라야 한다(만든 AI가 자기 일을 채점하지 않음).",
+      "enum": ["gpt", "claude-code", "aside", "remi", "pickle", "km"]
+    },
+    "sla_sec": {
+      "type": "integer",
+      "description": "끝내야 하는 시간(초). 단일 자료 3, 2중 전달·복합 계산 10.",
+      "minimum": 1,
+      "maximum": 600
+    },
+    "retry_count": {
+      "type": "integer",
+      "description": "지금까지 실패한 횟수. 실패마다 +1, 처음은 0.",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "max_retries": {
+      "type": "integer",
+      "description": "실패 상한. 항상 3.",
+      "const": 3
+    },
+    "status": {
+      "type": "string",
+      "description": "지금 상태. queued → running → verifying → done / blocked / failed.",
+      "enum": ["queued", "running", "verifying", "done", "blocked", "failed"]
+    },
+    "evidence": {
+      "type": "array",
+      "description": "실제로 돌려 본 것만. 명령과 결과, 파일 경로, 본 시각, 걸린 초.",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 0,
+      "maxItems": 50
+    },
+    "created_at": {
+      "type": "string",
+      "description": "만든 시각(ISO 8601, 한국 시간 +09:00).",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\+09:00|Z)$"
+    },
+    "fallback": {
+      "type": "array",
+      "description": "3회 실패했을 때 다음에 맡길 곳(순서대로).",
+      "items": { "type": "string", "enum": ["claude-code", "aside", "remi", "gpt", "pickle", "km"] },
+      "maxItems": 3
+    },
+    "blocked_reason": {
+      "type": "string",
+      "description": "status가 blocked일 때 원인 한 줄.",
+      "maxLength": 300
+    },
+    "result_path": {
+      "type": "string",
+      "description": "결과를 남긴 곳(docs/aside/reports/... 등).",
+      "maxLength": 300
+    },
+    "source": {
+      "type": "string",
+      "description": "이 일이 어디서 왔는지(대장님 질문, 게시판 번호, 이슈 번호 등).",
+      "maxLength": 200
+    }
+  },
+  "additionalProperties": true,
+  "$comment": "칸끼리 맞춰야 하는 규칙(스키마 문법 밖이라 검사기가 직접 봄): ① verify_by는 assigned_to와 달라야 함 ② status가 blocked면 blocked_reason 필수 ③ retry_count가 1 이상이면 evidence에 마지막 시도·오류가 있어야 함"
+}

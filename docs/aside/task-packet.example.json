@@ -1,0 +1,19 @@
+{
+  "task_id": "T-20261116-001",
+  "intent": "발주앱 주간 점검 지적 3건을 고치고, 같은 자료로 되돌려 보기(앞 24일)에서 고칠 줄이 늘지 않은 것을 확인한다",
+  "assigned_to": "claude-code",
+  "verify_by": "gpt",
+  "sla_sec": 10,
+  "retry_count": 1,
+  "max_retries": 3,
+  "status": "verifying",
+  "evidence": [
+    "1차: node order-src/test/regress.mjs → 2건 실패(빈 날 합계). 원인: 예상 재고가 0일 때 나누기",
+    "고침 뒤: node order-src/test/regress.mjs → 통과 (0.8초)",
+    "비교: node order-src/test/bt/compare.mjs <kv> 기준.html 고친.html --split 2026-10-23 → 고칠 줄 12 → 12 (늘지 않음)"
+  ],
+  "created_at": "2026-11-16T09:12:00+09:00",
+  "fallback": ["aside", "km"],
+  "source": "주간 점검(11/16) 지적 목록 3건",
+  "result_path": "docs/aside/reports/report-20261116-weekly.md"
+}

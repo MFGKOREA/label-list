@@ -867,6 +867,36 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt tr { break-inside: avoid; }
 }
 
+/* ---------- 버튼 로딩바 (11/16 KM) ---------- */
+/* [GW 전송] · [Gross Sales 불러오기] · [메뉴 판매 불러오기]를 누르면 그 줄 아래에 진행 막대가 생깁니다.
+   누른 즉시 보이고 → 도는 동안 연두 막대가 흐르고 → 끝나면 초록(성공)·빨강(실패)으로 한 번 채운 뒤 접힙니다.
+   결과 글은 위 .mis-s에 그대로 남습니다. 상태는 misState()·salesState()의 낱말(run·wait·ok·bad)만 씁니다. */
+.misbar:has(.lbar) { flex-wrap: wrap; }
+.misbar .lbar { order: 4; flex: 1 1 100%; display: grid; gap: 6px; margin-top: 8px; letter-spacing: -0.03em;
+  max-height: 48px; opacity: 1; overflow: hidden; transition: opacity .3s ease, max-height .3s ease, margin-top .3s ease; }
+.misbar .lbar.gone { opacity: 0; max-height: 0; margin-top: 0; }
+.misbar .lb-trk { position: relative; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.misbar .lb-fil { position: absolute; top: 0; bottom: 0; left: -36%; width: 36%; border-radius: inherit; background: var(--accent); animation: lbSlide 1.15s ease-in-out infinite; }
+.misbar .lb-txt { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.misbar .lb-sp { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--fill); border-top-color: var(--accent); animation: lbSpin .9s linear infinite; }
+/* PC가 꺼져 기다리는 중: 흐르지 않고 천천히 숨쉬듯 */
+.misbar .lbar[data-live="wait"] .lb-fil { width: 22%; background: var(--muted); animation: lbBreathe 2.6s ease-in-out infinite; }
+.misbar .lbar[data-live="wait"] .lb-sp { border-top-color: var(--muted); animation-duration: 2.2s; }
+/* 끝: 한 번 가득 채우고 접힘 */
+.misbar .lbar[data-live="ok"] .lb-fil { left: 0; width: 100%; background: var(--ok-ink); animation: none; }
+.misbar .lbar[data-live="ok"] .lb-sp { display: none; }
+.misbar .lbar[data-live="ok"] .lb-txt { color: var(--ok-ink); }
+.misbar .lbar[data-live="bad"] .lb-fil { left: 0; width: 100%; background: var(--rose-ink); animation: none; }
+.misbar .lbar[data-live="bad"] .lb-sp { display: none; }
+.misbar .lbar[data-live="bad"] .lb-txt { color: var(--rose-ink); }
+@keyframes lbSlide { 0% { left: -36%; } 100% { left: 100%; } }
+@keyframes lbSpin { to { transform: rotate(360deg); } }
+@keyframes lbBreathe { 0%, 100% { left: 0; opacity: .45; } 50% { left: 56%; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .misbar .lb-fil { animation: none; left: 0; width: 100%; opacity: .5; }
+  .misbar .lbar[data-live="run"] .lb-sp { animation: none; }
+}
+
 </style>
 </head>
 <body>
@@ -2966,6 +2996,33 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // 발주 GW 전송(misPush) 상태: idle 없음 · run PC가 넣는 중 · wait PC가 꺼져 있어 기다림 · ok 저장 완료 · bad 오류 또는 응답 없음(stale)  (매출 쪽 salesState와 같은 낱말)
   //  응답 없음: 확장은 6분(입력 시작 뒤 12분) 안에 끝내거나 멈춘 곳을 적고 닫음 → 그보다 1분 넘으면(7분·13분). 예전 북마크 방식은 5분
   const MIS_STALE = { pending: 7 * 60e3, running: 13 * 60e3, legacy: 300000, slow: 2 * 60e3 };
+  // ===== 버튼 로딩바 (11/16 KM) =====
+  // [GW 전송]·[Gross Sales 불러오기]·[메뉴 판매 불러오기]를 누르면 그 줄 아래에 진행 막대를 그림.
+  //  화면마다 새로 판단하지 않고 misState()·salesState()가 내는 낱말(run·wait·ok·bad)만 그대로 씀 (order-src/STATES.md 2·3).
+  //  run 도는 중 · wait PC가 꺼져 기다림 · ok·bad는 잠깐 채운 뒤 접힘(결과 글은 위 .mis-s에 남음). 누른 직후 1~2초는 press가 run을 대신 보여 줌.
+  const LB = { dwell: { ok: 1000, bad: 1800 }, gone: 320, press: 12e3, seen: {} };
+  const lbPress = {};
+  const lbPressed = (k) => { const t = lbPress[k]; return !!t && Date.now() - t < LB.press; };
+  function lbar(el, key, st, text) {
+    if (!el) return;
+    const s = LB.seen[key] || (LB.seen[key] = { st: "", at: 0 });
+    if (s.st !== st) { s.st = st; s.at = Date.now(); }
+    // 결과(ok·bad)는 잠깐만 — 그 뒤에 다시 그려도 결과 막대가 되살아나지 않게
+    const show = st === "run" || st === "wait" || ((st === "ok" || st === "bad") && Date.now() - s.at < LB.dwell[st]);
+    const old = el.querySelector(".lbar");
+    if (!show) { if (old) old.remove(); return; }
+    let b = old;
+    if (!b) { b = document.createElement("div"); b.className = "lbar"; b.setAttribute("role", "progressbar"); b.setAttribute("aria-live", "polite"); el.appendChild(b); }
+    b.dataset.live = st;
+    b.classList.remove("gone");
+    b.setAttribute("aria-valuetext", text || "");
+    if (b.__live !== st || b.__txt !== (text || "")) { // 글이 그대로면 손대지 않음 (막대가 끊겨 보이지 않게)
+      b.__live = st; b.__txt = text || "";
+      b.innerHTML = `<span class="lb-trk"><span class="lb-fil"></span></span><span class="lb-txt"><i class="lb-sp" aria-hidden="true"></i>${esc(text || "")}</span>`;
+    }
+    clearTimeout(b.__t);
+    if (st === "ok" || st === "bad") b.__t = setTimeout(() => { if (!b.isConnected) return; b.classList.add("gone"); b.__t = setTimeout(() => b.remove(), LB.gone); }, LB.dwell[st]);
+  }
   function misState() {
     const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, agOn = pcAlive();
     const act = !!p && /pending|running/.test(p.status), age = act ? Date.now() - (p.startAt || p.at) : 0;
@@ -2976,8 +3033,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   let misTick = 0;
   function renderMis() {
     const el = $("misBar"); if (!el) return;
-    clearTimeout(misTick); // 11/12: 기다리는 중이면 30초 뒤 다시 그림 (시트가 안 바뀌어도 시간 기준 상태가 바뀜)
-    if (db.misPush && db.misPush.date === TODAY && /pending|running/.test(db.misPush.status)) misTick = setTimeout(() => { if (!$("v-main").hidden) renderMis(); }, 30e3);
+    clearTimeout(misTick); // 11/12: 기다리는 중이면 다시 그림 (시트가 안 바뀌어도 시간 기준 상태가 바뀜)
+    // 11/16: 시간이 지나 "응답 없음"으로 바뀌는 것을 1초 안에 보여 주려고 30초 → 1초 (html이 같으면 다시 안 그림)
+    if (db.misPush && db.misPush.date === TODAY && /pending|running/.test(db.misPush.status)) misTick = setTimeout(() => { if (!$("v-main").hidden) renderMis(); }, 1000);
     if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
     el.hidden = false; el.dataset.phase = misState().st;
     const ag = db.misAgent || {}, ms = misState(), { p, agOn, stale, busy, failed, slow } = ms, list = misItems();
@@ -2992,24 +3050,35 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     // busy: 넣는 중(running)에만 버튼을 잠금 — 기다리는 중(pending)이어도 다시 누를 수 있게 · failed: 안 됐으면 MIS 직접 입력용 목록 복사 버튼
     // 11/12: 실패·응답 없음이 아니어도 PC 꺼짐·확장 없음이거나 보낸 지 2분 넘게 안 끝나면 작은 [목록 복사]를 미리 보임 (6~13분 기다리지 않고 직접 넣을 수 있게)
     const copyCls = failed ? "" : !agOn || slow ? " soft" : null;
-    el.innerHTML = `<div class="mis-t"><b>그룹웨어 자동입력</b>${st ? `<span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span>` : ""}</div>` +
+    // 로딩바 (11/16): 누른 즉시 run → 도는 중 · PC 꺼져 있으면 wait · 끝나면 ok·bad를 잠깐 채우고 접힘
+    const lbSt = lbPressed("mis") && (!ms.st || ms.st === "idle") ? "run" : ms.st; // 누른 직후(시트에 적히기 전)만 대신 run
+    const lbText = lbSt === "run" ? (ms.st === "idle" ? "PC로 보내는 중…" : stepNow ? stepNow + "…" : "PC가 그룹웨어에 넣는 중…")
+      : lbSt === "wait" ? "PC가 켜지면 자동으로 넣어요"
+      : lbSt === "ok" ? (p && p.saved ? `저장 완료 ${p.saved}개` : "저장 완료")
+      : lbSt === "bad" ? (p && p.status === "error" ? "확인 필요 · 눌러서 보기" : "PC 응답 없음 · 다시 보내 주세요") : "";
+    const html = `<div class="mis-t"><b>그룹웨어 자동입력</b>${st ? `<span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span>` : ""}</div>` +
       (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
-      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="misGo"${busy || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button></span>`;
-    bindPin(el);
-    el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
-    el.querySelector("#misCopy")?.addEventListener("click", async () => {
-      const t = misListText();
-      try { await navigator.clipboard.writeText(t); toast("복사했어요 · MIS 주문등록에 이 목록대로 넣어 주세요"); }
-      catch (e) { prompt("길게 눌러 복사하세요", t); }
-    });
-    el.querySelector("#misGo").addEventListener("click", async () => {
-      const now = misItems();
-      if (!now.length || !(await unlock())) return;
-      if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 그룹웨어(MIS)에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
-      setKey("misPush", { date: TODAY, id: Date.now(), at: Date.now(), status: "pending", n: now.length });
-      misFastUntil = Date.now() + 180000;
-      toast(agOn ? "GW 전송했어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
-    });
+      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="misGo"${busy || lbSt === "run" || lbSt === "wait" || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button></span>`;
+    if (el.__html !== html) { // 그대로면 다시 안 그림 (로딩바가 매초 끊겨 보이지 않게, 누르던 버튼이 바뀌지 않게)
+      el.__html = html; el.innerHTML = html;
+      bindPin(el);
+      el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(p.text || ""));
+      el.querySelector("#misCopy")?.addEventListener("click", async () => {
+        const t = misListText();
+        try { await navigator.clipboard.writeText(t); toast("복사했어요 · MIS 주문등록에 이 목록대로 넣어 주세요"); }
+        catch (e) { prompt("길게 눌러 복사하세요", t); }
+      });
+      el.querySelector("#misGo").addEventListener("click", async () => {
+        const now = misItems();
+        if (!now.length || !(await unlock())) return;
+        if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 그룹웨어(MIS)에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
+        lbPress.mis = Date.now(); renderMis(); // 누른 즉시 막대·버튼 잠금 (시트에 적히기까지 1~2초)
+        setKey("misPush", { date: TODAY, id: Date.now(), at: Date.now(), status: "pending", n: now.length });
+        misFastUntil = Date.now() + 180000;
+        toast(agOn ? "GW 전송했어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
+      });
+    }
+    lbar(el, "mis", lbSt, lbText);
   }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
   // 재고를 넣었고 발주가 필요한 품목 → 목록 맨 위 "발주 필요"로
@@ -4221,15 +4290,35 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     el.hidden = false;
     const s = salesState(K), hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
     const one = (t) => String(t || "").split("\n")[0];
-    const st = s.st === "idle" ? U.idle() : s.st === "ok" ? `✓ ${s.at ? hhmm(s.at) + " " : ""}${one(s.text) || "가져옴"}` : s.st === "bad" ? (s.dead ? `⚠ ${s.text}` : `⚠ ${s.at ? hhmm(s.at) + " " : ""}못 가져옴 · 눌러서 보기`) : s.text;
+    // 로딩바 (11/16): run 도는 중 · wait PC 꺼짐 · ok·bad 잠깐 · 누른 직후(press)는 도는 중으로 보여 줌
+    const lbSt = lbPressed(K) && s.st === "idle" ? "run" : s.st; // 누른 직후(시트에 적히기 전)만 대신 run
+    const lbText = lbSt === "run" ? (s.st === "idle" ? "PC로 보내는 중…" : s.text || "PC에서 읽는 중…")
+      : lbSt === "wait" ? (s.text || "PC가 켜지면 받아요")
+      : lbSt === "ok" ? (one(s.text) || "가져옴")
+      : lbSt === "bad" ? (one(s.text) || "못 가져옴") : "";
+    const st = lbSt === "run" && s.st === "idle" ? "PC로 보내는 중…" : s.st === "idle" ? U.idle() : s.st === "ok" ? `✓ ${s.at ? hhmm(s.at) + " " : ""}${one(s.text) || "가져옴"}` : s.st === "bad" ? (s.dead ? `⚠ ${s.text}` : `⚠ ${s.at ? hhmm(s.at) + " " : ""}못 가져옴 · 눌러서 보기`) : s.text;
     const cls = { run: "run", ok: "ok", bad: "bad", wait: "", idle: "" }[s.st], tap = (s.st === "bad" && !s.dead) || (s.st === "ok" && /\n| · /.test(s.text || "") && (s.text || "").length > 28);
+    const busy = lbSt === "run" || lbSt === "wait";
+    // 로딩바를 그리고, 도는·기다리는 동안은 1초마다 다시 그림 — 시간이 지나 "응답 없음"으로 바뀌는 것을 바로 보여 주려고
+    const paint = () => {
+      lbar(el, "sales:" + K, lbSt, lbText);
+      clearTimeout(el.__soon);
+      if (busy) el.__soon = setTimeout(() => { if (!$("v-forecast").hidden && !document.hidden) renderSalesBar(K); }, 1000);
+    };
     const html = `<div class="mis-t"><b>${U.title}</b><span class="mis-s ${cls}${tap ? " tap" : ""}">${esc(st)}</span></div>` +
-      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="${U.go}"${s.st === "run" ? " disabled" : ""}>${s.st === "run" ? "받는 중" : "불러오기"}</button></span>`;
-    if (el.__html === html && el.__text === (s.text || "")) return; // 그대로면 다시 그리지 않음 (누르던 버튼이 바뀌어 눌림이 씹히지 않게)
+      `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="${U.go}"${busy ? " disabled" : ""}>${lbSt === "run" ? "받는 중" : lbSt === "wait" ? "대기 중" : "불러오기"}</button></span>`;
+    if (el.__html === html && el.__text === (s.text || "")) { paint(); return; } // 그대로면 다시 그리지 않음 (누르던 버튼이 바뀌어 눌림이 씹히지 않게)
     el.__html = html; el.__text = s.text || ""; el.innerHTML = html;
     bindPin(el);
     el.querySelector(".mis-s.tap")?.addEventListener("click", () => alert(s.text || ""));
-    el.querySelector("#" + U.go).addEventListener("click", () => salesGo(K));
+    el.querySelector("#" + U.go).addEventListener("click", () => {
+      if (lbSt === "run" || lbSt === "wait") return; // 잠겨 있으면 눌리지 않지만 한 번 더 막음 (중복 요청 방지)
+      lbPress[K] = Date.now();
+      const b = el.querySelector("#" + U.go); if (b) { b.disabled = true; b.textContent = "받는 중"; }
+      lbar(el, "sales:" + K, "run", "PC로 보내는 중…"); // 누른 즉시 (시트에 적히기까지 1~2초)
+      salesGo(K).finally(() => { delete lbPress[K]; renderSales(); });
+    });
+    paint();
   }
   function renderSales() { renderSalesBar("gross"); renderSalesBar("menu"); }
   // 받는 중일 때는 15초마다 다시 그림 (걸린 시간에 따라 글이 바뀜)
