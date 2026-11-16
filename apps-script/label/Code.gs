@@ -22,6 +22,7 @@ function doGet(e) {
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
       if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 30일)
+      if (e.parameter.traceLookup) return json_(traceLookup_(e.parameter.traceLookup)); // 이력번호 하나 조회 (캐시 먼저)
       if (e.parameter.pushstat) return json_(pushStat_()); // 알림 점검: 매장별 등록 폰 수·마지막 오류 (토큰은 안 보여줌)
       if (e.parameter.backups) return json_({ backups: backupList_() }); // 복구용 백업 목록 (최근 15일)
       if (e.parameter.backup) return json_(backupGet_(String(e.parameter.backup), e.parameter.store ? store_(e.parameter.store) : '')); // 그날 백업 (매장 하나 또는 전체)
@@ -57,6 +58,7 @@ function doPost(e) {
     if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20), !!body.trace));
     if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
     if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
+    if (body.action === 'trace_lookup') return json_(traceLookup_(String(body.traceNo || '').slice(0, 20)));
     if (body.action === 'learn') return json_(learn_(store, String(body.id || '').slice(0, 40), String(body.name || '').slice(0, 80), String(body.text || '').slice(0, 3000), String(body.color || '').slice(0, 20)));
     if (body.action === 'self_update') return json_(selfUpdate_());
     if (body.action === 'admin_run') return json_(adminRun_(String(body.fn || '')));
@@ -651,6 +653,123 @@ function traceDelete_(store, id) {
   }
   photos.forEach((k) => unPhoto_(store, String(k).slice(0, 40)));
   return traceList_(store);
+}
+
+// ---- 이력번호 조회 (mtrace) + 시트 캐시 ----
+// 박스 바코드·라벨에서 읽은 12자리 이력번호로 도축일자·등급을 한 번만 물어보고 '이력캐시' 탭에 담아 둡니다.
+// 다음부터는 같은 번호를 구글 API 에 다시 묻지 않고 바로 돌려줍니다 (source: 'cache').
+// 공공 API 모양은 실제로 돌아가는 오픈소스에서 확인했습니다:
+//   sirloin-bondaero/mtrace-api-client (AnimalTraceImpl.java), 07z0/kyj-cow (server.py)
+//   GET http://data.ekape.or.kr/openapi-data/service/user/animalTrace/traceNoSearch?serviceKey=…&traceNo=002147460101
+//   → <response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header>
+//     <body><items><item><infoType>3</infoType><butcheryYmd>20220523</butcheryYmd><gradeNm>2</gradeNm>…</item></items></body></response>
+//   정보 종류(infoType): 1 소 개체 · 2 농장 · 3 도축·등급 · 4 가공장 · 5 백신 · 6 검사
+//   optionNo 를 붙이면 그 종류만 옵니다 — 도축일자·등급이 필요하므로 붙이지 않습니다.
+//   부위명·유통기한은 이 API 에 없습니다: 칸은 두되 비워 두고, 포장 바코드의 (17) 유통기한을 앱이 채웁니다.
+// 키는 스크립트 속성 MTRACE_API_KEY 에만 넣습니다 (코드·시트·채팅에 적지 않음).
+// 키가 없거나 API 가 실패하면 '확정'으로 넘기지 않고 pending(미확정)으로 돌려줍니다.
+const TRACE_CACHE_SHEET = '이력캐시';
+const TRACE_CACHE_HEAD = ['traceNo', 'butcherDate', 'grade', 'partName', 'expiry', 'source', 'verifiedAt'];
+const MTRACE_URL = 'http://data.ekape.or.kr/openapi-data/service/user/animalTrace/traceNoSearch';
+
+function traceCacheSheet_() {
+  const ss = spreadsheet_();
+  let sh = ss.getSheetByName(TRACE_CACHE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(TRACE_CACHE_SHEET);
+    sh.getRange('A:G').setNumberFormat('@');
+    sh.appendRow(TRACE_CACHE_HEAD);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function traceCacheRow_(no) {
+  const sh = traceCacheSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return null;
+  const at = sh.getRange(2, 1, last - 1, 1).getValues().findIndex((r) => cell_(r[0]) === no);
+  if (at < 0) return null;
+  const v = sh.getRange(at + 2, 1, 1, TRACE_CACHE_HEAD.length).getValues()[0].map((x) => cell_(x));
+  const out = {};
+  TRACE_CACHE_HEAD.forEach((h, i) => { out[h] = v[i]; });
+  return out;
+}
+
+function traceCachePut_(row) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = traceCacheSheet_();
+    const last = sh.getLastRow();
+    const at = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().findIndex((r) => cell_(r[0]) === row.traceNo) : -1;
+    const line = TRACE_CACHE_HEAD.map((h) => cell_(row[h]));
+    if (at >= 0) sh.getRange(at + 2, 1, 1, line.length).setValues([line]);
+    else sh.appendRow(line);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function tracePending_(no, note) {
+  return { ok: false, pending: true, source: 'pending', traceNo: no, note: note + ' (미확정)' };
+}
+
+// 이력번호 하나 → { ok, source: 'cache'|'api', traceNo, butcherDate, grade, partName, expiry, verifiedAt } 또는 pending
+function traceLookup_(traceNo) {
+  const no = String(traceNo || '').toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 17);
+  if (!/^(\d{12}|[A-Z]\d{12,16})$/.test(no)) return tracePending_(no, '번호 형식이 아님');
+  const hit = traceCacheRow_(no);
+  if (hit && hit.butcherDate) return { ok: true, source: 'cache', traceNo: no, butcherDate: hit.butcherDate, grade: hit.grade, partName: hit.partName, expiry: hit.expiry, verifiedAt: hit.verifiedAt };
+  const key = PropertiesService.getScriptProperties().getProperty('MTRACE_API_KEY');
+  if (!key) return tracePending_(no, 'API 키 미설정');
+  let xml = '';
+  try {
+    const res = UrlFetchApp.fetch(MTRACE_URL + '?serviceKey=' + encodeURIComponent(key) + '&traceNo=' + encodeURIComponent(no), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return tracePending_(no, 'API 응답 ' + res.getResponseCode());
+    xml = res.getContentText();
+  } catch (err) {
+    return tracePending_(no, 'API 조회 실패');
+  }
+  const got = traceParse_(xml);
+  if (!got.ok) return tracePending_(no, got.note || '조회 결과 없음');
+  const row = {
+    traceNo: no, butcherDate: got.butcherDate, grade: got.grade, partName: got.partName, expiry: '',
+    source: 'api', verifiedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'),
+  };
+  traceCachePut_(row);
+  return { ok: true, source: 'api', traceNo: no, butcherDate: row.butcherDate, grade: row.grade, partName: row.partName, expiry: row.expiry, verifiedAt: row.verifiedAt };
+}
+
+// 응답 XML 에서 한 칸 값. 값에 < > 가 들어가는 칸은 없으므로 태그 사이 글자만 꺼낸다.
+function traceTag_(block, tag) {
+  const m = new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>').exec(String(block || ''));
+  return m ? m[1].trim() : '';
+}
+
+// 20220523 → 2022-05-23. 여덟 자리가 아니면 빈 값 (날짜를 지어내지 않음)
+function traceYmd_(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  return d.length === 8 ? d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) : '';
+}
+
+// 통합이력 XML → { ok, butcherDate, grade, partName } (도축·등급이 없으면 ok: false)
+function traceParse_(xml) {
+  const s = String(xml || '');
+  const code = traceTag_(s, 'resultCode');
+  const msg = traceTag_(s, 'resultMsg');
+  if (code && code !== '00') return { ok: false, note: msg || ('API 오류 ' + code) };
+  const items = s.match(/<item>[\s\S]*?<\/item>/g) || [];
+  if (!items.length) return { ok: false, note: msg || '조회 결과 없음' };
+  const out = { ok: true, butcherDate: '', grade: '', partName: '' };
+  items.forEach((it) => {
+    if (traceTag_(it, 'infoType') !== '3') return;
+    if (!out.butcherDate) out.butcherDate = traceYmd_(traceTag_(it, 'butcheryYmd'));
+    if (!out.grade) out.grade = traceTag_(it, 'gradeNm');
+    if (!out.partName) out.partName = traceTag_(it, 'partNm') || traceTag_(it, 'partName');
+  });
+  if (!out.butcherDate && !out.grade) return { ok: false, note: '도축·등급 정보 없음' }; // 아직 도축 전이거나 번호가 틀림
+  return out;
 }
 
 

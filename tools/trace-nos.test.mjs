@@ -138,8 +138,10 @@ new Function(fs.readFileSync(new URL("../trace-nos.js", import.meta.url), "utf8"
 new Function(fs.readFileSync(new URL("../ocr-preprocess.js", import.meta.url), "utf8"));
 new Function(fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8"));
 const sw = fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8");
-assert.match(sw, /label-list-shell-v4/);
+assert.match(sw, /label-list-shell-v5/);
 assert.match(sw, /ocr-preprocess\.js/); // 오프라인에서도 2차 읽기 모듈을 받는다
+assert.match(sw, /barcode-decoder\.js/); // 바코드 모듈도 앱과 같은 판으로 맞춰 둔다
+assert.match(html, /src="barcode-decoder\.js\?v=1"/);
 
 const gs = fs.readFileSync(new URL("../apps-script/label/Code.gs", import.meta.url), "utf8");
 assert.match(gs, /TRACE_KEEP_DAYS = 30/);
