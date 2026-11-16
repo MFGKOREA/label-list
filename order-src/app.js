@@ -1441,7 +1441,10 @@
   // 미트카운트(10/26 KM): 영업 끝나고 센 재고를 다음 날 새벽에 적음 → 10시 전에 넣은 재고 = 전날 마감 재고(그날 입고 전)
   const MEAT_H = 10;
   // 11/6: 미트카운트는 고기·해동 품목(itemCfg.thaw)만. 샐러드믹스처럼 아침에 입고 뒤 센 품목을 "입고 전"으로 보면 오늘 입고를 또 더함 (입고예정 12+24=36으로 보였음)
-  const isMeat = (t, it) => hourOf(t) < MEAT_H && !!it && it.thaw > 0; // 시각을 모르면 10시로 봄 = 미트카운트 아님
+  // (11/16 KM "전날 재고를 아침 일찍 써 놓고, 출근해서 입고분까지 적은 것") 해동 품목이 아니어도 새벽 4시~9시 전에 넣은 값은 전날 마감 재고 = 그날 입고 전.
+  //  우대갈비 10/27 06:46·10/31 08:26: 입고 포함으로 보면 예상 32.9·32.8, 입고 전으로 보면 22.9·22.8, 센 값 23·21. 9시대(출근 뒤) 입력은 입고 포함(샐러드믹스 11/6 09:54 센 값 12 · 포함 10.9)
+  const EARLY_H = [4, 9];
+  const isMeat = (t, it) => !!it && ((hourOf(t) < MEAT_H && it.thaw > 0) || (hourOf(t) >= EARLY_H[0] && hourOf(t) < EARLY_H[1])); // 시각을 모르면 10시로 봄 = 미트카운트 아님
   // 입력 기록(onhand)이 없으면 발주 탭 재고 칸에 같이 남긴 센 시각(input.날짜[품목].t, 11/6부터)으로 — 기록이 지워져도 시각은 남음
   const inputLog = (key, d) => { const r = (db["input." + d] || {})[key]; return r && !r.est && typeof r.t === "string" && r.t.startsWith(d) && r.s !== "" && r.s != null && isFinite(num(r.s)) ? { t: r.t, k: key, s: num(r.s), v: 2, src: "input" } : undefined; };
   const logOn = (it, d) => (db.onhand || []).filter((l) => l.k === it.key && l.t.startsWith(d)).pop() || inputLog(it.key, d);
