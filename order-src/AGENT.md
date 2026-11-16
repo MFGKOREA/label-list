@@ -22,6 +22,7 @@
 |---|---|---|
 | 크롬이 켜져 있는 동안 | 상시 수집: 매장 PC 확장(GW Agent 1.8.0부터)이 30분마다 스스로 빈 자료와 계획(`gw-plan.json`)을 받아 옴 | `gw-agent/auto.js`, `mis-sales.js` |
 | 영업시간 08:30~22:30 · 15분마다(:05·:20·:35·:50) | 플젝 HR 출퇴근·스케줄 변경 신청을 PC가 읽어 시트 `hrStatus`에 (1.10.0부터). 감시 시각(09:10·12:00·13:00·16:10·17:10·18:10·20:10·22:10) 직전 값이 남음 | `gw-agent/bg.js`, `gw-agent/hr.js` |
+| 영업시간 08:30~23:00 · 매시간 :40 | 당일 되풀이: 오늘 지금까지 Gross를 `nowSales`에, 오늘 Set판매현황을 `setNow`에 (1.11.0부터, 같은 창에서 이어서). 발주 시간대(12:30~14:45)·밤에는 창을 안 띄우고, 다른 요청이 도는 중이면 양보. 무엇을 얼마나 자주는 `gw-plan.json`의 kind `now`·`setsToday` | `gw-agent/bg.js`, `gw-agent/periodic.js`, `mis-sales.js` |
 | 매일 10:23 · 15:23 | 자동 수집(뒷받침): PC가 못 받은 것이 있으면 요청 → 채점 → 학습 기록 한 줄 | `auto/collect.py`, `auto/learn.mjs --log` |
 | 매일 05:52 | 아침 보고 (읽기만) | 앱 계산 그대로 |
 | 매일 10:05 · 16:05 · 20:05 | 폰 알림(11/15 KM "먼저 할 4가지 바로 진행"): 86 위험(지금부터 내일 문 닫을 때까지 바닥날 품목). 알릴 게 있을 때만 예약 작업 푸시 (읽기만). 해동 알림은 KM이 첫 알림을 받고 "해동은 앞으로 제외"(11/15). 10:05 차례엔 GW 상황판 빨강 줄도 한 줄(11/15 "2주안 기획들 실행해") | `auto/alert.mjs` |
@@ -34,7 +35,8 @@
 
 ## 3. 도구
 
-- `gw-agent/auto.js`(판단) · `gw-plan.json`(더 받아 올 것) · `mis-sales.js`(읽는 법). 시험 `node order-src/test/gw/auto.test.mjs`, `node order-src/test/gw/e2e-auto.mjs`(진짜 확장).
+- `gw-agent/auto.js`(판단) · `gw-plan.json`(더 받아 올 것) · `mis-sales.js`(읽는 법). 시험 `node order-src/test/gw/auto.test.mjs`, `node order-src/test/gw/periodic.test.mjs`(당일 되풀이 판단), `node order-src/test/gw/e2e-auto.mjs`(진짜 확장).
+- 당일 되풀이(1.11.0): `gw-agent/periodic.js`는 화면을 안 건드리는 판단만 함(언제·무엇을·양보). 실제 읽기는 폰 버튼과 같은 `salesPush`(kind `now`·`sets` + `today: 1`) → `mis-sales.js`. 결과는 `nowSales`(오늘 Gross)·`setNow`(오늘 Set 중간값 — 하루 합계 `setDay.날짜`에는 넣지 않음). `periodic.test.mjs`는 시각·발주 시간대·이미 함·상한·양보 33가지를 시험.
 - `python3 order-src/auto/collect.py [--dry]` — 자동 수집. 끝 코드 0 최신/받음 · 2 건너뜀 · 3 시트 비정상 · 4 못 받음. 시험 `python3 order-src/auto/test_collect.py`(가짜 시트·가짜 PC).
 - `node order-src/auto/learn.mjs [--log] [--final] [--dry]` — 어제 채점(Forecast 오차, 예상 재고 적중·WAPE, 한쪽으로 쏠린 품목). `--log`면 학습 기록에 하루 한 줄.
 - `node order-src/auto/alert.mjs [--at 2026-11-14T16:05] [--kv 파일]` — 폰 알림 한 줄(86 위험: 지금부터 내일 문 닫을 때까지 + 12시 전 차례엔 GW 상황판 빨강 줄). 끝 코드 10 알릴 것 있음 · 0 없음 · 3 시트 비정상. (`--at`은 asof가 salesPush를 지워서 합계 대조 줄은 시험 못 함 → `test/health.mjs`로 봄) `--at`으로 지난 시각을 열어 시험(그날 뒤 자료는 잘라냄). 해동 알림은 KM 제외(11/15)라 지움.
