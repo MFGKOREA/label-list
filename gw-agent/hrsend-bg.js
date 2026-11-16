@@ -82,11 +82,8 @@ async function hrsRun(req, board, boardWin) {
     const inHr = new Set(m.rows.map((x) => x.empNo));
     const nowhere = empNos.filter((n) => !inHr.has(n));
     if (nowhere.length) { res = res0({ stage: "week", message: `HR 주간스케쥴(전체)에 없는 사번 ${nowhere.length}명: ${nowhere.join(", ")} — 저장 전에 멈춤`, rowErrors: nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "HR에 없는 사번(재직·휴직 확인)" })) }); return; }
-    // 이 부서인데 보낸 명단에 없는 직원(신규 입사자 등) → 저장 전에 멈춤. 표의 부서 칸(dept_code/dept_name)에 부서 이름이 있을 때만 셈
-    const mine = m.rows.filter((x) => x.dept && new RegExp("\\b" + plan.dept + "\\b", "i").test(x.dept));
-    const missing = mine.map((x) => x.empNo).filter((x) => x && !sentSet.has(x));
-    if (missing.length) { res = res0({ stage: "week", message: `HR에 ${plan.dept}인데 보낸 명단에 없는 직원 ${missing.length}명 — 저장 전에 멈춤(신규 입사자 등)`, missing }); return; }
-    await step("week", `표 ${m.rows.length}명(전체) · ${plan.dept} ${mine.length}명${mine.length ? "" : "(부서 칸으로 못 가림 → 빠진 직원 검사 건너뜀)"} · 보낸 ${empNos.length}명`);
+    // (11/17 KM) 부서 칸으로 "안 보낸 직원"을 가리는 검사는 하지 않음 — 보낸 직원만 넣고, 안 보낸 직원 행은 건드리지 않음
+    await step("week", `표 ${m.rows.length}명(전체) · 보낸 ${empNos.length}명 모두 있음`);
     // 4) 근태 코드: 출근 10·휴무 17은 확인됨. 주휴일·공휴일은 표의 근태 칸 드롭다운 목록에서 (보드가 codes로 줄 수도 있음)
     const CODE = { 출근: "10", 휴무: "17" }, need = new Set(); plan.emps.forEach((e) => e.days.forEach((d) => { if (!CODE[d.kind]) need.add(d.kind); }));
     if (need.size) {

@@ -173,10 +173,10 @@ ok(x.res && x.res.ok && S.saves.length === 1 && S.saves[0].dept === "" && S.save
 reset();
 x = await send({ mode: "test", employees: [...all3(), emp("99999999", "없는사람")] });
 ok(x.res && !x.res.ok && x.res.stage === "week" && /99999999/.test(x.res.message) && S.saves.length === 0, "HR에 없는 사번 → 저장 전에 멈춤", brief(x));
-// 5) 부서 탭에 있는데 안 보낸 직원 → 저장 전에 멈춤
-reset();
+// 5) 일부만 보내면 → 보낸 직원만 저장, 안 보낸 직원 행은 그대로 (부서 칸 검사 없음, 11/17 KM)
+reset({ week: { "90000003": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]), "90000020": weekOf(["휴무", "휴무", "주휴일", "휴무", "휴무", "휴무", "휴무"]) } });
 x = await send({ mode: "test", employees: [emp("90000001", "시험일"), emp("90000002", "시험이")] });
-ok(x.res && !x.res.ok && (x.res.missing || []).join() === "90000003" && S.saves.length === 0, "BOH인데 안 보낸 직원 → 저장 전에 멈춤 (FOH·STORE 직원은 안 셈)", brief(x));
+ok(x.res && x.res.ok && S.saves.length === 1 && S.saves[0].emps.join() === "90000001,90000002" && S.week["90000003"].MON.code === "17", "일부만 보내면 그 직원만 저장, 나머지 행은 그대로", brief(x));
 // 6) 확정·공지된 주
 reset({ status: { 48: "CONFIRM" } }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "confirmed" && S.saves.length === 0, "이미 확정된 주 → 멈춤", brief(x));
