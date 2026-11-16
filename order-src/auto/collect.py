@@ -161,6 +161,20 @@ def main():
         seen.add(k)
         jobs.append(j)
 
+    # 당일 발주 (11/16 KM "내가 쉬면 발주 얼마나 한지 모르잖아, 오후 3~4시 발주현황 조회해서 입고 데이터에 포함"):
+    #  15시 뒤(발주 마감 14:45 뒤) 오늘 주문현황을 아직 안 읽었으면 한 번 읽음 → misOrder.오늘 → 앱이 들어올 양에 넣음(앱 발주 칸이 빈 품목만)
+    #  하루 수집(어제까지 15일)이 같이 할 차례면 그 요청의 끝을 오늘로 늘림. 오늘 15시 뒤에 해 봤으면(되든 안 되든) 다시 안 함
+    hm0 = kst.hour * 60 + kst.minute
+    t1445 = datetime.datetime.combine(kst.date(), datetime.time(14, 45), KST).timestamp() * 1000
+    osc = d.get("misOrderScan") or {}
+    po = parts.get("orders") or ({"status": sp.get("status"), "doneAt": sp.get("doneAt")} if kind == "orders" and not parts else None)
+    tried_o = bool(po and po.get("status") in ("done", "error") and (po.get("doneAt") or 0) > t1445)
+    if hm0 >= 15 * 60 and not (osc.get("to") == T and (osc.get("at") or 0) > t1445) and not tried_o:
+        daily = next((j for j in jobs if j.get("kind") == "orders"), None)
+        jobs = [j for j in jobs if j.get("kind") != "orders"]
+        seen.add("orders")
+        jobs.append({"kind": "orders", "label": "오늘 주문현황" + (" + 지난 15일" if daily else ""), "args": {"from": day(T, -14 if daily else -2), "to": T}})
+
     want_g = bool(miss_g) and not tried("gross")
     want_m = bool(miss_m) and not tried("menu")
     if not want_g and not want_m and not jobs:

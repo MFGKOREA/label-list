@@ -149,6 +149,11 @@ def main():
         case("S2 계획 + 어제 매출 → 매출이 먼저, 살펴보기는 덧붙임", N, {"scout": False, "miss_g": [Y]}, "ok", 0, lambda q, o: len(q) == 1 and "kind" not in q[0] and "scout" in q[0]["also"] and "menu" not in q[0]["also"]),
         case("S3 살펴보기를 오늘 해 봤는데 실패 → 오늘은 다시 안 함", N, dict({"scout": False}, **done_today(parts={"scout": {"status": "error", "doneAt": ms("2026-11-13T09:05")}})), "ok", 0, lambda q, o: not q),
         case("S4 살펴보기만 요청했는데 PC가 오류 → 못 받음", N, {"scout": False}, "error", 4, lambda q, o: len(q) == 1),
+        case("T1 15:23 오늘 주문현황을 안 읽음 → 오늘까지 읽어 달라고 요청", "2026-11-13T15:23", {}, "ok", 0, lambda q, o: len(q) == 1 and q[0].get("kind") == "orders" and q[0]["to"] == "2026-11-13" and q[0]["from"] == "2026-11-11"),
+        case("T2 15:23 오늘 15시 뒤에 이미 읽음 → 안 함", "2026-11-13T15:23", {"misOrderScan": {"at": ms("2026-11-13T15:05"), "to": "2026-11-13"}}, None, 0, lambda q, o: not q),
+        case("T3 10:23(오전)엔 오늘 주문현황을 안 읽음", N, {}, None, 0, lambda q, o: not q),
+        case("T4 15:23 오늘 읽어 봤는데 실패 → 오늘은 다시 안 함", "2026-11-13T15:23", {"salesPush": {"id": 1, "at": ms("2026-11-13T15:00"), "status": "error", "kind": "orders", "doneAt": ms("2026-11-13T15:02")}}, None, 0, lambda q, o: not q),
+        case("T5 15:23 어제 매출도 빔 → 매출이 먼저, 오늘 주문현황은 덧붙임", "2026-11-13T15:23", {"miss_g": [Y]}, "ok", 0, lambda q, o: len(q) == 1 and "kind" not in q[0] and q[0]["also"]["orders"]["to"] == "2026-11-13"),
         case("P --dry → 쓰지 않음(기록도)", N, {"miss_g": [Y]}, "ok", 0, lambda q, o: not q and "요청" in o, extra=["--dry"], log="none"),
     ]
     print("%d/%d 통과" % (sum(R), len(R)))
