@@ -82,6 +82,26 @@ body {
 @keyframes breathe { 0% { transform: scale(1); opacity: .45; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .online i::after { animation: none; opacity: 0; } }
 .online b { font-weight: 800; }
+/* 처음 한 번 뜨는 알림 안내 */
+.push-ask { justify-items: center; text-align: center; gap: 16px; padding-top: 28px; }
+.push-ask h3 { font-size: 22px; }
+.pa-bell { width: 56px; height: 56px; border-radius: 18px; background: #e6f1ec; color: #3f7a62; display: grid; place-items: center; }
+.pa-bell svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; animation: ring 2.4s ease-in-out infinite; transform-origin: 50% 20%; }
+@keyframes ring { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(14deg); } 80% { transform: rotate(-12deg); } 85% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
+@media (prefers-reduced-motion: reduce) { .pa-bell svg { animation: none; } }
+.pa-store { margin: -6px 0 0; font-size: 14px; color: var(--muted); }
+.pa-store b { color: var(--fg); }
+.popup .pa-list { width: 100%; margin: 0; padding: 0; background: none; box-shadow: none; display: grid; gap: 8px; text-align: left; }
+.popup .pa-list li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; border-radius: 14px; background: #f7f7f8; }
+.pa-ic { flex: none; width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 14px; font-weight: 800; background: #fff; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+.pa-ic.exp { background: var(--rose); color: var(--rose-t); box-shadow: none; }
+.pa-list b { display: block; font-size: 15px; font-weight: 800; }
+.pa-list small { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
+.pa-ios { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--fg); background: var(--amber); border-radius: 12px; padding: 10px 12px; text-align: left; }
+.push-ask .actions { width: 100%; }
+/* 알림이 켜진 상태: 반짝임 없이 연두 테두리만 */
+.howto-open.push-on { animation: none; background: #e6f1ec; border-color: #cfe3da; color: #2f6b52; }
+.push-why { max-width: 200px; font-size: 11px; line-height: 1.35; color: var(--rose-t); text-align: right; word-break: break-all; }
 .howto-open { position: relative; width: 100%; text-align: center; font: inherit; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
 /* 홈 화면 추가: 연두빛이 은은하게 들어왔다 빠짐 (눈에 띄게, 과하지 않게) */
 .howto-open { background: linear-gradient(110deg, #fff 30%, #e3f1ea 50%, #fff 70%) 0 0 / 260% 100%; animation: hsheen 3.2s ease-in-out infinite, hglow 3.2s ease-in-out infinite; }
@@ -502,6 +522,8 @@ li.expired .name { text-decoration: none; }
     <span class="top-right">
       <span class="online" id="online" hidden><i></i><span>접속중 <b id="onlineN">0</b>명</span></span>
       <button type="button" class="howto-open" id="howtoOpen">홈 화면 추가</button>
+      <button type="button" class="howto-open" id="pushOpen" hidden>🔔 알림 받기</button>
+      <span class="push-why" id="pushWhy" hidden></span>
     </span>
   </div>
   <header class="hdr">
@@ -720,7 +742,8 @@ li.expired .name { text-decoration: none; }
     <ol class="steps" id="stepsIos">
       <li><span class="tx"><b>Safari</b>로 이 페이지를 엽니다</span></li>
       <li><span class="tx">아래 <b>공유 버튼</b> <span class="ico">□↑</span> 을 누릅니다<small>안 보이면 오른쪽 아래 <b>⋯</b> → 공유</small></span></li>
-      <li><span class="tx"><b>홈 화면에 추가</b> → 오른쪽 위 <b>추가</b></span></li>
+      <li><span class="tx"><b>홈 화면에 추가</b>를 누릅니다</span></li>
+      <li><span class="tx"><b>웹 앱으로 열기</b>를 켠 채로 → 오른쪽 위 <b>추가</b><small>꺼져 있으면 사파리로 열려서 알림을 받을 수 없어요</small></span></li>
     </ol>
     <ol class="steps" id="stepsAnd" hidden>
       <li><span class="tx"><b>Chrome</b>으로 이 페이지를 엽니다</span></li>
@@ -736,6 +759,34 @@ li.expired .name { text-decoration: none; }
   <div class="pv-img"><img id="pvImg" alt="라벨 사진"></div>
   <div><div class="pv-msg" id="pvMsg"></div><div class="pv-f"><button type="button" id="pvRetake">다시 찍기</button><button type="button" id="pvDel">사진 삭제</button></div></div>
   <input type="file" id="pvFile" accept="image/*" hidden>
+</div>
+
+<div class="overlay" id="pushAsk" hidden>
+  <div class="popup push-ask" role="dialog" aria-modal="true" aria-labelledby="pushAskTitle" tabindex="-1">
+    <div class="pa-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20a2 2 0 0 0 4 0"/></svg></div>
+    <h3 id="pushAskTitle">알림 기능 추가</h3>
+    <span id="pushAskStore" hidden></span>
+    <p class="pa-ios" id="pushAskIos" hidden>아이폰은 <b>홈 화면 앱</b>(웹 앱으로 열기)에서만 알림을 받을 수 있어요.</p>
+    <div class="actions"><button type="button" class="btn" id="pushAskNo">나중에</button><button type="button" class="btn primary" id="pushAskGo">알림 받기</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="pushHelp" hidden>
+  <div class="popup" role="dialog" aria-modal="true" aria-labelledby="pushHelpTitle">
+    <h3 id="pushHelpTitle">알림이 꺼져 있어요</h3>
+    <p class="reset-text">"허용 안 함"을 누르면 앱에서는 다시 물어볼 수 없어요. 휴대폰 설정에서 한 번만 켜 주세요. 켜고 앱으로 돌아오면 자동으로 등록돼요.</p>
+    <ol class="steps" id="pushHelpIos">
+      <li><span class="tx">휴대폰 <b>설정</b> 앱 → <b>알림</b></span></li>
+      <li><span class="tx">목록에서 <b>한글표시사항</b>을 누릅니다<small>홈 화면에 추가한 앱 이름이에요</small></span></li>
+      <li><span class="tx"><b>알림 허용</b>을 켭니다</span></li>
+    </ol>
+    <ol class="steps" id="pushHelpAnd" hidden>
+      <li><span class="tx">휴대폰 <b>설정</b> → <b>애플리케이션</b> → <b>한글표시사항</b><small>홈 화면 앱이 아니면 → <b>Chrome</b>(또는 삼성 인터넷) → 알림 → 사이트</small></span></li>
+      <li><span class="tx"><b>알림</b>을 누릅니다</span></li>
+      <li><span class="tx"><b>알림 허용</b>을 켭니다<small>크롬 화면에서는 주소창 왼쪽 아이콘 → 권한 → 알림 → 허용 도 돼요</small></span></li>
+    </ol>
+    <div class="actions"><button type="button" class="btn primary" id="pushHelpOk">확인</button></div>
+  </div>
 </div>
 
 <div class="overlay" id="addHome" hidden>
@@ -1723,7 +1774,8 @@ li.expired .name { text-decoration: none; }
     if (!noticeDirty) return;
     const text = $("noticeInput").value.trim().slice(0, 200);
     const it = { id: NOTICE_ID, name: "전달사항", memo: text, mode: "note", expiry: "2099-12-31", mfg: "", num: 0, unit: "", updatedAt: Date.now() };
-    try { const list = await call("saveItem", it); noticeDirty = false; notice = it; apply(list); }
+    const prev = (notice && notice.memo) || "";
+    try { const list = await call("saveItem", it); noticeDirty = false; notice = it; apply(list); pushNoticeLater(text, prev); }
     catch { $("noticeTime").textContent = "저장 안 됨 · 인터넷 확인"; $("noticeTime").classList.add("err"); }
   }
   $("noticeInput").addEventListener("input", () => {
@@ -2583,6 +2635,136 @@ li.expired .name { text-decoration: none; }
 
   // 다음부터는 휴대폰에 저장된 화면으로 바로 열림
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+  // ---- 휴대폰 알림 (유통기한·전달사항): 이 기기에서 고른 매장 알림만 받음 ----
+  // Firebase 웹 푸시. 기기 알림 주소(토큰)는 매장모음 '알림' 탭에 매장과 함께 저장되고, 보내기는 매장모음 구글 코드가 함
+  // Firebase 웹 앱 설정 (공개값, docs/aside/reports/report-20261115-firebase.md)
+  const FB_CONFIG = { apiKey: "AIzaSyAplFZ92jTVwwgfYsOQapwStvKydxsYyQU", authDomain: "mg-label.firebaseapp.com", projectId: "mg-label", storageBucket: "mg-label.firebasestorage.app", messagingSenderId: "121073203096", appId: "1:121073203096:web:85e2b86000e3ec1cf61ded" };
+  const FB_VAPID = "BAMhKgkSeozEpXF8uEQikje7fQvG1ATVNSdtdh-kYuJEF9Cyiue7_VxVzVK9nvk_knCmX57Vy3z9Ujqju_pTcic"; // 웹 푸시 공개 키
+  const PUSH_KEY = "label-list-push";
+  const pushSaved = () => { try { return JSON.parse(localStorage.getItem(PUSH_KEY)) || {}; } catch { return {}; } };
+  const pushOk = () => !!FB_CONFIG && storeKnown && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  function paintPush() {
+    const b = $("pushOpen");
+    // 아이폰 사파리(또는 iOS 16.4 미만)는 알림을 못 받지만, 버튼은 보여서 누르면 방법을 안내
+    // 버튼은 항상 보임. 알림을 못 받는 브라우저면 누를 때 방법을 안내
+    if (!pushOk()) { b.hidden = !(FB_CONFIG && storeKnown); b.textContent = "🔔 알림 받기"; b.classList.remove("push-on"); return; }
+    const denied = Notification.permission === "denied";
+    const on = Notification.permission === "granted"; // 허용했으면 '알림 켜짐' (등록은 뒤에서 조용히)
+    // 켜진 뒤에도 버튼은 남겨 두고 상태만 보여줌 (누르면 다시 등록해서 확인)
+    b.textContent = denied ? "🔕 알림 꺼짐" : on ? "🔔 알림 켜짐" : "🔔 알림 받기";
+    b.classList.toggle("push-on", on);
+    b.hidden = false;
+  }
+  let fbLoad = null;
+  const loadFb = () => fbLoad || (fbLoad = new Promise((ok, no) => {
+    const add = (src) => new Promise((a, b) => { const sc = document.createElement("script"); sc.src = src; sc.onload = a; sc.onerror = b; document.head.appendChild(sc); });
+    add("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js")
+      .then(() => add("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"))
+      .then(() => { if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG); ok(firebase); })
+      .catch(() => { fbLoad = null; no(new Error("알림 도구를 못 받았어요")); });
+  }));
+  async function pushSubscribe(quiet) {
+    if (!pushOk()) return;
+    const b = $("pushOpen");
+    try {
+      if (Notification.permission !== "granted") {
+        if (quiet) return;
+        const p = await Notification.requestPermission();
+        if (p !== "granted") { paintPush(); return; }
+      }
+      if (!quiet) b.textContent = "알림 켜는 중…";
+      const step = (name, pr) => pr.catch((e) => { throw new Error(name + ": " + String((e && ((typeof e.code === "string" && e.code) || e.message)) || e).replace(/^FirebaseError:\s*/, "")); });
+      const fb = await step("도구", loadFb()), reg = await step("서비스워커", navigator.serviceWorker.ready);
+      const token = await step("등록", fb.messaging().getToken({ vapidKey: FB_VAPID, serviceWorkerRegistration: reg }));
+      if (!token) throw new Error("등록: 토큰 없음");
+      const sv = pushSaved();
+      await step("저장", hubPost({ action: "push_sub", store: STORE, token, old: sv.token && sv.token !== token ? sv.token : "" }));
+      $("pushWhy").hidden = true;
+      try { localStorage.setItem(PUSH_KEY, JSON.stringify({ token, store: STORE, at: Date.now() })); } catch {}
+      if (!quiet) { b.textContent = "✓ 알림 켜짐"; setTimeout(paintPush, 1500); } else paintPush();
+    } catch (err) {
+      if (quiet) return;
+      // 왜 안 됐는지 화면에 남김 (사진으로 받아서 고칠 수 있게)
+      const why = String((err && ((typeof err.code === "string" && err.code) || err.message)) || err).replace(/^FirebaseError:\s*/, "").slice(0, 120);
+      b.textContent = "알림을 켜지 못했어요";
+      $("pushWhy").textContent = `이유: ${why} · 권한 ${Notification.permission} · ${navigator.standalone || matchMedia("(display-mode: standalone)").matches ? "홈 화면 앱" : "브라우저"}`;
+      $("pushWhy").hidden = false;
+      setTimeout(() => { b.textContent = "🔔 알림 받기"; paintPush(); }, 2500);
+    }
+  }
+  // "허용 안 함"을 눌렀으면 앱이 다시 물을 수 없음 → 휴대폰 설정에서 켜는 방법 안내
+  $("pushOpen").onclick = () => {
+    if (!pushOk()) { // 아이폰: 홈 화면 앱이 아니거나 iOS가 오래됨 / 그 밖: 알림을 못 받는 브라우저
+      const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+      if (!/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+        $("pushAskIos").innerHTML = "이 브라우저는 알림을 받을 수 없어요. <b>크롬</b>으로 열어 주세요.";
+        $("pushAskIos").hidden = false; $("pushAskGo").textContent = "확인"; $("pushAskGo").dataset.mode = "ok";
+        $("pushAsk").hidden = false; return;
+      }
+      $("pushAskStore").textContent = (STORES[STORE] && STORES[STORE].name) || "이 매장";
+      $("pushAskIos").innerHTML = standalone
+        ? "이 아이폰은 알림을 받을 수 없는 iOS 버전이에요. <b>설정 → 일반 → 소프트웨어 업데이트</b>에서 iOS 16.4 이상으로 올린 뒤 다시 눌러 주세요."
+        : "아이폰은 <b>홈 화면 앱</b>(웹 앱으로 열기)에서만 알림을 받을 수 있어요.";
+      $("pushAskIos").hidden = false;
+      $("pushAskGo").textContent = standalone ? "확인" : "홈 화면 추가 방법";
+      $("pushAskGo").dataset.mode = standalone ? "ok" : "ios";
+      $("pushAsk").hidden = false; return;
+    }
+    if ("Notification" in window && Notification.permission === "denied") {
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      $("pushHelpIos").hidden = !ios; $("pushHelpAnd").hidden = ios;
+      $("pushHelp").hidden = false; return;
+    }
+    pushSubscribe(false);
+  };
+  $("pushHelpOk").onclick = () => { $("pushHelp").hidden = true; };
+  $("pushHelp").addEventListener("click", (e) => { if (e.target.id === "pushHelp") $("pushHelp").hidden = true; });
+  // 설정에서 켜고 돌아오면 바로 등록
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && pushOk() && Notification.permission === "granted" && !pushSaved().token) pushSubscribe(true); paintPush(); });
+  // 처음 여는 사람에게 한 번만: 알림 받기 안내 (임박 팝업이 떠 있으면 닫힌 뒤에)
+  const PUSH_ASK = "label-list-push-asked";
+  const iosBrowser = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone && !matchMedia("(display-mode: standalone)").matches;
+  const PUSH_ASK_ON = true; // 11/15 수원점 폰 2대 실제 알림 수신 확인
+  function pushAskMaybe() {
+    if (!PUSH_ASK_ON || !FB_CONFIG || !storeKnown || !$("pushAsk").hidden) return;
+    try { if (localStorage.getItem(PUSH_ASK)) return; } catch { return; }
+    const ios = iosBrowser();
+    if (!ios && !pushOk()) return; // 알림을 못 받는 브라우저
+    if (!ios && (Notification.permission === "denied" || (Notification.permission === "granted" && pushSaved().token))) return;
+    if (!$("alert").hidden || !$("picker").hidden || !$("howto").hidden) { setTimeout(pushAskMaybe, 800); return; }
+    try { localStorage.setItem(PUSH_ASK, "1"); } catch {}
+    $("pushAskStore").textContent = (STORES[STORE] && STORES[STORE].name) || "이 매장";
+    $("pushAskIos").hidden = !ios;
+    $("pushAskGo").textContent = ios ? "홈 화면 추가 방법" : "알림 받기";
+    $("pushAsk").hidden = false; $("pushAsk").querySelector(".popup").focus({ preventScroll: true });
+  }
+  $("pushAskNo").onclick = () => { $("pushAsk").hidden = true; };
+  $("pushAsk").addEventListener("click", (e) => { if (e.target.id === "pushAsk") $("pushAsk").hidden = true; });
+  $("pushAskGo").onclick = () => {
+    $("pushAsk").hidden = true;
+    const mode = $("pushAskGo").dataset.mode; delete $("pushAskGo").dataset.mode;
+    if (mode === "ok") return;
+    if (mode === "ios" || iosBrowser()) { howtoTab(true); $("howto").hidden = false; return; }
+    pushSubscribe(false); // 누른 순간에 권한을 물어야 휴대폰이 허락 창을 띄움
+  };
+  setTimeout(pushAskMaybe, 1500);
+  // 이미 허용한 기기: 매장을 바꿨거나 하루 지났으면 조용히 다시 등록 (토큰이 바뀌는 경우 대비)
+  if (pushOk() && Notification.permission === "granted") { const sv = pushSaved(); if (sv.store !== STORE || !sv.token || Date.now() - (sv.at || 0) > 86400000) pushSubscribe(true); }
+  paintPush();
+  // 전달사항을 고치면 같은 매장 다른 폰에 알림: 쓰는 동안 여러 번 저장되니 마지막 저장 20초 뒤 한 번만
+  let pushNoticeTimer = 0, pushNoticeLast = null;
+  function pushNoticeLater(text, prev) {
+    if (!FB_CONFIG) return;
+    if (pushNoticeLast === null) pushNoticeLast = prev || "";
+    clearTimeout(pushNoticeTimer);
+    // 다 쓰고 칸을 벗어나면 바로, 쓰는 중이면 손을 뗀 지 4초 뒤 (글자마다 알림이 가지 않게)
+    pushNoticeTimer = setTimeout(() => {
+      if (!text || text === pushNoticeLast) return;
+      pushNoticeLast = text;
+      hubPost({ action: "push_notice", store: STORE, text: text.slice(0, 200), token: pushSaved().token || "" }).catch(() => {});
+    }, document.activeElement === $("noticeInput") ? 4000 : 0);
+  }
   if (!storeKnown) {
     $("storeName").textContent = "매장 선택";
     $("storeChange").hidden = true;

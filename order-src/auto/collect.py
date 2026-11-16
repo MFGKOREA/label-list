@@ -2,7 +2,11 @@
 # 자동 수집: 어제까지의 실제 매출(Gross)·날짜별 메뉴 판매가 시트에 없으면 매장 PC(크롬 확장)에 "받아 와 달라"고 요청하고 결과를 확인
 #  - 이 스크립트는 GW·MIS에 직접 들어가지 않음(비밀번호도 모름). 시트의 salesPush 칸에 요청을 적으면
 #    매장 PC의 확장이 PC에 저장된 로그인으로 GW·MIS를 열어 받아 옴 = 앱의 [Gross 불러오기]·[메뉴 판매 불러오기] 버튼과 같은 길
-#  - 시트에 쓰는 것은 salesPush 요청 하나뿐. 쓰기 전 값은 --backup 폴더에 남김(저장소 밖)
+#  - 시트에 쓰는 것은 salesPush 요청과 수집 기록(collectLog) 둘뿐. 쓰기 전 salesPush 값은 --backup 폴더에 남김(저장소 밖)
+#  - 수집 기록(11/15 KM "진행", 기획안 7번 "스스로 고치는 수집" 시작): 돌 때마다 결과·원인 한 줄을 collectLog(최근 60개)에 남김
+#    r: ok 받음 · fresh 최신 · skip 미룸 · fail 못 받음 / why: ok · fresh · tried · busy · ordering · ordertime · pc_off · no_reply · login · screen · sum · other
+#    미룸·PC 응답 없음은 다음 차례(10:23·15:23)가 다시 받음. 로그인·MIS 화면·합계는 사람이 봐야 함 → 앱 상황판 빨강 → 폰 알림(alert.mjs)
+#    시트가 비정상(끝 코드 3)이면 기록도 안 씀. --dry도 안 씀
 #  - 요청하지 않는 때: 받을 게 없음 / 오늘 이미 받아 봄 / PC가 꺼져 있음 / 발주 전송 중 / 발주 시간대(12:30~14:45, 11/12 실제 전송 14:28) / 다른 요청이 도는 중 / 시트가 비정상
 # 사용: python3 order-src/auto/collect.py [--dry] [--wait 420] [--days 7] [--force-time] [--backup DIR]
 # 끝 코드: 0 최신이거나 받음 · 2 이번엔 건너뜀(나중에 다시) · 3 시트 비정상(아무것도 안 씀) · 4 요청했지만 못 받음
@@ -46,6 +50,42 @@ def post(body):
     if not j.get("ok"):
         raise RuntimeError(j.get("error") or "저장 실패")
     return j
+
+
+LOG_KEY, LOG_MAX = "collectLog", 60
+WHY_KO = {"no_reply": "PC 응답 없음", "login": "로그인 풀림 → 매장 PC에서 GW 다시 로그인", "screen": "MIS 화면 바뀜 → 총괄 GW 채팅에서 확인", "sum": "합계 다름 → MIS 화면 확인", "other": "기타"}
+
+
+def classify(text, picked=True):
+    """PC가 남긴 결과 글로 못 받은 원인을 나눔. picked=False: PC가 요청을 집어 가지도 않음"""
+    t = text or ""
+    if not picked:
+        return "no_reply"
+    if re.search(r"로그인|비밀번호|세션이 (끝|만료)|login", t, re.I):
+        return "login"
+    if re.search(r"합계가 달라|합계 다름|합계와 다름", t):
+        return "sum"
+    if re.search(r"화면|못 찾|찾지 못|표를|열 이름|프레임|버튼을", t):
+        return "screen"
+    if not t.strip() or re.search(r"응답 없음|시간 초과|멈춤|창이 닫힘", t):
+        return "no_reply"
+    return "other"
+
+
+def clog(dry, data, kst, r, why, txt="", **extra):
+    """수집 기록 한 줄 (최근 LOG_MAX개만 남김). 기록이 실패해도 수집 결과(끝 코드)는 그대로"""
+    if dry:
+        return
+    try:
+        cur = data.get(LOG_KEY)
+        arr = [x for x in cur if isinstance(x, dict)] if isinstance(cur, list) else []
+        e = {"t": kst.strftime("%Y-%m-%d %H:%M"), "r": r, "why": why}
+        if txt:
+            e["txt"] = str(txt)[:80]
+        e.update({k: v for k, v in extra.items() if v is not None})
+        post({"action": "set", "key": LOG_KEY, "value": (arr + [e])[-LOG_MAX:]})
+    except Exception as ex:  # 기록 칸 쓰기 실패는 수집 실패가 아님
+        print("(수집 기록을 못 남김: %s)" % ex)
 
 
 def day(d, n=0):
@@ -125,22 +165,28 @@ def main():
     want_m = bool(miss_m) and not tried("menu")
     if not want_g and not want_m and not jobs:
         print("오늘 이미 받아 봄: 남은 빈 날은 휴무이거나 MIS에 없는 날" if miss_g or miss_m else "최신: 받을 것 없음")
+        clog(a.dry, d, kst, "fresh", "tried" if miss_g or miss_m else "fresh")
         return 0
 
     age = now - (sp.get("at") or 0)
     live = sp.get("status") == "running" and now - (sp.get("startAt") or sp.get("at") or 0) < 14 * MIN or sp.get("status") == "pending" and age < (6 * MIN if alive else 18 * 60 * MIN)
     if live:
         print("건너뜀: 다른 매출 요청이 도는 중(%s, %d분 전)" % (sp.get("status"), age / MIN))
+        clog(a.dry, d, kst, "skip", "busy", "%s %d분 전" % (sp.get("status"), age / MIN))
         return 2
     if mp.get("status") in ("pending", "running") and now - (mp.get("at") or 0) < 20 * MIN or ag.get("job") and now - (ag.get("at") or 0) < 3 * MIN:
         print("건너뜀: PC가 발주 전송 중")
+        clog(a.dry, d, kst, "skip", "ordering")
         return 2
     hm = kst.hour * 60 + kst.minute
     if 12 * 60 + 30 <= hm <= 14 * 60 + 45 and not a.force_time:
         print("건너뜀: 발주 시간대(12:30~14:45)에는 PC 창을 띄우지 않음")
+        clog(a.dry, d, kst, "skip", "ordertime")
         return 2
     if not alive:
-        print("건너뜀: 매장 PC가 꺼져 있음(마지막 신호 %s)" % ("%d분 전" % ((now - ag["at"]) / MIN) if ag.get("at") else "없음"))
+        last = "%d분 전" % ((now - ag["at"]) / MIN) if ag.get("at") else "없음"
+        print("건너뜀: 매장 PC가 꺼져 있음(마지막 신호 %s)" % last)
+        clog(a.dry, d, kst, "skip", "pc_off", "마지막 신호 " + last)
         return 2
 
     # 요청 만들기 (앱의 salesFresh와 같은 모양). 매출은 이번 주 월요일~어제(빈 날이 더 앞이면 거기부터), 메뉴는 빈 날부터 어제까지(PC가 이미 있는 날은 건너뜀)
@@ -217,12 +263,20 @@ def main():
     ok_g = not want_g or (ps.get("gross") or {}).get("status") == "done" or (not ps and p.get("status") == "done")
     ok_m = not want_m or (ps.get("menu") or {}).get("status") == "done" or (not ps and p.get("status") == "done" and not want_g)
     # 계획에 있는 일이 안 됐어도 매출·메뉴가 됐으면 성공으로 봄 (내일 다시 해 봄). 그것만 요청했는데 안 됐으면 못 받음
+    picked = p.get("status") not in ("pending", None) or bool(p.get("startAt"))
     if not want_g and not want_m and not any((ps.get(j["kind"]) or {}).get("status") == "done" for j in jobs) and p.get("status") != "done":
-        print("못 받음: %s" % (p.get("text") or "PC 응답 없음"))
+        why = classify(p.get("text"), picked)
+        print("못 받음(%s): %s" % (WHY_KO[why], p.get("text") or "PC 응답 없음"))
+        clog(a.dry, f, kst, "fail", why, p.get("text") or "PC 응답 없음")
         return 4
     if (want_g or want_m) and (p.get("status") not in ("done", "error") or not ok_g or not ok_m):
-        print("못 받음: %s" % (p.get("text") or "PC 응답 없음"))
+        bad = [x.get("text") for k, x in ps.items() if isinstance(x, dict) and x.get("status") == "error" and x.get("text")]
+        txt = " / ".join(bad) or p.get("text") or "PC 응답 없음"
+        why = classify(txt, picked)
+        print("못 받음(%s): %s" % (WHY_KO[why], txt))
+        clog(a.dry, f, kst, "fail", why, txt, g=len(got_g), m=len(got_m))
         return 4
+    clog(a.dry, f, kst, "ok", "ok", g=len(got_g), m=len(got_m))
     return 0
 
 

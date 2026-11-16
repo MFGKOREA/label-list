@@ -28,3 +28,23 @@ self.addEventListener("fetch", (e) => {
     return net;
   }));
 });
+
+// ---- 휴대폰 알림 (유통기한·전달사항): 매장모음 구글 코드가 Firebase로 보냄 ----
+self.addEventListener("push", (e) => {
+  let p = {}; try { p = e.data ? e.data.json() : {}; } catch (err) {}
+  const n = p.notification || {}, d = p.data || {};
+  const title = n.title || d.title || "한글표시사항";
+  e.waitUntil(self.registration.showNotification(title, {
+    body: n.body || d.body || "", icon: BASE + "icons/label-192.png?v=2", badge: BASE + "icons/label-192.png?v=2",
+    tag: d.tag || "label-list", data: { url: d.url || BASE },
+  }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || BASE, self.location).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const hit = list.find((c) => c.url.startsWith(self.location.origin + BASE));
+    if (hit) { hit.navigate(url).catch(() => {}); return hit.focus(); }
+    return self.clients.openWindow(url);
+  }));
+});

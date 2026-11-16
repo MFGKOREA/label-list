@@ -245,6 +245,12 @@ html, body { overflow-x: hidden; }
 .f-row input:focus { box-shadow: 0 0 0 2px var(--accent); background: var(--surface); }
 .f-row.today { background: var(--surface); box-shadow: inset 3px 0 0 var(--fg); }
 .f-row.today input { background: var(--fill-2); }
+/* 컨벤션센터 행사 한 줄 (11/15 시안 A): 칸 아래, 요일 칸 너비만큼 들여 씀 */
+.f-row .f-ev { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; margin-top: -1px; padding: 0 2px 2px 35px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.f-row .f-ev-k { flex: none; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--fill-2); color: var(--fg); }
+.f-row .f-ev-k.exh { background: var(--rose); color: var(--rose-ink); }
+.f-row .f-ev-n { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-row .f-ev-m { flex: 0 0 100%; font-variant-numeric: tabular-nums; }
 .diff { font-size: 12px; font-weight: 700; text-align: right; }
 .diff.d-up { color: var(--ok); }
 .diff.d-down { color: var(--rose-ink); }
@@ -482,10 +488,10 @@ html, body { overflow-x: hidden; }
 .fld > span em.u { font-style: normal; color: var(--rose-ink); }
 /* 재고 급변 경고 */
 .fld.warn { box-shadow: 0 0 0 2px var(--rose-ink) !important; }
-/* 발주 예상 재고: 재고칸 위에 작은 회색 박스 */
+/* 발주 예상 재고: 재고칸 위에 작은 상자 (11/15 KM "원래 위치에서 진하게": 회색 글씨 → 진한 글씨) */
 .cell:has(.estchip) .c-bot { margin-top: 24px; }
+.c-bot .estchip { position: absolute; left: 0; right: 0; top: -22px; text-align: center; white-space: nowrap; font-size: 12px; font-weight: 800; line-height: normal; color: var(--fg); background: var(--fill-2); border-radius: 6px; padding: 3px 2px; }
 .c-bot .stk { position: relative; display: grid; min-width: 0; }
-.c-bot .estchip { position: absolute; left: 0; right: 0; top: -22px; text-align: center; white-space: nowrap; font-size: 12px; font-weight: 700; line-height: normal; color: var(--muted); background: var(--fill-2); border-radius: 6px; padding: 3px 2px; }
 /* 프랩 재고 입력칸: 입력하는 칸이 눈에 띄게 (흰 바탕 + 진한 테두리), 예상은 회색 읽기 칸 */
 .p-bot .fld:not(.ro) { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
 .p-bot .fld:not(.ro) > span { color: var(--fg); font-weight: 700; }
@@ -512,9 +518,15 @@ html, body { overflow-x: hidden; }
 .risk86 .r-top { display: flex; align-items: baseline; gap: 8px; color: var(--rose-ink); }
 .risk86 .r-top b { font-size: 16px; font-weight: 800; }
 .risk86 .r-top span { font-size: 12px; font-weight: 600; }
-.risk86 button { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
-.risk86 button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.risk86 button em { display: block; font-style: normal; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+/* 11/15 KM "화면 짤려": 줄이 글 길이만큼 넓어져 오른쪽(세어서 확인·시간)이 화면 밖으로 나갔음 → 칸 폭에 맞추고 글은 줄바꿈 */
+.risk86 { grid-template-columns: minmax(0, 1fr); }
+.risk86 button { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; border: 0; background: var(--surface); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-align: left; color: var(--fg); font-weight: 700; font-size: 14px; }
+.risk86 button > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.risk86 button em .nw { white-space: nowrap; }
+.risk86 button em { display: block; font-style: normal; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; text-wrap: pretty; }
+/* 11/15 KM "몇 팩 부족한지 진하게" */
+.risk86 button em b { font-size: 13px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }
+.risk86 button small .thaw { font-size: 11px; font-weight: 700; }
 /* 11/12 KM: 퍼센트 대신 "86 위험" + 바닥날 때(시간), 아래 줄에 사유 */
 .risk86 button small { flex: none; display: grid; justify-items: end; gap: 1px; font-size: 14px; font-weight: 800; line-height: normal; color: var(--rose-ink); letter-spacing: -0.03em; white-space: nowrap; }
 .risk86 button small i { font-style: normal; font-size: 12px; font-weight: 800; color: #fff; background: var(--rose-ink); border-radius: 6px; padding: 2px 6px; }
@@ -594,8 +606,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .risk86 .r-top { padding: 0 8px 4px; }
 .risk86 button { border-radius: 12px; padding: 10px 12px; }
 /* 품목 카드 안 칸(재고·발주·필요) 둥글기 통일: 카드 20 · 칸 12 */
-.fld, .need, .c-bot .estchip { border-radius: 12px; }
-.c-bot .estchip { border-radius: 6px; }
+.fld, .need { border-radius: 12px; }
 /* 사전발주 버튼 글씨 7.5px → 읽히는 크기 */
 .sect .pre { min-height: 22px; padding: 0 9px; font-size: 12px; letter-spacing: -0.03em; }
 /* 오늘 날짜 아래 발주 상태: 날짜 상자 가운데에 */
@@ -730,3 +741,108 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
 .subhead.low { color: var(--rose-ink); }
 .subhead small { font-size: 12px; font-weight: 700; opacity: .75; margin-left: 2px; }
+
+/* ---------- 화면 정리 (11/15 KM "전체 글 정렬… 지저분… 정리 및 순서") ---------- */
+/* 숨긴 칸은 진짜로 숨김: .misbar·.sect 같은 display 규칙이 hidden을 이겨서 빈 흰 줄(발주 화면 MIS 줄)·빈 '옵션 비율' 제목(리포트, KM이 숨기라고 한 것)이 보였음 */
+[hidden] { display: none !important; }
+/* 하위 화면 제목: 독이 생기며 뒤로가기를 숨기자 3칸 줄이 밀려 'Gross Sales · 원'이 가운데로 갔음 → 제목 왼쪽, 보조 글 오른쪽. 크기는 메인 제목에 맞춤 */
+.nav { display: flex; align-items: center; gap: 8px; margin: 2px 2px 14px; min-height: 36px; }
+.nav h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+.nav .right { margin-left: auto; padding-right: 0; }
+#v-loc .nav { margin-left: -4px; }
+#v-loc .nav h2 { font-size: 20px; }
+/* 업체·위치 버튼 줄: 같은 모양이라 구분이 안 됐음 → 줄 앞에 작은 이름 */
+.chips#cats, .chips#locs { grid-template-columns: 30px; }
+.chips#cats::before, .chips#locs::before { align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: -0.03em; }
+.chips#cats::before { content: "업체"; }
+.chips#locs::before { content: "위치"; }
+.chips#sorts { grid-template-columns: 30px; }
+.chips#sorts::before { content: "정렬"; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+.chips#sorts button { font-size: 14px; }
+/* 프랩 카드: 단위(X·PK)가 빨강이라 오류처럼 보였음 → 회색 */
+.fld > span em.u { color: var(--muted); }
+/* 리포트: 좋은 값·개수까지 빨강이었음 → 숫자는 기본색, 가장 잘 맞는 방식만 연두 */
+#v-report .hero-num b, #v-report .kpi b, #v-report .mrow .pc { color: var(--fg); }
+#v-report .mrow.best .pc { color: var(--accent-text); }
+/* 데이터 파일: 그달 Gross 칸과 파일 목록을 한 묶음처럼 */
+.group.gross-g { margin-bottom: 8px; }
+.locentry { margin: 0 0 20px; }
+/* 리포트 '예상 재고 적중' 줄: 막대 없이 두 칸 (설명은 줄바꿈, 숫자는 오른쪽) — 한 줄 제목이 되자 숫자와 설명이 겹쳤음 */
+.mrow.hw { grid-template-columns: minmax(0, 1fr) auto; }
+.mrow.hw .nm small { white-space: normal; text-wrap: pretty; }
+.mrow.hw .pc { white-space: nowrap; }
+.nw { white-space: nowrap; }
+/* 7일마다 세는 품목 (11/15 KM): 셀 날이 아닌 품목은 목록 맨 아래에 접어 둠. 칩은 회색(정보), 모자랄 수 있으면 확인필요(빨강) */
+.chip.wk { background: var(--fill-2); color: var(--fg); }
+details.weekly { margin-bottom: 20px; }
+details.weekly > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 4px 7px; padding: 6px 0; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
+details.weekly > summary::-webkit-details-marker { display: none; }
+details.weekly .wk-t { font-size: 14px; font-weight: 700; color: var(--muted); }
+details.weekly .wk-t small { font-weight: 500; font-size: 12px; }
+details.weekly .wk-t em { display: block; font-style: normal; font-size: 12px; font-weight: 500; margin-top: 1px; }
+details.weekly .wk-s { flex: none; font-size: 13px; font-weight: 700; color: var(--accent-text); }
+details.weekly .wk-s::before { content: "펼치기 ▾"; }
+details.weekly[open] .wk-s::before { content: "접기 ▴"; }
+/* GW 상황판 (11/15): 점 색 = 상태 (초록 맞음 · 노랑 늦음 · 빨강 끊김/합계 다름 · 회색 아직/참고) */
+#hlthSum.ok { color: var(--accent-text); font-weight: 700; }
+#hlthSum.warn { color: var(--chick-ink); font-weight: 700; }
+#hlthSum.bad { color: var(--rose-ink); font-weight: 700; }
+.cell.kv.hl { padding-top: 9px; padding-bottom: 9px; }
+.kv.hl .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: var(--fill-2); }
+.kv.hl .dot.ok { background: var(--accent-text); }
+.kv.hl .dot.warn { background: var(--chick-ink); }
+.kv.hl .dot.bad { background: var(--rose-ink); }
+.kv.hl .dot.info { background: var(--muted); }
+.kv b.warn { color: var(--chick-ink); }
+/* 품절 기록 (11/15): 86 위험·검색한 품목에만 작은 단추. 누르면 빨강 "품절 18:12 · 취소" */
+.c-meta .soldbtn { display: inline-block; margin-top: 6px; padding: 3px 9px; border: 1px solid var(--fill-2); border-radius: 999px; background: none; color: var(--muted); font-size: 12px; font-weight: 700; line-height: normal; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.c-meta .soldbtn.on { border-color: var(--rose-ink); background: var(--rose); color: var(--rose-ink); }
+.chip.sold-lg { background: none; border: 1px solid var(--fill-2); color: var(--muted); }
+/* BOH 수원컨벤션점 발주시트 (11/16 KM: 주차별 · Forecast · 발주품목순 · 설명 없이 · 줄 나누기 정리) */
+.nav .right .printbtn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 700; min-height: 32px; touch-action: manipulation; }
+#v-log .nav h2.logtitle { font-size: 18px; line-height: 1.25; text-wrap: balance; }
+#v-log .logweeks { margin: 2px 0 12px; flex-wrap: wrap; }
+#v-log .logweeks button small { margin-left: 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
+#v-log .logwk { margin-bottom: 18px; }
+#v-log .logwk h3 { margin: 0 2px 8px; font-size: 16px; font-weight: 800; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+#v-log .logwk h3 span { font-size: 13px; font-weight: 600; color: var(--muted); }
+#v-log .logwk h3 .fcsum { color: var(--fg); }
+#v-log .logscroll { overflow: auto; max-height: calc(100dvh - 200px); background: var(--surface); border-radius: 14px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.logt { border-collapse: separate; border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.logt th, .logt td { padding: 4px 6px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); white-space: nowrap; text-align: right; min-width: 30px; }
+.logt .ds { border-left: 1px solid color-mix(in srgb, var(--muted) 45%, transparent); }
+.logt thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); font-weight: 800; color: var(--fg); text-align: center; }
+.logt thead tr + tr th { top: 27px; font-size: 10px; font-weight: 600; color: var(--muted); }
+.logt th.dh span { color: var(--muted); font-weight: 600; } .logt th.dh.today { color: var(--accent-text); }
+.logt .nm { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 112px; max-width: 150px; white-space: normal; font-weight: 600; line-height: 1.25; border-right: 1px solid color-mix(in srgb, var(--muted) 45%, transparent); }
+.logt thead .nm { z-index: 3; }
+.logt .nm small { font-size: 10px; color: var(--muted); font-weight: 500; }
+.logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
+.logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
+.logt td.o { color: var(--accent-text); font-weight: 800; }
+.logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
+@media print {
+  @page { size: A4 landscape; margin: 7mm; }
+  body.log-print, body.log-print .app, body.log-print main { background: #fff !important; max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
+  body.log-print .view:not(#v-log), body.log-print #dock, body.log-print .toast, body.log-print #v-log .nav .back, body.log-print #v-log .printbtn, body.log-print #v-log .logweeks { display: none !important; }
+  body.log-print #v-log { display: block !important; padding: 0 !important; }
+  body.log-print #v-log .nav { display: block; padding: 0; margin: 0 0 2mm; }
+  body.log-print #v-log .nav h2 { font-size: 13px; margin: 0; color: #000; }
+  body.log-print #v-log .logwk { break-before: page; margin: 0; }
+  body.log-print #v-log .logwk:first-of-type { break-before: auto; }
+  body.log-print #v-log .logwk h3 { font-size: 11px; margin: 0 0 1.5mm; color: #000; }
+  body.log-print #v-log .logwk h3 span { font-size: 9px; color: #000; }
+  body.log-print #v-log .logscroll { overflow: visible !important; max-height: none !important; border-radius: 0; }
+  body.log-print .logt { font-size: 7.5px; width: 100%; color: #000; }
+  body.log-print .logt th, body.log-print .logt td { padding: 1.4px 2.5px; min-width: 0; border-bottom: .4pt solid #999; border-right: .4pt solid #ccc; position: static !important; color: #000 !important; background: #fff !important; }
+  body.log-print .logt .ds { border-left: .8pt solid #555; }
+  body.log-print .logt .nm { width: 34mm; max-width: 34mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: .8pt solid #555; }
+  body.log-print .logt .nm small { font-size: 6px; color: #444 !important; }
+  body.log-print .logt thead tr + tr th { font-size: 6.5px; }
+  body.log-print .logt tbody tr:nth-child(even) td, body.log-print .logt tbody tr:nth-child(even) .nm { background: #f3f3f3 !important; }
+  body.log-print .logt td.s i { color: #666 !important; }
+  body.log-print .logt td.o { font-weight: 800; }
+  body.log-print .logt tr.fcrow td, body.log-print .logt tr.fcrow .nm { background: #e6e6e6 !important; }
+  body.log-print .logt thead { display: table-header-group; }
+  body.log-print .logt tr { break-inside: avoid; }
+}
