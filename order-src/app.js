@@ -1992,10 +1992,11 @@
   // d일 재고를 센 뒤에 들어올 입고: 그 전날까지 앱에 넣은 발주 중 아직 안 온 것 (+ 예전 방식 익일 칸)
   // 오늘 재고를 미트카운트로 넣었으면 오늘 들어오는 입고도 아직 안 센 것 → 들어올 양에 더함
   const incNow = (it) => incomingOf(it, TODAY) + (meatOn(it, TODAY) ? arrBetween(it, TODAY, true, TODAY, false) : 0); // = 오늘 들어오는 입고
-  const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) q += a.q; }); } return q; };
+  // (11/16 KM "오늘 발주 넣은 거 수 입고에 반영") 오늘 앱 발주 칸이 비어 있고 MIS에 직접 넣은 발주(a.mis)는 이미 시킨 것 → 오늘 것도 들어올 양에 넣음. 앱 발주 칸(오늘 정하는 중인 값)은 예전처럼 따로 셈
+  const incomingOf = (it, d) => { let q = 0; for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy || a.mis)) q += a.q; }); } return q; };
   // 들어올 입고를 날짜별로 (11/15 KM: 일요일엔 금 발주 → 월 입고, 토 발주 → 화 입고가 같이 걸려 있는데 합친 숫자 하나만 보여서 화요일 것이 있는지 몰랐음)
   //  카드에 "월 입고예정 40EA" · "화 입고예정 40EA"처럼 날짜마다 한 줄. 미트카운트로 센 날은 오늘 들어올 것도 "오늘 입고예정"으로
-  const incListOf = (it, d) => { const m = new Map(); for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy)) m.set(a.d, (m.get(a.d) || 0) + a.q); }); } return [...m].filter(([, q]) => q > 0).sort((a, b) => (a[0] < b[0] ? -1 : 1)); };
+  const incListOf = (it, d) => { const m = new Map(); for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy || a.mis)) m.set(a.d, (m.get(a.d) || 0) + a.q); }); } return [...m].filter(([, q]) => q > 0).sort((a, b) => (a[0] < b[0] ? -1 : 1)); };
   const incHtml = (it, d, unit) => {
     const L = incListOf(it, d);
     if (d === TODAY && meatOn(it, TODAY)) { const t = arrBetween(it, TODAY, true, TODAY, false); if (t > 0) L.unshift([TODAY, t]); }
@@ -2437,7 +2438,7 @@
     if (!v || v.s === "" || !isFinite(num(v.s))) return null;
     const w = orderWindowFor(it, d0), until = addDays(w.deliv, it.thaw || 0); // 오늘 발주가 들어와서 쓸 수 있는 날 전까지 (해동 품목은 입고 다음 날)
     const days = Math.round((parseISO(until) - parseISO(d0)) / 864e5), off = Math.round((parseISO(d0) - parseISO(TODAY)) / 864e5); if (days < 1) return null;
-    let arr = 0; const arrs = []; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(d0, -k)).forEach((a) => { if ((a.d > d0 || (a.d === d0 && meatOn(it, d0))) && a.d < until && (k > 0 || a.legacy)) { arr += a.q; arrs.push(a); } });
+    let arr = 0; const arrs = []; for (let k = 0; k <= 7; k++) arrivalsOf(it, addDays(d0, -k)).forEach((a) => { if ((a.d > d0 || (a.d === d0 && meatOn(it, d0))) && a.d < until && (k > 0 || a.legacy || a.mis)) { arr += a.q; arrs.push(a); } });
     const log = logOn(it, d0);
     const hh = atH != null ? atH : log ? +log.t.slice(11, 13) + +log.t.slice(14, 16) / 60 : new Date().getHours() + new Date().getMinutes() / 60;
     const left = leftOf(hh, d0);
