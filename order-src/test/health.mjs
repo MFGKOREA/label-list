@@ -159,6 +159,34 @@ for (const [log, want, label] of [
   await L.ctx.close();
 }
 
+// ---------- 3d) Forecast 저장은 사람이 고친 칸만 (11/16: 화면을 연 뒤 PC가 채운 실제 매출을 빈칸으로 덮어쓰던 버그) ----------
+{
+  const F = await open(null, "10:00");
+  await dock(F.p, "forecast");
+  const add = (n) => { const x = new Date(day + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7) + n); return x.toISOString().slice(0, 10); };
+  const d0 = add(0), d1 = add(1), d2 = add(2);
+  // 화면을 그린 뒤에 PC가 시트에 실제 매출을 채운 것처럼 (화면 칸은 그대로 빈칸)
+  const fill = (fc) => { fc[d0] = { ...(fc[d0] || {}), act: "5550000", total: "5000000", net: "4800000" }; fc[d1] = { ...(fc[d1] || {}), act: "6660000", total: "6000000", net: "5900000" }; };
+  fill(F.data.forecast); // 시트(가짜)에도, 앱이 받아 둔 값에도
+  await F.p.evaluate(({ d0, d1 }) => { const fc = window.__orderCalc.db().forecast; fc[d0] = { ...(fc[d0] || {}), act: "5550000", total: "5000000", net: "4800000" }; fc[d1] = { ...(fc[d1] || {}), act: "6660000", total: "6000000", net: "5900000" }; }, { d0, d1 });
+  const n0 = F.posts.length, rows = F.p.locator("#fcRows .f-row");
+  await rows.nth(2).locator("input.fc").fill("3,210,000"); await rows.nth(2).locator("input.fc").blur();   // 다른 날 Forecast만 고침
+  await rows.nth(1).locator("input.fc").fill("4,440,000"); await rows.nth(1).locator("input.fc").blur();   // 실제 매출이 채워진 날의 Forecast만 고침
+  await rows.nth(0).locator("input.act").focus(); await rows.nth(0).locator("input.act").blur();           // 실제 칸을 건드리기만 하고 안 고침
+  await F.p.waitForTimeout(2500);
+  const st = await F.p.evaluate(({ d0, d1, d2 }) => { const fc = window.__orderCalc.db().forecast; return { a: fc[d0], b: fc[d1], c: fc[d2] }; }, { d0, d1, d2 });
+  const sent = F.posts.slice(n0).filter((x) => x.key === "forecast"), patch = Object.assign({}, ...sent.map((x) => x.patch || {}));
+  ok(st.a.act === "5550000" && st.a.total === "5000000" && !(patch[d0] && (patch[d0].act === "" || patch[d0].act === null || patch[d0].total === null)), `안 고친 날(${d0.slice(5)}): 뒤에 채워진 실제 매출·Total 그대로 · 빈칸으로 덮어쓰지 않음`);
+  ok(st.b.fc === "4440000" && st.b.act === "6660000" && st.b.total === "6000000" && st.b.net === "5900000", `Forecast만 고친 날(${d1.slice(5)}): 실제 매출·Total·Net 그대로 (${JSON.stringify(st.b)})`);
+  ok(st.c.fc === "3210000" && sent.length >= 1 && JSON.stringify(patch).indexOf('"act":""') < 0, `고친 칸은 저장됨(${d2.slice(5)} ${st.c.fc}) · 보낸 내용에 빈 실제 매출 없음`);
+  // 실제 매출을 사람이 직접 고치면 그 값으로, Total·Net은 뺌
+  await rows.nth(0).locator("input.act").fill("7,000,000"); await rows.nth(0).locator("input.act").blur(); await F.p.waitForTimeout(1500);
+  const st2 = await F.p.evaluate((d0) => window.__orderCalc.db().forecast[d0], d0);
+  ok(st2.act === "7000000" && !("total" in st2), `실제 매출을 직접 고치면 그 값으로 저장 · Total·Net은 뺌 (${JSON.stringify(st2)})`);
+  ok(F.errs.length === 0, "페이지 오류 " + (F.errs.length ? F.errs.slice(0, 2).join(" | ") : "없음"));
+  await F.ctx.close();
+}
+
 // ---------- 4) 밤 9시 (11/15 KM "영업 끝난 시간에 당일 86위험은 이해가 안가. 밤에는 다음날 기준"): 86은 내일 문 열 때 예상 재고 기준 ----------
 const N = await open(null, "21:00");
 const nv = await N.p.evaluate(() => {

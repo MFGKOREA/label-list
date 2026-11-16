@@ -4284,18 +4284,29 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     }
     foot();
   }
-  // 저장은 화면에 보이는 한 주 7칸 전부를 그대로 (입력 멈추고 1.2초 뒤, 또는 칸을 벗어날 때)
+  // 저장은 이 화면에서 사람이 고친 칸만 (입력 멈추고 1.2초 뒤, 또는 칸을 벗어날 때).
+  //  11/16 고침: 예전엔 보이는 한 주 7칸을 화면 값 그대로 다 썼음 → 화면을 연 뒤 PC가 채운 실제 매출(시트엔 있는데 화면 칸은 빈칸)을
+  //  다른 칸을 건드리는 순간 빈칸으로 덮어씀 (11/16 실제: 11:22에 들어온 11/15 실제 매출·Total·Net이 12시쯤 지워짐).
+  //  고친 칸 = 지금 값이 그 칸을 그릴 때 값(defaultValue)과 다른 칸. 안 고친 칸은 시트 값 그대로 두고, Total·Net 같은 다른 칸도 지우지 않음
   let fcSaveT;
   function fcSave() {
     const rows = [...$("fcRows").querySelectorAll(".f-row")];
     if (rows.length !== 7) return;
-    const all = { ...(db.forecast || {}) }; let changed = false;
+    const all = { ...(db.forecast || {}) }; let changed = false; const done = [];
+    const dg = (x) => String(x || "").replace(/\D/g, "");
     rows.forEach((row, i) => {
-      const d = addDays(fcWeekStart, i), [fi, ai] = row.querySelectorAll("input");
-      const fc = fi.value.replace(/\D/g, ""), act = ai.value.replace(/\D/g, ""), o = all[d] || {};
+      const d = addDays(fcWeekStart, i), [fi, ai] = row.querySelectorAll("input"), o = all[d] || {};
+      const fcCh = dg(fi.value) !== dg(fi.defaultValue), actCh = dg(ai.value) !== dg(ai.defaultValue);
+      if (!fcCh && !actCh) return;
+      const fc = fcCh ? dg(fi.value) : o.fc || "", act = actCh ? dg(ai.value) : o.act || "";
+      done.push(fi, ai);
       if ((o.fc || "") === fc && (o.act || "") === act) return;
-      changed = true; if (!fc && !act) delete all[d]; else all[d] = { fc, act };
+      changed = true;
+      if (!fc && !act) delete all[d];
+      else if (actCh) all[d] = { fc, act }; // 실제 매출을 손으로 고치면 MIS에서 온 Total·Net은 그 값과 안 맞으니 뺌 (예전과 같음)
+      else all[d] = { ...o, fc, act };
     });
+    done.forEach((el) => (el.defaultValue = el.value)); // 저장한 값을 새 기준으로 (같은 칸을 두 번 저장하지 않게)
     if (changed) {
       setKey("forecast", all);
       rows.forEach((row, i) => { const de = dataForecast(addDays(fcWeekStart, i)); row.querySelector(".dfc").textContent = de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"; }); // 트렌드 반영된 데이터 예상
