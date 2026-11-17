@@ -320,7 +320,7 @@
       let saved = 0; const empty = [], failed = [], saveErr = [], chkBad = []; let rem = [], hung = false;
       // 시트 저장은 뒤에서 차례로 (하루 저장에 2~4초 → 조회를 막지 않게). 실패한 날은 따로 모음
       let saveQ = Promise.resolve();
-      const save = (day, rows) => { saveQ = saveQ.then(() => set("menuDay." + day, { at: Date.now(), rows })).then(() => { saved++; }, () => { saveErr.push(day); }); };
+      const save = (day, rows, h) => { saveQ = saveQ.then(() => set("menuDay." + day, h ? { at: Date.now(), rows, h } : { at: Date.now(), rows })).then(() => { saved++; }, () => { saveErr.push(day); }); };
       const readDay = async (day) => {
         step = "조회 " + day;
         if (!(await L.idle(T.q))) return "busy"; // 앞 조회가 아직 안 끝남 → 이 날은 나중에
@@ -344,7 +344,7 @@
         // 합계 대조: 메뉴 줄 수량 합(0·마이너스 줄 포함) = 화면 합계 줄 수량?
         const ck = sumCheck(hit.rows, (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
         if (ck && !ck.ok) { chkBad.push(day); if (SUM_BLOCK) return "chk"; } // 켜져 있으면 그날은 저장 안 함 (다음에 다시 읽음)
-        save(day, rows); return "ok";
+        save(day, rows, { cols: cols.map((c) => title(c) || c.field).slice(0, 30), menu: title(menuCol), cat: catCol ? title(catCol) : "" }); return "ok"; // h: 표 머리글 (11/17 새 POS 첫날 메뉴 이름이 분류 이름으로 옴 — 어느 칸에 메뉴 이름이 있는지 보려고)
       };
       try {
         const again = []; let stuck = 0;
