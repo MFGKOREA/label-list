@@ -97,6 +97,8 @@ const flat = Object.assign({}, ...Object.values(saved || {}));
 ok(Number(flat["900001"]) === 3 && Number(flat["900002"]) === 5 && Number(flat["900005"]) === 2 && !flat["900007"], `MIS에 들어간 수량: 품목1 = 3 · 품목2 = 5 · 품목5(새싹농산) = 2 · 발주 안 넣은 품목7은 없음`, JSON.stringify(saved));
 ok(saved && saved["46492"] && saved["49212"], "업체(주문그룹) 두 곳 모두에 나눠 저장", JSON.stringify(Object.keys(saved || {})));
 ok(sawMode && steps.size >= 2, `확장이 진행 단계를 시트에 남김 (${steps.size}단계: ${[...steps].slice(0, 4).join(" → ")})`, JSON.stringify(store.misAgent).slice(0, 300));
+const progs = writes.filter((w) => w.key === "misPush" && w.patch && w.patch.prog).map((w) => w.patch.prog); // 11/17 KM "로딩바 위에 어떤 상황인지"
+ok(progs.some((x) => /화면 띄움/.test(x)) && progs.some((x) => /넣는 중/.test(x)) && progs.some((x) => /저장 중/.test(x)) && progs.some((x) => /저장됨 · 전체 3\/3개/.test(x)) && !("prog" in (writes.filter((w) => w.key === "misPush").pop().patch || {})), `폰에 보일 단계 글: ${progs.join(" → ")}`);
 const keys = [...new Set(writes.map((w) => w.key))];
 ok(keys.every((k) => ["misAgent", "misPush"].includes(k)), `시트에 쓴 칸은 misAgent · misPush뿐 (${keys.join(", ")})`);
 ok(hits.some((h) => h.startsWith("gw.madforgarlic.com")) && hits.some((h) => h.startsWith("mis.madforgarlic.com")) && hits.some((h) => h.startsWith("script.google.com")), "GW · MIS · 시트 요청이 모두 가짜 서버로 옴");

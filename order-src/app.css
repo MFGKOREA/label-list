@@ -859,7 +859,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .misbar .lbar.gone { opacity: 0; max-height: 0; margin-top: 0; }
 .misbar .lb-trk { position: relative; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
 .misbar .lb-fil { position: absolute; top: 0; bottom: 0; left: -36%; width: 36%; border-radius: inherit; background: var(--accent); animation: lbSlide 1.15s ease-in-out infinite; }
-.misbar .lb-txt { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.misbar .lb-txt { order: -1; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .misbar .lb-sp { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--fill); border-top-color: var(--accent); animation: lbSpin .9s linear infinite; }
 /* PC가 꺼져 기다리는 중: 흐르지 않고 천천히 숨쉬듯 */
 .misbar .lbar[data-live="wait"] .lb-fil { width: 22%; background: var(--muted); animation: lbBreathe 2.6s ease-in-out infinite; }
