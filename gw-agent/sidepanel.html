@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>HR 근무표 입력</title>
+<style>
+:root { --fg:#111; --muted:#666; --line:#ddd; --bg:#fff; --ok:#0a7a35; --warn:#a15c00; --err:#b3261e; --acc:#1a56db; }
+@media (prefers-color-scheme: dark) { :root { --fg:#eee; --muted:#aaa; --line:#333; --bg:#151515; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --acc:#7aa2ff; } }
+body { margin:0; padding:12px; font:13px/1.45 system-ui, "Noto Sans KR", sans-serif; color:var(--fg); background:var(--bg); }
+h1 { font-size:15px; margin:0 0 8px; } textarea { width:100%; box-sizing:border-box; height:160px; font:12px ui-monospace, monospace; }
+.row { display:flex; gap:6px; align-items:center; margin:8px 0; flex-wrap:wrap; } button { padding:6px 10px; font:inherit; cursor:pointer; } button:disabled { opacity:.45; cursor:default; }
+.muted { color:var(--muted); } .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); }
+table { border-collapse:collapse; width:100%; font-size:12px; margin-top:6px; } th, td { border-bottom:1px solid var(--line); padding:3px 4px; text-align:left; font-variant-numeric:tabular-nums; } th { color:var(--muted); font-weight:600; }
+ul { margin:4px 0; padding-left:18px; } #week { font-weight:700; }
+</style></head>
+<body>
+<h1>HR 근무표 입력 <span class="muted" id="ver"></span></h1>
+<p class="muted">HR 주간스케쥴(시간) 탭을 연 채로 씁니다. 붙여넣기: 탭으로 나뉜 줄, 한 사람당 7줄(월→일). 이름 | 상태(출근·휴무·주휴일·공휴일) | 출근 | 퇴근 | 휴게 | 순근무</p>
+<textarea id="paste" placeholder="김해영&#9;휴무&#10;김해영&#9;출근&#9;09:00&#9;15:00&#9;00:30&#9;5:30&#10;…"></textarea>
+<div class="row"><button id="refresh">HR 화면 확인</button><span id="week" class="muted">HR 탭 확인 전</span></div>
+<div class="row"><label><input type="checkbox" id="weekOk"> 이 주가 맞아요</label></div>
+<div class="row"><button id="preview">미리보기</button><button id="apply" disabled>반영 후 저장</button></div>
+<div id="out"></div>
+<script src="hrsend-core.js"></script>
+<script src="hrsend-steps.js"></script>
+<script src="sidepanel.js"></script>
+</body></html>

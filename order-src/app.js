@@ -535,7 +535,8 @@
   let wholeMemo = new Map(); // 통 단위로 세는 품목 (wholeStep)
   let keyItem = new Map(), misTrustMemo = null, recvTrustMemo = null, ordMaxMemo = new Map(); // 품목 키 → 품목 (MIS 품목코드 it.codes) · 주문현황 믿을 수 있나 (misTrust) · 입고현황 믿을 수 있나 (recvTrust)
   let menuUseMemo = new Map(), menuWMemo = new Map(); // 날짜별 메뉴 역산 사용량 · 품목별 메뉴 역산 비율 (menuW)
-  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; recvTrustMemo = null; ordMaxMemo = new Map(); menuUseMemo = new Map(); menuWMemo = new Map(); };
+  let whyMemo = new Map(); // 날씨·행사 보정 사유 (dfWhy)
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); wholeMemo = new Map(); misTrustMemo = null; recvTrustMemo = null; ordMaxMemo = new Map(); menuUseMemo = new Map(); menuWMemo = new Map(); whyMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -550,7 +551,7 @@
   //  공휴일 = 지난 공휴일 실제 매출과 그 요일 평소 매출의 평균 (9~10월 실적으로 맞춰 봄)
   //  트렌드 = 그 주(월~일)에 점장님이 넣은 Forecast(보정 반영) ÷ 같은 날들 데이터 예상의 절반만 반영 (0.7~1.4배로 자름)
   //   9/14~10/20 실적으로 맞춰 보면 하루 오차 30.7% → 28.2%
-  function dataForecast(d) {
+  function dataForecastRaw(d) {
     const b = dataBase(d); if (b == null) return null;
     const f = db.forecast || {}, mon = mondayOf(d);
     let a = 0, z = 0, all = 0;
@@ -583,6 +584,41 @@
     dataFcMemo.set(d, v);
     return v;
   }
+  // ---------- 날씨·행사 보정 (11/17 KM 승인 · 시즌2 18) ----------
+  //  데이터 예상은 같은 요일 지난 매출만 보므로 그날 비·한파·컨벤션 행사를 모른다. 시트 weather·events 키로 배수를 곱하고 왜 그랬는지 숫자 밑에 한 줄로 보여줌.
+  //  비·눈 = ×0.90 · 한파(최고 12도 이하) = ×0.95. 8~11주 실제÷보정 전 데이터 예상에서 비 온 날 11일 중앙값 0.90, 추운 날 7일 0.94.
+  //  행사는 배수를 안 건다(1.0으로 둠): 행사일 30일의 실제÷예상이 0.53~3.16이라 규모(cap 7000)와도 상관없이 중앙값이 1.0. 이름만 사유로 보여줌.
+  //   settings.wxK = {rain: 0.9, cold: 0.95, evHi: 1.0, evMid: 1.0, evLo: 1.0} 로 직접 바꿀 수 있고, settings.wxAdj = "off" 면 보정을 끔.
+  //  되돌려 보기(그날 예보·행사를 그대로 넣고): 10/19~11/16 하루 오차 35.4→33.7%(비 온 날 44.4→37.2%), 9/14~11/16 31.1→30.3%, 편향 +17.8→+14.0%.
+  const wxDay = (d) => { const w = db.weather; return (w && w.days && w.days[d]) || null; };
+  const isRain = (x) => !!x && (num(x.pop) >= 60 || num(x.rain) >= 1); // 강수확률 60% 이상이거나 그날 비·눈
+  const isCold = (x) => !!x && isFinite(num(x.hi)) && num(x.hi) <= 12; // 최고기온 12도 이하
+  const evDay = (d) => ((db.events || {}).days || {})[d] || null;
+  const evTier = (e) => { if (!e || !(num(e.n) > 0)) return null; const cap = num(e.cap) || 0; return cap >= 5000 ? "evHi" : cap >= 2000 ? "evMid" : "evLo"; };
+  function wxK() {
+    const s = (db.settings || {}).wxK || {}, k = (v, d) => (isFinite(num(v)) ? Math.min(1.3, Math.max(0.6, num(v))) : d);
+    return { rain: k(s.rain, 0.9), cold: k(s.cold, 0.95), evHi: k(s.evHi, 1), evMid: k(s.evMid, 1), evLo: k(s.evLo, 1) };
+  }
+  // 그날의 보정 배수와 사유: { k, parts: [{ t: 화면 글자, p: %, name: 행사 이름 }] }
+  function dfWhy(d) {
+    if (whyMemo.has(d)) return whyMemo.get(d);
+    const x = wxDay(d), e = evDay(d), tier = evTier(e), on = (db.settings || {}).wxAdj !== "off", K = wxK(), parts = [];
+    let k = 1;
+    if (on && isRain(x)) { k *= K.rain; parts.push({ t: "비", p: Math.round((K.rain - 1) * 100) }); }
+    if (on && isCold(x)) { k *= K.cold; parts.push({ t: "한파", p: Math.round((K.cold - 1) * 100) }); }
+    if (tier) {
+      const ek = on ? K[tier] : 1; k *= ek;
+      parts.push({ t: "행사", p: Math.round((ek - 1) * 100), name: ((e.names || [])[0] || "").replace(/&#0?38;/g, "·") });
+    }
+    return (whyMemo.set(d, { k, parts }), whyMemo.get(d));
+  }
+  function dataForecast(d) { const b = dataForecastRaw(d); return b == null ? null : b * dfWhy(d).k; }
+  // 숫자 밑에 붙는 사유 한 줄: "주말 비 -10% · 행사 마이펫페어" (1% 안쪽으로 배수가 1이면 그 항목은 안 씀)
+  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : `${p.t} ${p.name}`)).join(" · ");
+  const dfcHTML = (d, de) => {
+    const w = dfWhyText(d);
+    return `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영${w ? " · " + w : ""}">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}${w ? `<small>${esc(w)}</small>` : ""}</span>`;
+  };
   // I: Forecast 보정 — 요일 묶음(월·화 / 수·목·금 / 토·일·공휴일)마다 "실제 ÷ Forecast" 중앙값으로. 점장 Forecast가 수·목·금은 계속 10~20% 적게,
   //  월·화는 조금 많게 잡혀 왔음 (9/14~10/25, 34일). 표본이 적을수록 덜 믿음(n/(n+3)), ±5% 안은 우연으로 보고 안 함, 0.7~1.3배로 자름.
   //  되돌려 보기(그날 이전 날들만 보고 정함): 하루 오차 17.4→16.8% (10/6~), 15.4% (10/13~), 17.7% (10/19~) · 편향 +4.3→+0.5%
@@ -1887,9 +1923,11 @@
     const copyCls = failed ? "" : !agOn || slow ? " soft" : null;
     // 로딩바 (11/16): 누른 즉시 run → 도는 중 · PC 꺼져 있으면 wait · 끝나면 ok·bad를 잠깐 채우고 접힘
     const lbSt = lbPressed("mis") && (!ms.st || ms.st === "idle") ? "run" : ms.st; // 누른 직후(시트에 적히기 전)만 대신 run
-    const lbText = lbSt === "run" ? (ms.st === "idle" ? "PC로 보내는 중…" : stepNow ? stepNow + "…" : "PC가 그룹웨어에 넣는 중…")
+    // 11/17 KM "로딩바 위에 어떤 상황인지 (화면 띄웠고, 넣는중이고, 저장했고)": PC가 적는 단계 글 중 새것 — 확장(misAgent.step: GW 로그인·화면 열기) · 자동 대기(misPush.prog: 넣는 중·저장·확인)
+    const progNow = p && p.prog && p.progAt && Date.now() - p.progAt < 4 * 60e3 && (!stepNow || p.progAt >= (ag.stepAt || 0)) ? p.prog : "";
+    const lbText = lbSt === "run" ? (ms.st === "idle" ? "폰 → PC로 보내는 중…" : progNow ? progNow + "…" : stepNow ? stepNow + "…" : p && p.status === "pending" ? "PC가 요청 받음 · 그룹웨어 화면 여는 중…" : "PC가 그룹웨어에 넣는 중…")
       : lbSt === "wait" ? "PC가 켜지면 자동으로 넣어요"
-      : lbSt === "ok" ? (p && p.saved ? `저장 완료 ${p.saved}개` : "저장 완료")
+      : lbSt === "ok" ? (p && p.saved ? `저장 완료 ${p.saved}${p.total ? "/" + p.total : ""}개 · 다시 읽어 확인함` : "저장 완료")
       : lbSt === "bad" ? (p && p.status === "error" ? "확인 필요 · 눌러서 보기" : "PC 응답 없음 · 다시 보내 주세요") : "";
     const html = `<div class="mis-t"><b>그룹웨어 자동입력</b>${st ? `<span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span>` : ""}</div>` +
       (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
@@ -1909,7 +1947,7 @@
         if (!confirm(`오늘(${mmdd(TODAY)}) 발주 ${now.length}개를 PC의 그룹웨어(MIS)에 넣고 저장할까요?\n\n${now.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return;
         lbPress.mis = Date.now(); renderMis(); // 누른 즉시 막대·버튼 잠금 (시트에 적히기까지 1~2초)
         setKey("misPush", { date: TODAY, id: Date.now(), at: Date.now(), status: "pending", n: now.length });
-        misFastUntil = Date.now() + 180000;
+        misFastUntil = Date.now() + 8 * 60e3; // 11/17: 단계 글을 끝까지 보이게 (결과가 나오면 바로 멈춤)
         toast(agOn ? "GW 전송했어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
       });
     }
@@ -1973,7 +2011,12 @@
   const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
   // 손으로 적은 입고·이동 (11/15 KM: 버터라이스가 모자라 다른 매장에서 45개 빌림 — MIS 입고현황엔 안 잡힘). 시트 recvAdd.날짜 = { rows: [{ key 품목, q 재고단위(빌려주면 −), note }] }
   //  KM이 말해 준 것만 적는다. 같은 날 입고현황에 같은 양이 잡히면 두 번 세지 않음
-  const addRowsOf = (it, x) => ((db["recvAdd." + x] || {}).rows || []).filter((r) => r && r.key === it.key && num(r.q) !== 0 && !(recvOn(it, x) && (recvRowsOf(it.key, x) || []).some((m) => Math.abs(ordToStock(it, num(m.qty)) - num(r.q)) < 1e-6)));
+  // 매장간재고이동 (11/17 KM, PC가 MIS에서 읽음): 시트 misXfer.날짜 = { rows: [{ code, qty(+받음 −보냄) }] }. 입고현황엔 안 잡힘
+  //  그날 misXfer가 있으면 KM이 붙여 줘서 손으로 적은 "사내이송" 줄(recvAdd)은 빼고 이것을 씀 (두 번 세지 않게)
+  const xferOn = (x) => Array.isArray((db["misXfer." + x] || {}).rows);
+  const xferRowsOf = (it, x) => (xferOn(x) ? db["misXfer." + x].rows : []).filter((r) => r && (it.codes || []).map(String).includes(String(r.code)) && num(r.qty) !== 0);
+  const addRowsOf = (it, x) => ((db["recvAdd." + x] || {}).rows || []).filter((r) => r && r.key === it.key && num(r.q) !== 0 && !(xferOn(x) && /^사내이송/.test(r.note || "")) && !(recvOn(it, x) && (recvRowsOf(it.key, x) || []).some((m) => Math.abs(ordToStock(it, num(m.qty)) - num(r.q)) < 1e-6)))
+    .concat(xferRowsOf(it, x).map((r) => ({ key: it.key, q: ordToStock(it, num(r.qty)), note: "매장간재고이동", xfer: true })));
   const arrivalsOf = (it, x) => {
     const out = arrivalsOrd(it, x), add = addRowsOf(it, x).map((r) => ({ d: x, q: num(r.q), recv: true, add: true }));
     if (!RECV_USE) return add.length ? [...out, ...add] : out;
@@ -2643,12 +2686,11 @@
     $("logTable").innerHTML = sel.length ? sel.map((m) => {
       const days = [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(m, k)), wk = isoWeek(m).w, fcSum = days.reduce((t, d) => t + (fcOf(d) || 0), 0);
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
-      const h2 = days.map(() => `<th class="sub ds">재고</th><th class="sub">발주</th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
       let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
-      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
+      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
-        `<div class="logscroll"><table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
+        `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm">품목</th>${h1}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
   }
   $("logWeeks").addEventListener("click", (e) => { const b = e.target.closest("button[data-w]"); if (!b) return; const w = b.dataset.w; logWeekSel.has(w) ? logWeekSel.delete(w) : logWeekSel.add(w); renderStockLog(); });
@@ -3195,7 +3237,7 @@
       const hol = isHoliday(d), de = dataForecast(d);
       row.className = "cell f-row" + (i >= 5 || hol ? " we" : "") + (d === TODAY ? " today" : "");
       row.innerHTML = `<span class="day">${DOW[dow(d)]}<small>${d === TODAY ? "오늘" : mmdd(d)}${hol ? "<em>공휴일</em>" : ""}</small></span>` +
-        `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}</span>` +
+        dfcHTML(d, de) +
         `<input class="fc" inputmode="numeric" enterkeyhint="next" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
         `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
       // 컨벤션센터 행사 (11/15 KM 시안 A 고름 "참가인원·수용인원 있으면 좋을 듯"): 데스크위젯이 매일 보내는 events → 그날 줄 아래에 종류·이름, 숫자가 있으면 수용·예상 관람 한 줄 더
@@ -3251,7 +3293,7 @@
     done.forEach((el) => (el.defaultValue = el.value)); // 저장한 값을 새 기준으로 (같은 칸을 두 번 저장하지 않게)
     if (changed) {
       setKey("forecast", all);
-      rows.forEach((row, i) => { const de = dataForecast(addDays(fcWeekStart, i)); row.querySelector(".dfc").textContent = de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"; }); // 트렌드 반영된 데이터 예상
+      rows.forEach((row, i) => { const d = addDays(fcWeekStart, i), el = row.querySelector(".dfc"); if (el) el.outerHTML = dfcHTML(d, dataForecast(d)); }); // 트렌드 반영된 데이터 예상 (날씨·행사 보정 사유 포함)
     }
     foot();
   }
@@ -3837,7 +3879,7 @@
       let need = true;
       if (!noStatus) try {
         const j = await (await fetch(API + "?api=1&status=1&t=" + Date.now())).json();
-        if (j && j.status) { const sig = JSON.stringify([j.status.misPush, j.status.salesPush]); need = sig !== fastSig; fastSig = sig; } else noStatus = true;
+        if (j && j.status) { const mp = j.status.misPush || {}, sig = JSON.stringify([mp, j.status.salesPush, /pending|running/.test(mp.status || "") ? j.ver : 0]); need = sig !== fastSig; fastSig = sig; } else noStatus = true; /* 11/17: GW 전송 중엔 시트 버전(ver)도 봄 → PC가 적는 단계 글(misPush.prog)이 2초 안에 보이게 */
       } catch {}
       if (need) { lastFull = Date.now(); if (await pull(true)) refreshVisible(); }
       const busy = (x) => x && /pending|running/.test(x.status);

@@ -35,7 +35,7 @@ export function cutKv(data, asOf, { today = "counted", dropMonths = [] } = {}) {
     if ((m = /^input\.(\d{4}-\d\d-\d\d)$/.exec(k))) {
       if (m[1] > asOf || (m[1] === asOf && today === "none")) delete d[k];
       else if (m[1] === asOf && today === "counted") { const o = {}; Object.keys(d[k]).forEach((n) => { const v = d[k][n]; if (v && v.s !== "" && v.s != null) o[n] = { ...v, o: "", r: "" }; }); d[k] = o; }
-    } else if ((m = /^(menuDay|menuDayPart|prepOnhand|misOrder|misRecv|recvAdd|soldout)\.(\d{4}-\d\d-\d\d)$/.exec(k))) { if (m[2] >= asOf) delete d[k]; }
+    } else if ((m = /^(menuDay|menuDayPart|prepOnhand|misOrder|misRecv|misXfer|recvAdd|soldout)\.(\d{4}-\d\d-\d\d)$/.exec(k))) { if (m[2] >= asOf) delete d[k]; }
     else if ((m = /^month\.(\d{4}-\d\d)$/.exec(k))) { if (m[1] > asOf.slice(0, 7)) delete d[k]; else if (dropMonths.includes(m[1])) ["gross", "ledger", "sales"].forEach((f) => delete d[k][f]); }
   });
   const lim = today === "none" ? asOf : asOf + " 99";

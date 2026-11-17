@@ -314,13 +314,23 @@
       const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
       const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total/i.test(String(v ?? "").trim()));
       // 날짜 목록: from ~ to 중 시트에 아직 없는 날만 (force면 다)
+      //  1.17.0 (11/17 KM 1번): job.today = 1이면 오늘 지금까지 중간값 → 완결된 하루 기록(menuDay.날짜)이 아니라 menuNow 에 둠.
+      //   영업 중 값이라 학습(요일별 메뉴 쏠림 → 품목별 주말 배수)의 하루 기록에 섞지 않고, 매시간 덮어씀
+      const today = !!job.today;
+      const keyOf = (day) => (today ? "menuNow" : "menuDay." + day);
       const have = await get();
-      const days = []; for (let x = job.from; x <= job.to; ) { if (job.force || !have["menuDay." + x]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      const days = [];
+      if (today) days.push(job.to || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+      else for (let x = job.from; x <= job.to; ) { if (job.force || !have[keyOf(x)]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
       const L = loader($, d);
       let saved = 0; const empty = [], failed = [], saveErr = [], chkBad = []; let rem = [], hung = false;
       // 시트 저장은 뒤에서 차례로 (하루 저장에 2~4초 → 조회를 막지 않게). 실패한 날은 따로 모음
       let saveQ = Promise.resolve();
-      const save = (day, rows) => { saveQ = saveQ.then(() => set("menuDay." + day, { at: Date.now(), rows })).then(() => { saved++; }, () => { saveErr.push(day); }); };
+      let rowsN = 0; // 오늘 중간값이면 화면에 "몇 가지 메뉴"인지 적기 위해
+      const save = (day, rows, h) => {
+        const v = today ? { at: Date.now(), day, partial: 1, rows, ...(h ? { h } : {}) } : h ? { at: Date.now(), rows, h } : { at: Date.now(), rows };
+        saveQ = saveQ.then(() => set(keyOf(day), v)).then(() => { saved++; if (today) rowsN = rows.length; }, () => { saveErr.push(day); });
+      };
       const readDay = async (day) => {
         step = "조회 " + day;
         if (!(await L.idle(T.q))) return "busy"; // 앞 조회가 아직 안 끝남 → 이 날은 나중에
@@ -344,7 +354,7 @@
         // 합계 대조: 메뉴 줄 수량 합(0·마이너스 줄 포함) = 화면 합계 줄 수량?
         const ck = sumCheck(hit.rows, (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
         if (ck && !ck.ok) { chkBad.push(day); if (SUM_BLOCK) return "chk"; } // 켜져 있으면 그날은 저장 안 함 (다음에 다시 읽음)
-        save(day, rows); return "ok";
+        save(day, rows, { cols: cols.map((c) => title(c) || c.field).slice(0, 30), menu: title(menuCol), cat: catCol ? title(catCol) : "" }); return "ok"; // h: 표 머리글 (11/17 새 POS 첫날 메뉴 이름이 분류 이름으로 옴 — 어느 칸에 메뉴 이름이 있는지 보려고)
       };
       try {
         const again = []; let stuck = 0;
@@ -363,11 +373,11 @@
         }
       } finally { await saveQ.catch(() => {}); }
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set([...failed, ...saveErr])].sort();
-      const text = `메뉴 판매 ${saved}일 저장` + (empty.length ? ` · 판매 없음 ${empty.map(md).join(", ")}` : "") + (hung ? " · MIS가 응답하지 않아 멈췄어요" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")} (다시 누르면 그날만 받아요)` : "") +
+      const text = (today ? `메뉴 판매(오늘) ${saved ? `지금까지 ${rowsN}가지 메뉴 저장` : "아직 판매 없음 (영업 전이거나 화면에 아직 안 나옴)"}` : `메뉴 판매 ${saved}일 저장`) + (empty.length ? ` · 판매 없음 ${empty.map(md).join(", ")}` : "") + (hung ? " · MIS가 응답하지 않아 멈췄어요" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")} (다시 누르면 그날만 받아요)` : "") +
         (rem.length ? ` · 남은 ${rem.length}일은 다시 누르면 이어서 받아요` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
         (chkBad.length ? ` · ⚠ 합계 다른 날 ${chkBad.sort().map(md).join(", ")} (${SUM_BLOCK ? "저장 안 함, " : ""}MIS 화면 확인)` : "");
-      if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length, chkBad: chkBad.length }); }
-      return finish(true, text, { days: saved, more: rem.length, chkBad: chkBad.length });
+      if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length, chkBad: chkBad.length, ...(today ? { rows: rowsN } : {}) }); }
+      return finish(true, text, { days: saved, more: rem.length, chkBad: chkBad.length, ...(today ? { rows: rowsN } : {}) });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
     }
@@ -716,6 +726,100 @@
     }
   }
 
+  // ---------- 매장간재고이동 (11/17 KM "2번 좋다", kind "xfer") ----------
+  //  다른 매장과 주고받은 물건(사내이송)은 입고현황에 안 잡힘 → 11/10·11/15에 자숙피바지락 43PK 등을 받았는데 앱은 몰랐음.
+  //  메뉴 경로: 매입정보관리 › 재고이동(폴더) › 매장간재고이동. [조회]만 누름 (등록·저장·삭제·수신 단추는 절대 안 누름)
+  //  시트 misXfer.날짜 = { at, rows: [{ code, name, qty(+받음 / −보냄), other(상대 매장코드) }] }. 받은 것은 수령일자, 보낸 것은 발송일 기준.
+  //  등록자·수신자(직원 이름)와 금액은 저장 안 함. 열 이름만 xferProbe에
+  async function runXfer() {
+    try {
+      step = "매장간재고이동 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const STAT_RE = /^매장\s*간\s*재고\s*이동$/;
+      const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+      const expandAll = async () => { for (let round = 0; round < 6 && !byText(STAT_RE, ".tree-title"); round++) { let did = 0; for (const w of trees()) { let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")]; } catch (e) {} for (const h of hits) { let ok = false; try { const $w = w.jQuery, node = h.closest(".tree-node"), root = $w && $w.fn && $w.fn.tree && node ? $w(h).closest("ul.tree") : null; if (root && root.length) { root.tree("expand", node); ok = true; } } catch (e) {} if (!ok) { try { press(w, h); ok = true; } catch (e) {} } if (ok) did++; } } if (!did) break; await sleep(700); } };
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /재고\s*이동/.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 2000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(STAT_RE, ".tree-title")) await expandAll();
+        const hit = byText(STAT_RE, ".tree-title"); if (!hit) break;
+        hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "매장간재고이동 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "매장간재고이동 화면에 jQuery가 없어요");
+      step = "조회일";
+      const kst = (n) => new Date(Date.now() + 9 * 3600e3 + n * 864e5).toISOString().slice(0, 10);
+      const to = kst(0) > job.to ? kst(0) : job.to; // 오늘 보낸·받은 것도 (그날 바로 재고가 바뀜)
+      const from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 30); return t.toISOString().slice(0, 10); })();
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+      if (dbs.length >= 2) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(from, like)); $(dbs[1]).datebox("setValue", fmt(to, like)); }
+      else if (dbs.length === 1) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(to, like)); }
+      step = "조회";
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) return finish(false, "매장간재고이동 조회 버튼을 못 찾았어요");
+      const L = loader($, d);
+      await L.idle(T.q);
+      let hit = null;
+      for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
+      if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
+      step = "읽기";
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const totalOf = (g) => { try { const dd = $(g).datagrid("getData") || {}; return +dd.total || 0; } catch (e) { return 0; } };
+      for (const g of L.grids()) {
+        try {
+          const o = $(g).datagrid("options"), t = totalOf(g), n0 = (L.raw(g) || []).length;
+          if (!o.pagination || !(t > n0)) continue;
+          step = "전체 쪽 불러오기"; const n = Math.min(5000, t), pg = $(g).datagrid("getPager");
+          pg.pagination({ pageSize: n, pageList: [...new Set([...(o.pageList || []), n])] }); pg.pagination("select", 1);
+          for (let k = 0; k < 100 && (L.raw(g) || []).length < n; k++) await sleep(200);
+          await L.idle(T.q);
+        } catch (e) {}
+      }
+      step = "읽기";
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!o.pagination }; });
+      await set("xferProbe", { at: Date.now(), from, to, grids: probe });
+      if (!hit || !hit.rows.length) { await set("misXferScan", { at: Date.now(), from, to, days: 0, n: 0 }); return finish(true, `매장간재고이동 ${from.slice(5)}~${to.slice(5)} 조회 결과 없음`, { days: 0 }); }
+      // 열: 품목코드 · 품목명 · 발송매장코드 · 발송수량 · 발송일 · 수신매장코드 · 수신수량 · 수령일자 (11/17 KM이 붙여 준 표 머리글)
+      const toIso = (v) => { const m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(String(v ?? "").trim()); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
+      let use = null;
+      for (const g of L.grids()) {
+        const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), rs = L.raw(g) || [];
+        if (!rs.length) continue;
+        const f = (re, bad) => cs.find((c) => re.test(title(c)) && !(bad && bad.test(title(c))));
+        const u = { code: f(/^품목\s*코드$/), name: f(/^품목\s*명$/), sFrom: f(/발송\s*매장\s*코드/), sQty: f(/발송\s*수량/), sDt: f(/발송\s*일/), rTo: f(/수신\s*매장\s*코드/), rQty: f(/수신\s*수량/), rDt: f(/수령\s*일|수신\s*일/) };
+        if (u.code && u.sFrom && u.rTo && (u.sQty || u.rQty) && (u.sDt || u.rDt)) { use = Object.assign(u, { rs, all: !(o.pagination && totalOf(g) > rs.length) }); break; }
+      }
+      if (!use) return finish(false, `매장간재고이동 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
+      const by = new Map(), V = (r, c) => (c ? String(r[c.field] ?? "").trim() : ""); let inN = 0, outN = 0, wait = 0;
+      use.rs.forEach((r) => {
+        const code = V(r, use.code), sf = V(r, use.sFrom), rt = V(r, use.rTo); if (!code) return;
+        let dt = null, q = 0, other = "";
+        if (rt === STORE && sf !== STORE) { dt = toIso(V(r, use.rDt)); q = num(V(r, use.rQty)) || 0; other = sf; if (!dt || !(q > 0)) { wait++; return; } inN++; } // 받는 쪽: 수령한 것만 (아직 안 받았으면 다음에)
+        else if (sf === STORE && rt !== STORE) { dt = toIso(V(r, use.sDt)); q = -(num(V(r, use.sQty)) || 0); other = rt; if (!dt || !(q < 0)) return; outN++; }
+        else return;
+        if (dt < from || dt > to) return;
+        if (!by.has(dt)) by.set(dt, []);
+        by.get(dt).push({ code, name: V(r, use.name).slice(0, 60), qty: q, other: other.slice(0, 12) });
+      });
+      step = "시트 저장";
+      let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misXfer." + dt, { at: Date.now(), rows }); saved++; }
+      let empty = 0;
+      if (use.all) { const yest = kst(-1); for (let x = from; x <= to && x <= yest; x = new Date(Date.parse(x + "T00:00:00Z") + 864e5).toISOString().slice(0, 10)) if (!by.has(x)) { await set("misXfer." + x, { at: Date.now(), rows: [] }); empty++; } }
+      await set("misXferScan", { at: Date.now(), from, to, days: saved, empty, all: use.all ? 1 : 0, in: inN, out: outN, wait });
+      return finish(true, `매장간재고이동 ${from.slice(5)}~${to.slice(5)} · ${saved}일 · 받음 ${inN}줄 · 보냄 ${outN}줄${wait ? ` · 아직 안 받은 ${wait}줄` : ""}`, { days: saved });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- Set판매현황 (11/15 KM 승인 "그래 읽고 너도 분석해봐", kind "sets") ----------
   //  실제 화면(11/15 첫 조회): 매장마다 한 줄, 세트 종류마다 수량·금액·% 칸이 옆으로 늘어선 표(treegrid "tg").
   //   칸: 매장코드·매장명·Gross/Total/RESTAURANT/DELIVERY Sales·매장고객수(CUST_CNT)·PPA, 세트 합계(TOT_CNT), 세트별 *_CNT
@@ -847,17 +951,19 @@
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황", xfer: "매장간재고이동" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
-  const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
+  //  1.17.0: today(오늘 중간값)도 종류마다 같이 넘겨야 함. 예전엔 also로 덧붙인 sets의 today:1이 job을 만들 때 빠져서
+  //   오늘 중간값이 완결된 하루 기록(setDay.날짜)에 섞였음(매시간 :40 수집). 지금은 req.today → job.today로 그대로 전달
+  const queue = [[k0, { from: base.from, to: base.to, force: base.force, today: base.today }]];
   try {
     while (queue.length && !replaced) {
       const [kind, req] = queue.shift();
       // 계획표(gw-plan)에서 덧붙인 일(시간대별·주문현황)은 날짜 없이 옴 → 어제(한국 날짜)까지로 (11/13: 날짜가 없으면 시간대별이 Invalid Date로 멈추던 것)
       const yest = new Date(Date.now() + 9 * 3600e3 - 864e5).toISOString().slice(0, 10);
-      job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to || (needRange(kind) ? req.to : yest), force: req.force };
+      job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to || (needRange(kind) ? req.to : yest), force: req.force, today: req.today == null ? base.today : req.today };
       step = "시작"; Object.keys(diag).forEach((k) => delete diag[k]);
       if (kind !== k0) await merge("salesPush", { cur: kind, prog: null }).catch(() => {});
       const r = left() < T.reserve ? { ok: false, text: "시간이 모자라 시작 못 함 · 다시 눌러 주세요", extra: {} } : RUN[kind] ? await RUN[kind]() : { ok: false, text: "모르는 종류라 하지 않음: " + String(kind).slice(0, 20), extra: {} };

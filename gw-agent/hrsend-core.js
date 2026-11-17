@@ -27,7 +27,7 @@
   function hrsCheck(req) {
     const errors = [], warns = [], r = req || {};
     const dept = String(r.dept || "").trim().toUpperCase();
-    if (!/^(BOH|FOH)$/.test(dept)) errors.push({ msg: `부서(dept)는 BOH 또는 FOH여야 해요 (받은 값: ${r.dept})` });
+    if (!/^(BOH|FOH)$/.test(dept) && !(dept === "ALL" && r.byName === true)) errors.push({ msg: `부서(dept)는 BOH 또는 FOH여야 해요 (받은 값: ${r.dept})` });
     const ws = String(r.weekStart || "");
     if (!isDate(ws)) errors.push({ msg: `주 시작일(weekStart)이 날짜가 아니에요: ${r.weekStart}` });
     else if (new Date(Date.parse(ws + "T00:00:00Z")).getUTCDay() !== 1) errors.push({ msg: `주 시작일 ${ws}이 월요일이 아니에요` });
@@ -43,9 +43,11 @@
     for (const e of list) {
       const empNo = String((e && e.empNo) == null ? "" : e.empNo).trim(), name = String((e && e.name) || "").trim().slice(0, 30);
       const bad = (msg) => errors.push({ empNo, name, msg });
-      if (!/^\d{4,12}$/.test(empNo)) { bad(`사번이 숫자가 아니에요: "${empNo}"`); continue; }
-      if (seen.has(empNo)) { bad("같은 사번이 두 번 있어요"); continue; }
-      seen.add(empNo);
+      const byName = r.byName === true && !empNo; // 사이드패널: 이름으로 찾음
+      if (!byName && !/^\d{4,12}$/.test(empNo)) { bad(`사번이 숫자가 아니에요: "${empNo}"`); continue; }
+      const key = byName ? "n:" + name : empNo;
+      if (seen.has(key)) { bad(byName ? "같은 이름이 두 번 있어요" : "같은 사번이 두 번 있어요"); continue; }
+      seen.add(key);
       if (!name) bad("이름이 비어 있어요");
       const days = Array.isArray(e.days) ? e.days : [], byDate = new Map();
       days.forEach((d) => { if (d && d.date) byDate.set(String(d.date), d); });
@@ -59,7 +61,7 @@
         const kind = String(d.kind || "").trim();
         if (KINDS.indexOf(kind) < 0) { bad(`${date} 근태유형 "${kind || "(빈칸)"}"은 HR에 없어요 — 보드에서 출근·휴무·주휴일·공휴일 중 하나로 바꿔 보내 주세요`); ok = false; continue; }
         let tin = hhmm(d.in), tout = hhmm(d.out), brk = hhmm(d.brk);
-        if (tin === null || tout === null || brk === null) { bad(`${date} 시간 모양이 틀려요 (출근 ${d.in || "-"} · 퇴근 ${d.out || "-"} · 휴게 ${d.brk || "-"}, HH:MM)`); ok = false; continue; }
+        if (tin === null || tout === null || brk === null) { bad(`${date} 시간 형식 오류 (출근 ${d.in || "-"} · 퇴근 ${d.out || "-"} · 휴게 ${d.brk || "-"}, HH:MM)`); ok = false; continue; }
         if (kind === "출근") {
           if (!tin || !tout) { bad(`${date} 출근인데 출근·퇴근 시각이 비었어요`); ok = false; continue; }
           if (!brk) brk = "00:00"; // 휴게 없으면 00:00 (HR 필수 칸)
@@ -77,10 +79,14 @@
       const wk = out.filter((d) => d.kind === "주휴일").length;
       const total = out.reduce((t, d) => t + workMin(d), 0);
       const rule = [];
-      if (wk !== 1) rule.push(`주휴일이 주에 정확히 1일이어야 해요 (지금 ${wk}일)`);
+      if (wk > 1) rule.push(`주휴일이 주에 ${wk}일이에요 (1일만)`);
       if (total > 52 * 60) rule.push(`주 근무가 52시간을 넘어요 (${Math.floor(total / 60)}시간 ${total % 60}분)`);
       if (rule.length && !soft) { rule.forEach(bad); continue; }
       rule.forEach((m) => warns.push({ empNo, name, msg: m + " (시험이라 경고만)" }));
+      // 주휴일이 없으면(예: 휴무만 2개) 막지 않고 HR의 기존 주휴일을 그대로 둠 → "확인 필요" (11/17 KM 실제 운영 방식)
+      if (wk === 0) warns.push({ empNo, name, msg: "입력에 주휴일이 없어요 — HR의 기존 주휴일은 덮어쓰지 않고 둠 (확인 필요)", keepWeekly: true });
+      // 9시간 넘게 근무하면 휴게 01:00 이상 (경고)
+      out.forEach((d) => { if (d.kind !== "출근" || !d.in || !d.out) return; let span = mins(d.out) - mins(d.in); if (span <= 0) span += 1440; if (span - (d.brk ? mins(d.brk) : 0) > 9 * 60 && (!d.brk || mins(d.brk) < 60)) warns.push({ empNo, name, day: d.dow, msg: `${d.dow} 근무가 9시간을 넘는데 휴게가 ${d.brk || "00:00"} (01:00 이상이어야 함)` }); });
       emps.push({ empNo, name, days: out, min: total });
     }
     const weekEnd = we;
@@ -140,5 +146,62 @@
     }
     return out;
   }
+
+  // ---- 공지 전 매장 전체 점검 (11/16 KM: 공지·확정은 매장 전체에 한 번에 적용) ----
+  //  tabs: [{ dept: "BOH"|"FOH"|"STORE", rows: [{ empNo, name, days: [{ dow, code, in, out, brk }] }], labels: { code: "화면 이름" } }]
+  //  codes: 근태 코드 → 종류. 출근 10·휴무 17은 확인됨, 나머지는 화면에 보이는 이름(주휴·공휴)으로 알아냄. over로 덮어쓸 수 있음
+  //  점검: 시간 없는 출근 0개 · 직원마다 주휴일 정확히 1일 · 주 52시간 이하. 걸리면 직원·요일 목록
+  function hrsPublishCheck(tabs, over) {
+    const labels = {}; (tabs || []).forEach((t) => Object.assign(labels, t.labels || {}));
+    const kindOf = (code) => { const c = String(code || ""); if (!c) return ""; if (over && over[c]) return over[c]; if (c === "10") return "출근"; if (c === "17") return "휴무"; const l = String(labels[c] || ""); if (/주휴/.test(l)) return "주휴일"; if (/공휴/.test(l)) return "공휴일"; if (/출근/.test(l)) return "출근"; if (/휴무/.test(l)) return "휴무"; return "?" + c + (l ? "(" + l + ")" : ""); };
+    const DK = { MON: "월", TUE: "화", WED: "수", THU: "목", FRI: "금", SAT: "토", SUN: "일" };
+    const errors = [], seen = new Map(); let n = 0;
+    for (const t of tabs || []) for (const r of t.rows || []) {
+      if (!r.empNo || seen.has(r.empNo)) continue; seen.set(r.empNo, t.dept); n++;
+      const who = { empNo: r.empNo, name: r.name, dept: r.dept || t.dept };
+      let wk = 0, min = 0;
+      for (const d of r.days || []) {
+        const k = kindOf(d.code), tin = hhmm(d.in), tout = hhmm(d.out), brk = hhmm(d.brk);
+        if (k[0] === "?") errors.push({ ...who, day: d.dow, msg: `${DK[d.dow]} 근태 코드 ${k.slice(1)}가 무엇인지 몰라요` });
+        if (k === "주휴일") wk++;
+        if (k === "출근" && (!tin || !tout)) errors.push({ ...who, day: d.dow, msg: `${DK[d.dow]} 출근인데 출근·퇴근 시간이 없어요` });
+        if ((k === "출근" || k === "공휴일") && tin && tout) min += workMin({ in: tin, out: tout, brk: brk || "" });
+      }
+      if (wk !== 1) errors.push({ ...who, day: null, msg: `주휴일이 주에 ${wk}일 (정확히 1일이어야 함)` });
+      if (min > 52 * 60) errors.push({ ...who, day: null, msg: `주 ${Math.floor(min / 60)}시간 ${min % 60}분 (52시간 넘음)` });
+    }
+    return { ok: !errors.length, errors, n, codes: Object.fromEntries(Object.keys(labels).map((c) => [c, kindOf(c)])) };
+  }
+  G.hrsPublishCheck = hrsPublishCheck;
+
+  // ---- 붙여넣기 글 읽기 (사이드패널, 11/17 KM): 탭으로 나뉜 줄, 한 사람당 7줄(월→일). 열: 이름 | 상태 | 출근 | 퇴근 | 휴게 | 순근무
+  //  날짜가 없으므로 weekStart(사이드패널에서 HR 화면 주차로 확인)로 날짜를 붙임. 순근무는 검증용(다르면 경고, 시각 기준)
+  function hrsParsePaste(text, weekStart) {
+    const lines = String(text || "").split(/\r?\n/).map((l) => l.replace(/\s+$/, "")).filter((l) => l.trim());
+    const errors = [], warns = [], order = [], by = new Map();
+    lines.forEach((l, i) => {
+      const c = l.split("\t").map((x) => x.trim());
+      if (c.length < 2) { errors.push({ line: i + 1, msg: `${i + 1}번째 줄: 탭으로 나뉜 '이름 · 상태'가 아니에요` }); return; }
+      const name = c[0];
+      if (!by.has(name)) { by.set(name, []); order.push(name); }
+      by.get(name).push({ line: i + 1, kind: c[1], in: c[2] || "", out: c[3] || "", brk: c[4] || "", net: c[5] || "" });
+    });
+    const emps = [];
+    for (const name of order) {
+      const rows = by.get(name);
+      if (rows.length !== 7) { errors.push({ name, msg: `${name}: ${rows.length}줄 (7줄이어야 함, 월→일)` }); continue; }
+      const days = rows.map((r, i) => ({ date: addDay(weekStart, i), kind: r.kind, in: r.in, out: r.out, brk: r.brk }));
+      rows.forEach((r, i) => {
+        if (!r.net || r.kind !== "출근") return;
+        const a = hhmm(r.in), b = hhmm(r.out), k = hhmm(r.brk), n = hhmm(r.net.length <= 4 && /^\d{1,2}:\d{2}$/.test(r.net) ? r.net : r.net);
+        if (!a || !b || n == null || n === "") return;
+        const w = workMin({ in: a, out: b, brk: k || "" });
+        if (Math.abs(w - mins(n)) > 0) warns.push({ name, day: DOWS[i], msg: `${DOWS[i]} 순근무 ${r.net} ≠ 계산 ${Math.floor(w / 60)}:${String(w % 60).padStart(2, "0")} (시각 기준으로 넣음)` });
+      });
+      emps.push({ empNo: "", name, days });
+    }
+    return { ok: !errors.length, errors, warns, emps };
+  }
+  G.hrsParsePaste = hrsParsePaste;
   G.hrsCheck = hrsCheck; G.hrsFiles = hrsFiles; G.hrsXlsx = hrsXlsx; G.hrsHHMM = hhmm; G.HRS_DOWS = DOWS;
 })(typeof self !== "undefined" ? self : globalThis);

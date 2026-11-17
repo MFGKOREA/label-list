@@ -34,7 +34,9 @@
   const kstDay = (ms) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
 
   // ---- 0) 로그인 화면 / 로그인 필요 ----
-  const pwInput = () => [...document.querySelectorAll('input[type="password"]')].find(vis) || null;
+  // 자동완성 방지용 숨은 비밀번호 칸(#jlamp_autocomplete_2, 투명도 0·0×0)은 로그인 화면이 아님 (11/16 KM)
+  const realPw = (el) => { if (!vis(el) || /^jlamp_autocomplete/.test(el.id || "")) return false; const r = el.getBoundingClientRect(); if (r.width <= 1 || r.height <= 1) return false; for (let n = el; n && n !== document.documentElement; n = n.parentElement) { try { if (parseFloat(getComputedStyle(n).opacity) === 0) return false; } catch (e) { break; } } return true; };
+  const pwInput = () => (window.hrt2325 || document.querySelector("a[menu-app-id]") ? null : [...document.querySelectorAll('input[type="password"]')].find(realPw) || null);
   function setV(el, v) {
     try {
       const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");

@@ -230,7 +230,9 @@ html, body { overflow-x: hidden; }
 .lg-fc::before { background: var(--c-fc); box-shadow: 0 0 6px var(--c-fc); }
 .lg-act::before { background: var(--c-act); box-shadow: 0 0 6px var(--c-act); }
 .f-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 5px; align-items: center; }
-.f-row .dfc { text-align: right; font-size: 14px; font-weight: 600; color: var(--fg); padding-right: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f-row .dfc { text-align: right; font-size: 14px; font-weight: 600; color: var(--fg); padding-right: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; }
+/* 날씨·행사 보정 사유 (숫자 밑 한 줄) */
+.f-row .dfc small { display: block; font-size: 9.5px; font-weight: 600; color: var(--c-de); overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px; }
 .f-row .day small em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: var(--rose-ink); }
 .lg-de::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; background: var(--c-de); box-shadow: 0 0 6px var(--c-de); }
 .f-row .day { font-size: 14px; font-weight: 700; line-height: normal; }
@@ -820,7 +822,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
 .logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
 .logt td.o { color: var(--accent-text); font-weight: 800; }
-.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); } .logt tr.vrow .nm small { font-weight: 600; }
+.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); }
+.logt tr.vrow td.sub { text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); } .logt tr.vrow .nm small { font-weight: 600; }
 .logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
 @media print {
   @page { size: A4 landscape; margin: 7mm; }
@@ -847,6 +850,17 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt tr.fcrow td, body.log-print .logt tr.fcrow .nm { background: #e6e6e6 !important; }
   body.log-print .logt thead { display: table-header-group; }
   body.log-print .logt tr { break-inside: avoid; }
+  /* 11/17 KM "가로 인쇄 줄맞춤, 열·행 높이 맞추기": 칸 너비를 고정(품목 40mm · 날마다 재고·발주 같은 너비) · 줄 높이 하나로 · 숫자는 오른쪽, 머리글은 가운데 */
+  body.log-print .logt { table-layout: fixed; width: 100%; font-size: 8px; }
+  body.log-print .logt col.cn { width: 40mm; }
+  body.log-print .logt col.cs, body.log-print .logt col.co { width: auto; }
+  body.log-print .logt th, body.log-print .logt td { height: 4.2mm; padding: 0 1.6mm 0 1mm; line-height: 1; vertical-align: middle; overflow: hidden; white-space: nowrap; box-sizing: border-box; }
+  body.log-print .logt thead th { text-align: center; padding: 0 .5mm; }
+  body.log-print .logt thead tr:first-child th { height: 4.8mm; font-size: 8.5px; }
+  body.log-print .logt .nm { width: auto; max-width: none; text-align: left; padding-left: 1.2mm; }
+  body.log-print .logt td.fc, body.log-print .logt tr.vrow td.sub { text-align: center; }
+  body.log-print .logt tr.vrow td.sub { font-size: 7px; font-weight: 700; }
+  body.log-print .logt td.s, body.log-print .logt td.o { text-align: right; }
 }
 
 /* ---------- 버튼 로딩바 (11/16 KM) ---------- */
@@ -859,7 +873,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .misbar .lbar.gone { opacity: 0; max-height: 0; margin-top: 0; }
 .misbar .lb-trk { position: relative; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
 .misbar .lb-fil { position: absolute; top: 0; bottom: 0; left: -36%; width: 36%; border-radius: inherit; background: var(--accent); animation: lbSlide 1.15s ease-in-out infinite; }
-.misbar .lb-txt { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.misbar .lb-txt { order: -1; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .misbar .lb-sp { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--fill); border-top-color: var(--accent); animation: lbSpin .9s linear infinite; }
 /* PC가 꺼져 기다리는 중: 흐르지 않고 천천히 숨쉬듯 */
 .misbar .lbar[data-live="wait"] .lb-fil { width: 22%; background: var(--muted); animation: lbBreathe 2.6s ease-in-out infinite; }

@@ -119,6 +119,19 @@ ok(((d["misRecv.2026-11-12"] || {}).rows || []).length === 2 && d["misRecv.2026-
 ok(!JSON.stringify(d).includes("홍길동") && d.recvProbe && d.recvProbe.grids[0].cols.some((c) => /입고수량/.test(c)) && !d.recvProbe.grids[0].rows, "직원 이름은 어디에도 없음 · 열 이름만 기록");
 ok(Array.isArray((d["misRecv.2026-11-10"] || {}).rows) && d["misRecv.2026-11-10"].rows.length === 0 && d.misRecvScan.empty === 10 && d.misRecvScan.days === 2 && d.misRecvScan.all === 1 && !d["misRecv.2026-10-01"], "받은 게 없는 날은 빈 기록(10일) · 기간 밖(10/1)은 안 씀");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "입고현황 읽기도 KM 입력(input.날짜)은 안 건드림");
+// 6-2) 매장간재고이동 (11/17 KM "2번 좋다"): 받은 것(+)은 수령일, 보낸 것(−)은 발송일로 misXfer.날짜에. 등록·수신 단추와 다른 화면은 안 누름, 직원 이름·금액은 저장 안 함
+let opened5 = null, xw = 0;
+d = await run({ kind: "xfer", from: "2026-11-01", to: "2026-11-16" }, "xfer-main.html", async (p) => { opened5 = await p.evaluate(() => window.__opened); xw = await p.evaluate(() => (window.__xferWrite || 0) + (window.__recvEntryOpened || 0)); });
+console.log("결과:", d.salesPush.status, d.salesPush.text);
+ok(d.salesPush.status === "done" && d.salesPush.parts.xfer.status === "done", "매장간재고이동 읽기 끝남");
+ok(xw === 0 && Array.isArray(opened5) && opened5.length === 1 && opened5[0] === "매장간재고이동", `열린 화면은 매장간재고이동 하나뿐 · 등록·수신 단추 안 누름 (${xw})`);
+const x15 = (d["misXfer.2026-11-15"] || {}).rows || [], x10 = (d["misXfer.2026-11-10"] || {}).rows || [];
+ok(x15.length === 2 && x15.every((r) => r.code === "340000032") && x15.reduce((a, r) => a + r.qty, 0) === 41 && x15.some((r) => r.other === "1345041"), "11/15 버터라이스 받음 15+26=41 (보낸 매장 코드 남김)");
+ok(x10.length === 1 && x10[0].qty === 20 && ((d["misXfer.2026-11-11"] || {}).rows || []).some((r) => r.code === "340002142" && r.qty === 4), "받은 것은 수령일 기준 (탈각새우 발송 11/10 → 수령 11/11)");
+ok(((d["misXfer.2026-11-06"] || {}).rows || []).some((r) => r.code === "340001444" && r.qty === -1 && r.other === "1345058"), "보낸 것은 마이너스 (11/06 파인애플 −1)");
+ok(!JSON.stringify(d).includes("340009999") && !((d["misXfer.2026-11-16"] || {}).rows || []).some((r) => r.code === "340000404") && d.misXferScan.wait === 1, "다른 매장끼리 주고받은 줄은 뺌 · 아직 안 받은 줄(자숙홍합)은 다음에");
+ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("김영희") && !/10,000/.test(JSON.stringify(d.misXferScan) + JSON.stringify(x15)) && d.xferProbe.grids[0].cols.some((c) => /수령일자/.test(c)), "직원 이름·금액은 저장 안 함 · 열 이름만 xferProbe");
+ok(Array.isArray((d["misXfer.2026-11-08"] || {}).rows) && d["misXfer.2026-11-08"].rows.length === 0 && d.misXferScan.all === 1, "주고받은 게 없는 날은 빈 기록 (쪽 나눔 표를 다 불러옴)");
 // 7) Set판매현황 (11/15 KM 승인): 실제 화면은 매장마다 한 줄 · 세트마다 수량 칸(treegrid). 이 매장 줄의 세트별 수량·고객수만 setDay.날짜에. 다른 화면은 안 엶, 금액·다른 매장은 저장 안 함
 gas.post({ action: "set", key: "setDay.2026-11-11", value: { at: 1, tot: 1, rows: [{ s: "x", q: 1 }] } });
 gas.post({ action: "set", key: "setDay.2026-11-13", value: { at: 1, rows: [] } }); // 첫 판이 남긴 빈 기록(tot 없음) → 다시 읽어야 함
@@ -145,5 +158,5 @@ d = await run({ kind: "sets", from: "2026-11-01", to: "2026-11-02" }, "sets-main
 console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(!d["setDay.2026-11-01"] && !d["setDay.2026-11-02"] && d.setProbe.diag && d.setProbe.diag.grids[0].tree === true && d.misSetScan.to === null && d.salesPush.parts.sets.status === "error", "이 매장 줄이 없으면 아무 날도 저장 안 함 · setProbe.diag만 · 끝날 기록 안 함(다음에 다시)");
 await b.close();
-console.log(`합계: 통과 ${54 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${62 - fails} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

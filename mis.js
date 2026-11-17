@@ -87,6 +87,8 @@ const fill = async (auto) => {
   const order = [...groups.filter((x) => MAIN.has(x.name))], extra = groups.filter((x) => !MAIN.has(x.name));
 
   const list = [...want.values()];
+  const prog = (m) => { try { if (typeof window.__misProg === "function") window.__misProg(m); } catch (e) {} }; // 폰 로딩바 위 글 (자동 대기가 켤 때만)
+  prog(`발주 ${list.length}개 확인 · MIS에 넣기 시작`);
   if (!auto && !origConfirm.call(W, `발주앱 오늘(${TODAY.slice(5)}) 발주 ${list.length}개를 MIS에 넣고 저장할까요?\n\n${list.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`)) return null;
 
   const loadGroup = async (code) => {
@@ -103,13 +105,14 @@ const fill = async (auto) => {
     return origAjax.apply(this, arguments);
   };
   W.__appFillRunning = true;
-  const left = new Map(want), report = [], bad = [];
+  const left = new Map(want), report = [], bad = []; let done = 0;
   quiet();
   try {
     // 모든 그룹을 열어 봄: 오늘 발주 품목을 넣는 것뿐 아니라, 앱 목록에 없는데 MIS에 수량이 남아 있는 품목(지난 발주·시험 데이터)을 0으로 정리하려면
     for (const grp of [...order, ...extra]) {
       const main = MAIN.has(grp.name);
       if (!main && !left.size) break; // 찾을 품목이 남았을 때만 다른 그룹을 엶
+      prog(`${grp.name} 주문그룹 여는 중`);
       let rows = await loadGroup(grp.code);
       const here = [];
       left.forEach((w, code) => { const idx = rows.findIndex((r) => String(r.CD_ITEM) === code); if (idx >= 0) here.push({ idx, code, ...w }); });
@@ -126,6 +129,7 @@ const fill = async (auto) => {
         ...resid.map((h) => ({ idx: h.idx, q: 0 })),
       ];
       if (todo.length) {
+        prog(`${grp.name} ${here.length ? here.length + "개 " : ""}넣는 중${resid.length ? ` (남은 칸 ${resid.length}개 0으로)` : ""}`);
         // 사람이 칸에 입력한 것처럼: 편집 시작 → 값 넣기 → 편집 끝 (MIS가 금액·입고일 다시 계산)
         todo.forEach((h) => inEvent(() => {
           g.datagrid("beginEdit", h.idx);
@@ -133,9 +137,11 @@ const fill = async (auto) => {
           if (ed) { ed.actions.setValue(ed.target, h.q); g.datagrid("endEdit", h.idx); }
           else { g.datagrid("cancelEdit", h.idx); g.datagrid("updateRow", { index: h.idx, row: { QT_ORDER: h.q } }); }
         }));
+        prog(`${grp.name} 저장 중`);
         inEvent(() => W.fn_Save());
         for (let t = 0; t < 10; t++) { await sleep(300); if (!clickMessager() && t > 2) break; }
         // 저장됐는지: 그룹을 다시 불러와 대조
+        prog(`${grp.name} 저장 확인 중`);
         rows = await loadGroup(grp.code);
       }
       const miss = here.filter((h) => { const r = rows.find((x) => String(x.CD_ITEM) === h.code); return !r || num(r.QT_ORDER) !== h.q; });
@@ -148,6 +154,7 @@ const fill = async (auto) => {
         else report.push(`[${grp.name}] 잔여 품목 ${h.name} (기존 ${h.old}개) -> 0개로 정리`);
       });
       if (here.length) report.push(`${grp.name}: ${here.length - miss.length}/${here.length}개 저장${todo.length ? "" : " (이미 같음)"}`);
+      if (here.length) { done += here.length - miss.length; prog(`${grp.name} 저장됨 · 전체 ${done}/${list.length}개`); }
     }
   } catch (e) {
     bad.push("중간에 멈춤: " + (e && e.message ? e.message : e));

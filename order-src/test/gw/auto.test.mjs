@@ -55,6 +55,6 @@ const OPLAN = [{ id: "o", kind: "orders", key: "misOrderScan", freshDays: 2 }];
 t("F4 주문현황 어제까지 읽음 → 안 함", P(base(N, { scout: true, misOrderScan: { at: 1, to: Y } }), N, {}, OPLAN), (r) => r.act === "none");
 t("F5 주문현황 그제까지만 → 오늘 다시 (어제 날짜 없이 보내면 PC가 어제로)", P(base(N, { scout: true, misOrderScan: { at: 1, to: addDay(Y, -1) } }), N, {}, OPLAN), (r, q) => r.act === "request" && q.kind === "orders" && !q.to);
 // 실제 gw-plan.json 검사: 배열이고, 각 항목이 알려진 kind·key를 가짐 (mis-sales.js RUN에 있는 종류만)
-// 실제 gw-plan.json 검사: 배열이고, 각 항목이 알려진 kind·key를 가짐 (mis-sales.js RUN 종류 + 당일 되풀이 kind now·setsToday — periodic.test.mjs가 봄)
-t("Z 실제 gw-plan.json 모양", { act: Array.isArray(SHIPPED) && SHIPPED.every((j) => j && /^(scout|hour|orders|recv|sets|now|setsToday|daily|pl|catalog)$/.test(j.kind) && j.key) ? "none" : "bad", why: "" }, (r) => r.act === "none");
+// 실제 gw-plan.json 검사: 배열이고, 각 항목이 알려진 kind·key를 가짐 (mis-sales.js RUN 종류 + 당일 되풀이 kind now·setsToday·menuToday — periodic.test.mjs가 봄)
+t("Z 실제 gw-plan.json 모양", { act: Array.isArray(SHIPPED) && SHIPPED.every((j) => j && /^(scout|hour|orders|recv|xfer|sets|now|setsToday|menuToday|daily|pl|catalog)$/.test(j.kind) && j.key) ? "none" : "bad", why: "" }, (r) => r.act === "none");
 console.log(`${pass}/${n} 통과`); process.exit(pass === n ? 0 : 1);

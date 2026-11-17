@@ -61,6 +61,10 @@
 4. **짧은 말:** `board.md` 맨 아래에 한 줄씩 덧붙입니다. 형식: `- 10.26 13:30 [보낸 사람 → 받는 사람] 내용`
 5. 작업을 시작하기 전에 항상 `git pull`, 끝나면 `git push`. 커밋 메시지 앞에 `[클로드 코드]` `[피클]` `[어사이드]` 를 붙입니다.
 6. **규칙 원본은 `docs/ai-protocol.md` 하나**(11/16). 역할·응답 SLA(3초/10초)·대장님께 가는 답 모양·태스크 패킷·3회 멈춤·검증 게이트가 거기 있고, 일은 그 문서 4장의 표준 태스크 패킷(`docs/aside/task-schema.json`)으로 맡깁니다.
+7. **[업무]는 순서가 정해져 있습니다**(11/17, `docs/ai-protocol.md` 9장): 레미(등록) → 클로드 코드(코드·PR) → GPT(3줄 반박) → 신우 님 승인 카드. 사람이 순서를 기억하지 않아도 되게 `tools/task_router.py` 가 넘깁니다.
+   - 이슈 양식(`.github/ISSUE_TEMPLATE/work-item.yml`)으로 올리고 → `python3 tools/task_router.py from-issue <번호>`
+   - 진행: `advance <일 번호> --to running|verifying --evidence "..."` · 반박: `rebut <일 번호> --line "..."`(3줄까지) · 카드: `card <일 번호>` · 승인: `approve <일 번호> --by km --ref "PR #.."`
+   - 반박 3줄 없이 카드가 안 나오고, 카드 없이 승인·완료가 안 됩니다. 3회 실패하면 멈춥니다(BOH 지침과 같은 원칙). 확인: `python3 tools/task_router.py status`
 
 ### 꼭 지킬 것
 - **비밀번호·토큰·개인정보는 절대 적지 않습니다.** 이 저장소는 공개이고, `docs/` 도 웹에 그대로 보입니다.
