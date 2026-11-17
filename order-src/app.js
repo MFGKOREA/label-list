@@ -528,7 +528,8 @@
 
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
-  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); };
+  let whyMemo = new Map();
+  const invalidate = () => { cache = null; fcBiasMemo = null; fcErrMemo = null; dataFcMemo = new Map(); whyMemo = new Map(); };
   // 공휴일 (대체공휴일 포함). 시트의 holidays 키(날짜 배열)로 더 넣을 수 있음
   const HOLI = new Set([
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02", "2026-05-05", "2026-05-25", "2026-06-03", "2026-08-17",
@@ -543,7 +544,7 @@
   //  공휴일 = 지난 공휴일 실제 매출과 그 요일 평소 매출의 평균 (9~10월 실적으로 맞춰 봄)
   //  트렌드 = 그 주(월~일)에 점장님이 넣은 Forecast(보정 반영) ÷ 같은 날들 데이터 예상의 절반만 반영 (0.7~1.4배로 자름)
   //   9/14~10/20 실적으로 맞춰 보면 하루 오차 30.7% → 28.2%
-  function dataForecast(d) {
+  function dataForecastRaw(d) {
     const b = dataBase(d); if (b == null) return null;
     const f = db.forecast || {}, mon = mondayOf(d);
     let a = 0, z = 0, all = 0;
@@ -576,6 +577,41 @@
     dataFcMemo.set(d, v);
     return v;
   }
+  // ---------- 날씨·행사 보정 (11/17 KM 승인 · 시즌2 18) ----------
+  //  데이터 예상은 같은 요일 지난 매출만 보므로 그날 비·한파·컨벤션 행사를 모른다. 시트 weather·events 키로 배수를 곱하고 왜 그랬는지 숫자 밑에 한 줄로 보여줌.
+  //  비·눈 = ×0.90 · 한파(최고 12도 이하) = ×0.95. 8~11주 실제÷보정 전 데이터 예상에서 비 온 날 11일 중앙값 0.90, 추운 날 7일 0.94.
+  //  행사는 배수를 안 건다(1.0으로 둠): 행사일 30일의 실제÷예상이 0.53~3.16이라 규모(cap 7000)와도 상관없이 중앙값이 1.0. 이름만 사유로 보여줌.
+  //   settings.wxK = {rain: 0.9, cold: 0.95, evHi: 1.0, evMid: 1.0, evLo: 1.0} 로 직접 바꿀 수 있고, settings.wxAdj = "off" 면 보정을 끔.
+  //  되돌려 보기(그날 예보·행사를 그대로 넣고): 10/19~11/16 하루 오차 35.4→33.7%(비 온 날 44.4→37.2%), 9/14~11/16 31.1→30.3%, 편향 +17.8→+14.0%.
+  const wxDay = (d) => { const w = db.weather; return (w && w.days && w.days[d]) || null; };
+  const isRain = (x) => !!x && (num(x.pop) >= 60 || num(x.rain) >= 1); // 강수확률 60% 이상이거나 그날 비·눈
+  const isCold = (x) => !!x && isFinite(num(x.hi)) && num(x.hi) <= 12; // 최고기온 12도 이하
+  const evDay = (d) => ((db.events || {}).days || {})[d] || null;
+  const evTier = (e) => { if (!e || !(num(e.n) > 0)) return null; const cap = num(e.cap) || 0; return cap >= 5000 ? "evHi" : cap >= 2000 ? "evMid" : "evLo"; };
+  function wxK() {
+    const s = (db.settings || {}).wxK || {}, k = (v, d) => (isFinite(num(v)) ? Math.min(1.3, Math.max(0.6, num(v))) : d);
+    return { rain: k(s.rain, 0.9), cold: k(s.cold, 0.95), evHi: k(s.evHi, 1), evMid: k(s.evMid, 1), evLo: k(s.evLo, 1) };
+  }
+  // 그날의 보정 배수와 사유: { k, parts: [{ t: 화면 글자, p: %, name: 행사 이름 }] }
+  function dfWhy(d) {
+    if (whyMemo.has(d)) return whyMemo.get(d);
+    const x = wxDay(d), e = evDay(d), tier = evTier(e), on = (db.settings || {}).wxAdj !== "off", K = wxK(), parts = [];
+    let k = 1;
+    if (on && isRain(x)) { k *= K.rain; parts.push({ t: "비", p: Math.round((K.rain - 1) * 100) }); }
+    if (on && isCold(x)) { k *= K.cold; parts.push({ t: "한파", p: Math.round((K.cold - 1) * 100) }); }
+    if (tier) {
+      const ek = on ? K[tier] : 1; k *= ek;
+      parts.push({ t: "행사", p: Math.round((ek - 1) * 100), name: ((e.names || [])[0] || "").replace(/&#0?38;/g, "·") });
+    }
+    return (whyMemo.set(d, { k, parts }), whyMemo.get(d));
+  }
+  function dataForecast(d) { const b = dataForecastRaw(d); return b == null ? null : b * dfWhy(d).k; }
+  // 숫자 밑에 붙는 사유 한 줄: "주말 비 -10% · 행사 마이펫페어" (1% 안쪽으로 배수가 1이면 그 항목은 안 씀)
+  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : `${p.t} ${p.name}`)).join(" · ");
+  const dfcHTML = (d, de) => {
+    const w = dfWhyText(d);
+    return `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영${w ? " · " + w : ""}">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}${w ? `<small>${esc(w)}</small>` : ""}</span>`;
+  };
   // I: Forecast 보정 — 요일 묶음(월·화 / 수·목·금 / 토·일·공휴일)마다 "실제 ÷ Forecast" 중앙값으로. 점장 Forecast가 수·목·금은 계속 10~20% 적게,
   //  월·화는 조금 많게 잡혀 왔음 (9/14~10/25, 34일). 표본이 적을수록 덜 믿음(n/(n+3)), ±5% 안은 우연으로 보고 안 함, 0.7~1.3배로 자름.
   //  되돌려 보기(그날 이전 날들만 보고 정함): 하루 오차 17.4→16.8% (10/6~), 15.4% (10/13~), 17.7% (10/19~) · 편향 +4.3→+0.5%
@@ -2595,7 +2631,7 @@
       const hol = isHoliday(d), de = dataForecast(d);
       row.className = "cell f-row" + (i >= 5 || hol ? " we" : "") + (d === TODAY ? " today" : "");
       row.innerHTML = `<span class="day">${DOW[dow(d)]}<small>${d === TODAY ? "오늘" : mmdd(d)}${hol ? "<em>공휴일</em>" : ""}</small></span>` +
-        `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}</span>` +
+        dfcHTML(d, de) +
         `<input class="fc" inputmode="numeric" enterkeyhint="next" placeholder="–" value="${comma(f.fc)}" aria-label="${mmdd(d)} Forecast (원)">` +
         `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
       const [fi, ai] = row.querySelectorAll("input");
@@ -2632,7 +2668,7 @@
     });
     if (changed) {
       setKey("forecast", all);
-      rows.forEach((row, i) => { const de = dataForecast(addDays(fcWeekStart, i)); row.querySelector(".dfc").textContent = de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"; }); // 트렌드 반영된 데이터 예상
+      rows.forEach((row, i) => { const d = addDays(fcWeekStart, i), el = row.querySelector(".dfc"); if (el) el.outerHTML = dfcHTML(d, dataForecast(d)); }); // 트렌드 반영된 데이터 예상 (날씨·행사 보정 사유 포함)
     }
     foot();
   }
