@@ -1,1 +1,3 @@
 order-src/test/shots/
+__pycache__/
+*.pyc

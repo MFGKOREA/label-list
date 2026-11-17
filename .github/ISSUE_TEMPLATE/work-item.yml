@@ -1,0 +1,95 @@
+name: "[업무] 일 등록"
+description: "레미 → 클로드 코드 → GPT 3줄 반박 → 신우 님 승인 카드 순서로 넘어갈 일을 등록합니다"
+title: "[업무] "
+labels: ["업무"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        이 양식으로 올리면 `python3 tools/task_router.py from-issue <번호>` 가 그대로 태스크 패킷(`docs/aside/tasks/`)으로 바꿉니다.
+        순서는 **레미(등록) → 클로드 코드(코드·PR) → GPT(3줄 반박) → 신우 님 승인 카드** 고정입니다(`docs/ai-protocol.md` 9장).
+        비밀번호·토큰·매장 숫자·사람 이름은 적지 않습니다.
+  - type: textarea
+    id: what
+    attributes:
+      label: 무엇을
+      description: "동사로 시작하고, 끝났는지 볼 수 있게 한 문장. 예) 매시간 :40에 오늘 메뉴별 판매를 읽어 menuNow에 남기고 시험 47개를 돌린다"
+      placeholder: "무엇을 · 어떻게 끝났는지"
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: 끝났는지 보는 기준
+      description: "숫자·파일·화면처럼 확인할 수 있는 것. 예) 시험 47/47 통과, 시트에 menuNow 키가 생김"
+      placeholder: "끝난 것을 어떻게 확인하나"
+    validations:
+      required: true
+  - type: dropdown
+    id: who
+    attributes:
+      label: 맡는 AI
+      options:
+        - claude-code
+        - aside
+        - remi
+        - gpt
+        - pickle
+      default: 0
+    validations:
+      required: true
+  - type: dropdown
+    id: verify
+    attributes:
+      label: 검증할 AI (맡는 AI와 달라야 함)
+      options:
+        - gpt
+        - claude-code
+        - aside
+        - remi
+        - pickle
+        - km
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: sla
+    attributes:
+      label: 응답 기준(초)
+      description: "단일 자료 3초 · 2중 전달·복합 계산 10초. 오래 걸리는 일은 실제 값(예: 60)"
+      placeholder: "10"
+      value: "10"
+    validations:
+      required: false
+  - type: dropdown
+    id: irreversible
+    attributes:
+      label: 되돌릴 수 없는 일이 있나
+      description: "배포·전송·결제·외부 공개가 있으면 '예' — 승인 카드 전에는 실행하지 않습니다"
+      options:
+        - 아니오
+        - 예
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 근거
+      description: "이 일이 왜 필요한지 — 본 파일·시트·화면·이슈 번호. 개인정보는 빼고"
+      placeholder: "예) 11/17 BOH 리포트, 3번 의견"
+    validations:
+      required: false
+  - type: dropdown
+    id: sender
+    attributes:
+      label: 올린 사람
+      options:
+        - remi
+        - km
+        - pickle
+        - claude-code
+        - aside
+      default: 0
+    validations:
+      required: false

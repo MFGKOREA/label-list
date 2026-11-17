@@ -570,7 +570,8 @@ const PLAN_URL = "https://mfgkorea.github.io/label-list/gw-plan.json";
 async function autoCheck(now, L) {
   const { auto, autoSt = {} } = await get(["auto", "autoSt"]);
   if (auto === false || now < (autoSt.next || 0)) return;
-  const day = ymd(new Date(now)), st = autoSt.day === day ? { ...autoSt } : { day, n: 0 };
+  // #26: 날이 바뀌어도 요청 칸(reqId·reqAt)·글은 남기고 하루 횟수(n)만 0으로 — 밤에 낸 요청이 자정을 넘겨 끝나도 tickOnce가 "s"+reqId로 이 상태를 찾아 "스스로 받음"으로 고칠 수 있게
+  const day = ymd(new Date(now)), st = autoSt.day === day ? { ...autoSt } : { ...autoSt, day, n: 0 };
   st.at = now; st.next = now + (L.autoEvery || AUTO.every);
   if (!L.autoAnyTime) { // 쉬는 시간대면 시트를 읽지도 않고 그 시간이 끝날 때 다시 봄 (밤새 30분마다 시트 전체를 받지 않게)
     const dt = new Date(now), hm = dt.getHours() * 60 + dt.getMinutes(), at = (h, m, plus) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + (plus || 0), h, m, 0).getTime();
