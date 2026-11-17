@@ -255,3 +255,4 @@ KM에게 먼저 묻는다:
 - 시트 `learnlog`: `{id, t: "YYYY-MM-DD HH:MM"(한국 시각), by, notes: [[tag, 글]]}`. tag = learn 학습 · fix 수정 · down 오차 감소 · up 오차 증가 · err 오류 · done 해결. 주방에서 읽는 말로, 품목 이름과 숫자를 넣어 짧게. 덧붙이기(append)로 쓴다. 통째로 다시 쓰지 않는다.
 - 규칙이 바뀌면 `order-src/README.md`에 날짜와 함께 한 단락. 새로 배운 것은 이 문서 5장에 한 줄.
 - (11/17 KM "GW 전송 누르면 로딩바 위에 어떤 상황인지") 자동 대기(mis-agent.js VER 5)가 window.__misProg로 받은 단계 글을 misPush.prog·progAt에 merge(같은 글 안 씀, 쓰는 중이면 마지막 것만, 결과 쓰기 전에 다 씀). mis.js 단계: 화면 띄움 → 발주 n개 확인 → [그룹] 여는 중 → n개 넣는 중 → 저장 중 → 저장 확인 중 → 저장됨 · 전체 a/b. 앱 막대 글: misAgent.step(확장: GW 로그인·화면 열기)과 misPush.prog 중 새것, 글은 막대 위(.lb-txt order −1). 빠른 확인은 전송 중일 때 시트 ver도 봄(Apps Script 안 바꿈), 8분까지. e2e-order 9개.
+- (11/17 KM "발주시트 가로인쇄 줄맞춤, 열·행 높이 맞추기") 인쇄만: table-layout fixed + colgroup(품목 40mm · 날마다 재고·발주 같은 너비) · 줄 높이 4.2mm 하나로 · 글씨 8px · 숫자 오른쪽 · 머리글·Forecast 가운데. 화면 보기는 그대로.

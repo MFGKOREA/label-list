@@ -2655,7 +2655,7 @@
       let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
       const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
-        `<div class="logscroll"><table class="logt"><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
+        `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
   }
   $("logWeeks").addEventListener("click", (e) => { const b = e.target.closest("button[data-w]"); if (!b) return; const w = b.dataset.w; logWeekSel.has(w) ? logWeekSel.delete(w) : logWeekSel.add(w); renderStockLog(); });

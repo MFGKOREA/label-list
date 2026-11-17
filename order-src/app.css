@@ -847,6 +847,16 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt tr.fcrow td, body.log-print .logt tr.fcrow .nm { background: #e6e6e6 !important; }
   body.log-print .logt thead { display: table-header-group; }
   body.log-print .logt tr { break-inside: avoid; }
+  /* 11/17 KM "가로 인쇄 줄맞춤, 열·행 높이 맞추기": 칸 너비를 고정(품목 40mm · 날마다 재고·발주 같은 너비) · 줄 높이 하나로 · 숫자는 오른쪽, 머리글은 가운데 */
+  body.log-print .logt { table-layout: fixed; width: 100%; font-size: 8px; }
+  body.log-print .logt col.cn { width: 40mm; }
+  body.log-print .logt col.cs, body.log-print .logt col.co { width: auto; }
+  body.log-print .logt th, body.log-print .logt td { height: 4.2mm; padding: 0 1.6mm 0 1mm; line-height: 1; vertical-align: middle; overflow: hidden; white-space: nowrap; box-sizing: border-box; }
+  body.log-print .logt thead th { text-align: center; padding: 0 .5mm; }
+  body.log-print .logt thead tr:first-child th { height: 4.8mm; font-size: 8.5px; }
+  body.log-print .logt .nm { width: auto; max-width: none; text-align: left; padding-left: 1.2mm; }
+  body.log-print .logt td.fc { text-align: center; }
+  body.log-print .logt td.s, body.log-print .logt td.o { text-align: right; }
 }
 
 /* ---------- 버튼 로딩바 (11/16 KM) ---------- */
