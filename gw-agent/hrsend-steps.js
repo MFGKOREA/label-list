@@ -351,7 +351,7 @@ async function hrsStep(op, a) {
       unl.forEach((c, i) => { if (!/^(MON|TUE|WED|THU|FRI|SAT|SUN)_time_item_code_p$/.test(c.field || "")) return; const code = String(di[c.field] == null ? "" : di[c.field]); const t = tx(tr.cells[i]).replace(/\d{1,2}:\d{2}.*$/, "").trim(); if (code && t && !labels[code]) labels[code] = t.slice(0, 20); });
     });
     const v = (x) => (x == null ? "" : String(x));
-    return { ok: true, dept: v(($id("hrt2325_dept_category") || {}).value), labels, rows: data.map((r) => ({ empNo: v(r.emp_code), name: v(r.emp_name).slice(0, 30), dept: v(r.dept_code || r.dept_name).slice(0, 20), days: DAYS.map((D) => ({ dow: D, code: v(r[D + "_time_item_code_p"]), in: v(r[D + "_work_on_p_hhmm"]), out: v(r[D + "_work_off_p_hhmm"]), brk: v(r[D + "_break_time_p_hhmm"]) })) })) };
+    return { ok: true, dept: v(($id("hrt2325_dept_category") || {}).value), labels, rows: data.map((r) => ({ empNo: v(r.emp_code), name: v(r.emp_name).split(/<br\s*\/?>/i)[0].replace(/<[^>]+>/g, "").trim().slice(0, 30), dept: v(r.dept_code || r.dept_name).slice(0, 20), days: DAYS.map((D) => ({ dow: D, code: v(r[D + "_time_item_code_p"]), kname: v(r[D + "_time_item_name_p"]).slice(0, 20), in: v(r[D + "_work_on_p_hhmm"]), out: v(r[D + "_work_off_p_hhmm"]), brk: v(r[D + "_break_time_p_hhmm"]), edit: v(r[D + "_edit_yn"]) })) })) };
   }
 
   if (op === "final") { // 메인 저장(켜져 있을 때만) → 공지 → 확정 (a.skipNotice: 이미 공지된 주면 확정만)

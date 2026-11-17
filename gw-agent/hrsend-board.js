@@ -3,7 +3,7 @@
 //  확장 → 보드: { type: "MFG_HR_AGENT_READY", ver } (열릴 때·MFG_HR_PING에 대답)
 //               { type: "MFG_HR_SEND_ACK", requestId, ok, error? } (받았음)
 //               { type: "MFG_HR_SEND_PROGRESS", requestId, item: { t, stage, day, msg } } (단계마다)
-//               { type: "MFG_HR_SEND_RESULT" | "MFG_HR_PUBLISH_RESULT", requestId, ok, stage, … } (끝)
+//               { type: "MFG_HR_SEND_RESULT" | "MFG_HR_PUBLISH_RESULT" | "MFG_HR_READ_RESULT", requestId, ok, stage, … } (끝)
 //  같은 창(window)·같은 주소(origin)에서 온 메시지만 받음
 (() => {
   if (window.__gwHrBoard) return; window.__gwHrBoard = 1;
@@ -15,9 +15,9 @@
     const d = e.data || {};
     if (d.type === "MFG_HR_PING") return out({ type: "MFG_HR_AGENT_READY", ver });
     if (d.type === "MFG_HR_SEND_STATUS") { chrome.runtime.sendMessage({ q: "hrSendLast", requestId: String(d.requestId || "") }).then((r) => out({ type: "MFG_HR_SEND_STATUS_RESULT", requestId: d.requestId, run: r && r.run, result: r && r.last })).catch(() => {}); return; }
-    if (d.type !== "MFG_HR_SEND" && d.type !== "MFG_HR_PUBLISH") return; // PUBLISH = 매장 전체 공지·확정 (BOH·FOH 저장 뒤)
+    if (d.type !== "MFG_HR_SEND" && d.type !== "MFG_HR_PUBLISH" && d.type !== "MFG_HR_READ") return; // READ = HR 현재 값 읽기만 (1.16.0) // PUBLISH = 매장 전체 공지·확정 (BOH·FOH 저장 뒤)
     const req = JSON.parse(JSON.stringify(d)); // 모양만 복사(함수·DOM 제외)
-    chrome.runtime.sendMessage({ q: d.type === "MFG_HR_PUBLISH" ? "hrPublish" : "hrSend", req }).then((r) => out({ type: "MFG_HR_SEND_ACK", requestId: d.requestId, ok: !!(r && r.ok), error: r && r.error, ver: r && r.ver }))
+    chrome.runtime.sendMessage({ q: d.type === "MFG_HR_PUBLISH" ? "hrPublish" : d.type === "MFG_HR_READ" ? "hrRead" : "hrSend", req }).then((r) => out({ type: "MFG_HR_SEND_ACK", requestId: d.requestId, ok: !!(r && r.ok), error: r && r.error, ver: r && r.ver }))
       .catch((err) => out({ type: "MFG_HR_SEND_ACK", requestId: d.requestId, ok: false, error: "확장에 못 보냄: " + String((err && err.message) || err) }));
   });
   chrome.runtime.onMessage.addListener((m) => {

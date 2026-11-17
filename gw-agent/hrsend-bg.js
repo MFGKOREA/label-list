@@ -194,12 +194,57 @@ async function hrsPublish(req, board, boardWin) {
     if (board != null) chrome.tabs.update(board, { active: true }).catch(() => {});
   }
 }
+// 1.16.0 보드 [HR 현재 값 불러와 비교] → { type: "MFG_HR_READ", requestId, weekStart } — 읽기만 (아무 칸도 안 바꿈)
+//  결과 { type: "MFG_HR_READ_RESULT", requestId, ok, message, week, status, rows:[{empNo, name, dept, days:[{dow, kind, code, in, out, brk, edit}]}] }
+//  직책(duty_name) 칸은 휴대폰 번호가 같이 있어 읽지 않음
+async function hrsRead(req, board, boardWin) {
+  const id = String(req.requestId || "").slice(0, 80);
+  const res0 = (o) => Object.assign({ type: "MFG_HR_READ_RESULT", requestId: id, ok: false, message: "", week: "", status: [], rows: [] }, o);
+  const ws = String(req.weekStart || ""), we = /^\d{4}-\d\d-\d\d$/.test(ws) ? new Date(Date.parse(ws + "T00:00:00Z") + 6 * 864e5).toISOString().slice(0, 10) : "";
+  if (!id) return;
+  if (!we || new Date(Date.parse(ws + "T00:00:00Z")).getUTCDay() !== 1) return hrsSend(board, { q: "hrSendResult", res: res0({ message: `주 시작일(월요일)이 틀려요: ${ws}` }) });
+  const { hrSend = {} } = await get("hrSend");
+  if (hrSend.run && Date.now() - hrSend.run.at < HRS.budget) return hrsSend(board, { q: "hrSendResult", res: res0({ message: "HR 전송이 도는 중이에요 (끝난 뒤 다시)", busy: true }) });
+  let tabId = null, res = null;
+  try {
+    const { hrTab } = await get("hrTab");
+    let t = (await chrome.tabs.query({ url: "https://hr.pljec.cloud/*" }).catch(() => [])).filter((x) => x.id !== hrTab)[0];
+    if (t) await chrome.tabs.update(t.id, { active: true }).catch(() => {});
+    else t = await chrome.tabs.create({ url: "https://hr.pljec.cloud/", active: true, windowId: boardWin != null ? boardWin : undefined });
+    tabId = t.id;
+    const rd = await hrsTabReady(tabId, 40e3);
+    if (!rd || rd.err) { res = res0({ message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 확인", code: "network" }); return; }
+    let pr = await hrsExec(tabId, "probe", {}, 15e3);
+    for (let k = 0; k < 20 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 500)); pr = await hrsExec(tabId, "probe", {}, 15e3); }
+    if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
+    let r = await hrsExec(tabId, "open", {}, 50e3);
+    if (!r.ok) { res = res0({ message: r.message, code: r.code }); return; }
+    r = await hrsExec(tabId, "cond", { dept: "", weekStart: ws, weekEnd: we, site: HRS.site }, 120e3);
+    if (!r.ok) { res = res0({ message: "전체 검색: " + r.message }); return; }
+    const status = r.status || [], week = r.week || "";
+    const w = await hrsExec(tabId, "weekRows", {}, 30e3);
+    if (!w.ok) { res = res0({ message: w.message, week, status }); return; }
+    const KIND = { 10: "출근", 17: "휴무", 18: "주휴일" };
+    const kindOf = (d) => KIND[d.code] || (/주휴/.test(d.kname) ? "주휴일" : /공휴/.test(d.kname) ? "공휴일" : /휴무/.test(d.kname) ? "휴무" : /출근/.test(d.kname) ? "출근" : (w.labels || {})[d.code] || d.kname || (d.code ? "코드 " + d.code : ""));
+    const T = (x) => { const m = /^(\d{1,2}):?(\d{2})$/.exec(String(x || "").trim()); return m ? m[1].padStart(2, "0") + ":" + m[2] : ""; };
+    const rows = w.rows.map((x) => ({ empNo: x.empNo, name: x.name, dept: x.dept, days: x.days.map((d) => ({ dow: d.dow, kind: kindOf(d), code: d.code, in: T(d.in), out: T(d.out), brk: T(d.brk), edit: d.edit === "N" ? "N" : "Y" })) }));
+    res = res0({ ok: true, message: `${week} · ${rows.length}명 읽음`, week, status, rows });
+  } catch (e) {
+    res = res0({ message: "확장 오류: " + String((e && e.message) || e).slice(0, 200) });
+  } finally {
+    if (tabId != null) await hrsExec(tabId, "done", {}, 5e3).catch(() => {});
+    if (!res) res = res0({ message: "끝까지 못 갔어요" });
+    await log(`HR 읽기 ${res.ok ? "끝" : "멈춤"}: ${res.ok ? res.rows.length + "명" : String(res.message).replace(/[^\s(]+님/g, "○○님").slice(0, 80)}`, { quiet: true });
+    await hrsSend(board, { q: "hrSendResult", res });
+    if (board != null) chrome.tabs.update(board, { active: true }).catch(() => {});
+  }
+}
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
-  if (!m || (m.q !== "hrSend" && m.q !== "hrSendLast" && m.q !== "hrPublish")) return false;
+  if (!m || (m.q !== "hrSend" && m.q !== "hrSendLast" && m.q !== "hrPublish" && m.q !== "hrRead")) return false;
   const t = sender.tab;
   if (!t || !HRS.board.test(t.url || "")) { reply({ ok: false, error: "보드 화면에서만 보낼 수 있어요" }); return false; }
   if (m.q === "hrSendLast") { get("hrSend").then(({ hrSend = {} }) => reply({ ok: true, run: hrSend.run ? { id: hrSend.run.id, stage: hrSend.run.stage, day: hrSend.run.day || null, at: hrSend.run.at } : null, last: hrSend.last && hrSend.last.id === m.requestId ? hrSend.last.res : null })); return true; }
   reply({ ok: true, accepted: true, ver: VER });
-  if (m.q === "hrPublish") hrsPublish(m.req || {}, t.id, t.windowId); else hrsRun(m.req || {}, t.id, t.windowId);
+  if (m.q === "hrRead") hrsRead(m.req || {}, t.id, t.windowId); else if (m.q === "hrPublish") hrsPublish(m.req || {}, t.id, t.windowId); else hrsRun(m.req || {}, t.id, t.windowId);
   return false;
 });
