@@ -93,6 +93,16 @@
     <div class="group" id="locList"></div>
   </section>
 
+  <!-- BOH 수원컨벤션점 발주시트 (11/16 KM: 과거 2주치 재고·발주량 조회·인쇄, 점검용 → 주차별·Forecast·발주품목순, 설명 문구 없이) -->
+  <section class="view" id="v-log" aria-label="BOH 수원컨벤션점 발주시트" hidden>
+    <div class="nav">
+      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
+      <h2 class="logtitle">BOH 수원컨벤션점 발주시트</h2>
+      <span class="right"><button type="button" class="printbtn" id="logPrint">인쇄</button></span>
+    </div>
+    <div class="chips logweeks" id="logWeeks" role="group" aria-label="주차 고르기"></div>
+    <div class="logwrap" id="logTable"></div>
+  </section>
   <section class="view" id="v-files" aria-label="데이터 파일" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
@@ -101,20 +111,21 @@
     </div>
     <div class="conn" id="connState"></div>
 
-    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
-    <div class="group" id="masters"></div>
-    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-
     <div class="sect"><span>월별 데이터</span><small>매달 4개</small></div>
     <div class="months" id="months" role="group" aria-label="월 선택"></div>
     <div class="sect"><span id="mTitle"></span><small id="mCount"></small></div>
-    <div class="group">
+    <div class="group gross-g">
       <div class="cell gross"><span class="kv"><span>실제 Gross Sales<small>그달 합계 (원)</small></span></span><input id="grossIn" inputmode="numeric" placeholder="예: 250,000,000" aria-label="그달 실제 Gross Sales"></div>
     </div>
     <div class="group" id="files"></div>
 
     <div class="sect"><span>레시피 연결 확인</span><small id="mapCount"></small></div>
     <div class="group" id="mapList"></div>
+
+    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
+    <div class="group" id="masters"></div>
+    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b><small>주차별 재고·발주·Forecast · 인쇄</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
@@ -148,6 +159,9 @@
       <h2>데이터 리포트</h2>
       <span class="right"></span>
     </div>
+    <!-- GW 상황판 (11/15 KM "2주안 기획들 실행해", 기획안 14번): 자료마다 마지막으로 들어온 날 · PC 신호 · 합계 대조 · 학습 기록 · 오늘 86 · 품절 -->
+    <div class="sect" id="hlthH"><span>GW 상황판</span><small id="hlthSum"></small></div>
+    <div class="group" id="hlth"></div>
     <div class="xp" aria-label="데이터 학습량">
       <div class="xp-top"><span>데이터 학습량</span><button type="button" class="xp-detail" id="xpDetail" aria-expanded="false" aria-controls="xpParts">상세보기<svg width="6" height="10" viewBox="0 0 6 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4-4 4"/></svg></button></div>
       <b class="xp-pct" id="xpPct"></b>
@@ -156,8 +170,6 @@
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
-    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
-    <div class="group" id="rReq" hidden></div>
     <div class="wkpick" hidden>
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
       <select id="rSel" aria-label="주 선택"></select>
@@ -173,6 +185,8 @@
       <div class="kpi"><span>채점한 품목</span><b id="kItems"></b></div>
       <div class="kpi"><span>재고 입력</span><b id="kLogs"></b></div>
     </div>
+    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
+    <div class="group" id="rReq" hidden></div>
     <div class="sect"><span>방식별 정확도</span></div>
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>오차 범위 큰 품목</span><small>오늘 발주 기준 ±</small></div>
@@ -214,6 +228,8 @@
       <div class="cell legend-row"><span class="chip t-inc">입고예정 6PK</span><span>발주했지만 아직 안 온 양.</span></div>
       <div class="cell legend-row"><span class="chip t-est">예상 5.8EA</span><span>앱이 추정한 재고. 참고만.</span></div>
       <div class="cell legend-row"><span class="chip diff">86 위험</span><span>다음 입고 전에 떨어질 수 있는 품목. 맨 위 빨간 카드.</span></div>
+      <div class="cell legend-row"><span class="chip wk">7일 세기</span><span>거의 발주 안 하는 품목. 7일에 한 번만 셈. 셀 날이 아니면 목록 맨 아래에 접혀 있고, 모자랄 것 같으면 위로 올라옴.</span></div>
+      <div class="cell legend-row"><span class="chip sold-lg">품절 기록</span><span>86 위험·0을 센 품목(검색하면 모든 품목) 카드의 작은 단추. 품절되면 한 번 누르면 시각이 남고, 다시 누르면 지워짐. 알림이 품절을 얼마나 줄였는지 재는 데 씀.</span></div>
       <div class="cell legend-row"><span class="chip t-est">해동 1일</span><span>냉동. 입고 다음 날부터 사용.</span></div>
       <div class="cell legend-row"><span class="chip t-est">금일 발주 마감</span><span>14:30 지남. 날짜 아래 표시.</span></div>
     </div>

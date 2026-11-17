@@ -14,5 +14,59 @@
     "from_days": 1,
     "note": "시간대별매출현황을 조회해 요일별 시간대 비율(hourShare)을 다시 만듦. 7일마다. 이 매장만, 조회만",
     "freshDays": 7
+  },
+  {
+    "id": "orders-1",
+    "kind": "orders",
+    "key": "misOrderScan",
+    "label": "주문현황",
+    "note": "이 매장 주문현황(발주 내역)을 어제까지 15일 읽어 misOrder.날짜에 둠. 앱 발주 칸이 빈 날의 입고를 채움. 하루 한 번(어제까지 읽었으면 쉼: freshDays 2 = 읽은 끝날이 이틀 전이면 다시), 이 매장만, 조회만 (주문등록 화면은 안 엶)",
+    "freshDays": 2
+  },
+  {
+    "id": "recv-1",
+    "kind": "recv",
+    "key": "misRecvScan",
+    "label": "입고현황",
+    "note": "이 매장 입고현황(실제로 받은 날·양)을 어제까지 31일 읽어 misRecv.날짜에 둠. 앱은 발주만 알고 받은 날·양을 몰라 예상 재고 오차의 약 2/3가 입고 구간에서 났음. 하루 한 번(freshDays 2), 이 매장만, 조회만 (입고등록 화면은 안 엶, 직원 이름은 저장 안 함)",
+    "freshDays": 2
+  },
+  {
+    "id": "xfer-1",
+    "kind": "xfer",
+    "key": "misXferScan",
+    "label": "매장간재고이동",
+    "note": "이 매장이 다른 매장과 주고받은 물건(사내이송)을 오늘까지 31일 읽어 misXfer.날짜에 둠(+받음 −보냄). 입고현황엔 안 잡혀 예상 재고가 틀렸음(11/10·11/15 자숙피바지락 43PK). 11/17 KM 승인. 하루 한 번(freshDays 1: 오늘까지 읽으므로), 조회만 (등록·수신 단추는 안 누름, 직원 이름·금액은 저장 안 함)",
+    "freshDays": 1
+  },
+  {
+    "id": "sets-1",
+    "kind": "sets",
+    "key": "misSetScan",
+    "label": "Set판매현황",
+    "note": "이 매장 Set판매현황을 하루씩 읽어 세트별 구성 메뉴·수량을 setDay.날짜에 둠(처음엔 어제까지 28일, 다음부터 새 날만). 메뉴별 매출엔 세트 안의 밥·사이드·수프가 '셋트구성코드'로만 나와 레시피 계산에서 빠짐. 11/15 KM 승인. 하루 한 번(freshDays 2), 이 매장만, 조회만 (금액·직원 이름은 저장 안 함)",
+    "freshDays": 2
+  },
+  {
+    "id": "now-1h",
+    "kind": "now",
+    "key": "nowSales",
+    "label": "당일 Gross",
+    "everyMin": 60,
+    "at": 40,
+    "from": "08:30",
+    "to": "23:00",
+    "note": "오늘 지금까지 Gross를 매시간 :40에 한 번 읽어 시트 nowSales = { at, day, gross } 에 둠. 영업 중 값이라 Forecast 학습 칸엔 안 넣음. 발주 시간대(12:30~14:45)와 밤에는 창을 안 띄움. 11/16 KM"
+  },
+  {
+    "id": "setnow-1h",
+    "kind": "setsToday",
+    "key": "setNow",
+    "label": "당일 Set판매현황",
+    "everyMin": 60,
+    "at": 40,
+    "from": "08:30",
+    "to": "23:00",
+    "note": "오늘 Set판매현황을 매시간 :40에 한 번 읽어 시트 setNow 에 둠(당일 중간값이라 하루 합계 setDay.날짜엔 안 넣음). 위 당일 Gross와 같은 창에서 이어서 읽음. 11/16 KM"
   }
 ]

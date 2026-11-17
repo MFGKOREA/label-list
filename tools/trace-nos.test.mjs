@@ -54,6 +54,52 @@ assert.equal(compareTrace("002123456789", ""), "bad");
 assert.equal(compareTrace("", ""), "empty");
 assert.equal(compareTrace("I21806200434001", "L 2180 6200 4340 01"), "ok");
 
+// ---- GS1-128 (01) GTIN · (10) 로트 · (17) 유통기한 ----
+const { parseGs1Barcode } = sandbox.TraceNos;
+assert.equal(typeof parseGs1Barcode, "function");
+// 기존 API 는 그대로 남아 있어야 한다 (하위 호환)
+for (const k of ["STEAKS", "normTrace", "traceNos", "compareTrace", "kindNear", "nextTraceShot", "traceVerdict"]) {
+  assert.ok(sandbox.TraceNos[k], "TraceNos." + k + " 가 없어짐");
+}
+
+const g1 = parseGs1Barcode("(01)08801234567893(17)261030(10)LOT-123");
+assert.equal(g1.ok, true);
+assert.equal(g1.gtin, "08801234567893");
+assert.equal(g1.gtinValid, true); // 검증숫자 맞음
+assert.equal(g1.lot, "LOT-123");
+assert.equal(g1.expiryRaw, "261030");
+assert.equal(g1.expiry, "2026-10-30");
+assert.deepEqual(Array.from(g1.ais, (a) => a.ai), ["01", "17", "10"]);
+assert.equal(g1.warning, "");
+
+// 괄호 없는 연속 문자열
+const g2 = parseGs1Barcode("01088012345678931726103010ABC123");
+assert.equal(g2.gtin, "08801234567893");
+assert.equal(g2.expiry, "2026-10-30");
+assert.equal(g2.lot, "ABC123");
+
+// FNC1(\u001d)·심볼로지 식별자·시리얼까지 붙은 실제 리더 출력
+const g3 = parseGs1Barcode("]C101088012345678931726103010LOT123\u001d21SER9");
+assert.equal(g3.gtin, "08801234567893");
+assert.equal(g3.expiry, "2026-10-30");
+assert.equal(g3.lot, "LOT123");
+assert.equal(g3.serial, "SER9");
+
+// 라벨 글자에 간격을 두고 찍힌 경우, 두 자리 연도 컷오프, 잘못된 날짜, 빈 입력
+assert.equal(parseGs1Barcode("유통기한 (17) 26 10 30 까지").expiry, "2026-10-30");
+assert.equal(parseGs1Barcode("(17)991231").expiry, "1999-12-31");
+const g4 = parseGs1Barcode("(17)261332");
+assert.equal(g4.expiry, ""); // 13월은 버린다
+assert.equal(g4.expiryRaw, "261332");
+assert.match(g4.warning, /읽지 못함/);
+assert.equal(parseGs1Barcode("").ok, false);
+assert.match(parseGs1Barcode("(99)123").warning, /모르는 AI/);
+
+// 로트에 들어 있는 12자리 이력번호는 기존 normTrace 로 그대로 검증
+const lotOnly = parseGs1Barcode("(10)801001506378");
+assert.equal(lotOnly.expiry, "");
+assert.equal(normTrace(lotOnly.lot), "801001506378");
+
 const { nextTraceShot, traceVerdict } = sandbox.TraceNos;
 assert.equal(nextTraceShot("doc"), "등심");
 assert.equal(nextTraceShot("등심"), "채끝");
@@ -77,13 +123,29 @@ assert.equal(traceVerdict({
 
 const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 assert.match(html, /src="trace-nos\.js"/);
+// 라벨 OCR 전처리 모듈: trace-nos.js 보다 먼저 걸고, 날짜를 못 찾았을 때 2차 읽기에 쓴다
+assert.match(html, /src="ocr-preprocess\.js\?v=1"/);
+assert.ok(html.indexOf('src="ocr-preprocess.js') < html.indexOf('src="trace-nos.js"'), "전처리 모듈을 먼저 걸어야 함");
+assert.match(html, /window\.OcrPreprocess/);
+assert.match(html, /P\.preprocessDataUrl\(dataUrl\)/);
+assert.match(html, /ocrPreprocessed\(data, false\)/);
 assert.match(html, /id="trFile"[^>]*capture="environment"/);
 assert.match(html, /오늘 입고 찍기/);
 assert.match(html, /trace:\s*true/);
 assert.match(html, /id="trCuts"/);
 for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(m[1]);
 new Function(fs.readFileSync(new URL("../trace-nos.js", import.meta.url), "utf8"));
+new Function(fs.readFileSync(new URL("../ocr-preprocess.js", import.meta.url), "utf8"));
 new Function(fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8"));
+const sw = fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8");
+assert.match(sw, /label-list-shell-v5/);
+assert.match(sw, /ocr-preprocess\.js/); // 오프라인에서도 2차 읽기 모듈을 받는다
+assert.match(sw, /barcode-decoder\.js/); // 바코드 모듈도 앱과 같은 판으로 맞춰 둔다
+assert.match(html, /src="barcode-decoder\.js\?v=1"/);
+// 라벨 사진에서 바코드를 읽어 (17) 유통기한을 후보 1순위로, 이력번호는 조회로
+assert.match(html, /BarcodeScan/);
+assert.match(html, /바코드에서 읽은 날짜/);
+assert.match(html, /trace_lookup/);
 
 const gs = fs.readFileSync(new URL("../apps-script/label/Code.gs", import.meta.url), "utf8");
 assert.match(gs, /TRACE_KEEP_DAYS = 30/);

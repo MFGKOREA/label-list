@@ -22,6 +22,8 @@ function doGet(e) {
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
       if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 30일)
+      if (e.parameter.traceLookup) return json_(traceLookup_(e.parameter.traceLookup)); // 이력번호 하나 조회 (캐시 먼저)
+      if (e.parameter.pushstat) return json_(pushStat_()); // 알림 점검: 매장별 등록 폰 수·마지막 오류 (토큰은 안 보여줌)
       if (e.parameter.backups) return json_({ backups: backupList_() }); // 복구용 백업 목록 (최근 15일)
       if (e.parameter.backup) return json_(backupGet_(String(e.parameter.backup), e.parameter.store ? store_(e.parameter.store) : '')); // 그날 백업 (매장 하나 또는 전체)
       const store = store_(e.parameter.store);
@@ -56,7 +58,12 @@ function doPost(e) {
     if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20), !!body.trace));
     if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
     if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
+    if (body.action === 'trace_lookup') return json_(traceLookup_(String(body.traceNo || '').slice(0, 20)));
     if (body.action === 'learn') return json_(learn_(store, String(body.id || '').slice(0, 40), String(body.name || '').slice(0, 80), String(body.text || '').slice(0, 3000), String(body.color || '').slice(0, 20)));
+    if (body.action === 'self_update') return json_(selfUpdate_());
+    if (body.action === 'admin_run') return json_(adminRun_(String(body.fn || '')));
+    if (body.action === 'push_sub') return json_(pushSub_(store, String(body.token || '').slice(0, 400), String(body.old || '').slice(0, 400)));
+    if (body.action === 'push_notice') return json_(pushNotice_(store, String(body.text || '').slice(0, 200), String(body.token || '').slice(0, 400)));
     if (body.action === 'unphoto') return json_(unPhoto_(store, String(body.id || '').slice(0, 40)));
     return json_(listItems(store));
   } catch (err) {
@@ -648,6 +655,123 @@ function traceDelete_(store, id) {
   return traceList_(store);
 }
 
+// ---- 이력번호 조회 (mtrace) + 시트 캐시 ----
+// 박스 바코드·라벨에서 읽은 12자리 이력번호로 도축일자·등급을 한 번만 물어보고 '이력캐시' 탭에 담아 둡니다.
+// 다음부터는 같은 번호를 구글 API 에 다시 묻지 않고 바로 돌려줍니다 (source: 'cache').
+// 공공 API 모양은 실제로 돌아가는 오픈소스에서 확인했습니다:
+//   sirloin-bondaero/mtrace-api-client (AnimalTraceImpl.java), 07z0/kyj-cow (server.py)
+//   GET http://data.ekape.or.kr/openapi-data/service/user/animalTrace/traceNoSearch?serviceKey=…&traceNo=002147460101
+//   → <response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE.</resultMsg></header>
+//     <body><items><item><infoType>3</infoType><butcheryYmd>20220523</butcheryYmd><gradeNm>2</gradeNm>…</item></items></body></response>
+//   정보 종류(infoType): 1 소 개체 · 2 농장 · 3 도축·등급 · 4 가공장 · 5 백신 · 6 검사
+//   optionNo 를 붙이면 그 종류만 옵니다 — 도축일자·등급이 필요하므로 붙이지 않습니다.
+//   부위명·유통기한은 이 API 에 없습니다: 칸은 두되 비워 두고, 포장 바코드의 (17) 유통기한을 앱이 채웁니다.
+// 키는 스크립트 속성 MTRACE_API_KEY 에만 넣습니다 (코드·시트·채팅에 적지 않음).
+// 키가 없거나 API 가 실패하면 '확정'으로 넘기지 않고 pending(미확정)으로 돌려줍니다.
+const TRACE_CACHE_SHEET = '이력캐시';
+const TRACE_CACHE_HEAD = ['traceNo', 'butcherDate', 'grade', 'partName', 'expiry', 'source', 'verifiedAt'];
+const MTRACE_URL = 'http://data.ekape.or.kr/openapi-data/service/user/animalTrace/traceNoSearch';
+
+function traceCacheSheet_() {
+  const ss = spreadsheet_();
+  let sh = ss.getSheetByName(TRACE_CACHE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(TRACE_CACHE_SHEET);
+    sh.getRange('A:G').setNumberFormat('@');
+    sh.appendRow(TRACE_CACHE_HEAD);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function traceCacheRow_(no) {
+  const sh = traceCacheSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return null;
+  const at = sh.getRange(2, 1, last - 1, 1).getValues().findIndex((r) => cell_(r[0]) === no);
+  if (at < 0) return null;
+  const v = sh.getRange(at + 2, 1, 1, TRACE_CACHE_HEAD.length).getValues()[0].map((x) => cell_(x));
+  const out = {};
+  TRACE_CACHE_HEAD.forEach((h, i) => { out[h] = v[i]; });
+  return out;
+}
+
+function traceCachePut_(row) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sh = traceCacheSheet_();
+    const last = sh.getLastRow();
+    const at = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().findIndex((r) => cell_(r[0]) === row.traceNo) : -1;
+    const line = TRACE_CACHE_HEAD.map((h) => cell_(row[h]));
+    if (at >= 0) sh.getRange(at + 2, 1, 1, line.length).setValues([line]);
+    else sh.appendRow(line);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function tracePending_(no, note) {
+  return { ok: false, pending: true, source: 'pending', traceNo: no, note: note + ' (미확정)' };
+}
+
+// 이력번호 하나 → { ok, source: 'cache'|'api', traceNo, butcherDate, grade, partName, expiry, verifiedAt } 또는 pending
+function traceLookup_(traceNo) {
+  const no = String(traceNo || '').toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 17);
+  if (!/^(\d{12}|[A-Z]\d{12,16})$/.test(no)) return tracePending_(no, '번호 형식이 아님');
+  const hit = traceCacheRow_(no);
+  if (hit && hit.butcherDate) return { ok: true, source: 'cache', traceNo: no, butcherDate: hit.butcherDate, grade: hit.grade, partName: hit.partName, expiry: hit.expiry, verifiedAt: hit.verifiedAt };
+  const key = PropertiesService.getScriptProperties().getProperty('MTRACE_API_KEY');
+  if (!key) return tracePending_(no, 'API 키 미설정');
+  let xml = '';
+  try {
+    const res = UrlFetchApp.fetch(MTRACE_URL + '?serviceKey=' + encodeURIComponent(key) + '&traceNo=' + encodeURIComponent(no), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return tracePending_(no, 'API 응답 ' + res.getResponseCode());
+    xml = res.getContentText();
+  } catch (err) {
+    return tracePending_(no, 'API 조회 실패');
+  }
+  const got = traceParse_(xml);
+  if (!got.ok) return tracePending_(no, got.note || '조회 결과 없음');
+  const row = {
+    traceNo: no, butcherDate: got.butcherDate, grade: got.grade, partName: got.partName, expiry: '',
+    source: 'api', verifiedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'),
+  };
+  traceCachePut_(row);
+  return { ok: true, source: 'api', traceNo: no, butcherDate: row.butcherDate, grade: row.grade, partName: row.partName, expiry: row.expiry, verifiedAt: row.verifiedAt };
+}
+
+// 응답 XML 에서 한 칸 값. 값에 < > 가 들어가는 칸은 없으므로 태그 사이 글자만 꺼낸다.
+function traceTag_(block, tag) {
+  const m = new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>').exec(String(block || ''));
+  return m ? m[1].trim() : '';
+}
+
+// 20220523 → 2022-05-23. 여덟 자리가 아니면 빈 값 (날짜를 지어내지 않음)
+function traceYmd_(v) {
+  const d = String(v || '').replace(/\D/g, '');
+  return d.length === 8 ? d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) : '';
+}
+
+// 통합이력 XML → { ok, butcherDate, grade, partName } (도축·등급이 없으면 ok: false)
+function traceParse_(xml) {
+  const s = String(xml || '');
+  const code = traceTag_(s, 'resultCode');
+  const msg = traceTag_(s, 'resultMsg');
+  if (code && code !== '00') return { ok: false, note: msg || ('API 오류 ' + code) };
+  const items = s.match(/<item>[\s\S]*?<\/item>/g) || [];
+  if (!items.length) return { ok: false, note: msg || '조회 결과 없음' };
+  const out = { ok: true, butcherDate: '', grade: '', partName: '' };
+  items.forEach((it) => {
+    if (traceTag_(it, 'infoType') !== '3') return;
+    if (!out.butcherDate) out.butcherDate = traceYmd_(traceTag_(it, 'butcheryYmd'));
+    if (!out.grade) out.grade = traceTag_(it, 'gradeNm');
+    if (!out.partName) out.partName = traceTag_(it, 'partNm') || traceTag_(it, 'partName');
+  });
+  if (!out.butcherDate && !out.grade) return { ok: false, note: '도축·등급 정보 없음' }; // 아직 도축 전이거나 번호가 틀림
+  return out;
+}
+
 
 
 // ---- 복구용 백업 (매장모음 프로젝트에서만 씀) ----
@@ -773,4 +897,231 @@ function restoreStore(store, date) {
     bump_(store);
   } finally { lock.releaseLock(); }
   Logger.log(store + ' 를 ' + date + ' 백업(' + b.items.length + '개)으로 되살렸습니다');
+}
+
+
+// ---- 휴대폰 알림 (매장모음 프로젝트에서만 씀) ----
+// 각 휴대폰이 앱에서 [알림 받기]를 누르면 Firebase 알림 주소(토큰)를 매장과 함께 '알림' 탭에 저장.
+// 매일 아침 9시·저녁 5시: 매장마다 7일도 안 남은 품목(지난 것 포함)을 그 매장 폰들에 / 전달사항이 바뀌면: 같은 매장 다른 폰들에.
+// 스크립트 속성 FCM_SA 에 Firebase 서비스 계정 JSON(비공개 키 파일 내용 전체)을 넣어야 보냅니다.
+const PUSH_SHEET = '알림';
+const APP_URL = 'https://mfgkorea.github.io/label-list/';
+
+function pushSheet_() {
+  const ss = spreadsheet_();
+  let sh = ss.getSheetByName(PUSH_SHEET);
+  if (!sh) { sh = ss.insertSheet(PUSH_SHEET); sh.appendRow(['token', 'store', 'at']); sh.setFrozenRows(1); }
+  return sh;
+}
+function pushRows_() {
+  const v = pushSheet_().getDataRange().getValues(); v.shift();
+  return v.filter((r) => r[0]).map((r) => ({ token: String(r[0]), store: String(r[1]) }));
+}
+function pushSub_(store, token, old) {
+  if (!token) throw new Error('토큰 없음');
+  const lock = LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    const sh = pushSheet_(), v = sh.getDataRange().getValues();
+    for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === token || (old && String(v[i][0]) === old)) sh.deleteRow(i + 1);
+    sh.appendRow([token, store, new Date().toISOString()]);
+  } finally { lock.releaseLock(); }
+  return { ok: true };
+}
+function pushDrop_(token) {
+  const sh = pushSheet_(), v = sh.getDataRange().getValues();
+  for (let i = v.length - 1; i >= 1; i--) if (String(v[i][0]) === token) sh.deleteRow(i + 1);
+}
+
+// Firebase 서비스 계정으로 접근 토큰 (50분 캐시)
+function fcmAuth_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('FCM_SA');
+  if (!raw) throw new Error('FCM_SA 스크립트 속성이 없습니다');
+  const sa = JSON.parse(raw), cache = CacheService.getScriptCache(), hit = cache.get('fcm_at');
+  if (hit) return { at: hit, project: sa.project_id };
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (o) => Utilities.base64EncodeWebSafe(JSON.stringify(o)).replace(/=+$/, '');
+  const head = enc({ alg: 'RS256', typ: 'JWT' });
+  const claim = enc({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+  const sig = Utilities.base64EncodeWebSafe(Utilities.computeRsaSha256Signature(head + '.' + claim, sa.private_key)).replace(/=+$/, '');
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', payload: { grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: head + '.' + claim + '.' + sig }, muteHttpExceptions: true });
+  const at = JSON.parse(res.getContentText()).access_token;
+  if (!at) throw new Error('Firebase 인증 실패: ' + res.getContentText().slice(0, 200));
+  cache.put('fcm_at', at, 3000);
+  return { at: at, project: sa.project_id };
+}
+// 매장 폰들에 보내기 (skip 토큰 제외). 없어진 토큰은 지움
+function pushSend_(store, title, body, tag, skip) {
+  const rows = pushRows_().filter((r) => r.store === store && r.token !== skip);
+  if (!rows.length) return 0;
+  const auth = fcmAuth_(), url = 'https://fcm.googleapis.com/v1/projects/' + auth.project + '/messages:send';
+  const link = APP_URL + '?store=' + store;
+  const reqs = rows.map((r) => ({ url: url, method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + auth.at },
+    payload: JSON.stringify({ message: { token: r.token, data: { title: title, body: body, tag: tag, url: link }, webpush: { headers: { Urgency: 'high', TTL: '43200' }, notification: { title: title, body: body, tag: tag }, fcm_options: { link: link } } } }) }));
+  let sent = 0;
+  UrlFetchApp.fetchAll(reqs).forEach((res, i) => {
+    const code = res.getResponseCode();
+    if (code === 200) sent++;
+    else {
+      CacheService.getScriptCache().put('push_err', new Date().toISOString() + ' ' + code + ' ' + res.getContentText().slice(0, 300), 21600);
+      if (code === 404 || /UNREGISTERED|INVALID_ARGUMENT/.test(res.getContentText())) pushDrop_(rows[i].token);
+    }
+  });
+  return sent;
+}
+
+// 전달사항 알림: 같은 매장 다른 폰들에 바로 (매장마다 30초에 한 번까지)
+function pushNotice_(store, text, from) {
+  if (!text) return { sent: 0 };
+  const cache = CacheService.getScriptCache(), k = 'pn_' + store;
+  if (cache.get(k)) return { sent: 0, wait: true };
+  cache.put(k, '1', 30); // 같은 매장 30초에 한 번까지 (바로 보내되 연달아 여러 번은 막음)
+  return { sent: pushSend_(store, (STORE_NAMES[store] || store) + ' · 전달사항', text, 'notice-' + store, from) };
+}
+
+// 매장 이름 (알림 제목용) — 앱 index.html 의 STORES 와 같게. 없으면 코드로
+const STORE_NAMES = {
+  yeouido: 'MG여의도점',
+  mokdong: 'MG목동점',
+  sadang: 'MG사당점',
+  gnsamsung: 'MG강남삼성타운점',
+  ydptimes: 'MG영등포타임스퀘어점',
+  sac: 'MG예술의전당점',
+  dogok: 'MG도곡점',
+  sangammbc: 'MG상암MBC점',
+  lsw: 'MG롯데시네마수원역점',
+  djdunsan: 'MG대전둔산점',
+  lwt: 'MG롯데시네마월드타워점',
+  gjgwangcheon: 'MG광주광천점',
+  kdstarcity: 'MG건대스타시티점',
+  pangyo: 'MG판교라스트리트점',
+  ssgcheonan: 'MG신세계백화점천안아산점',
+  dongtan: 'MG타임테라스동탄점',
+  ys: 'MG용산아이파크몰점',
+  hdgasan: 'MG현대아울렛가산점',
+  ulsanhd: 'MG울산현대백화점',
+  centerone: 'MG센터원점',
+  ssgujb: 'MG신세계백화점의정부점',
+  hdmia: 'MG현대미아점',
+  bongeunsa: 'MG봉은사아이파크타워점',
+  anseongsf: 'MG안성스타필드점',
+  djssgart: 'MG대전신세계Art&Science점',
+  ldongbusan: 'MG롯데프리미엄아울렛동부산점',
+  lbusan: 'MG롯데백화점부산본점',
+  lnowon: 'MG롯데노원점',
+  lcastle: 'MG롯데캐슬잠실점',
+  lpyeongchon: 'MG롯데평촌점',
+  lworld: 'MG롯데월드점',
+  lsuji: 'MG롯데몰수지점',
+  onegrove: 'MG원그로브점',
+  lincheon: 'MG롯데백화점인천점',
+  galleria: 'MG갤러리아센터시티점',
+  cheongju: 'MG청주커넥트점',
+  unjeong: 'MG스타필드빌리지운정점',
+  suwon: 'MG수원컨벤션센터점',
+  hdsongdo: 'MG현대프리미엄아울렛송도점',
+  cpgrand: 'CP그랑서울점',
+  sfgunsan: 'MG스타필드마켓군산점',
+};
+
+// 매일 아침: 지난 것·7일 이내가 있는 매장만
+function pushDaily() {
+  const stores = [...new Set(pushRows_().map((r) => r.store))];
+  const tz = Session.getScriptTimeZone(), todayIso = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  const t0 = new Date(todayIso + 'T00:00:00');
+  stores.forEach((store) => {
+    let items = [];
+    try {
+      if (EXTERNAL_STORES[store]) { const d = JSON.parse(UrlFetchApp.fetch(EXTERNAL_STORES[store] + '?api=1&store=' + store + '&t=' + Date.now(), { muteHttpExceptions: true }).getContentText()); items = Array.isArray(d) ? d : (d.items || []); }
+      else items = listItems(store);
+    } catch (err) { return; }
+    const rows = items.filter((it) => it.mode !== 'note' && it.mode !== 'pack' && it.id !== '__notice__').map((it) => {
+      const exp = it.mode === 'period' ? addPeriod_(it.mfg, Number(it.num) || 0, it.unit) : it.expiry;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(exp || '')) return null;
+      return { name: it.name, exp: exp, n: Math.round((new Date(exp + 'T00:00:00') - t0) / 86400000) };
+    }).filter((r) => r && r.n < 7).sort((a, b) => a.n - b.n); // 7일도 안 남은 품목 (지난 것 포함)
+    if (!rows.length) return;
+    const gone = rows.filter((r) => r.n < 0).length, soon = rows.length - gone;
+    const head = gone ? '지난 것 ' + gone + '개 포함 ' + rows.length + '개' : rows.length + '개';
+    const when = Number(Utilities.formatDate(new Date(), tz, 'H')) >= 12 ? '저녁 확인' : '아침 확인';
+    // 날짜로: 수란 11/17까지 · 지난 건 샐러드믹스 11/12 지남
+    const md = (iso) => Number(iso.slice(5, 7)) + '/' + Number(iso.slice(8, 10));
+    const list = rows.slice(0, 5).map((r) => r.name.replace(/\(.*?\)|_.*$/g, '') + ' ' + md(r.exp) + (r.n < 0 ? ' 지남' : '까지')).join(', ');
+    try { pushSend_(store, (STORE_NAMES[store] || store) + ' · 유통기한 ' + when, head + ' · ' + list + (rows.length > 5 ? ' 외' : ''), 'expiry-' + store, ''); } catch (err) { Logger.log(store + ' 알림 실패: ' + err); }
+  });
+}
+function addPeriod_(mfg, num, unit) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(mfg || '')) return '';
+  const p = mfg.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]);
+  if (unit === 'd') d.setDate(d.getDate() + num);
+  else { const m = unit === 'y' ? num * 12 : num; const t = new Date(d.getFullYear(), d.getMonth() + m, 1); const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(); t.setDate(Math.min(d.getDate(), last)); return Utilities.formatDate(t, Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+// 편집기에서 한 번 실행: 매일 아침 9시·저녁 5시 유통기한 알림
+function installPushTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'pushDaily') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('pushDaily').timeBased().everyDays(1).atHour(9).create();
+  ScriptApp.newTrigger('pushDaily').timeBased().everyDays(1).atHour(17).create();
+  pushSheet_();
+  Logger.log('매일 아침 9시·저녁 5시 유통기한 알림 트리거를 만들었습니다');
+}
+
+
+// ---- 스스로 배포 (매장모음 프로젝트에서만 씀) ----
+// 저장소 main 의 apps-script/label/Code.gs 를 받아 이 프로젝트 코드를 바꾸고, 새 버전을 만들어 기존 배포(같은 주소)에 올립니다.
+// 저장소에 올라간 코드만 배포하므로 누가 불러도 main 그대로일 뿐입니다 (1분에 한 번까지).
+// 처음 한 번: script.google.com/home/usersettings 에서 'Google Apps Script API' 켜기 + appsscript.json 에 oauthScopes 추가 + 편집기에서 setupSelfUpdate 실행(권한 허용).
+const SELF_DEPLOY_ID = 'AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw';
+const SELF_SRC = 'https://raw.githubusercontent.com/MFGKOREA/label-list/main/apps-script/label/Code.gs';
+
+function selfUpdate_() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('self_update')) return { error: '1분 뒤에 다시' };
+  cache.put('self_update', '1', 60);
+  const src = UrlFetchApp.fetch(SELF_SRC + '?t=' + Date.now(), { muteHttpExceptions: true });
+  if (src.getResponseCode() !== 200) return { error: '저장소 코드를 못 받음 ' + src.getResponseCode() };
+  const code = src.getContentText();
+  if (code.indexOf('function doPost') < 0 || code.indexOf('function selfUpdate_') < 0) return { error: '받은 코드가 이상함 (doPost/selfUpdate_ 없음)' };
+  const api = 'https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId();
+  const H = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  const call = (path, method, body) => {
+    const res = UrlFetchApp.fetch(api + path, { method: method || 'get', headers: H, contentType: 'application/json', payload: body ? JSON.stringify(body) : undefined, muteHttpExceptions: true });
+    const d = JSON.parse(res.getContentText() || '{}');
+    if (res.getResponseCode() >= 300) throw new Error(path + ' ' + res.getResponseCode() + ' ' + JSON.stringify(d).slice(0, 300));
+    return d;
+  };
+  try {
+    const cur = call('/content');
+    const files = cur.files.map((f) => (f.type === 'SERVER_JS' && f.name === 'Code' ? { name: f.name, type: f.type, source: code } : { name: f.name, type: f.type, source: f.source }));
+    if (!files.some((f) => f.name === 'Code')) throw new Error('Code 파일을 못 찾음');
+    call('/content', 'put', { files: files });
+    const ver = call('/versions', 'post', { description: '자동 배포 ' + new Date().toISOString() });
+    call('/deployments/' + SELF_DEPLOY_ID, 'put', { deploymentConfig: { versionNumber: ver.versionNumber, manifestFileName: 'appsscript', description: '자동 배포 v' + ver.versionNumber } });
+    return { ok: true, version: ver.versionNumber };
+  } catch (err) { return { error: String(err.message || err) }; }
+}
+
+// 배포 뒤에 다시 돌려야 하는 설치 함수만 (정해진 것만)
+function adminRun_(fn) {
+  const ok = { installPushTrigger: installPushTrigger, installBackupTrigger: installBackupTrigger, installTracePruneTrigger: installTracePruneTrigger, backupDaily: backupDaily };
+  if (!ok[fn]) return { error: '허용되지 않은 함수' };
+  const cache = CacheService.getScriptCache();
+  if (cache.get('admin_' + fn)) return { error: '1분 뒤에 다시' };
+  cache.put('admin_' + fn, '1', 60);
+  try { ok[fn](); return { ok: true, fn: fn }; } catch (err) { return { error: String(err.message || err) }; }
+}
+
+// 편집기에서 한 번 실행: 권한 확인 (Apps Script API 를 켰는지, 배포를 볼 수 있는지)
+function setupSelfUpdate() {
+  const res = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + '/deployments/' + SELF_DEPLOY_ID, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  Logger.log(res.getResponseCode() === 200 ? '스스로 배포 준비 완료' : '아직 안 됨: ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 300));
+}
+
+function pushStat_() {
+  const counts = {};
+  pushRows_().forEach((r) => { counts[r.store] = (counts[r.store] || 0) + 1; });
+  let auth = '';
+  try { fcmAuth_(); auth = 'ok'; } catch (err) { auth = String(err.message || err).slice(0, 200); }
+  let sa = '', project = '';
+  try { const j = JSON.parse(PropertiesService.getScriptProperties().getProperty('FCM_SA') || '{}'); sa = j.client_email || ''; project = j.project_id || ''; } catch (err) {}
+  return { counts: counts, lastError: CacheService.getScriptCache().get('push_err') || '', fcmAuth: auth, serviceAccount: sa, saProject: project };
 }

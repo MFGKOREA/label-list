@@ -1,0 +1,9 @@
+# 보안 지킴이(tools/guard.py) 허용 목록 — KM 확인 뒤에만 한 줄씩 추가
+#  "path:앞부분" = 그 경로는 검사하지 않음, 그 밖의 줄 = 그 글자가 든 줄은 통과
+# 11/15 처음 만들 때 이미 공개돼 있던 것 중 비밀이 아닌 것:
+# 매장모음(라벨 앱) Firebase 웹 설정 apiKey — 웹 앱 코드에 원래 들어가는 공개 값(보안은 Firebase 규칙·API 제한이 맡음)
+AIzaSyAplFZ92jTVwwgfYsOQapwStvKydxsYyQU
+# Firebase 서비스 계정 이메일 — 이름일 뿐 비밀 아님(비밀인 개인 키는 Apps Script 스크립트 속성에만)
+iam.gserviceaccount.com
+# 이력번호 읽기 시험의 가짜 전화·카드 번호(걸러내는지 시험하는 값)
+path:tools/trace-nos.test.mjs

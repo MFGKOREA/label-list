@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<ul class="tree" id="t"></ul>
+<script>
+// 실제 MIS처럼: 주문정보관리 › 주문등록(폴더) › [주문등록(발주 입력 화면), 주문현황, 사전주문등록]. 폴더는 접혀 있고 펼침 단추로만 아래가 생김
+var DATA = [
+  { t: "매출정보관리", c: [{ t: "매출현황", c: [{ t: "MiscellaneousReport" }] }] },
+  { t: "주문정보관리", c: [{ t: "주문등록", c: [{ t: "주문등록", page: "ordentry.html" }, { t: "주문현황", page: "orderreport.html" }, { t: "사전주문등록", page: "ordentry.html" }] }] }
+];
+function nodeEl(n, d) {
+  var li = document.createElement("li"), div = document.createElement("div"); div.className = "tree-node";
+  var folder = !!n.c; for (var i = 0; i < (folder ? d : d + 1); i++) { var s = document.createElement("span"); s.className = "tree-indent"; div.appendChild(s); }
+  if (folder) { var h = document.createElement("span"); h.className = "tree-hit tree-collapsed"; h.onclick = function (e) { e.stopPropagation(); if (h.className.indexOf("tree-collapsed") < 0) return; h.className = "tree-hit tree-expanded"; setTimeout(function () { var ul = document.createElement("ul"); n.c.forEach(function (c) { ul.appendChild(nodeEl(c, d + 1)); }); li.appendChild(ul); }, 120); }; div.appendChild(h); }
+  var t = document.createElement("span"); t.className = "tree-title"; t.textContent = n.t;
+  t.onclick = function () { if (n.page) parent.openTab(n.page, n.t); else if (folder) { var hh = div.querySelector(".tree-hit"); if (hh) hh.onclick({ stopPropagation: function () {} }); } };
+  div.appendChild(t); li.appendChild(div); return li;
+}
+DATA.forEach(function (n) { document.getElementById("t").appendChild(nodeEl(n, 0)); });
+</script></body></html>
