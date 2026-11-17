@@ -840,7 +840,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
 .logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
 .logt td.o { color: var(--accent-text); font-weight: 800; }
-.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); } .logt tr.vrow .nm small { font-weight: 600; }
+.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); }
+.logt tr.vrow td.sub { text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); } .logt tr.vrow .nm small { font-weight: 600; }
 .logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
 @media print {
   @page { size: A4 landscape; margin: 7mm; }
@@ -875,7 +876,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt thead th { text-align: center; padding: 0 .5mm; }
   body.log-print .logt thead tr:first-child th { height: 4.8mm; font-size: 8.5px; }
   body.log-print .logt .nm { width: auto; max-width: none; text-align: left; padding-left: 1.2mm; }
-  body.log-print .logt td.fc { text-align: center; }
+  body.log-print .logt td.fc, body.log-print .logt tr.vrow td.sub { text-align: center; }
+  body.log-print .logt tr.vrow td.sub { font-size: 7px; font-weight: 700; }
   body.log-print .logt td.s, body.log-print .logt td.o { text-align: right; }
 }
 
@@ -3830,12 +3832,11 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     $("logTable").innerHTML = sel.length ? sel.map((m) => {
       const days = [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(m, k)), wk = isoWeek(m).w, fcSum = days.reduce((t, d) => t + (fcOf(d) || 0), 0);
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
-      const h2 = days.map(() => `<th class="sub ds">On Hand</th><th class="sub">Order</th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
       let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
-      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
+      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
-        `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm" rowspan="2">품목</th>${h1}</tr><tr>${h2}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
+        `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm">품목</th>${h1}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
   }
   $("logWeeks").addEventListener("click", (e) => { const b = e.target.closest("button[data-w]"); if (!b) return; const w = b.dataset.w; logWeekSel.has(w) ? logWeekSel.delete(w) : logWeekSel.add(w); renderStockLog(); });

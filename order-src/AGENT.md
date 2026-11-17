@@ -257,3 +257,4 @@ KM에게 먼저 묻는다:
 - (11/17 KM "GW 전송 누르면 로딩바 위에 어떤 상황인지") 자동 대기(mis-agent.js VER 5)가 window.__misProg로 받은 단계 글을 misPush.prog·progAt에 merge(같은 글 안 씀, 쓰는 중이면 마지막 것만, 결과 쓰기 전에 다 씀). mis.js 단계: 화면 띄움 → 발주 n개 확인 → [그룹] 여는 중 → n개 넣는 중 → 저장 중 → 저장 확인 중 → 저장됨 · 전체 a/b. 앱 막대 글: misAgent.step(확장: GW 로그인·화면 열기)과 misPush.prog 중 새것, 글은 막대 위(.lb-txt order −1). 빠른 확인은 전송 중일 때 시트 ver도 봄(Apps Script 안 바꿈), 8분까지. e2e-order 9개.
 - (11/17 KM "발주시트 가로인쇄 줄맞춤, 열·행 높이 맞추기") 인쇄만: table-layout fixed + colgroup(품목 40mm · 날마다 재고·발주 같은 너비) · 줄 높이 4.2mm 하나로 · 글씨 8px · 숫자 오른쪽 · 머리글·Forecast 가운데. 화면 보기는 그대로.
 - (11/17 KM) 발주시트 칸 머리글: 재고 → On Hand, 발주 → Order (화면·인쇄 같이).
+- (11/17 KM "업체랑 품목 사이로") On Hand · Order 칸 이름은 머리글 둘째 줄 대신 업체 줄(온세물류 등)에. 머리글은 날짜 한 줄.

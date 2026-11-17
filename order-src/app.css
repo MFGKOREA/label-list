@@ -820,7 +820,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .logt tbody tr:nth-child(even) td, .logt tbody tr:nth-child(even) .nm { background: color-mix(in srgb, var(--fill-2) 70%, var(--surface)); }
 .logt td.s b { font-weight: 700; color: var(--fg); } .logt td.s i { color: var(--muted); }
 .logt td.o { color: var(--accent-text); font-weight: 800; }
-.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); } .logt tr.vrow .nm small { font-weight: 600; }
+.logt tr.vrow td, .logt tr.vrow .nm { background: var(--fill-2) !important; font-weight: 800; color: var(--fg); border-top: 2px solid var(--line); }
+.logt tr.vrow td.sub { text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); } .logt tr.vrow .nm small { font-weight: 600; }
 .logt tr.fcrow td, .logt tr.fcrow .nm { background: var(--fill-2) !important; font-weight: 700; text-align: center; }
 @media print {
   @page { size: A4 landscape; margin: 7mm; }
@@ -855,7 +856,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   body.log-print .logt thead th { text-align: center; padding: 0 .5mm; }
   body.log-print .logt thead tr:first-child th { height: 4.8mm; font-size: 8.5px; }
   body.log-print .logt .nm { width: auto; max-width: none; text-align: left; padding-left: 1.2mm; }
-  body.log-print .logt td.fc { text-align: center; }
+  body.log-print .logt td.fc, body.log-print .logt tr.vrow td.sub { text-align: center; }
+  body.log-print .logt tr.vrow td.sub { font-size: 7px; font-weight: 700; }
   body.log-print .logt td.s, body.log-print .logt td.o { text-align: right; }
 }
 
