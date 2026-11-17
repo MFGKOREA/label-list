@@ -314,13 +314,23 @@
       const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
       const isTotal = (r) => Object.values(r).some((v) => /합계|소계|총계|^계$|total/i.test(String(v ?? "").trim()));
       // 날짜 목록: from ~ to 중 시트에 아직 없는 날만 (force면 다)
+      //  1.17.0 (11/17 KM 1번): job.today = 1이면 오늘 지금까지 중간값 → 완결된 하루 기록(menuDay.날짜)이 아니라 menuNow 에 둠.
+      //   영업 중 값이라 학습(요일별 메뉴 쏠림 → 품목별 주말 배수)의 하루 기록에 섞지 않고, 매시간 덮어씀
+      const today = !!job.today;
+      const keyOf = (day) => (today ? "menuNow" : "menuDay." + day);
       const have = await get();
-      const days = []; for (let x = job.from; x <= job.to; ) { if (job.force || !have["menuDay." + x]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      const days = [];
+      if (today) days.push(job.to || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+      else for (let x = job.from; x <= job.to; ) { if (job.force || !have[keyOf(x)]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
       const L = loader($, d);
       let saved = 0; const empty = [], failed = [], saveErr = [], chkBad = []; let rem = [], hung = false;
       // 시트 저장은 뒤에서 차례로 (하루 저장에 2~4초 → 조회를 막지 않게). 실패한 날은 따로 모음
       let saveQ = Promise.resolve();
-      const save = (day, rows, h) => { saveQ = saveQ.then(() => set("menuDay." + day, h ? { at: Date.now(), rows, h } : { at: Date.now(), rows })).then(() => { saved++; }, () => { saveErr.push(day); }); };
+      let rowsN = 0; // 오늘 중간값이면 화면에 "몇 가지 메뉴"인지 적기 위해
+      const save = (day, rows, h) => {
+        const v = today ? { at: Date.now(), day, partial: 1, rows, ...(h ? { h } : {}) } : h ? { at: Date.now(), rows, h } : { at: Date.now(), rows };
+        saveQ = saveQ.then(() => set(keyOf(day), v)).then(() => { saved++; if (today) rowsN = rows.length; }, () => { saveErr.push(day); });
+      };
       const readDay = async (day) => {
         step = "조회 " + day;
         if (!(await L.idle(T.q))) return "busy"; // 앞 조회가 아직 안 끝남 → 이 날은 나중에
@@ -363,11 +373,11 @@
         }
       } finally { await saveQ.catch(() => {}); }
       const md = (x) => x.slice(5).replace("-", "/"), bad = [...new Set([...failed, ...saveErr])].sort();
-      const text = `메뉴 판매 ${saved}일 저장` + (empty.length ? ` · 판매 없음 ${empty.map(md).join(", ")}` : "") + (hung ? " · MIS가 응답하지 않아 멈췄어요" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")} (다시 누르면 그날만 받아요)` : "") +
+      const text = (today ? `메뉴 판매(오늘) ${saved ? `지금까지 ${rowsN}가지 메뉴 저장` : "아직 판매 없음 (영업 전이거나 화면에 아직 안 나옴)"}` : `메뉴 판매 ${saved}일 저장`) + (empty.length ? ` · 판매 없음 ${empty.map(md).join(", ")}` : "") + (hung ? " · MIS가 응답하지 않아 멈췄어요" : "") + (bad.length ? ` · 못 받은 날 ${bad.map(md).join(", ")} (다시 누르면 그날만 받아요)` : "") +
         (rem.length ? ` · 남은 ${rem.length}일은 다시 누르면 이어서 받아요` : "") + (days.length ? "" : " · 새로 받을 날 없음") +
         (chkBad.length ? ` · ⚠ 합계 다른 날 ${chkBad.sort().map(md).join(", ")} (${SUM_BLOCK ? "저장 안 함, " : ""}MIS 화면 확인)` : "");
-      if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length, chkBad: chkBad.length }); }
-      return finish(true, text, { days: saved, more: rem.length, chkBad: chkBad.length });
+      if (bad.length) { step = failed.length ? "조회 " + failed[0] : "시트 저장"; return finish(false, text, { days: saved, bad: bad.length, more: rem.length, chkBad: chkBad.length, ...(today ? { rows: rowsN } : {}) }); }
+      return finish(true, text, { days: saved, more: rem.length, chkBad: chkBad.length, ...(today ? { rows: rowsN } : {}) });
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
     }
@@ -945,13 +955,15 @@
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
   const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
-  const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
+  //  1.17.0: today(오늘 중간값)도 종류마다 같이 넘겨야 함. 예전엔 also로 덧붙인 sets의 today:1이 job을 만들 때 빠져서
+  //   오늘 중간값이 완결된 하루 기록(setDay.날짜)에 섞였음(매시간 :40 수집). 지금은 req.today → job.today로 그대로 전달
+  const queue = [[k0, { from: base.from, to: base.to, force: base.force, today: base.today }]];
   try {
     while (queue.length && !replaced) {
       const [kind, req] = queue.shift();
       // 계획표(gw-plan)에서 덧붙인 일(시간대별·주문현황)은 날짜 없이 옴 → 어제(한국 날짜)까지로 (11/13: 날짜가 없으면 시간대별이 Invalid Date로 멈추던 것)
       const yest = new Date(Date.now() + 9 * 3600e3 - 864e5).toISOString().slice(0, 10);
-      job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to || (needRange(kind) ? req.to : yest), force: req.force };
+      job = { ...base, kind: kind === "gross" ? undefined : kind, from: req.from, to: req.to || (needRange(kind) ? req.to : yest), force: req.force, today: req.today == null ? base.today : req.today };
       step = "시작"; Object.keys(diag).forEach((k) => delete diag[k]);
       if (kind !== k0) await merge("salesPush", { cur: kind, prog: null }).catch(() => {});
       const r = left() < T.reserve ? { ok: false, text: "시간이 모자라 시작 못 함 · 다시 눌러 주세요", extra: {} } : RUN[kind] ? await RUN[kind]() : { ok: false, text: "모르는 종류라 하지 않음: " + String(kind).slice(0, 20), extra: {} };
