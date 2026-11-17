@@ -1,21 +1,24 @@
 const $ = (id) => document.getElementById(id);
 const hm = (t) => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 async function load() {
-  const c = await chrome.storage.local.get(["id", "pw", "on", "logs", "auto", "autoSt", "per", "perSt", "hrId", "hrPw", "hron", "hrSt", "snapSt"]);
+  const c = await chrome.storage.local.get(["id", "pw", "on", "logs", "auto", "autoSt", "per", "perSt", "hrId", "hrPw", "hron", "hrSt", "snapSt", "gwDiagCache"]);
   $("id").value = c.id || ""; $("on").checked = !!c.on; $("auto").checked = c.auto !== false; $("per").checked = c.per !== false;
   $("hrid").value = c.hrId || ""; $("hron").checked = c.hron !== false; $("hrpw").placeholder = c.hrPw ? "저장됨 (바꿀 때만 입력)" : "비밀번호";
   const as = c.autoSt || {}, autoLine = c.auto === false ? "\n상시 수집 꺼짐" : !c.on ? "" : `\n상시 수집: ${as.msg || "곧 첫 확인"}${as.at ? ` · ${hm(as.at)} 확인` : ""}${as.next && as.next > Date.now() ? ` · 다음 ${hm(as.next)}` : ""}`; $("pw").placeholder = c.pw ? "저장됨 (바꿀 때만 입력)" : "비밀번호";
   const hs = c.hrSt || {}, hrLine = c.hron === false ? "\n플젝 HR 덤프 꺼짐" : `\n플젝 HR: ${hs.msg || "곧 첫 확인"}${hs.okAt ? ` · 마지막 ${hm(hs.okAt)}` : ""}`;
   const ps = c.perSt || {}, perLine = c.per === false ? "\n당일 되풀이 꺼짐" : !c.on ? "" : `\n당일 되풀이: ${ps.msg || "곧 첫 확인"}${ps.okAt ? ` · 마지막 ${hm(ps.okAt)}` : ""}`;
   const ss = c.snapSt || {}, snapLine = !c.on || c.auto === false ? "" : `\n마감 스냅샷: ${ss.msg || "저녁 21:20에 한 번"}${ss.okAt ? ` · 마지막 ${hm(ss.okAt)}` : ""}`; // 1.17.0: 그날 마지막 값 덤프 상태
+  const dg = c.gwDiagCache || {}; let diagLine = dg.diagMsg && Date.now() - (dg.at || 0) < 3 * 3600e3 ? `\n진단: ${dg.diagMsg}` : dg.diagMsg ? `\n진단(지난 ${hm(dg.at)}): ${dg.diagMsg}` : ""; // 1.17.0 시즌2 13번: 스스로 진단한 원인·복구 한 줄
   $("log").textContent = (c.logs || []).slice(0, 12).join("\n");
   try {
     const v = await (await fetch(API + "?api=1&status=1&t=" + Date.now())).json(), d = (v && (v.status || v.data)) || {};
-    const a = d.misAgent || {}, p = d.misPush || {};
+    const a = d.misAgent || {}, p = d.misPush || {}, gd = d.gwDiag || {};
+    if (gd.diagMsg || gd.at) await chrome.storage.local.set({ gwDiagCache: { at: gd.at || 0, diagMsg: gd.diagMsg || "", fixedBy: gd.fixedBy || "", code: gd.code || "" } }); // 스스로 진단(시즌2 13번)
+    if (gd.diagMsg) diagLine = `\n진단: ${gd.diagMsg}`;
     const fresh = a.at && Date.now() - a.at < (a.mode === "ondemand" ? 20 * 60e3 : 180000);
     $("st").textContent = (!fresh ? `대기 꺼짐${a.at ? ` · 마지막 ${hm(a.at)}` : ""} (자동입력 켜기 확인)` : a.mode === "ondemand" ? `✓ 대기 중 · ${hm(a.at)} 확인 · 폰 전송 때만 창이 열려요` : `✓ MIS 입력 창 열림 · ${hm(a.at)} 확인${a.grid ? "" : " · 주문등록 화면 아님"}`) +
-      (p.date ? `\n마지막 전송 ${p.date.slice(5)} ${p.status === "done" ? "저장 완료" : p.status === "error" ? "확인 필요" : p.status}` : "") + autoLine + perLine + snapLine + hrLine;
-  } catch (e) { $("st").textContent = "시트에 연결 못 함 (인터넷 확인)" + autoLine + perLine + snapLine + hrLine; }
+      (p.date ? `\n마지막 전송 ${p.date.slice(5)} ${p.status === "done" ? "저장 완료" : p.status === "error" ? "확인 필요" : p.status}` : "") + autoLine + perLine + snapLine + diagLine + hrLine;
+  } catch (e) { $("st").textContent = "시트에 연결 못 함 (인터넷 확인)" + autoLine + perLine + snapLine + diagLine + hrLine; }
 }
 $("save").addEventListener("click", async () => {
   const v = { id: $("id").value.trim(), on: $("on").checked, auto: $("auto").checked, per: $("per").checked, hrId: $("hrid").value.trim(), hron: $("hron").checked, tries: [] };

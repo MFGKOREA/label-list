@@ -18,7 +18,7 @@
 //   ③ 단계(stage)마다 시간 제한과 다시 하기: GW 화면(gw) → MIS 탭 열림(open) → 주문등록 화면(mis) → 전송 받음(start) → 입력(run).
 //      3초마다 탭 상태를 직접 살펴(probe) 스크립트가 안 돌았으면 다시 넣고, 새 탭이 안 생기면 경영정보를 다시 누르고, 그래도 없으면 MIS 주소를 직접 엶.
 //   ④ 안 되면 6분을 기다리지 않고 바로 misPush를 error로 올림. 글에 "멈춘 곳"과 "무엇을 기다리다 멈췄는지"를 적음(주소는 GW·MIS 구분만, 아이디·비밀번호·주소 뒤 값은 안 적음).
-importScripts("common.js", "auto.js", "periodic.js", "hrsend-core.js", "hrsend-steps.js", "hrsend-bg.js"); // 1.12.0: HR 주간스케쥴 전송
+importScripts("common.js", "auto.js", "periodic.js", "diag.js", "hrsend-core.js", "hrsend-steps.js", "hrsend-bg.js"); // 1.12.0: HR 주간스케쥴 전송 · 1.17.0: diag.js(스스로 진단)
 const get = (k) => chrome.storage.local.get(k);
 const put = (o) => chrome.storage.local.set(o);
 const VER = chrome.runtime.getManifest().version;
@@ -41,11 +41,33 @@ const postMerge = (key, patch) => { const c = new AbortController(), t = setTime
 const postOk = async (key, value) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 25e3); try { const j = await (await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "set", key, value }), signal: c.signal })).json(); return !!(j && j.ok); } catch (e) { return false; } finally { clearTimeout(t); } };
 const readStatus = async () => { const v = await netGet(API + "?api=1&status=1&t=" + Date.now()); return (v && (v.status || v.data)) || {}; };
 
+// ---- 스스로 진단 (1.17.0 시즌2 13번 — 11/17 KM 승인) ----
+//  원인 고르기·복구 한 줄은 diag.js(순수 함수·시험 있음)가 정하고, 여기서는 시트에 적고 지우는 일만 한다.
+//  적는 곳: 시트 kv 의 gwDiag = { at, code, diagMsg, fixedBy, why, ver } (사람 이름·숫자 없음) → 폰·AI 허브가 이 줄만 읽으면 된다
+const VER_URL = "https://mfgkorea.github.io/label-list/gw-ver.json"; // 필요한 최소 확장 버전(minVer)만 있는 작은 파일
+const DIAG = { code: "", msg: "", at: 0 };
+async function diagSet(code, why) {
+  const now = Date.now(), c = code || "", msg = c ? gwDiagText(c, why) : "";
+  if (DIAG.code === c && DIAG.msg === msg) { DIAG.at = now; return; }
+  DIAG.code = c; DIAG.msg = msg; DIAG.at = now;
+  await postOk("gwDiag", { at: now, code: c, diagMsg: msg, fixedBy: c ? GW_RECOVER[c] || "" : "", why: String(why || "").trim().slice(0, 120), ver: VER });
+  if (c) await log(`스스로 진단: ${msg}`, { quiet: true });
+}
+// 확장 버전이 필요한 버전보다 낮으면(높으면 Pages의 새 종류(menuToday)를 모른 채 도는 상태) 진단 한 줄을 남긴다
+async function checkVer(now) {
+  const { verMin, verAt } = await get(["verMin", "verAt"]);
+  if (!verMin) return;
+  const st = gwVerState(VER, verMin);
+  if (st.low) await diagSet("ver", `확장이 낮아요(지금 ${VER} · 필요 ${verMin})`);
+  else if (DIAG.code === "ver") await diagSet("", "");
+  await put({ verAt: verAt || now });
+}
+
 // ---- 저장소 읽고-고쳐-쓰기를 한 줄로 (겹쳐 쓰면 나중 것이 앞의 것을 지움) ----
 let q = Promise.resolve();
 const lock = (fn) => { const r = q.then(fn); q = r.catch(() => {}); return r; }; // 주의: lock 안에서 lock·log·mutJob을 부르지 않음
 const mutJob = (fn) => lock(async () => { const { job } = await get("job"); if (!job) return null; job.n = job.n || {}; job.extra = job.extra || []; if ((await fn(job)) === false) return job; await put({ job }); return job; });
-const beat = (job) => post("misAgent", { at: Date.now(), mode: "ondemand", ver: VER, job: job.kind, step: job.step + (job.wait ? " · " + job.wait : ""), stepAt: Date.now(), stage: job.stage || "" });
+const beat = (job) => post("misAgent", { at: Date.now(), mode: "ondemand", ver: VER, job: job.kind, step: job.step + (job.wait ? " · " + job.wait : ""), stepAt: Date.now(), stage: job.stage || "", diag: DIAG.code, diagMsg: DIAG.msg });
 // 기록. o.quiet: 확장 기록에만(폰에 보이는 단계 글은 그대로) · o.set(job): 같은 순간에 job에 같이 적을 것 (true를 돌려주면 이것도 조용히)
 async function log(msg, o = {}) {
   let j = null;
@@ -106,11 +128,12 @@ async function endJob(reason) {
   await sweep();
   await log(reason);
   const { auto } = await get("auto");
-  post("misAgent", { at: Date.now(), mode: "ondemand", ver: VER, auto: auto === false ? 0 : 1 });
+  post("misAgent", { at: Date.now(), mode: "ondemand", ver: VER, auto: auto === false ? 0 : 1, diag: DIAG.code, diagMsg: DIAG.msg });
 }
 // 안 되면 바로 폰에 알림: misPush(또는 salesPush)를 error로 올리고 창 닫음. 그새 입력이 시작됐으면 그대로 둠. 시트에 못 닿으면 다음 확인 때 다시
 async function fail(job, why) {
   const now = Date.now(), sec = Math.round((now - job.openedAt) / 1000);
+  { const c = gwDiagCause(why); if (c) await diagSet(c, why); } // 1.17.0: 막힌 원인을 골라 복구 한 줄을 gwDiag에 남김
   let d; try { d = await readStatus(); } catch (e) { return; }
   const text = `PC 자동입력이 ${sec}초 만에 멈춤 · 멈춘 곳: ${why} → MIS에 직접 넣어 주세요`;
   if (job.kind === "order") {
@@ -383,6 +406,7 @@ async function tickOnce(why) {
         await put({ perSt: { ...perSt, okAt: now, ok, failN, why: "", next: ok || failN > periodMaxRetry ? 0 : now + periodBackoff(failN),
           msg: ok ? "스스로 받음" : failN <= periodMaxRetry ? `스스로 받다가 못 받음 · ${Math.round(periodBackoff(failN) / 60e3)}분 뒤 다시` : "스스로 받다가 못 받음 · 다음 시간대에 다시" } });
       }
+      if (sp.status === "done" && DIAG.code && DIAG.code !== "ver") await diagSet("", ""); // 잘 되면 지난 진단 줄을 지움
       return endJob(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`);
     }
     // 1.8.0: 스스로 받던 중에 폰에서 [GW 전송]이 오면 발주가 먼저 (받던 것은 멈추고, 30분 뒤 스스로 다시 받음)
@@ -556,12 +580,15 @@ async function autoCheck(now, L) {
   await put({ autoSt: st }); // 먼저 적어 둠: 시트를 읽는 동안 다음 확인이 겹쳐도 한 번만
   let d, plan = [];
   try { const v = await netGet(API + "?api=1&t=" + now, 45e3); if (!v || !v.ok || !v.data) throw new Error("x"); d = v.data; }
-  catch (e) { st.msg = "시트를 못 읽음 (인터넷 확인)"; st.next = now + AUTO.retry; await put({ autoSt: st }); return; }
+  catch (e) { st.msg = "시트를 못 읽음 (인터넷 확인)"; st.next = now + AUTO.retry; await put({ autoSt: st }); await diagSet("sheet", "시트를 못 읽음"); return; }
+  if (DIAG.code === "sheet") await diagSet("", ""); // 다시 읽히면 지난 진단 줄을 지움
   { // 시트에 급한 HR 요청(hrPush)이 적혀 있으면 바로 한 번 (감시가 30분을 기다리지 않게)
     const ask = d.hrPush || {}, hs = (await get("hrSt")).hrSt || {};
     if (ask.id && (ask.at || 0) > (hs.reqId || 0) && now - (ask.at || 0) < 20 * 60e3) { await put({ hrSt: { ...hs, reqId: ask.id } }); hrStart("요청", now); }
   }
-  try { const p = await netGet(PLAN_URL + "?t=" + now, 8e3); if (Array.isArray(p)) { plan = p; await put({ planCache: p }); } } catch (e) {} // 계획을 못 받으면 매출·메뉴만 (1.11.0: 마지막으로 받은 계획은 planCache에 두어 당일 되풀이 수집이 씀)
+  try { const p = await netGet(PLAN_URL + "?t=" + now, 8e3); if (Array.isArray(p)) { plan = p; await put({ planCache: p }); } } catch (e) {}
+  try { const m = await netGet(VER_URL + "?t=" + now, 8e3); if (m && m.minVer) await put({ verMin: String(m.minVer).slice(0, 20) }); } catch (e) {} // 필요한 최소 확장 버전
+  await checkVer(now); // 확장이 낮으면 gwDiag에 "새 zip 덮어쓰기" 한 줄 // 계획을 못 받으면 매출·메뉴만 (1.11.0: 마지막으로 받은 계획은 planCache에 두어 당일 되풀이 수집이 씀)
   const r = autoPlan(d, now, plan, { pc: true, forceTime: !!L.autoAnyTime });
   let go = false;
   if (r.act === "request") {
@@ -582,9 +609,9 @@ chrome.runtime.onStartup.addListener(async () => {
   { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null } }); } // 새로 켜졌으면 HR 덤프는 다음 차례에
   { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 60e3 } }); } // 크롬이 막 켜졌으면 1분 뒤에 첫 확인
   await sweep("크롬 시작", true); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 4000); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 12000);
-  tick("start"); hrTick(Date.now()); periodicTick(Date.now()); await snapTick(Date.now());
+  tick("start"); hrTick(Date.now()); periodicTick(Date.now()); checkVer(Date.now()); await snapTick(Date.now());
 });
-chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); periodicTick(Date.now()); await snapTick(Date.now()); });
+chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); periodicTick(Date.now()); checkVer(Date.now()); await snapTick(Date.now()); });
 chrome.alarms.create("watch", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); hrTick(Date.now()); periodicTick(Date.now()); snapTick(Date.now()); });
 let fastOn = false;
