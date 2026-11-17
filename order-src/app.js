@@ -2650,7 +2650,7 @@
     $("logTable").innerHTML = sel.length ? sel.map((m) => {
       const days = [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(m, k)), wk = isoWeek(m).w, fcSum = days.reduce((t, d) => t + (fcOf(d) || 0), 0);
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
-      const h2 = days.map(() => `<th class="sub ds">재고</th><th class="sub">발주</th>`).join("");
+      const h2 = days.map(() => `<th class="sub ds">On Hand</th><th class="sub">Order</th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
       let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
       const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th><td colspan="14"></td></tr>` : ""; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
