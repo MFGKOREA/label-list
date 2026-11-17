@@ -26,7 +26,7 @@
 
 const SHEET = "kv";
 const CHUNK = 45000;
-const BUILD = "2026-11-12"; // 배포본 확인용: GET ?api=1&status=1 의 build로 보임 (어느 코드가 배포돼 있는지 밖에서 확인)
+const BUILD = "2026-11-17"; // 배포본 확인용: GET ?api=1&status=1 의 build로 보임 (어느 코드가 배포돼 있는지 밖에서 확인)
 
 // 시트에서 연 스크립트면 그 시트를, script.google.com에서 따로 만든 스크립트면
 // 처음 실행할 때 "발주프랩 데이터" 시트를 내 드라이브에 만들어 계속 씁니다.
@@ -198,8 +198,9 @@ function authOk_(k) { const key = appKey_(); return !key || String(k || "") === 
 function denied_() { Utilities.sleep(1000); return json_({ ok: false, auth: true, error: "가게 키가 필요해요" }); }
 // 키 없이 보여 주는 전송 상태: 시각·상태·날짜만 (내용 없음). 시트 전체를 읽지 않고 상태 키 3개만 읽어 답이 빠름
 function status_() {
-  const all = readKeys_(["misPush", "salesPush", "misAgent"]), pick = (o, ks) => { const out = {}; if (o) ks.forEach((k) => { if (o[k] != null) out[k] = o[k]; }); return out; };
-  return { misPush: pick(all.misPush, ["date", "id", "at", "status", "startAt", "doneAt", "by"]), salesPush: pick(all.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(all.misAgent, ["at", "mode", "grid"]) };
+  // 1.17.0 (시즌2 13번): gwDiag = 매장 PC가 스스로 남긴 진단 한 줄(원인 코드·복구 안내). 숫자·사람 이름은 없다
+  const all = readKeys_(["misPush", "salesPush", "misAgent", "gwDiag"]), pick = (o, ks) => { const out = {}; if (o) ks.forEach((k) => { if (o[k] != null) out[k] = o[k]; }); return out; };
+  return { misPush: pick(all.misPush, ["date", "id", "at", "status", "startAt", "doneAt", "by"]), salesPush: pick(all.salesPush, ["id", "at", "status", "startAt", "doneAt"]), misAgent: pick(all.misAgent, ["at", "mode", "grid", "ver"]), gwDiag: pick(all.gwDiag, ["at", "code", "diagMsg", "fixedBy", "ver"]) };
 }
 const ACTIONS_ = { set: 1, append: 1, merge: 1, restore: 1 };
 const KEY_RE_ = /^(?!(__proto__|constructor|prototype|toString|valueOf|hasOwnProperty)$)[\w.\-|:가-힣 ]{1,120}$/; // 시트 키 이름: 글자·숫자·._-|: 공백만, 120자까지
