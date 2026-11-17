@@ -32,6 +32,14 @@
     "freshDays": 2
   },
   {
+    "id": "xfer-1",
+    "kind": "xfer",
+    "key": "misXferScan",
+    "label": "매장간재고이동",
+    "note": "이 매장이 다른 매장과 주고받은 물건(사내이송)을 오늘까지 31일 읽어 misXfer.날짜에 둠(+받음 −보냄). 입고현황엔 안 잡혀 예상 재고가 틀렸음(11/10·11/15 자숙피바지락 43PK). 11/17 KM 승인. 하루 한 번(freshDays 1: 오늘까지 읽으므로), 조회만 (등록·수신 단추는 안 누름, 직원 이름·금액은 저장 안 함)",
+    "freshDays": 1
+  },
+  {
     "id": "sets-1",
     "kind": "sets",
     "key": "misSetScan",

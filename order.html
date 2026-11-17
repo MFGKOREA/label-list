@@ -3143,7 +3143,12 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   const recvCovers = (it, x, d) => { if (!RECV_USE) return false; for (let y = x; y <= d; y = addDays(y, 1)) if (!recvOn(it, y)) return false; return true; }; // x~d 모든 날 받은 기록이 있음 = 그 사이 입고를 다 앎
   // 손으로 적은 입고·이동 (11/15 KM: 버터라이스가 모자라 다른 매장에서 45개 빌림 — MIS 입고현황엔 안 잡힘). 시트 recvAdd.날짜 = { rows: [{ key 품목, q 재고단위(빌려주면 −), note }] }
   //  KM이 말해 준 것만 적는다. 같은 날 입고현황에 같은 양이 잡히면 두 번 세지 않음
-  const addRowsOf = (it, x) => ((db["recvAdd." + x] || {}).rows || []).filter((r) => r && r.key === it.key && num(r.q) !== 0 && !(recvOn(it, x) && (recvRowsOf(it.key, x) || []).some((m) => Math.abs(ordToStock(it, num(m.qty)) - num(r.q)) < 1e-6)));
+  // 매장간재고이동 (11/17 KM, PC가 MIS에서 읽음): 시트 misXfer.날짜 = { rows: [{ code, qty(+받음 −보냄) }] }. 입고현황엔 안 잡힘
+  //  그날 misXfer가 있으면 KM이 붙여 줘서 손으로 적은 "사내이송" 줄(recvAdd)은 빼고 이것을 씀 (두 번 세지 않게)
+  const xferOn = (x) => Array.isArray((db["misXfer." + x] || {}).rows);
+  const xferRowsOf = (it, x) => (xferOn(x) ? db["misXfer." + x].rows : []).filter((r) => r && (it.codes || []).map(String).includes(String(r.code)) && num(r.qty) !== 0);
+  const addRowsOf = (it, x) => ((db["recvAdd." + x] || {}).rows || []).filter((r) => r && r.key === it.key && num(r.q) !== 0 && !(xferOn(x) && /^사내이송/.test(r.note || "")) && !(recvOn(it, x) && (recvRowsOf(it.key, x) || []).some((m) => Math.abs(ordToStock(it, num(m.qty)) - num(r.q)) < 1e-6)))
+    .concat(xferRowsOf(it, x).map((r) => ({ key: it.key, q: ordToStock(it, num(r.qty)), note: "매장간재고이동", xfer: true })));
   const arrivalsOf = (it, x) => {
     const out = arrivalsOrd(it, x), add = addRowsOf(it, x).map((r) => ({ d: x, q: num(r.q), recv: true, add: true }));
     if (!RECV_USE) return add.length ? [...out, ...add] : out;

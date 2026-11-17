@@ -716,6 +716,100 @@
     }
   }
 
+  // ---------- 매장간재고이동 (11/17 KM "2번 좋다", kind "xfer") ----------
+  //  다른 매장과 주고받은 물건(사내이송)은 입고현황에 안 잡힘 → 11/10·11/15에 자숙피바지락 43PK 등을 받았는데 앱은 몰랐음.
+  //  메뉴 경로: 매입정보관리 › 재고이동(폴더) › 매장간재고이동. [조회]만 누름 (등록·저장·삭제·수신 단추는 절대 안 누름)
+  //  시트 misXfer.날짜 = { at, rows: [{ code, name, qty(+받음 / −보냄), other(상대 매장코드) }] }. 받은 것은 수령일자, 보낸 것은 발송일 기준.
+  //  등록자·수신자(직원 이름)와 금액은 저장 안 함. 열 이름만 xferProbe에
+  async function runXfer() {
+    try {
+      step = "매장간재고이동 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const STAT_RE = /^매장\s*간\s*재고\s*이동$/;
+      const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+      const expandAll = async () => { for (let round = 0; round < 6 && !byText(STAT_RE, ".tree-title"); round++) { let did = 0; for (const w of trees()) { let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")]; } catch (e) {} for (const h of hits) { let ok = false; try { const $w = w.jQuery, node = h.closest(".tree-node"), root = $w && $w.fn && $w.fn.tree && node ? $w(h).closest("ul.tree") : null; if (root && root.length) { root.tree("expand", node); ok = true; } } catch (e) {} if (!ok) { try { press(w, h); ok = true; } catch (e) {} } if (ok) did++; } } if (!did) break; await sleep(700); } };
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /재고\s*이동/.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 2000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(STAT_RE, ".tree-title")) await expandAll();
+        const hit = byText(STAT_RE, ".tree-title"); if (!hit) break;
+        hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "매장간재고이동 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "매장간재고이동 화면에 jQuery가 없어요");
+      step = "조회일";
+      const kst = (n) => new Date(Date.now() + 9 * 3600e3 + n * 864e5).toISOString().slice(0, 10);
+      const to = kst(0) > job.to ? kst(0) : job.to; // 오늘 보낸·받은 것도 (그날 바로 재고가 바뀜)
+      const from = job.from || (() => { const t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - 30); return t.toISOString().slice(0, 10); })();
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = [...d.querySelectorAll("input")].filter((i) => $(i).data("datebox"));
+      if (dbs.length >= 2) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(from, like)); $(dbs[1]).datebox("setValue", fmt(to, like)); }
+      else if (dbs.length === 1) { const like = $(dbs[0]).datebox("getValue") || ""; $(dbs[0]).datebox("setValue", fmt(to, like)); }
+      step = "조회";
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) return finish(false, "매장간재고이동 조회 버튼을 못 찾았어요");
+      const L = loader($, d);
+      await L.idle(T.q);
+      let hit = null;
+      for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
+      if (!hit) { const g = L.grids().find((x) => (L.raw(x) || []).length); if (g) hit = { grid: g, rows: L.raw(g) }; }
+      step = "읽기";
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const totalOf = (g) => { try { const dd = $(g).datagrid("getData") || {}; return +dd.total || 0; } catch (e) { return 0; } };
+      for (const g of L.grids()) {
+        try {
+          const o = $(g).datagrid("options"), t = totalOf(g), n0 = (L.raw(g) || []).length;
+          if (!o.pagination || !(t > n0)) continue;
+          step = "전체 쪽 불러오기"; const n = Math.min(5000, t), pg = $(g).datagrid("getPager");
+          pg.pagination({ pageSize: n, pageList: [...new Set([...(o.pageList || []), n])] }); pg.pagination("select", 1);
+          for (let k = 0; k < 100 && (L.raw(g) || []).length < n; k++) await sleep(200);
+          await L.idle(T.q);
+        } catch (e) {}
+      }
+      step = "읽기";
+      const probe = L.grids().map((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: (L.raw(g) || []).length, total: totalOf(g), paged: !!o.pagination }; });
+      await set("xferProbe", { at: Date.now(), from, to, grids: probe });
+      if (!hit || !hit.rows.length) { await set("misXferScan", { at: Date.now(), from, to, days: 0, n: 0 }); return finish(true, `매장간재고이동 ${from.slice(5)}~${to.slice(5)} 조회 결과 없음`, { days: 0 }); }
+      // 열: 품목코드 · 품목명 · 발송매장코드 · 발송수량 · 발송일 · 수신매장코드 · 수신수량 · 수령일자 (11/17 KM이 붙여 준 표 머리글)
+      const toIso = (v) => { const m = /^(\d{4})[-./]?(\d\d)[-./]?(\d\d)/.exec(String(v ?? "").trim()); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
+      let use = null;
+      for (const g of L.grids()) {
+        const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), rs = L.raw(g) || [];
+        if (!rs.length) continue;
+        const f = (re, bad) => cs.find((c) => re.test(title(c)) && !(bad && bad.test(title(c))));
+        const u = { code: f(/^품목\s*코드$/), name: f(/^품목\s*명$/), sFrom: f(/발송\s*매장\s*코드/), sQty: f(/발송\s*수량/), sDt: f(/발송\s*일/), rTo: f(/수신\s*매장\s*코드/), rQty: f(/수신\s*수량/), rDt: f(/수령\s*일|수신\s*일/) };
+        if (u.code && u.sFrom && u.rTo && (u.sQty || u.rQty) && (u.sDt || u.rDt)) { use = Object.assign(u, { rs, all: !(o.pagination && totalOf(g) > rs.length) }); break; }
+      }
+      if (!use) return finish(false, `매장간재고이동 열을 못 찾았어요 (머리글: ${probe.map((g) => g.cols.join(",")).join(" | ").slice(0, 300)})`);
+      const by = new Map(), V = (r, c) => (c ? String(r[c.field] ?? "").trim() : ""); let inN = 0, outN = 0, wait = 0;
+      use.rs.forEach((r) => {
+        const code = V(r, use.code), sf = V(r, use.sFrom), rt = V(r, use.rTo); if (!code) return;
+        let dt = null, q = 0, other = "";
+        if (rt === STORE && sf !== STORE) { dt = toIso(V(r, use.rDt)); q = num(V(r, use.rQty)) || 0; other = sf; if (!dt || !(q > 0)) { wait++; return; } inN++; } // 받는 쪽: 수령한 것만 (아직 안 받았으면 다음에)
+        else if (sf === STORE && rt !== STORE) { dt = toIso(V(r, use.sDt)); q = -(num(V(r, use.sQty)) || 0); other = rt; if (!dt || !(q < 0)) return; outN++; }
+        else return;
+        if (dt < from || dt > to) return;
+        if (!by.has(dt)) by.set(dt, []);
+        by.get(dt).push({ code, name: V(r, use.name).slice(0, 60), qty: q, other: other.slice(0, 12) });
+      });
+      step = "시트 저장";
+      let saved = 0; for (const [dt, rows] of [...by].sort()) { await set("misXfer." + dt, { at: Date.now(), rows }); saved++; }
+      let empty = 0;
+      if (use.all) { const yest = kst(-1); for (let x = from; x <= to && x <= yest; x = new Date(Date.parse(x + "T00:00:00Z") + 864e5).toISOString().slice(0, 10)) if (!by.has(x)) { await set("misXfer." + x, { at: Date.now(), rows: [] }); empty++; } }
+      await set("misXferScan", { at: Date.now(), from, to, days: saved, empty, all: use.all ? 1 : 0, in: inN, out: outN, wait });
+      return finish(true, `매장간재고이동 ${from.slice(5)}~${to.slice(5)} · ${saved}일 · 받음 ${inN}줄 · 보냄 ${outN}줄${wait ? ` · 아직 안 받은 ${wait}줄` : ""}`, { days: saved });
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- Set판매현황 (11/15 KM 승인 "그래 읽고 너도 분석해봐", kind "sets") ----------
   //  실제 화면(11/15 첫 조회): 매장마다 한 줄, 세트 종류마다 수량·금액·% 칸이 옆으로 늘어선 표(treegrid "tg").
   //   칸: 매장코드·매장명·Gross/Total/RESTAURANT/DELIVERY Sales·매장고객수(CUST_CNT)·PPA, 세트 합계(TOT_CNT), 세트별 *_CNT
@@ -847,9 +941,9 @@
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황", xfer: "매장간재고이동" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
   const queue = [[k0, { from: base.from, to: base.to, force: base.force }]];
   try {
