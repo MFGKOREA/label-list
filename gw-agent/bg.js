@@ -1,3 +1,5 @@
+// 배경 (1.17.0 — 11/17 KM 승인 1·13번: ① 매시간 :40 같은 창에서 오늘 메뉴별 판매도 읽어 시트(menuNow)에 남김 → PL 우편함·손익 쪽이 같은 시트에서 메뉴 믹스를 읽음
+//          ② 실패하면 5분 → 15분 → 45분(지수)로 스스로 다시 해 보고, ③ 저녁 21:20에 그날 마지막 값(매출·메뉴·Set·HR 건수·발주 상태)을 daySnap.<날짜>로 한 번 덤프)
 // 배경 (1.11.0 — 11/16 KM "당일 Gross·SET판매현황도 PC가 스스로, 1시간마다": 매시간 :40에 창 하나로 오늘 지금까지 Gross와 오늘 Set판매현황을 읽어 시트(nowSales·setNow)에 남김 → 아래 "당일 되풀이 수집")
 //  1.11.0 원칙: 무엇을 얼마나 자주(gw-plan.json의 kind now·setsToday, everyMin·at·from·to)만 계획에서 받고, 판단은 periodic.js(순수 함수·시험 있음),
 //   창 열고 읽는 길은 폰 버튼과 같은 salesPush 그대로. 발주 시간대(12:30~14:45)와 밤에는 창을 띄우지 않고, 매출·발주 요청이 도는 중이면 양보
@@ -374,8 +376,13 @@ async function tickOnce(why) {
       // 1.8.0: 스스로 보낸 요청이었으면 설정 창에 보일 상태를 고침 (됐으면 1분 뒤 다시 확인해 "다 받아 둠"으로, 안 됐으면 정해 둔 30분 뒤에 다시)
       const { autoSt = {}, perSt = {} } = await get(["autoSt", "perSt"]);
       if ("s" + autoSt.reqId === job.id) await put({ autoSt: { ...autoSt, msg: sp.status === "done" ? "스스로 받음" : "스스로 받다가 못 받음 · 조금 뒤 다시", doneAt: now, ...(sp.status === "done" ? { next: now + 60e3 } : {}) } });
-      // 1.11.0: 당일 되풀이로 낸 요청이면 팝업 상태에 남김 (받은 값은 mis-sales.js가 시트 nowSales·setNow에 적음)
-      if ("s" + perSt.reqId === job.id) await put({ perSt: { ...perSt, okAt: now, ok: sp.status === "done", why: "", msg: sp.status === "done" ? "스스로 받음" : "스스로 받다가 못 받음 · 다음 시간대에 다시" } });
+      // 1.11.0: 당일 되풀이로 낸 요청이면 팝업 상태에 남김 (받은 값은 mis-sales.js가 시트 nowSales·setNow·menuNow에 적음)
+      //  1.17.0 (11/17 KM 13번): 못 받았으면 연속 실패 횟수를 세고, 다음 확인을 5분 → 15분 → 45분으로 미뤄 스스로 다시 해 봄
+      if ("s" + perSt.reqId === job.id) {
+        const ok = sp.status === "done", failN = ok ? 0 : Math.min(9, (+perSt.failN || 0) + 1);
+        await put({ perSt: { ...perSt, okAt: now, ok, failN, why: "", next: ok || failN > periodMaxRetry ? 0 : now + periodBackoff(failN),
+          msg: ok ? "스스로 받음" : failN <= periodMaxRetry ? `스스로 받다가 못 받음 · ${Math.round(periodBackoff(failN) / 60e3)}분 뒤 다시` : "스스로 받다가 못 받음 · 다음 시간대에 다시" } });
+      }
       return endJob(`매출 ${sp.status === "done" ? "가져옴" : "못 가져옴"} → 창 닫음`);
     }
     // 1.8.0: 스스로 받던 중에 폰에서 [GW 전송]이 오면 발주가 먼저 (받던 것은 멈추고, 30분 뒤 스스로 다시 받음)
@@ -482,6 +489,54 @@ async function periodicOnce(now) {
   fast(); setTimeout(() => tick("periodic"), 500); // 다음 확인이 창을 열게 (폰 버튼과 같은 길)
 }
 
+// ---- 마감 스냅샷 (1.17.0 — 11/17 KM 승인 13번) ----
+//  21:20에 그날 마지막 값(당일 매출·메뉴·Set·HR·발주 상태)을 한 덩어리로 시트 daySnap.<날짜> 에 남긴다.
+//  왜: nowSales·setNow·menuNow는 그날 값이 계속 덮어써지고 날이 바뀌면 사라짐 → 어제 마감이 얼마였는지 코드로 다시 못 봄.
+//  원칙: 하루 한 번, 영업 중 창을 열지 않음(이미 읽힌 값을 시트에서 다시 읽음), 사람 이름·고객 정보는 담지 않음(HR은 건수만)
+const SNAP = { wait: 5 * 60e3, readMs: 45e3 }; // 실패하면 5분 뒤 다시 · 시트 전체 읽기 제한
+let snapBusy = false;
+async function snapTick(now) {
+  if (snapBusy) return;
+  snapBusy = true;
+  try { await snapOnce(now); } finally { snapBusy = false; }
+}
+async function snapOnce(now) {
+  const { on, auto, snapSt = {}, job } = await get(["on", "auto", "snapSt", "job"]);
+  if (!on || auto === false) return;
+  if (now < (snapSt.next || 0)) return;
+  const r = snapDue(now, snapSt);
+  if (!r.go) { if (r.why !== snapSt.why) await put({ snapSt: { ...snapSt, why: r.why } }); return; }
+  if (job) { await put({ snapSt: { ...snapSt, why: "PC가 다른 일을 하는 중 · 조금 뒤", next: now + 60e3 } }); return; }
+  await put({ snapSt: { ...snapSt, day: r.day, at: now, next: now + SNAP.wait, why: "읽는 중" } }); // 겹침막음 (결과는 아래에서 다시 적음)
+  let d;
+  try { const v = await netGet(API + "?api=1&t=" + now, SNAP.readMs); if (!v || !v.ok || !v.data) throw new Error("x"); d = v.data; } // 시트는 지금 잠긴 채 아님(설정에 가게 키 없음)
+  catch (e) {
+    const failN = Math.min(9, (+snapSt.failN || 0) + 1);
+    await put({ snapSt: { ...snapSt, day: r.day, at: now, okAt: 0, failN, why: "시트를 못 읽음", next: now + periodBackoff(failN) } });
+    await log(`마감 스냅샷 못 함: 시트를 못 읽음 (${failN}번째)`, { quiet: true });
+    return;
+  }
+  const nowSales = d.nowSales || {}, menuNow = d.menuNow || {}, setNow = d.setNow || {}, hr = d.hrStatus || {}, mp = d.misPush || {}, fc = d["forecast." + r.day] || d.forecast && d.forecast[r.day] || {}, oToday = d["misOrder." + r.day] || null;
+  const snap = {
+    at: now, day: r.day, late: r.late, ver: VER,
+    sales: { gross: nowSales.gross == null ? null : Number(nowSales.gross), at: nowSales.at || null, day: nowSales.day || null }, // 당일 Gross(중간값)
+    menu: { at: menuNow.at || null, day: menuNow.day || null, n: Array.isArray(menuNow.rows) ? menuNow.rows.length : 0,
+      rows: Array.isArray(menuNow.rows) ? menuNow.rows.map((x) => [String(x.m || "").slice(0, 40), x.c ? String(x.c).slice(0, 20) : "", Number(x.q) || 0]) : [] }, // 메뉴별 판매 수량 [메뉴, 분류, 수량]
+    sets: { at: setNow.at || null, day: setNow.day || null, cust: setNow.cust == null ? null : Number(setNow.cust), tot: setNow.tot == null ? null : Number(setNow.tot), rows: Array.isArray(setNow.rows) ? setNow.rows.map((x) => [String(x.s || "").slice(0, 24), Number(x.q) || 0]) : [] },
+    hr: { at: hr.at || null, date: hr.date || null, n: hr.n == null ? null : Number(hr.n), reqN: hr.reqN == null ? null : Number(hr.reqN), err: hr.err ? { at: hr.err.at || null, error: String(hr.err.error || "").slice(0, 40) } : null }, // 출퇴근·신청 건수만 (이름 없음)
+    order: { date: mp.date || null, status: mp.status || null, at: mp.at || null, doneAt: mp.doneAt || null, n: oToday && Array.isArray(oToday.rows) ? oToday.rows.length : null, scanAt: oToday ? oToday.at || null : null }, // 발주 전송 상태 + 오늘 발주 줄 수
+    forecast: { act: fc && fc.act != null ? Number(fc.act) : null, total: fc && fc.total != null ? Number(fc.total) : null }, // 앱에 적힌 그날 실제(Gross)
+  };
+  if (await postOk("daySnap." + r.day, snap)) {
+    await put({ snapSt: { day: r.day, okAt: now, at: now, late: r.late, failN: 0, next: 0, why: "", msg: `마감 스냅샷 ${r.day.slice(5)} 저장${r.late ? " (늦게)" : ""}` } });
+    await log(`마감 스냅샷 ${r.day} 저장 (매출 ${snap.sales.gross == null ? "?" : snap.sales.gross.toLocaleString("ko-KR")} · 메뉴 ${snap.menu.n} · Set ${snap.sets.tot == null ? "?" : snap.sets.tot})`, { quiet: true });
+  } else {
+    const failN = Math.min(9, (+snapSt.failN || 0) + 1);
+    await put({ snapSt: { ...snapSt, day: r.day, at: now, okAt: 0, failN, why: "시트에 못 적음", next: now + periodBackoff(failN) } });
+    await log(`마감 스냅샷을 시트에 못 적음 (${failN}번째)`, { quiet: true });
+  }
+}
+
 // ---- 상시 수집 (1.8.0): 크롬이 켜져 있는 동안 PC가 스스로 ----
 //  30분마다 시트를 한 번 읽어, 어제까지의 실제 매출·메뉴 판매가 비었거나 계획(gw-plan.json)에 아직 안 한 일이 있으면 스스로 요청(salesPush)을 적음
 //  → 그 뒤는 폰 버튼과 같은 길(창 하나 열어 GW·MIS에서 받아 오고 닫음). 다 받아 뒀으면 3시간 쉼. 하루 4번까지만 스스로 요청(MIS가 막혔을 때 계속 두드리지 않게)
@@ -527,11 +582,11 @@ chrome.runtime.onStartup.addListener(async () => {
   { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null } }); } // 새로 켜졌으면 HR 덤프는 다음 차례에
   { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 60e3 } }); } // 크롬이 막 켜졌으면 1분 뒤에 첫 확인
   await sweep("크롬 시작", true); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 4000); setTimeout(() => sweep("크롬 시작 (되살아난 창)", true), 12000);
-  tick("start"); hrTick(Date.now()); periodicTick(Date.now());
+  tick("start"); hrTick(Date.now()); periodicTick(Date.now()); await snapTick(Date.now());
 });
-chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); periodicTick(Date.now()); });
+chrome.runtime.onInstalled.addListener(async () => { await chrome.storage.local.remove(["job", "tabId", "openedAt", "manual", "warmAt", "kicked", "hrTab"]); { const { autoSt = {} } = await get("autoSt"); await put({ autoSt: { ...autoSt, next: Date.now() + 30e3 } }); } { const { hrSt = {} } = await get("hrSt"); if (hrSt.run) await put({ hrSt: { ...hrSt, run: null, next: Date.now() + 30e3 } }); } await sweep("확장 설치·업데이트"); tick("start"); hrTick(Date.now()); periodicTick(Date.now()); await snapTick(Date.now()); });
 chrome.alarms.create("watch", { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); hrTick(Date.now()); periodicTick(Date.now()); });
+chrome.alarms.onAlarm.addListener(() => { tick("alarm"); fast(); hrTick(Date.now()); periodicTick(Date.now()); snapTick(Date.now()); });
 let fastOn = false;
 function fast() { // 매장 시간이거나 작업 중이면 3초마다 (배경이 잠들면 30초 알람이 다시 깨움)
   if (fastOn) return; fastOn = true;

@@ -10,18 +10,18 @@ const SHIPPED = JSON.parse(fs.readFileSync(REPO + "/gw-plan.json", "utf8"));
 const ms = (s) => Date.parse(s + ":00+09:00");
 let pass = 0, n = 0;
 const t = (name, r, check) => { n++; let ok = false; try { ok = !!check(r); } catch (e) { ok = false; } if (ok) pass++; console.log((ok ? "통과  " : "실패  ") + name + (ok ? "" : "\n   " + JSON.stringify(r).slice(0, 400))); };
-const JOBS = periodJobs(SHIPPED); // 실제 gw-plan.json의 되풀이 항목(now·setsToday, 1시간·:40)
+const JOBS = periodJobs(SHIPPED); // 실제 gw-plan.json의 되풀이 항목(now·setsToday·menuToday, 1시간·:40)
 const due = (s, st, jobs, o) => periodDue(ms(s), st || {}, jobs || JOBS, o || {});
 const T = "2026-11-16", Y = "2026-11-15"; // 월요일
 
-t("A 실제 계획 → 되풀이 항목 둘(당일 Gross·당일 Set판매현황), 1시간·:40", { jobs: JOBS }, (r) => r.jobs.length === 2 && r.jobs.every((j) => j.everyMin === 60 && j.at === 40 && j.from === 8 * 60 + 30 && j.to === 23 * 60) && r.jobs.map((j) => j.kind).join() === "now,setsToday");
+t("A 실제 계획 → 되풀이 항목 셋(당일 Gross·Set판매현황·메뉴 판매), 1시간·:40", { jobs: JOBS }, (r) => r.jobs.length === 3 && r.jobs.every((j) => j.everyMin === 60 && j.at === 40 && j.from === 8 * 60 + 30 && j.to === 23 * 60) && r.jobs.map((j) => j.kind).join() === "now,setsToday,menuToday");
 t("B 09:39는 아직(:40 전) → 안 함", due(`${T}T09:39`), (r) => !r.go && /40분 뒤/.test(r.why));
-t("C 09:40 → 둘 다 할 차례", due(`${T}T09:40`), (r) => r.go && r.jobs.length === 2 && /당일 Gross/.test(r.why));
-t("D 09:55에 이번 시간 이미 함 → 안 함", due(`${T}T09:55`, { day: T, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`) } }), (r) => !r.go && /이미 함/.test(r.why));
-t("E 10:40 → 다음 시간이므로 다시", due(`${T}T10:40`, { day: T, n: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`) } }), (r) => r.go && r.jobs.length === 2);
-t("F 한쪽만 했으면 안 한 쪽만", due(`${T}T10:43`, { day: T, jobAt: { now: ms(`${T}T10:40`) } }), (r) => r.go && r.jobs.length === 1 && r.jobs[0].kind === "setsToday");
-t("F3 발주 시간대를 건너뛰어 14:46에 했어도 다음은 15:40 (시각에 다시 맞춤)", due(`${T}T15:40`, { day: T, jobAt: { now: ms(`${T}T14:46`), setsToday: ms(`${T}T14:46`) } }), (r) => r.go && r.jobs.length === 2);
-t("F4 같은 시간대 15:55에는 둘 다 이미 함 → 안 함", due(`${T}T15:55`, { day: T, jobAt: { now: ms(`${T}T15:40`), setsToday: ms(`${T}T15:40`) } }), (r) => !r.go && r.jobs.length === 0);
+t("C 09:40 → 셋 다 할 차례", due(`${T}T09:40`), (r) => r.go && r.jobs.length === 3 && /당일 Gross/.test(r.why));
+t("D 09:55에 이번 시간 이미 함 → 안 함", due(`${T}T09:55`, { day: T, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } }), (r) => !r.go && /이미 함/.test(r.why));
+t("E 10:40 → 다음 시간이므로 다시", due(`${T}T10:40`, { day: T, n: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } }), (r) => r.go && r.jobs.length === 3);
+t("F 한쪽만 했으면 안 한 쪽만", due(`${T}T10:43`, { day: T, jobAt: { now: ms(`${T}T10:40`), setsToday: ms(`${T}T10:40`) } }), (r) => r.go && r.jobs.length === 1 && r.jobs[0].kind === "menuToday");
+t("F3 발주 시간대를 건너뛰어 14:46에 했어도 다음은 15:40 (시각에 다시 맞춤)", due(`${T}T15:40`, { day: T, jobAt: { now: ms(`${T}T14:46`), setsToday: ms(`${T}T14:46`), menuToday: ms(`${T}T14:46`) } }), (r) => r.go && r.jobs.length === 3);
+t("F4 같은 시간대 15:55에는 셋 다 이미 함 → 안 함", due(`${T}T15:55`, { day: T, jobAt: { now: ms(`${T}T15:40`), setsToday: ms(`${T}T15:40`), menuToday: ms(`${T}T15:40`) } }), (r) => !r.go && r.jobs.length === 0);
 t("G 발주 시간대 12:40 → 창을 안 띄움", due(`${T}T12:40`), (r) => !r.go && /발주 시간대/.test(r.why));
 t("H 14:40도 발주 시간대 → 미룸", due(`${T}T14:40`), (r) => !r.go && /발주 시간대/.test(r.why));
 t("I 14:46 → 발주 시간대 끝, 할 차례", due(`${T}T14:46`), (r) => r.go);
@@ -29,7 +29,7 @@ t("J 08:00 영업 전 → 안 함", due(`${T}T08:00`), (r) => !r.go && /영업 �
 t("K 23:00 영업 끝 → 안 함", due(`${T}T23:00`), (r) => !r.go && /영업 시간 밖/.test(r.why));
 t("L 22:40 마감 뒤 한 번 더(하루 합계) → 할 차례", due(`${T}T22:40`), (r) => r.go);
 t("M 하루 상한(20번)이면 미룸", due(`${T}T15:40`, { day: T, n: 20 }), (r) => !r.go && /상한/.test(r.why));
-t("N 날이 바뀌면 상한·이미 함이 풀림", due(`${T}T09:40`, { day: Y, n: 20, jobAt: { now: ms(`${Y}T09:40`) } }), (r) => r.go && r.jobs.length === 2);
+t("N 날이 바뀌면 상한·이미 함이 풀림", due(`${T}T09:40`, { day: Y, n: 20, jobAt: { now: ms(`${Y}T09:40`) } }), (r) => r.go && r.jobs.length === 3);
 t("O 요청 모양: 창 하나로 now + also.sets(오늘·force)", due(`${T}T09:40`), (r) => { const q = periodBundle(ms(`${T}T09:40`), r.jobs); return q.kind === "now" && q.from === T && q.to === T && q.status === "pending" && q.src === "pc-hour" && typeof q.id === "number" && q.also.sets.from === T && q.also.sets.to === T && q.also.sets.force === 1 && q.also.sets.today === 1 && !q.force; });
 t("P Set만 할 차례면 sets 본체(today·force)", { jobs: periodJobs([{ kind: "setsToday" }]) }, (r) => { const q = periodBundle(ms(`${T}T09:40`), r.jobs); return q.kind === "sets" && q.today === 1 && q.force === 1 && q.from === T && q.to === T && r.jobs.length === 1; });
 t("Q Gross만 할 차례면 also 없음", { jobs: periodJobs([{ kind: "now" }]) }, (r) => { const q = periodBundle(ms(`${T}T09:40`), r.jobs); return q.kind === "now" && !q.also && r.jobs.length === 1; });
@@ -52,5 +52,22 @@ t("W4 매출 창이 입력 중(running 2분) → 양보", periodBlocked({ salesP
 t("W5 발주 전송 중 → 양보", periodBlocked({ misPush: { date: T, status: "pending", at: NOW - 5 * 60e3 } }, NOW, ""), (r) => r === "발주 전송 중");
 t("W6 발주 전송이 오래된 기록(30분 전) → 통과", periodBlocked({ misPush: { date: T, status: "pending", at: NOW - 30 * 60e3 } }, NOW, ""), (r) => r === null);
 t("W7 아무 요청 없음 → 통과", periodBlocked({}, NOW, ""), (r) => r === null);
-t("X 실제 gw-plan.json 되풀이 항목 모양", { p: SHIPPED.filter((j) => /^(now|setsToday)$/.test(String(j.kind || ""))) }, (r) => r.p.length === 2 && r.p.every((j) => j.key && typeof j.everyMin === "number" && typeof j.at === "number" && /^\d{2}:\d{2}$/.test(j.from) && /^\d{2}:\d{2}$/.test(j.to) && j.note));
+t("X 실제 gw-plan.json 되풀이 항목 모양", { p: SHIPPED.filter((j) => /^(now|setsToday|menuToday)$/.test(String(j.kind || ""))) }, (r) => r.p.length === 3 && r.p.every((j) => j.key && typeof j.everyMin === "number" && typeof j.at === "number" && /^\d{2}:\d{2}$/.test(j.from) && /^\d{2}:\d{2}$/.test(j.to) && j.note));
+
+// ---- 1.17.0 (11/17 KM 1·13번): 당일 메뉴 판매를 같은 창에 + 실패하면 지수로 다시 + 마감 스냅샷 ----
+const ALL3 = periodJobs([{ kind: "now" }, { kind: "setsToday" }, { kind: "menuToday" }]);
+t("Y1 오늘 메뉴 판매도 한 요청에: now 본체 + also.sets·also.menu(둘 다 today·force)", { q: periodBundle(ms(`${T}T09:40`), ALL3) }, (r) => r.q.kind === "now" && r.q.also.sets.today === 1 && r.q.also.menu.from === T && r.q.also.menu.to === T && r.q.also.menu.force === 1 && r.q.also.menu.today === 1 && !("force" in r.q));
+t("Y2 메뉴만 할 차례면 menu 본체(today·force) · also 없음", { q: periodBundle(ms(`${T}T09:40`), periodJobs([{ kind: "menuToday" }])) }, (r) => r.q.kind === "menu" && r.q.from === T && r.q.to === T && r.q.today === 1 && r.q.force === 1 && !r.q.also);
+t("Y3 Gross + 메뉴만 → also.menu 하나", { q: periodBundle(ms(`${T}T09:40`), periodJobs([{ kind: "now" }, { kind: "menuToday" }])) }, (r) => r.q.kind === "now" && r.q.also.menu && !r.q.also.sets);
+t("Y4 메뉴 항목이 계획에 없으면 요청에도 없음", { q: periodBundle(ms(`${T}T09:40`), periodJobs([{ kind: "now" }])) }, (r) => !r.q.also);
+const fail1 = { day: T, failN: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } };
+t("Y5 실패 1번: 5분 전(09:44)엔 아직 / 5분 뒤(09:45)에 다시", { a: due(`${T}T09:44`, fail1), b: due(`${T}T09:45`, fail1) }, (r) => !r.a.go && r.b.go && r.b.jobs.length === 3);
+const fail2 = { day: T, failN: 2, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } };
+t("Y6 실패 2번: 15분(09:55)에 다시 (5분이 아님)", { a: due(`${T}T09:50`, fail2), b: due(`${T}T09:55`, fail2) }, (r) => !r.a.go && r.b.go);
+t("Y7 실패 4번(상한 넘음): 다시 안 하고 다음 시간대", due(`${T}T10:20`, { day: T, failN: 4, jobAt: { now: ms(`${T}T10:00`) } }), (r) => !r.go && /이미 함/.test(r.why));
+t("Y8 실패 뒤라도 5분이 안 지났으면 기다림", due(`${T}T10:42`, { day: T, failN: 1, jobAt: { now: ms(`${T}T10:40`), setsToday: ms(`${T}T10:40`), menuToday: ms(`${T}T10:40`) } }), (r) => !r.go && /이미 함/.test(r.why));
+t("Y9 백오프 값: 5·15·45분, 60분에서 멈춤", [1, 2, 3, 4].map((k) => periodBackoff(k) / 60000), (r) => r.join() === "5,15,45,60");
+t("Z1 마감 스냅샷: 21:19 아직 / 21:20 함", { a: snapDue(ms(`${T}T21:19`), {}), b: snapDue(ms(`${T}T21:20`), {}) }, (r) => !r.a.go && r.b.go && r.b.late === 0 && r.b.day === T);
+t("Z2 마감 스냅샷: 21:45에 켜지면 늦게(late) 한 번", snapDue(ms(`${T}T21:45`), {}), (r) => r.go && r.late === 1);
+t("Z3 오늘 이미 했으면 안 함 / 자정 넘으면 어제 것은 안 함", { a: snapDue(ms(`${T}T22:10`), { day: T, okAt: ms(`${T}T21:20`) }), b: snapDue(ms(`${T}T23:59`), {}), c: snapDue(ms(`2026-11-17T00:10`), { day: T, okAt: 1 }) }, (r) => !r.a.go && r.b.go && !r.c.go);
 console.log(`${pass}/${n} 통과`); process.exit(pass === n ? 0 : 1);
