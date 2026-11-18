@@ -2674,8 +2674,12 @@
   const LOCS = [["dry", "드라이"], ["walk", "워크인"], ["frz", "프리저"]];
   // 11/19 KM "식자재 위치랑 구분 · FOH만 드라이 말고 EXPO": FOH 탭에서는 상온 자리 이름이 EXPO (워크인·프리저는 그대로)
   const locName = (k, t) => (scope === "foh" && k === "dry" ? "EXPO" : t);
+  const LOCS_FOH = [["dry", "EXPO"], ["bar", "BAR"], ["walk", "워크인"], ["frz", "프리저"]]; // FOH 탭 위치 4칸 (EXPO = 상온 자리, 키는 dry)
+  const locsNow = () => (scope === "foh" ? LOCS_FOH : LOCS);
   const guessLoc = (it) => {
     const n = it.name;
+    // 11/19 KM "FOH 위치 EXPO BAR 워크인 프리저": FOH 음료·주류·시럽은 BAR로 짐작 (고치면 itemCfg.loc = "bar")
+    if (it.foh && (/롯데칠성|주류/.test(it.vendor || "") || /시럽|주스|탄산|테너|에이드|녹차|커피|쉐이크|그린티|사이다|콜라|오렌지/.test(n))) return "bar";
     if (/냉동|새우|폭립|핑거립|우대갈비|바지락|홍합|오징어|날치알|소시지|떡갈비|판도우|브로컬리컷|감자튀김|양파튀김|어묵|버터라이스|시즐링라이스|부라타|고르곤졸라|잠봉|베이컨|티라미슈|아이스|부채살|채끝|안심|등심|닭가슴살|유린기|생면/.test(n)) return "frz";
     if (it.vendor === "새싹농산" || /샐러드|치즈|크림|우유|버터|수란|명란|하몽|드레싱|피클|라구|마요|머스타드|감말랭이|바나나|레몬주스|테너|리코타|모짜/.test(n)) return "walk";
     return "dry";
@@ -2786,7 +2790,7 @@
   if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
   function renderLocs(M) {
     const pool = M.items.filter((i) => !i.ledgerOnly && inScope(i) && (!cat || i.vendor === cat));
-    $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${locName(k, t)}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+    $("locs").innerHTML = locsNow().map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${locName(k, t)}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
   }
 
   function renderList() {
