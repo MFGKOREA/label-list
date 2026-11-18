@@ -69,7 +69,7 @@ async function world(sc = {}) {
         if (sp.status === "pending" && j.st === "pending" && now - j.at > (sc.pickup ?? 500)) {
           j.st = "running"; j.at = now;
           post("salesPush", { ...sp, status: "running", startAt: now, cur: kind, prog: kind === "menu" ? "8/28일" : "" });
-        } else if (sp.status === "running" && j.st === "running" && now - j.at > (sc.salesRun ?? 1200)) {
+        } else if (sp.status === "running" && j.st === "running" && now - j.at > (sc.salesRun ?? 5000)) {
           j.st = "done";
           if (sc.salesNever) continue; // PC가 응답을 안 적음 → 앱 화면에서 시간 초과
           if (sc.salesError) post("salesPush", { ...sp, status: "error", doneAt: now, text: "MIS가 응답하지 않아 멈췄어요" });
@@ -109,6 +109,10 @@ const pendIds = (w, key) => [...new Set(w.posts.filter((x) => x.key === key).map
   const b0 = await btn(pg, "misGo");
   ok(!!b0 && /GW 전송 2/.test(b0.label), "발주 화면에 [GW 전송 2]가 있고 누를 수 있음");
   await pg.evaluate(() => document.getElementById("misGo").click());
+  // 11/19: 전송 전 확인 화면(추천과 다른 품목 빨강)이 뜸 → [GW 전송]을 눌러야 보냄
+  await until(async () => await pg.evaluate(() => !!document.getElementById("misDlg") && document.getElementById("misDlg").open));
+  ok(await pg.evaluate(() => document.querySelectorAll("#misDlg .md-row").length === 2), "전송 전 확인 화면에 발주 2줄");
+  await pg.evaluate(() => document.querySelector("#misDlg .md-ok").click());
   await sleep(150);
   const b1 = await bar(pg, "#misBar"), v1 = await btn(pg, "misGo");
   ok(!!b1 && b1.live === "run", "누른 즉시 GW 줄 아래에 진행 막대가 보임 (data-live=" + (b1 && b1.live) + ")");
@@ -116,7 +120,7 @@ const pendIds = (w, key) => [...new Set(w.posts.filter((x) => x.key === key).map
   ok(!!v1 && v1.disabled, "누른 즉시 버튼이 잠김 (중복 클릭 방지)");
   await pg.evaluate(() => { for (let i = 0; i < 3; i++) document.getElementById("misGo").click(); }); // 잠긴 동안 세 번 더 눌러 봄
   const pick = await until(async () => { const x = await bar(pg, "#misBar"); return x && x.live === "run" && x.text ? x : null; }, 2000);
-  ok(!!pick && /넣는 중|열기|보내는 중/.test(pick.text), "PC가 받아 도는 동안 진행 글이 막대에 나옴 (" + (pick && pick.text) + ")");
+  ok(!!pick && /넣는 중|열기|여는 중|보내는 중/.test(pick.text), "PC가 받아 도는 동안 진행 글이 막대에 나옴 (" + (pick && pick.text) + ")");
   const pend = pendIds(w, "misPush");
   ok(pend.length === 1, "잠긴 동안 여러 번 눌러도 요청은 1건만 (pending " + pend.length + "건)");
   const okk = await until(async () => { const x = await bar(pg, "#misBar"); return x && x.live === "ok" ? x : null; }, 5000);

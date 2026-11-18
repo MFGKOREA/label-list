@@ -932,3 +932,24 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 #v-loc.n5 #locTabs button { padding: 7px 2px; font-size: 13px; letter-spacing: -0.04em; white-space: nowrap; }
 #v-loc.n5 #locTabs button .cnt { margin-left: 2px; }
 #v-loc.n5 .rloc button { width: 31px; }
+/* GW 전송 전 확인 화면 (11/19 KM 4번): 추천과 많이 다르면 빨강 */
+.mdlg { border: 0; padding: 0; border-radius: 22px; background: var(--surface); color: var(--fg); width: min(440px, calc(100vw - 32px)); max-height: min(78dvh, 640px); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); overscroll-behavior: contain; }
+.mdlg::backdrop { background: rgba(0, 0, 0, .45); }
+.mdlg form { display: flex; flex-direction: column; max-height: inherit; }
+.mdlg h3 { margin: 0; padding: 20px 20px 2px; font-size: 18px; font-weight: 800; }
+.mdlg .md-sub { margin: 0; padding: 0 20px 12px; font-size: 13px; color: var(--muted); }
+.mdlg .md-red, .mdlg .md-row.odd .md-r, .mdlg .md-row.odd .md-q { color: var(--rose-ink); }
+.mdlg .md-list { overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.mdlg .md-v { padding: 12px 20px 4px; font-size: 12px; font-weight: 800; color: var(--muted); }
+.mdlg .md-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; align-items: baseline; gap: 10px; padding: 7px 20px; }
+.mdlg .md-n { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; word-break: keep-all; }
+.mdlg .md-r { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mdlg .md-row.odd .md-r { font-weight: 800; }
+.mdlg .md-q { font-size: 16px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mdlg .md-q small { margin-left: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.mdlg .md-btns { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+.mdlg .md-btns button { min-height: 48px; border: 0; border-radius: 14px; font-size: 16px; font-weight: 800; touch-action: manipulation; }
+.mdlg .md-no { background: var(--fill); color: var(--fg); }
+.mdlg .md-ok { background: var(--accent); color: var(--accent-ink); }
+.c-name[data-full] { cursor: pointer; }
+.f-row input.fc.auto::placeholder { opacity: .65; color: var(--c-de); }

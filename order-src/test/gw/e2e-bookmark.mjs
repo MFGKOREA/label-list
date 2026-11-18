@@ -58,7 +58,7 @@ await ph.waitForFunction(() => window.__orderCalc && window.__orderCalc.model().
 await ph.waitForTimeout(1500);
 console.log("bar:", (await ph.textContent("#misBar")).trim());
 await ph.screenshot({ path: TMP + "/mis-1before.png", clip: { x: 0, y: 380, width: 390, height: 330 } });
-await ph.click("#misGo"); await ph.waitForTimeout(1000);
+await ph.click("#misGo"); await ph.waitForTimeout(500); await ph.click("#misDlg .md-ok").catch(() => {}); await ph.waitForTimeout(1000); // 11/19: 전송 전 확인 화면
 console.log("after send:", (await ph.textContent("#misBar")).trim(), JSON.stringify(store.misPush));
 for (let i = 0; i < 6 && !/done|error/.test((store.misPush || {}).status); i++) await pc.waitForTimeout(6000);
 console.log("misPush", JSON.stringify(store.misPush));
