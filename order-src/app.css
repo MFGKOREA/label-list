@@ -977,3 +977,18 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .mdlg .md-row.miss .md-r, .mdlg .md-row.miss .md-d { font-weight: 800; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mdlg .md-blue, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-r, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-d { color: #7aa7ff; } }
 :root[data-theme="dark"] .mdlg .md-blue, :root[data-theme="dark"] .mdlg .md-row.miss .md-r, :root[data-theme="dark"] .mdlg .md-row.miss .md-d { color: #7aa7ff; }
+/* 리포트·데이터 파일 분류 카드 (11/19 KM "HR 운영 설정처럼"): 2×2 카드, 고른 카드는 검정 */
+.catgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 22px; }
+.catgrid button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 600; text-align: left; touch-action: manipulation; transition: transform .1s ease, background-color .15s ease; }
+.catgrid button svg { flex: none; color: var(--muted); }
+.catgrid button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catgrid button.on { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.catgrid button.on svg { color: var(--surface); }
+.catgrid button:active { transform: scale(.97); }
+.catpane[hidden] { display: none !important; }
+.catempty { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); }
+details.adv { margin-top: 8px; }
+details.adv > summary { list-style: none; display: flex; justify-content: center; align-items: center; gap: 6px; padding: 14px 0; font-size: 14px; color: var(--muted); cursor: pointer; }
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s ease; }
+details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg); }

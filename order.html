@@ -997,6 +997,21 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .mdlg .md-row.miss .md-r, .mdlg .md-row.miss .md-d { font-weight: 800; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mdlg .md-blue, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-r, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-d { color: #7aa7ff; } }
 :root[data-theme="dark"] .mdlg .md-blue, :root[data-theme="dark"] .mdlg .md-row.miss .md-r, :root[data-theme="dark"] .mdlg .md-row.miss .md-d { color: #7aa7ff; }
+/* 리포트·데이터 파일 분류 카드 (11/19 KM "HR 운영 설정처럼"): 2×2 카드, 고른 카드는 검정 */
+.catgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 22px; }
+.catgrid button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 600; text-align: left; touch-action: manipulation; transition: transform .1s ease, background-color .15s ease; }
+.catgrid button svg { flex: none; color: var(--muted); }
+.catgrid button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catgrid button.on { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+.catgrid button.on svg { color: var(--surface); }
+.catgrid button:active { transform: scale(.97); }
+.catpane[hidden] { display: none !important; }
+.catempty { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); }
+details.adv { margin-top: 8px; }
+details.adv > summary { list-style: none; display: flex; justify-content: center; align-items: center; gap: 6px; padding: 14px 0; font-size: 14px; color: var(--muted); cursor: pointer; }
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s ease; }
+details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
 
 </style>
 </head>
@@ -1117,6 +1132,13 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       <span class="right"></span>
     </div>
     <div class="conn" id="connState"></div>
+    <div class="catgrid" data-view="files" role="tablist" aria-label="분류">
+      <button type="button" role="tab" data-cat="month"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M9 3.5v4M15 3.5v4"/></svg><span>월별 자료</span></button>
+      <button type="button" role="tab" data-cat="recipe"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7h11M9 12h11M9 17h11"/><path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg><span>레시피 · 품목</span></button>
+      <button type="button" role="tab" data-cat="order"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.8 12 3.5l8.5 4.3v8.4L12 20.5l-8.5-4.3z"/><path d="M3.5 7.8 12 12l8.5-4.2M12 12v8.5"/></svg><span>발주 설정</span></button>
+      <button type="button" role="tab" data-cat="learn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg><span>학습 상태</span></button>
+    </div>
+    <div class="catpane" data-cat="month">
 
     <div class="sect"><span>월별 데이터</span></div>
     <div class="months" id="months" role="group" aria-label="월 선택"></div>
@@ -1126,16 +1148,17 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     </div>
     <div class="group" id="files"></div>
 
+    </div>
+    <div class="catpane" data-cat="recipe">
     <div class="sect"><span>레시피 연결 확인</span><small id="mapCount"></small></div>
     <div class="group" id="mapList"></div>
 
     <div class="sect"><span>품목 목록</span></div>
     <div class="group" id="masters"></div>
+    </div>
+    <div class="catpane" data-cat="order">
     <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
     <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-
-    <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
-    <div class="group" id="learnState"></div>
 
     <div class="sect"><span>발주 설정</span></div>
     <div class="group">
@@ -1144,7 +1167,13 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
         <label class="fld"><span>%</span><input id="wkIn" type="number" inputmode="numeric" min="0" max="200" step="5" aria-label="주말 여유분 퍼센트"></label>
       </div>
     </div>
+    </div>
+    <div class="catpane" data-cat="learn">
+    <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
+    <div class="group" id="learnState"></div>
 
+    </div>
+    <details class="adv"><summary>고급</summary>
     <div class="sect"><span>구글 시트 연결</span></div>
     <div class="group">
       <div class="cell set">
@@ -1157,6 +1186,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
         <div class="row"><select id="bkSel" aria-label="백업 날짜"><option value="">불러오는 중…</option></select><button type="button" class="btn ghost" id="bkGo">되돌리기</button></div>
       </div>
     </div>
+    </details>
   </section>
 
   <!-- 데이터 리포트 -->
@@ -1166,9 +1196,18 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       <h2>데이터 리포트</h2>
       <span class="right"></span>
     </div>
+    <div class="catgrid" data-view="report" role="tablist" aria-label="분류">
+      <button type="button" role="tab" data-cat="hlth"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg><span>상황판</span></button>
+      <button type="button" role="tab" data-cat="acc"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg><span>정확도</span></button>
+      <button type="button" role="tab" data-cat="learn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15l3.5-4 3 2.5L19 8"/></svg><span>학습</span></button>
+      <button type="button" role="tab" data-cat="req"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h4.5l1 2h5l1-2H20"/></svg><span>데이터 요청</span></button>
+    </div>
+    <div class="catpane" data-cat="hlth">
     <!-- GW 상황판 (11/15 KM "2주안 기획들 실행해", 기획안 14번): 자료마다 마지막으로 들어온 날 · PC 신호 · 합계 대조 · 학습 기록 · 오늘 86 · 품절 -->
     <div class="sect" id="hlthH"><span>GW 상황판</span><small id="hlthSum"></small></div>
     <div class="group" id="hlth"></div>
+    </div>
+    <div class="catpane" data-cat="learn">
     <div class="xp" aria-label="데이터 학습량">
       <div class="xp-top"><span>데이터 학습량</span><button type="button" class="xp-detail" id="xpDetail" aria-expanded="false" aria-controls="xpParts">상세보기<svg width="6" height="10" viewBox="0 0 6 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4-4 4"/></svg></button></div>
       <b class="xp-pct" id="xpPct"></b>
@@ -1177,6 +1216,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
+    </div>
+    <div class="catpane" data-cat="acc">
     <div class="wkpick" hidden>
       <button type="button" id="rPrev" aria-label="이전 주"><svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 1.5l-6 6 6 6"/></svg></button>
       <select id="rSel" aria-label="주 선택"></select>
@@ -1192,15 +1233,18 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       <div class="kpi"><span>채점한 품목</span><b id="kItems"></b></div>
       <div class="kpi"><span>재고 입력</span><b id="kLogs"></b></div>
     </div>
-    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
-    <div class="group" id="rReq" hidden></div>
     <div class="sect"><span>방식별 정확도</span></div>
     <div class="group" id="rMethods"></div>
     <div class="sect"><span>오차 범위 큰 품목</span></div>
     <div class="group" id="rMiss"></div>
+    </div>
+    <div class="catpane" data-cat="req">
+    <div class="empty catempty">요청할 자료가 없어요</div>
+    <div class="sect" id="rReqH" hidden><span>데이터 요청</span><small id="rReqN"></small></div>
+    <div class="group" id="rReq" hidden></div>
     <div class="sect" id="rSharesH" hidden><span>옵션 비율</span></div>
     <div class="group" id="rShares" hidden></div>
-    
+    </div>
   </section>
 
   <!-- 사용방법 -->
@@ -3045,6 +3089,26 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     tabs.forEach(([t2, p2, title]) => { const on = t2 === t; $(t2).setAttribute("aria-selected", on); $(p2).hidden = !on; if (on) $("mainTitle").textContent = title; });
     if (t === "tabPrep") renderPrep();
   }));
+
+  // ---------- 리포트·데이터 파일 분류 카드 (11/19 KM "기능·카드가 너무 많아, HR 운영 설정처럼 카테고리별로") ----------
+  //  화면 위 2×2 카드 중 하나를 고르면 그 묶음(.catpane)만 보임. 고른 것은 이 기기에 기억. 데이터 요청은 요청·옵션 비율이 없으면 "요청할 자료가 없어요"
+  function catSync() {
+    document.querySelectorAll(".catgrid").forEach((g) => {
+      const view = g.closest(".view"), panes = [...view.querySelectorAll(".catpane")], keys = panes.map((p) => p.dataset.cat);
+      let cur = ""; try { cur = localStorage.getItem("cat-" + g.dataset.view) || ""; } catch (e) {}
+      if (!keys.includes(cur)) cur = keys[0];
+      g.querySelectorAll("button[data-cat]").forEach((b) => { const on = b.dataset.cat === cur; b.setAttribute("aria-selected", on); b.classList.toggle("on", on); });
+      panes.forEach((p) => { p.hidden = p.dataset.cat !== cur; });
+      const req = view.querySelector('.catpane[data-cat="req"]');
+      if (req) { const has = [...req.querySelectorAll("#rReqH, #rSharesH")].some((x) => !x.hidden); const em = req.querySelector(".catempty"); if (em) em.hidden = has; }
+    });
+  }
+  document.querySelectorAll(".catgrid").forEach((g) => g.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-cat]"); if (!b) return;
+    try { localStorage.setItem("cat-" + g.dataset.view, b.dataset.cat); } catch (er) {}
+    catSync();
+  }));
+  catSync();
 
   // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
   // 11/12 KM 화면: 아이폰에서 숫자를 입력하고 키보드를 닫으면 하단 독이 키보드가 있던 자리(화면 중간)에 떠서 내용을 가림 (iOS 고정 위치 버그)
@@ -5180,6 +5244,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     $("hlth").innerHTML = rows.map((r) => `<div class="cell kv hl"><span><i class="dot ${r.s}" aria-hidden="true"></i>${esc(r.t)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span><b class="${{ ok: "ok", bad: "bad", warn: "warn" }[r.s] || "mut"}">${esc(r.v)}</b></div>`).join("");
   }
   function renderReport() {
+    setTimeout(catSync, 0); // 데이터 요청 칸이 비었는지 다시 봄
     const M = model();
     renderXp(M); renderReq(M); renderHealth(M);
     // 한 주(월~일) 단위로 채점: 재고 입력 사이 사용량이 끝난 날의 주 (수불현황은 한 달 단위라 주 채점에서는 뺌)

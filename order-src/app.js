@@ -1771,6 +1771,26 @@
     if (t === "tabPrep") renderPrep();
   }));
 
+  // ---------- 리포트·데이터 파일 분류 카드 (11/19 KM "기능·카드가 너무 많아, HR 운영 설정처럼 카테고리별로") ----------
+  //  화면 위 2×2 카드 중 하나를 고르면 그 묶음(.catpane)만 보임. 고른 것은 이 기기에 기억. 데이터 요청은 요청·옵션 비율이 없으면 "요청할 자료가 없어요"
+  function catSync() {
+    document.querySelectorAll(".catgrid").forEach((g) => {
+      const view = g.closest(".view"), panes = [...view.querySelectorAll(".catpane")], keys = panes.map((p) => p.dataset.cat);
+      let cur = ""; try { cur = localStorage.getItem("cat-" + g.dataset.view) || ""; } catch (e) {}
+      if (!keys.includes(cur)) cur = keys[0];
+      g.querySelectorAll("button[data-cat]").forEach((b) => { const on = b.dataset.cat === cur; b.setAttribute("aria-selected", on); b.classList.toggle("on", on); });
+      panes.forEach((p) => { p.hidden = p.dataset.cat !== cur; });
+      const req = view.querySelector('.catpane[data-cat="req"]');
+      if (req) { const has = [...req.querySelectorAll("#rReqH, #rSharesH")].some((x) => !x.hidden); const em = req.querySelector(".catempty"); if (em) em.hidden = has; }
+    });
+  }
+  document.querySelectorAll(".catgrid").forEach((g) => g.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-cat]"); if (!b) return;
+    try { localStorage.setItem("cat-" + g.dataset.view, b.dataset.cat); } catch (er) {}
+    catSync();
+  }));
+  catSync();
+
   // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
   // 11/12 KM 화면: 아이폰에서 숫자를 입력하고 키보드를 닫으면 하단 독이 키보드가 있던 자리(화면 중간)에 떠서 내용을 가림 (iOS 고정 위치 버그)
   //  → 키보드가 떠 있는 동안은 독을 숨기고, 입력이 끝나면 화면 위치를 한 번 다시 잡아 독을 바닥으로 돌려놓음
@@ -3905,6 +3925,7 @@
     $("hlth").innerHTML = rows.map((r) => `<div class="cell kv hl"><span><i class="dot ${r.s}" aria-hidden="true"></i>${esc(r.t)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span><b class="${{ ok: "ok", bad: "bad", warn: "warn" }[r.s] || "mut"}">${esc(r.v)}</b></div>`).join("");
   }
   function renderReport() {
+    setTimeout(catSync, 0); // 데이터 요청 칸이 비었는지 다시 봄
     const M = model();
     renderXp(M); renderReq(M); renderHealth(M);
     // 한 주(월~일) 단위로 채점: 재고 입력 사이 사용량이 끝난 날의 주 (수불현황은 한 달 단위라 주 채점에서는 뺌)
