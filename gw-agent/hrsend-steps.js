@@ -77,6 +77,10 @@ async function hrsStep(op, a) {
     }
     return false;
   }
+  // (1.17.2) 보낸 뒤 아직 답이 안 온 요청 · 저장 안 된 변경이 있는 행(사번)
+  const pendingAjax = () => { const done = new Set(H.ajax.map((x) => x.id).filter(Boolean)), t = Date.now() - 60e3; return H.sent.filter((x) => x.t > t && !done.has(x.id)).map((x) => x.ep); };
+  const dirtyNos = (g) => { try { return [].slice.call(g.dataSource.data()).filter((r) => r.dirty || /^[UID]$/.test(String(r.workType || ""))).map((r) => String(r.emp_code)).slice(0, 40); } catch (e) { return []; } };
+  const dsChanged = (g) => { try { return !!g.dataSource.hasChanges(); } catch (e) { return false; } };
   async function withConfirm(expect, fn) { // 이 단추에서 뜨는 예상 문구에만 "예", 끝나면 되돌림
     const orig = window.confirm, seen = [];
     window.confirm = function (m) { const s = String(m || ""); seen.push(s); return !!expect && expect.test(s); };
@@ -196,6 +200,8 @@ async function hrsStep(op, a) {
     tap($id("hrt2325_btn_search"));
     const ax = await waitAjax(m0, "getMasterList_prc", 15e3); await idle(15e3);
     if (!ax) return fail("week", "검색 응답(getMasterList_prc)이 안 왔어요");
+    for (let k = 0; k < 75 && pendingAjax().length; k++) await sleep(200); // (1.17.2) 검색 뒤 이어지는 표 불러오기(MAINROWS 등)까지 끝난 뒤 검사
+    await idle(5e3);
     if (ax.http >= 400) return fail("week", `검색 응답 HTTP ${ax.http}`);
     const bad = H.msgs.slice(m0.m).find((x) => errText(x.msg)); if (bad) { dismiss(); return fail("week", "검색 중: " + bad.msg); }
     if (!ax.st && ax.n == null) return fail("week", "주차 상태를 못 읽었어요 (infoEnc를 풀지 못함)");
@@ -221,11 +227,34 @@ async function hrsStep(op, a) {
   // ---- 카드 입력 (11/17 KM: 업로드 방식은 쓰지 않음) — 메인 표(#hrt2325_info_list_html) 행 모델에 값을 넣고 workType='U' → [저장] 한 번 ----
   const mainGrid = () => { const el = $id("hrt2325_info_list_html"); return el && $ ? $(el).data("kendoGrid") : null; };
   const DAYS7 = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+  if (op === "settle") { // (1.17.2) 저장 뒤 HR 화면이 서버 응답·표 다시 불러오기(getMasterList_prc)를 끝낼 때까지 기다림 — 그 전에 검색·검사하면 저장 중인 표를 '남의 변경'으로 봄
+    const t0 = Date.now(), ms = a.ms || 20e3;
+    const lastSave = (() => { for (let i = H.ajax.length - 1; i >= 0; i--) if (H.ajax[i].ep === "saveData_prc") return i; return -1; })();
+    while (Date.now() - t0 < ms) {
+      const reloaded = lastSave < 0 || H.ajax.slice(lastSave + 1).some((x) => x.ep === "getMasterList_prc");
+      if (!pendingAjax().length && reloaded && (await idle(2e3))) break;
+      await sleep(300);
+    }
+    const g = mainGrid();
+    return { ok: true, waited: Date.now() - t0, pending: pendingAjax(), dirty: g ? dsChanged(g) : false, dirtyNos: g ? dirtyNos(g) : [] };
+  }
+  // (1.17.2) 저장 안 된 변경이 '방금 이 확장이 저장한 행'뿐이고 표 값이 저장한 값과 모두 같으면 변경 표시만 지움(cancelChanges). 남의 행·고친 값이 하나라도 있으면 안 지움
+  async function dropOwnRows(g, own) {
+    own = own || {}; const nos = dirtyNos(g), byNo = new Map([].slice.call(g.dataSource.data()).map((r) => [String(r.emp_code), r]));
+    const same = (no) => { const w = own[no], r = byNo.get(no); if (!w || !r) return false; return Object.keys(w).every((D) => String(r[D + "_time_item_code_p"] == null ? "" : r[D + "_time_item_code_p"]) === String(w[D].code) && T(r[D + "_work_on_p_hhmm"]) === T(w[D].in) && T(r[D + "_work_off_p_hhmm"]) === T(w[D].out) && T(r[D + "_break_time_p_hhmm"]) === T(w[D].brk)); };
+    if (!dsChanged(g)) return { dropped: 0, dirty: false, dirtyNos: [] };
+    const others = nos.filter((n) => !same(n));
+    if (!nos.length || others.length) return { dropped: 0, dirty: true, dirtyNos: others.length ? others : nos };
+    try { g.dataSource.cancelChanges(); } catch (e) {}
+    await sleep(200);
+    return { dropped: nos.length, dirty: dsChanged(g), dirtyNos: dirtyNos(g) };
+  }
+  if (op === "dropOwn") { const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요"); return Object.assign({ ok: true }, await dropOwnRows(g, a.own)); }
   if (op === "cardMap") { // 지금 탭(소속구분)의 메인 표: 사번 + 요일별 수정 가능(edit_yn). 이름·직책은 안 읽음
     const g = mainGrid(); if (!g) return fail("week", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
     const v = (x) => (x == null ? "" : String(x));
     let dirty = false; try { dirty = !!g.dataSource.hasChanges(); } catch (e) {}
-    return { ok: true, dirty, dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), dept: v(r.dept_code || r.dept_name).slice(0, 20), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
+    return { ok: true, dirty, dirtyNos: dirty ? dirtyNos(g) : [], dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), dept: v(r.dept_code || r.dept_name).slice(0, 20), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
   }
   if (op === "learnCodes") { // 근태유형 코드표: 표의 근태 칸 편집기(드롭다운)를 잠깐 열어 목록만 읽고 닫음 (값은 안 바꿈)
     const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요");
@@ -294,9 +323,11 @@ async function hrsStep(op, a) {
 
   if (op === "cardApply") { // 바뀐 칸만 d.set → 그 행 workType 'U' → hrt2325.saveData() 직접 → 다시 읽어 확인
     const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
-    try { if (g.dataSource.hasChanges()) return fail("save", "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — [검색]으로 새로 고친 뒤 다시", { code: "dirty" }); } catch (e) {}
+    for (let k = 0; k < 75 && pendingAjax().length; k++) await sleep(200);
+    if (dsChanged(g)) { const dr = await dropOwnRows(g, a.own); if (dr.dirty) return fail("save", `HR 표에 저장 안 된 변경이 ${dr.dirtyNos.length || "몇"}행 있어요${dr.dirtyNos.length ? " (사번 " + dr.dirtyNos.slice(0, 5).join(", ") + (dr.dirtyNos.length > 5 ? " 외" : "") + ")" : ""} — 이 확장이 방금 저장한 값이 아니라 누가 화면에서 고치는 중일 수 있어 멈춤. 주차 상태 EDIT(작성 중)와는 다른 것. [검색]으로 새로 고친 뒤 다시`, { code: "dirty", dirtyNos: dr.dirtyNos }); if (dr.dropped) { note("msg", `저장 전 변경 표시 ${dr.dropped}행은 방금 저장한 행이라 지움`); H.droppedOwn = dr.dropped; } }
     const df = diffOf(g, a);
-    if (!df.changes.length) return Object.assign({ ok: true, applied: 0, msg: "바뀔 칸이 없어요 (이미 같음)" }, df);
+    const dropped = H.droppedOwn || 0; H.droppedOwn = 0;
+    if (!df.changes.length) return Object.assign({ ok: true, applied: 0, droppedOwn: dropped, msg: "바뀔 칸이 없어요 (이미 같음)" }, df);
     const rows = [].slice.call(g.dataSource.data()), byNo = new Map(rows.map((r) => [String(r.emp_code), r])), touched = new Set();
     const put = (r, f, v) => { if (typeof r.set === "function") r.set(f, v); else { r[f] = v; r.dirty = true; } };
     for (const c of df.changes) {
@@ -325,10 +356,17 @@ async function hrsStep(op, a) {
       okNow = true; break;
     }
     await idle(10e3);
+    // (1.17.2) 저장이 끝나고 서버 값과 맞는 걸 확인한 뒤에도 표에 '저장 안 된 변경' 표시가 남으면(다시 불러오기 중) 잠깐 기다리고, 그래도 남은 게 방금 저장한 행뿐이면 표시만 지움
+    if (okNow && !(bad && bad.length)) {
+      for (let k = 0; k < 20 && (pendingAjax().length || dsChanged(mainGrid() || g)); k++) await sleep(300);
+      const g3 = mainGrid() || g, left = dsChanged(g3) ? dirtyNos(g3) : [];
+      if (left.length && left.every((n) => touched.has(n))) { try { g3.dataSource.cancelChanges(); } catch (e) {} note("msg", "저장 뒤 남은 변경 표시(방금 저장한 행) 지움"); }
+      H.ownSaved = { at: Date.now(), empNos: [...touched] };
+    }
     if (why) { try { const b1 = $id("jl_noti_footer_btn1"); if (b1 && vis(b1)) tap(b1); } catch (e) {} try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "HR이 저장을 막음: " + why, { confirms: seen }), df); }
     if (!okNow) { try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "저장 뒤 40초 안에 표가 다시 안 불려 왔어요 (workType이 그대로)", { confirms: seen }), df); }
     if (bad.length) return Object.assign(fail("save", `저장 뒤 다시 읽었더니 ${bad.length}칸이 달라요`, { notSaved: bad.map((c) => ({ empNo: c.empNo, name: c.name, dow: c.dow, msg: `보냄 ${c.to.code} ${c.to.in || "-"}~${c.to.out || "-"}/${c.to.brk || "-"}` })) }), df);
-    return Object.assign({ ok: true, applied: df.changes.length, rowsTouched: touched.size, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) }, df);
+    return Object.assign({ ok: true, applied: df.changes.length, droppedOwn: dropped, rowsTouched: touched.size, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) }, df);
   }
 
   if (op === "status") { // 다시 검색해서 지금 상태 (공지·확정 전 확인)

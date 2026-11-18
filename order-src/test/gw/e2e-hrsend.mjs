@@ -47,8 +47,8 @@ function draw(){const el=document.getElementById('hrt2325_info_list_html');el.in
  el.__k={kendoGrid:{columns:cols,table:[tbl],dataItem(tr){return rows[+tr.getAttribute('data-uid').slice(1)];},
   editCell(w){const td=w.el;const s=document.createElement('span');s.setAttribute('data-role','dropdownlist');s.__k={kendoDropDownList:{options:{dataValueField:'time_item_code',dataTextField:'time_item_name'},dataSource:{data(){const L=[{time_item_code:'10',time_item_name:'출근'},{time_item_code:'17',time_item_name:'휴무'},{time_item_code:'18',time_item_name:'주휴일'},{time_item_code:'19',time_item_name:'공휴일'}];return {toJSON(){return L;}};}}}};td.appendChild(s);window.__edited=(window.__edited||0)+1;},
   closeCell(){document.querySelectorAll('#hrt2325_info_list_html [data-role=dropdownlist]').forEach(x=>x.remove());},
-  dataSource:{data(){return rows;},view(){return rows;},hasChanges(){return rows.some(r=>r.dirty);},cancelChanges(){window.__cancel=(window.__cancel||0)+1;search();}}}};}
-async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});rows=JSON.parse(decParam(mr.j.data.infoEnc)).map(obs);if(${JSON.stringify(!!S.preDirty)}&&rows[1]&&!window.__pd){window.__pd=1;rows[1].dirty=true;}draw();btns();}
+  dataSource:{data(){return rows;},view(){return rows;},hasChanges(){return rows.some(r=>r.dirty);},cancelChanges(){window.__cancel=(window.__cancel||0)+1;rows.forEach(r=>{r.dirty=false;});draw();btns();}}}};}
+async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});rows=JSON.parse(decParam(mr.j.data.infoEnc)).map(obs);const S_OTHER=${JSON.stringify(S.otherEdit||'')};if(${JSON.stringify(!!S.preDirty)}&&rows[1]&&!window.__pd){window.__pd=1;rows[1].dirty=true;rows[1].MON_work_on_p_hhmm='07:00';}const DA=${JSON.stringify(S.dirtyAfter||[])};rows.forEach(r=>{if(DA.includes(String(r.emp_code))){r.dirty=true;if(S_OTHER&&String(r.emp_code)===S_OTHER)r.MON_work_on_p_hhmm='06:30';}});draw();btns();}
 function render(){document.getElementById('app').innerHTML=\`
  <input type="hidden" id="hrt2325_search_site_code" value="5090"><input type="hidden" id="hrt2325_dept_category" value="\${dept}">
  <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}">
@@ -68,7 +68,7 @@ function render(){document.getElementById('app').innerHTML=\`
  document.getElementById('hrt2325_btn_init').onclick=async()=>{if(!confirm('기존에 등록된 자료가 있다면 삭제 후 초기화가 진행됩니다.'))return;await ajax('init_prc',{wk});await search();doClientMsg('초기화 되었습니다.');};
  document.getElementById('hrt2325_btn_copy').onclick=()=>ajax('copy_prc',{});
 }
-window.hrt2325={async saveData(){window.__saveCalls=(window.__saveCalls||0)+1;const ch=rows.filter(r=>r.workType==='U').map(r=>{const o={emp_code:r.emp_code};DOWS.forEach(d=>['_time_item_code_p','_time_item_name_p','_work_on_p_hhmm','_work_off_p_hhmm','_break_time_p_hhmm'].forEach(f=>o[d+f]=r[d+f]));return o;});const sp=document.createElement('div');sp.className='k-loading-mask';sp.style.cssText='position:fixed;inset:0';document.body.appendChild(sp);const r=await ajax('saveData_prc',{dept,wk,rows:ch});sp.remove();if(!r.j||r.j.returnCode!==0){const d=document.createElement('div');d.className='k-window';d.setAttribute('role','dialog');d.textContent=(r.j&&r.j.p_error_str)||'저장 오류';document.body.appendChild(d);return;}search();},moveWeek(d){wk+=d==='next'?1:-1;document.getElementById('wk').textContent=wk+'주('+W[wk][0]+'~'+W[wk][1]+')';document.getElementById('hrt2325_year_week_seq').value=wk;},btnEnable(){btns();},getMasterList(){},validateConfirm(){},statusChangeData(){},openMdl(){}};
+window.hrt2325={async saveData(){window.__saveCalls=(window.__saveCalls||0)+1;const ch=rows.filter(r=>r.workType==='U').map(r=>{const o={emp_code:r.emp_code};DOWS.forEach(d=>['_time_item_code_p','_time_item_name_p','_work_on_p_hhmm','_work_off_p_hhmm','_break_time_p_hhmm'].forEach(f=>o[d+f]=r[d+f]));return o;});const sp=document.createElement('div');sp.className='k-loading-mask';sp.style.cssText='position:fixed;inset:0';document.body.appendChild(sp);const r=await ajax('saveData_prc',{dept,wk,rows:ch});sp.remove();if(!r.j||r.j.returnCode!==0){const d=document.createElement('div');d.className='k-window';d.setAttribute('role','dialog');d.textContent=(r.j&&r.j.p_error_str)||'저장 오류';document.body.appendChild(d);return;}await search();if(${JSON.stringify(!!S.stickyDirty)})rows.forEach(r=>{if(ch.some(c=>c.emp_code===r.emp_code))r.dirty=true;});},moveWeek(d){wk+=d==='next'?1:-1;document.getElementById('wk').textContent=wk+'주('+W[wk][0]+'~'+W[wk][1]+')';document.getElementById('hrt2325_year_week_seq').value=wk;},btnEnable(){btns();},getMasterList(){},validateConfirm(){},statusChangeData(){},openMdl(){}};
 </script></body>`;
 const boardPage = `<!doctype html><meta charset="utf-8"><title>HR Board</title><body>board<script>window.__msgs=[];addEventListener('message',e=>{if(e.source===window&&/^MFG_HR_(AGENT_READY|SEND_ACK|SEND_PROGRESS|SEND_RESULT|PUBLISH_RESULT)/.test((e.data||{}).type))window.__msgs.push(e.data);});window.send=(o)=>window.postMessage(Object.assign({type:'MFG_HR_SEND'},o),location.origin);</script></body>`;
 const hits = [];
@@ -132,7 +132,7 @@ const emp = (no, name, kinds) => ({ empNo: no, name, days: dates.map((d, i) => (
 const reqOf = (o) => Object.assign({ requestId: "r" + Math.random().toString(36).slice(2), dept: "BOH", weekStart: W, weekEnd: "2026-11-29", mode: "full", employees: [emp("90000001", "시험일"), emp("90000002", "시험이"), emp("90000003", "시험삼")] }, o || {});
 let board = null;
 async function send(o, ms = +(process.env.HRS_MS || 150000)) {
-  for (const p of ctx.pages()) if (/hr\.pljec/.test(p.url())) await p.close().catch(() => {}); // 지난 HR 탭은 닫고 새로
+  if (!o.keepHr) for (const p of ctx.pages()) if (/hr\.pljec/.test(p.url())) await p.close().catch(() => {}); // 지난 HR 탭은 닫고 새로 (keepHr: 같은 탭 그대로 = 매장 PC처럼)
   if (!board || board.isClosed()) { board = await ctx.newPage(); await board.goto("https://hr-board-teal.vercel.app/"); }
   else await board.reload();
   await board.waitForFunction(() => window.__msgs.some((m) => m.type === "MFG_HR_AGENT_READY"), null, { timeout: 15000 });
@@ -212,6 +212,20 @@ ok(x.res && !x.res.ok && x.res.stage === "save" && x.res.rowErrors.some((e) => e
 reset({ preDirty: true });
 x = await send({ mode: "test", employees: all3() });
 ok(x.res && !x.res.ok && x.res.stage === "save" && /저장 안 된 변경/.test(x.res.message) && S.saves.length === 0, "HR 표에 남의 저장 안 된 변경 → 저장 안 하고 멈춤", brief(x));
+// 10c) (1.17.2) 저장 직후 HR 표에 '저장 안 된 변경' 표시가 남아도(다시 불러오기 중) 방금 저장한 행은 내 것 → 같은 탭에서 바로 다시 보내도 멈추지 않음
+reset({ stickyDirty: true });
+x = await send({ mode: "saveOnly", employees: all3() });
+const hrTab = () => ctx.pages().find((p) => /hr\.pljec/.test(p.url()));
+ok(x.res && x.res.ok && S.saves.length === 1 && (await hrTab().evaluate(() => !jq("#hrt2325_info_list_html").data("kendoGrid").dataSource.hasChanges())), "저장 뒤 남은 '변경' 표시가 방금 저장한 행뿐이면 지움 → 표 깨끗", brief(x));
+S.dirtyAfter = ["90000001", "90000002", "90000003"]; await hrTab().reload(); await sleep(800); // 매장처럼: 검색 뒤에도 방금 저장한 행에 '변경' 표시가 남는 경우
+x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
+ok(x.res && x.res.ok && S.saves.length === 1 && x.res.log.some((l) => /방금 이 확장이 저장한 행이라 지움/.test(l.msg)) && x.res.log.some((l) => /EDIT\(작성 중 · 공지 전\)/.test(l.msg)), "같은 HR 탭에서 바로 다시 보냄: 표 값이 방금 저장한 값과 같은 행의 '변경' 표시는 지우고 진행 · 주차 상태 EDIT는 '작성 중'으로 따로 적음", brief(x));
+S.dirtyAfter = ["90000001", "90000020"]; S.otherEdit = "90000020"; await hrTab().reload(); await sleep(800);
+x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000020/.test(x.res.message) && !/90000001/.test(x.res.message) && S.saves.length === 1, "남의 행(보내지 않은 90000020, 값을 고침)에 저장 안 된 변경 → 예전처럼 멈춤, 그 사번만 알려 줌", brief(x));
+S.dirtyAfter = ["90000002"]; S.otherEdit = "90000002"; await hrTab().reload(); await sleep(800);
+x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000002/.test(x.res.message) && S.saves.length === 1, "방금 저장한 사람이라도 표 값을 누가 고쳤으면(06:30) 남의 변경 → 멈춤", brief(x));
 // 11) 로그인 풀림 · 같은 requestId
 reset({ login: false }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0, "HR 로그인 화면 → 바로 멈춤(login)", brief(x));

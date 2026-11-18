@@ -65,10 +65,11 @@ async function hrsRun(req, board, boardWin) {
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
     // 3) 소속구분은 고르지 않음(빈칸 = 전체: BOH·FOH·STORE가 다 나옴, 11/17 KM) → 한 화면에서 보낸 직원을 모두 찾음
     const sentSet = new Set(empNos);
+    { const sv = await hrsExec(tabId, "settle", { ms: 20e3 }, 30e3); if (sv && sv.waited > 1500) await step("week", `HR 화면이 앞 작업(저장·다시 불러오기)을 끝낼 때까지 ${Math.round(sv.waited / 1000)}초 기다림`); }
     r = await hrsExec(tabId, "cond", { dept: "", weekStart: plan.weekStart, weekEnd: plan.weekEnd, site: HRS.site }, 120e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message }); return; }
     let st = r.status; const week = r.week;
-    await step("week", `검색(전체): ${r.week} · 상태 ${st.join(",") || "없음"}`, null, r.ajax);
+    await step("week", `검색(전체): ${r.week} · 주차 상태 ${st.length ? st.map((x) => x === "EDIT" ? "EDIT(작성 중 · 공지 전)" : x).join(",") : "없음"} — 저장 안 된 변경 여부와는 따로 봄`, null, r.ajax);
     if (st.indexOf("CONFIRM") >= 0) { res = res0({ stage: "week", message: `이미 확정된 주예요 (${week}) — 확정취소는 자동으로 하지 않아요`, code: "confirmed" }); return; }
     if (st.indexOf("NOTICE") >= 0) { res = res0({ stage: "week", message: `공지된 주라 수정할 수 없어요 (${week}) — 공지취소는 자동으로 하지 않아요`, code: "noticed" }); return; }
     if (!st.length && plan.allowInit) { // 상태 없는 주: 이대로 저장하면 공지·확정이 안 켜짐 → allowInit일 때만 저장 전에 [초기화]
@@ -80,7 +81,12 @@ async function hrsRun(req, board, boardWin) {
     } else if (!st.length) await step("week", "주차 상태 없음 — 저장은 되지만 공지·확정이 안 켜질 수 있어요 (HR에서 초기화·전주복사 또는 allowInit)");
     const m = await hrsExec(tabId, "cardMap", {}, 30e3);
     if (!m.ok) { res = res0({ stage: "week", message: m.message }); return; }
-    if (m.dirty) { res = res0({ stage: "save", message: "HR 표에 저장 안 된 변경이 있어요 (누가 화면에서 고치는 중?) — 같이 저장되지 않게 멈춤. HR에서 [검색]으로 새로 고친 뒤 다시", code: "dirty" }); return; }
+    if (m.dirty) { // (1.17.2) 방금 이 확장이 저장한 행(30분 안, 서버 값 확인함)뿐이면 표시만 지우고 계속. 남의 행이 섞이면 예전처럼 멈춤
+      const { hrSaved: ls } = await get("hrSaved"), own = ls && ls.week === plan.weekStart && Date.now() - ls.at < 30 * 60e3 && ls.rows ? ls.rows : null;
+      const dr = own ? await hrsExec(tabId, "dropOwn", { own }, 10e3) : { dirty: true, dirtyNos: m.dirtyNos || [] };
+      if (dr && dr.dropped) await step("week", `저장 안 된 변경 표시 ${dr.dropped}행은 방금 이 확장이 저장한 행이라 지움(서버 값과 같음)`);
+      if (!dr || dr.dirty) { const nos = (dr && dr.dirtyNos) || m.dirtyNos || []; res = res0({ stage: "save", message: `HR 표에 저장 안 된 변경이 ${nos.length || "몇"}행 있어요${nos.length ? " (사번 " + nos.slice(0, 5).join(", ") + (nos.length > 5 ? " 외" : "") + ")" : ""} — 이 확장이 저장한 행이 아니라 누가 화면에서 고치는 중일 수 있어 멈춤. 주차 상태 EDIT(작성 중)와는 다른 것. HR에서 [검색]으로 새로 고친 뒤 다시`, code: "dirty", dirtyNos: nos }); return; }
+    }
     const inHr = new Set(m.rows.map((x) => x.empNo));
     const nowhere = empNos.filter((n) => !inHr.has(n)); // 표에 없는 사람은 건너뛰고 보고 (11/17 KM: HR '누락건 추가'로 따로)
     if (nowhere.length) await step("week", `표에 없는 사번 ${nowhere.length}명은 건너뜀: ${nowhere.join(", ")}`);
@@ -104,11 +110,15 @@ async function hrsRun(req, board, boardWin) {
     await setRun({ stage: "save", tab: tabId });
     const emps = plan.emps.filter((e) => inHr.has(e.empNo)).map((e) => ({ empNo: e.empNo, name: e.name, days: e.days.filter((d) => days.indexOf(d.dow) >= 0).map((d) => ({ dow: d.dow, code: CODE[d.kind], kname: KN[d.kind], in: d.in, out: d.out, brk: d.brk })) }));
     const keep = chk.warns.filter((w) => w.keepWeekly).map((w) => w.empNo);
-    r = await hrsExec(tabId, "cardApply", { emps, keep, weekly: CODE["주휴일"] }, 90e3);
+    const { hrSaved: ls2 } = await get("hrSaved"), own2 = ls2 && ls2.week === plan.weekStart && Date.now() - ls2.at < 30 * 60e3 && ls2.rows ? ls2.rows : null;
+    r = await hrsExec(tabId, "cardApply", { emps, keep, weekly: CODE["주휴일"], own: own2 }, 90e3);
+    if (r && r.code === "dirty") { res = res0({ stage: "save", message: r.message, code: "dirty", dirtyNos: r.dirtyNos || [] }); return; }
+    if (r && r.droppedOwn) await step("save", `저장 안 된 변경 표시 ${r.droppedOwn}행은 방금 이 확장이 저장한 행이라 지움(표 값이 저장한 값과 같음)`);
     const extra = { skipped: [...(r.skipped || []), ...nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "표에 없음 — 건너뜀" }))], kept: r.kept || [], locked: r.locked || [], changed: (r.changes || []).length };
     if (!r.ok) { res = res0(Object.assign({ stage: "save", message: `저장: ${r.message}`, code: r.code, rowErrors: (r.notSaved || []).map((x) => ({ empNo: x.empNo, name: x.name, day: x.dow, msg: "저장 뒤 값이 다름 · " + x.msg })) }, extra)); return; }
     await step("save", `바뀐 칸 ${r.applied}개(${r.rowsTouched || 0}명) 입력 → 저장 → 다시 읽어 확인 맞음${extra.kept.length ? ` · 주휴일 유지 ${extra.kept.length}` : ""}${extra.locked.length ? ` · 수정 불가 ${extra.locked.length}` : ""}${extra.skipped.length ? ` · 건너뜀 ${extra.skipped.length}명` : ""}`, null, r.ajax);
     const saved = emps.map((e) => e.empNo).filter((n) => !extra.skipped.some((x) => x.empNo === n));
+    await put({ hrSaved: { at: Date.now(), week: plan.weekStart, rows: Object.fromEntries(emps.filter((e) => saved.includes(e.empNo)).map((e) => [e.empNo, Object.fromEntries(e.days.map((d) => [d.dow, { code: d.code, in: d.in || "", out: d.out || "", brk: d.brk || "" }]))])) } }); // (1.17.2) 다음 실행이 이 행들을 '남의 변경'으로 보지 않게
     days.forEach((d) => savedDays.push(d));
     if (mode === "test") { res = res0(Object.assign({ ok: true, stage: "save", day: "MON", message: `시험: 월요일만 넣고 저장했어요 (바뀐 칸 ${extra.changed}개, 공지·확정 안 함)`, test: true }, extra)); return; }
     res = res0(Object.assign({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${saved.length}명 · 바뀐 칸 ${extra.changed}개${extra.kept.length || extra.skipped.length || extra.locked.length ? " · 확인 필요 있음" : ""}). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: saved }, extra));
@@ -156,6 +166,7 @@ async function hrsPublish(req, board, boardWin) {
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
     // 1) 전체(소속구분 빈칸) 한 번 [검색] → 메인 표 전원(BOH·FOH·STORE) 점검 (11/17 KM: 부서 따로 안 고름)
+    await hrsExec(tabId, "settle", { ms: 20e3 }, 30e3); // (1.17.2) 앞 저장·다시 불러오기가 끝난 뒤 검색
     r = await hrsExec(tabId, "cond", { dept: "", weekStart: ws, weekEnd: we, site: HRS.site }, 120e3);
     if (!r.ok) { res = res0({ stage: "precheck", message: "전체 검색: " + r.message }); return; }
     const st0 = r.status, wk0 = r.week;
@@ -219,6 +230,7 @@ async function hrsRead(req, board, boardWin) {
     if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ message: r.message, code: r.code }); return; }
+    await hrsExec(tabId, "settle", { ms: 20e3 }, 30e3); // (1.17.2) 앞 저장·다시 불러오기가 끝난 뒤 검색
     r = await hrsExec(tabId, "cond", { dept: "", weekStart: ws, weekEnd: we, site: HRS.site }, 120e3);
     if (!r.ok) { res = res0({ message: "전체 검색: " + r.message }); return; }
     const status = r.status || [], week = r.week || "";
