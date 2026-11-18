@@ -316,12 +316,14 @@
       // 날짜 목록: from ~ to 중 시트에 아직 없는 날만 (force면 다)
       //  1.17.0 (11/17 KM 1번): job.today = 1이면 오늘 지금까지 중간값 → 완결된 하루 기록(menuDay.날짜)이 아니라 menuNow 에 둠.
       //   영업 중 값이라 학습(요일별 메뉴 쏠림 → 품목별 주말 배수)의 하루 기록에 섞지 않고, 매시간 덮어씀
+      // 11/16~17 새 POS 첫날들은 소분류(분류 이름)를 메뉴로 읽었음 → 그렇게 저장된 날은 없는 날로 보고 다시 받음 (머리글에 메뉴명 칸이 있는데 메뉴로 소분류를 씀)
+      const badMenuDay = (v, day) => !!(v && (v.h ? v.h.menu === "소분류" && (v.h.cols || []).some((c) => /메뉴\s*명/.test(String(c))) : day >= "2026-11-16")); // 11/16은 머리글 기록 전에 받음
       const today = !!job.today;
       const keyOf = (day) => (today ? "menuNow" : "menuDay." + day);
       const have = await get();
       const days = [];
       if (today) days.push(job.to || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
-      else for (let x = job.from; x <= job.to; ) { if (job.force || !have[keyOf(x)]) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
+      else for (let x = job.from; x <= job.to; ) { if (job.force || !have[keyOf(x)] || badMenuDay(have[keyOf(x)], x)) days.push(x); const t = new Date(x + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); x = t.toISOString().slice(0, 10); }
       const L = loader($, d);
       let saved = 0; const empty = [], failed = [], saveErr = [], chkBad = []; let rem = [], hung = false;
       // 시트 저장은 뒤에서 차례로 (하루 저장에 2~4초 → 조회를 막지 않게). 실패한 날은 따로 모음
@@ -344,8 +346,11 @@
         const grid = hit.grid, o = $(grid).datagrid("options"), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
         const TT = (c) => title(c) + " " + c.field;
         const qtyCol = cols.find((c) => /판매\s*수량/.test(title(c))) || cols.find((c) => /수량|qty/i.test(TT(c)) && !/금액|율|%|amt/i.test(TT(c)));
-        const menuCol = cols.find((c) => /^소분류$|메뉴\s*명/.test(title(c))) || cols.find((c) => /메뉴|menu|상품명|품목명/i.test(TT(c)) && !/코드|code|cd_|분류/i.test(TT(c)));
-        const catCol = cols.find((c) => /^중분류$/.test(title(c))) || cols.find((c) => /분류|구분|cat/i.test(TT(c)) && c !== menuCol && !/코드|code|cd_/i.test(TT(c)));
+        // 11/18 KM "포스기 변경으로 카테고리 / 메뉴명": 새 POS 표 = 대분류 | 중분류 | 소분류(Soup·Salad 같은 분류) | 메뉴코드 | 메뉴명(S).
+        //  예전 표는 소분류 칸이 메뉴 이름이었음 → 메뉴명 칸이 있으면 그것을 먼저, 분류는 그 바로 위(소분류). 없으면 예전대로 소분류 = 메뉴, 중분류 = 분류.
+        const nameCol = cols.find((c) => /메뉴\s*명/.test(title(c)));
+        const menuCol = nameCol || cols.find((c) => /^소분류$/.test(title(c))) || cols.find((c) => /메뉴|menu|상품명|품목명/i.test(TT(c)) && !/코드|code|cd_|분류/i.test(TT(c)));
+        const catCol = (nameCol && cols.find((c) => /^소분류$/.test(title(c)))) || cols.find((c) => /^중분류$/.test(title(c)) && c !== menuCol) || cols.find((c) => /분류|구분|cat/i.test(TT(c)) && c !== menuCol && !/코드|code|cd_/i.test(TT(c)));
         step = "읽기 " + day;
         if (!qtyCol || !menuCol) throw new Error(`메뉴·수량 칸을 못 찾았어요 (머리글: ${cols.map(title).join(", ").slice(0, 200)})`);
         const rows = [];

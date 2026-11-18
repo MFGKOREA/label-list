@@ -126,7 +126,7 @@
       savePend();
       Object.keys(pend.add).forEach((k) => { const arr = Array.isArray(remote[k]) ? remote[k].slice() : []; pend.add[k].forEach((it) => { if (!arr.some((x) => JSON.stringify(x) === JSON.stringify(it))) arr.push(it); }); remote[k] = arr; });
       if (remote["onhand.archive"] || remote.onhand || db.onhand) remote.onhand = mergeLogs(remote["onhand.archive"], remote.onhand, db.onhand);
-      db = { ...db, ...remote }; online = true; pulled = true; lsSave();
+      db = { ...db, ...remote }; online = true; pulled = true; dropBadMenu(); lsSave();
       if (Object.keys(pend.set).length || Object.keys(pend.add).length) flush();
       return changed;
     } catch (e) { online = false; if (!quiet) toast("구글 시트에 연결하지 못했어요. 이 기기에 저장해 둘게요."); return false; }
@@ -516,6 +516,8 @@
   const mget = (m) => db["month." + m] || {};
   // 날짜별 메뉴 판매의 소계 줄 빼기 (11/13): MIS 메뉴별 매출현황에는 중분류마다 "[스테이크] 스테이크"처럼 이름이 중분류와 같은 소계 줄이 섞여 옴.
   //  이 줄이 엉뚱한 레시피에 붙어(Soup → 머시룸 수프, 파스타 → 포 갈릭 스테이크 파스타 …) 10월만 9,800개를 더 셌음. 같은 중분류에 다른 메뉴가 있을 때만 소계로 봄(메뉴가 하나뿐인 중분류는 그대로)
+  // 11/18 새 POS: 메뉴명 칸이 있는데 소분류(Soup·Salad 같은 분류)를 메뉴로 읽은 날(11/16~17)은 없는 날로 봄(11/16은 머리글 기록 전에 받아 머리글 없음 = 새 POS 첫날) — 분류 이름이 비슷한 레시피에 붙어 사용량을 흔듦. 시트 값은 지우지 않음(PC가 다시 받아 덮어씀)
+  function dropBadMenu() { Object.keys(db).forEach((k) => { const v = db[k]; if (/^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && v && (v.h ? v.h.menu === "소분류" && (v.h.cols || []).some((c) => /메뉴\s*명/.test(String(c))) : k.slice(8) >= "2026-11-16")) delete db[k]; }); }
   const dayRowsOf = (k) => { const rows = (db[k] || {}).rows; if (!Array.isArray(rows)) return []; const multi = new Set(rows.filter((r) => r.c && r.m !== r.c).map((r) => r.c)); return rows.filter((r) => !(r.c && r.c === r.m && multi.has(r.c))); };
   function mset(m, patch) { setKey("month." + m, { ...mget(m), ...patch }); }
   // 최신 레시피 (가장 늦은 달에 올린 것, 같은 이름은 나중 파일이 덮음)

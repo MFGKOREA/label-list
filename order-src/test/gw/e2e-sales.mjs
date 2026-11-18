@@ -10,7 +10,7 @@ const req = (m) => import(m).catch(() => import("/opt/node22/lib/node_modules/" 
 const { chromium } = await req("playwright");
 const HERE = path.dirname(fileURLToPath(import.meta.url)), REPO = path.resolve(HERE, "../../..");
 const gas = load(REPO + "/apps-script/order/Code.gs");
-let fails = 0; const ok = (c, m) => { console.log((c ? "통과 " : "실패 ") + m); if (!c) fails++; };
+let fails = 0, oks = 0; const ok = (c, m) => { console.log((c ? "통과 " : "실패 ") + m); if (!c) fails++; else oks++; };
 const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 const ctx = await b.newContext({ timezoneId: "Asia/Seoul" });
 await ctx.route("https://script.google.com/**", async (r) => {
@@ -18,7 +18,8 @@ await ctx.route("https://script.google.com/**", async (r) => {
   const body = q.method() === "GET" ? gas.get(Object.fromEntries(new URL(q.url()).searchParams)) : gas.post(JSON.parse(q.postData()));
   r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 });
-await ctx.route("https://mis.test/**", (r) => r.fulfill({ path: HERE + "/mock/" + new URL(r.request().url()).pathname.slice(1) }));
+const swap = {}; // 시험마다 가짜 화면 바꿔 끼우기 (11/18 새 POS 메뉴 칸)
+await ctx.route("https://mis.test/**", (r) => { const n = new URL(r.request().url()).pathname.slice(1); r.fulfill({ path: HERE + "/mock/" + (swap[n] || n) }); });
 await ctx.route("https://mfgkorea.github.io/label-list/mis-sales.js*", (r) => r.fulfill({ path: REPO + "/mis-sales.js", contentType: "text/javascript" }));
 const run = async (job, page = "sales-main.html", peek, block) => {
   gas.post({ action: "set", key: "salesPush", value: { id: Date.now(), at: Date.now(), status: "pending", ...job } });
@@ -50,6 +51,17 @@ ok(d.salesPush.status === "done" && /⚠ 합계 다른 날 10\/26 \(저장 안 �
 // 1-2) 합계 대조 (11/15 KM "합계는 한 번 더 맞춰 본다"): 화면 합계 줄과 읽은 합이 다르면 ⚠로 알리고 저장은 그대로
 d = await run({ kind: "menu", from: "2026-10-26", to: "2026-10-26" });
 ok(d.salesPush.status === "done" && /⚠ 합계 다른 날 10\/26/.test(d.salesPush.text) && d.salesPush.parts.menu.chkBad === 1 && (d["menuDay.2026-10-26"] || {}).rows.length === 4, "합계 대조: 메뉴 합계가 다르면 ⚠ 다른 날 10/26 (저장은 그대로) · " + d.salesPush.text);
+// 1b) 11/18 새 POS: 소분류가 분류 이름(Soup·Salad)이고 메뉴명(S) 칸이 따로 → 메뉴명을 메뉴로, 소분류를 분류로. 소분류를 메뉴로 잘못 받아 둔 날은 다시 받음
+swap["menureport.html"] = "menureport-newpos.html";
+gas.post({ action: "set", key: "menuDay.2026-11-03", value: { at: 1, rows: [{ c: "Master", m: "Soup", q: 9 }], h: { cols: ["대분류", "중분류", "소분류", "메뉴코드", "메뉴명(S)", "수량"], menu: "소분류", cat: "중분류" } } });
+gas.post({ action: "set", key: "menuDay.2026-11-04", value: { at: 1, rows: [{ c: "x", m: "y", q: 1 }] } });
+d = await run({ kind: "menu", from: "2026-11-01", to: "2026-11-04" });
+delete swap["menureport.html"];
+const np = d["menuDay.2026-11-01"] || {}, npm = (np.rows || []).map((r) => r.m);
+ok(np.h && np.h.menu === "메뉴명(S)" && np.h.cat === "소분류", "새 POS: 메뉴 칸 = 메뉴명(S), 분류 = 소분류 · " + JSON.stringify(np.h && { menu: np.h.menu, cat: np.h.cat }));
+ok(npm.includes("매드 스테이크 & 치킨 플래터") && !npm.includes("Master") && npm.length === 5 && (np.rows || []).find((r) => r.m === "포레스트 스트립 스테이크").c === "스테이크", "새 POS: 메뉴 이름으로 저장 · 빈 메뉴명 소계 줄 뺌 · " + npm.join("/"));
+ok(d["menuDay.2026-11-03"].h.menu === "메뉴명(S)" && d["menuDay.2026-11-03"].rows.some((r) => /플래터/.test(r.m)), "소분류를 메뉴로 잘못 받아 둔 날(11/03)은 다시 받음");
+ok(d["menuDay.2026-11-04"].rows[0].m === "y", "제대로 있던 날(11/04)은 그대로");
 // 2) Gross 불러오기도 그대로
 gas.post({ action: "set", key: "forecast", value: { "2026-10-20": { fc: "3000000", act: "" } } });
 d = await run({ from: "2026-10-20", to: "2026-10-24" });
@@ -144,7 +156,7 @@ const s13 = d["setDay.2026-11-13"] || {}, s14 = d["setDay.2026-11-14"] || {}, qO
 ok(s13.cust === 180 && s13.tot === 7 && qOf(s13, "MGGGR") === 4 && qOf(s13, "MTDB") === 2 && qOf(s13, "ROMANTIC") === 1 && !(s13.rows || []).some((r) => r.s === "PREMIUM"), "11/13 이 매장 줄: 고객수 180 · 세트 7 (골고루 4 · 미트 더블 2 · 로맨틱 1, 0인 세트는 뺌) · 첫 판의 빈 기록은 다시 읽어 덮음");
 ok(s14.cust === 420 && qOf(s14, "MGGGR") === 11 && qOf(s14, "PREMIUM") === 1, "11/14 토요일: 고객수 420 · 골고루 11 · 프리미엄 1 (treegrid 자식 줄에서 읽음)");
 ok(Array.isArray((d["setDay.2026-11-12"] || {}).rows) && d["setDay.2026-11-12"].rows.length === 0 && d["setDay.2026-11-11"].rows[0].s === "x", "이 매장 세트가 없는 날(11/12)은 빈 기록 · 이미 있던 날(11/11)은 다시 안 읽음");
-ok(!JSON.stringify(d).includes("다른매장") && ![s13, s14].some((x) => JSON.stringify(x).includes("50") || /,000/.test(JSON.stringify(x))) && !JSON.stringify(d).includes("MG수원"), "다른 매장 줄·금액·매장명은 저장 안 함");
+ok(!JSON.stringify(d).includes("다른매장") && ![s13, s14].some((x) => JSON.stringify({ rows: x.rows, cust: x.cust, tot: x.tot }).includes("50") || /,000/.test(JSON.stringify(x))) && !JSON.stringify(d).includes("MG수원"), "다른 매장 줄·금액·매장명은 저장 안 함");
 ok(d.setProbe && d.setProbe.grids[0].tree === true && d.setProbe.grids[0].cols.includes("MGGGR_CNT=수량") && JSON.stringify(d.setProbe.grids[0].heads).includes("골고루*3") && d.misSetScan && d.misSetScan.to === "2026-11-14" && d.misSetScan.days === 2 && d.misSetScan.empty === 1 && d.misSetScan.cols.sets.includes("MTDB_CNT"), "열 이름·겹 머리글(세트 이름)은 setProbe에 · 스캔 기록(끝날·저장 2일·빈 날 1일)");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "Set판매현황 읽기도 KM 입력(input.날짜)은 안 건드림");
 ok(!/⚠/.test(d.salesPush.text) && Array.isArray(d.misSetScan.chkBad) && d.misSetScan.chkBad.length === 0, "합계 대조: 세트별 합 = 세트 합계면 경고 없음");
@@ -158,5 +170,5 @@ d = await run({ kind: "sets", from: "2026-11-01", to: "2026-11-02" }, "sets-main
 console.log("결과:", d.salesPush.status, d.salesPush.text);
 ok(!d["setDay.2026-11-01"] && !d["setDay.2026-11-02"] && d.setProbe.diag && d.setProbe.diag.grids[0].tree === true && d.misSetScan.to === null && d.salesPush.parts.sets.status === "error", "이 매장 줄이 없으면 아무 날도 저장 안 함 · setProbe.diag만 · 끝날 기록 안 함(다음에 다시)");
 await b.close();
-console.log(`합계: 통과 ${62 - fails} · 실패 ${fails}`);
+console.log(`합계: 통과 ${oks} · 실패 ${fails}`);
 process.exitCode = fails ? 1 : 0;

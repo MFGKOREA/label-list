@@ -127,7 +127,10 @@ def main():
     span = [day(T, -i) for i in range(a.days, 0, -1)]
     has_act = lambda x: str((fc.get(x) or {}).get("act") or "").strip() not in ("", "0")
     miss_g = [x for x in span if not has_act(x)]
-    miss_m = [x for x in span if ("menuDay." + x) not in d]
+    # 11/18 새 POS: 메뉴명 칸이 있는데 소분류(분류 이름)를 메뉴로 읽은 날은 빈 날로 봄 (확장 mis-sales.js 도 같은 규칙으로 다시 받음)
+    #  11/16은 머리글 기록(h) 전에 받아 h가 없음 → 11/16부터 h 없는 날도 같음 (고친 뒤 받은 날은 h.menu = 메뉴명(S))
+    bad_m = lambda v, x: isinstance(v, dict) and (v["h"].get("menu") == "소분류" and any(re.search(r"메뉴\s*명", str(c)) for c in (v["h"].get("cols") or [])) if isinstance(v.get("h"), dict) else x >= "2026-11-16")
+    miss_m = [x for x in span if ("menuDay." + x) not in d or bad_m(d.get("menuDay." + x), x)]
     print("기준 %s %s · 어제 %s · 매출 빈 날 %s · 메뉴 빈 날 %s" % (T, kst.strftime("%H:%M"), md(Y), ", ".join(map(md, miss_g)) or "없음", ", ".join(map(md, miss_m)) or "없음"))
     sp = d.get("salesPush") or {}
     ag = d.get("misAgent") or {}
@@ -268,7 +271,7 @@ def main():
     p = f.get("salesPush") or {}
     fc2 = f.get("forecast") or {}
     got_g = [x for x in miss_g if str((fc2.get(x) or {}).get("act") or "").strip() not in ("", "0")]
-    got_m = [x for x in miss_m if ("menuDay." + x) in f]
+    got_m = [x for x in miss_m if ("menuDay." + x) in f and not bad_m(f.get("menuDay." + x), x)]
     ps = p.get("parts") or {}
     for k, name in [("gross", "매출"), ("menu", "메뉴")] + [(j["kind"], j.get("label") or j["kind"]) for j in jobs]:
         if ps.get(k):
