@@ -371,17 +371,19 @@ function ocrOnly_(data, color, trace, via) {
   if (!m) throw new Error('사진 형식이 올바르지 않습니다');
   const bytes = Utilities.base64Decode(m[2]);
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
-  const blob = Utilities.newBlob(bytes, 'image/' + m[1], 'ocr.jpg');
+  const blob = Utilities.newBlob(bytes, 'image/' + m[1], OCR_SRC);
   let text = '', ocrError = '', vErr = '';
   try { text = visionOcr_(m[2]); if (String(text).trim()) t.by = 'vision'; } catch (err) { vErr = String(err).slice(0, 200); }
-  if (!t.by && via === 'copy') {
-    // 시험: 사진 파일을 먼저 만들고 그 파일을 문서로 복사해 읽기 (사진 저장 방식과 같은 길)
+  if (!t.by && via !== 'insert') {
+    // 사진 파일을 만들고 그 파일을 문서로 복사해 읽는다 (11/18 매장 사진 26장: 26장 모두 읽음, 바로 올려 읽기는 10장이 '요청 많음'으로 거절)
     try {
       const c0 = Date.now(), f = photoFolder_().createFile(blob); t.create = Date.now() - c0;
-      try { text = ocrFile_(f.getId()); t.by = 'copy'; } finally { ocrLater_(f.getId()); }
+      const c1 = Date.now();
+      try { text = ocrFile_(f.getId(), true); t.by = 'copy'; } finally { t.copy = Date.now() - c1; ocrLater_(f.getId()); }
     } catch (err) { ocrError = String(err); }
   }
-  if (!t.by && !ocrError) { try { text = ocr_(blob, t, true); t.by = 'drive'; } catch (err) { ocrError = String(err); } }
+  // 복사 방식이 비었을 때만 예전 방식(바이트를 바로 올려 읽기)으로 한 번 더
+  if (!String(text || '').trim()) { try { text = ocr_(blob, t, true); t.by = 'drive'; ocrError = ''; } catch (err) { ocrError = (ocrError ? ocrError + ' / ' : '') + String(err); } }
   if (vErr) t.vision = vErr;
   t.ocr = Date.now() - t0;
   let suggest = [];
@@ -396,7 +398,7 @@ function unPhoto_(store, id) {
 }
 
 // 이미 드라이브에 있는 사진으로 글자 읽기. 바이트를 다시 올리지 않는다.
-function ocrFile_(fileId) {
+function ocrFile_(fileId, later) {
   if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
   // v3: 문서 형식으로 복사하면 글자를 읽음 / v2: ocr 옵션이 변환까지 하므로 문서 형식을 따로 적으면 안 됨
   // (v2 에 mimeType 문서를 같이 주면 "OCR is not supported for ... google-apps.document" 오류)
@@ -406,7 +408,7 @@ function ocrFile_(fileId) {
   const id = copied && copied.id;
   if (!id) throw new Error('글자 읽기 문서를 만들지 못했습니다');
   try { return ocrPlain_(id); }
-  finally { ocrDrop_(id); }
+  finally { if (later) ocrLater_(id); else ocrDrop_(id); }
 }
 
 function ocrPlain_(fileId) {
@@ -428,6 +430,7 @@ function ocrDrop_(fileId) {
   } catch (err) {}
 }
 
+const OCR_SRC = 'ocr_src.jpg'; // 글자 읽기만 할 때 잠깐 만드는 사진 파일 이름
 // 다 읽은 임시 문서: 목록에 적어 두고 사진 저장 요청(뒤에서 도는 쪽)이나 새벽 백업 때 지움
 function ocrLater_(fileId) {
   try {
@@ -442,11 +445,14 @@ function ocrSweep_(all) {
     ids.forEach(ocrDrop_);
     if (!all) return;
     // 목록에서 빠진 것: 이름이 ocr_tmp 인 1시간 지난 구글 문서만
-    const old = Date.now() - 3600 * 1000, it = DriveApp.getFilesByName('ocr_tmp');
-    while (it.hasNext()) {
-      const f = it.next();
-      if (f.getMimeType() === 'application/vnd.google-apps.document' && f.getDateCreated().getTime() < old) ocrDrop_(f.getId());
-    }
+    const old = Date.now() - 3600 * 1000;
+    [['ocr_tmp', 'application/vnd.google-apps.document'], [OCR_SRC, 'image/jpeg']].forEach(([name, mime]) => {
+      const it = DriveApp.getFilesByName(name);
+      while (it.hasNext()) {
+        const f = it.next();
+        if (f.getName() === name && f.getMimeType() === mime && f.getDateCreated().getTime() < old) ocrDrop_(f.getId());
+      }
+    });
   } catch (err) {}
 }
 
