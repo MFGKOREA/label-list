@@ -1908,9 +1908,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       // 품목코드 칸이 있는 시트에서 코드 없는 줄은 '날짜', '데일리 매출' 같은 메모 줄. 'hide'는 목록에서 뺀 품목 ("업체:소모품"이면 그 업체 전체)
       const hasCode = (sheet.cols || []).includes("code"), hide = new Set(db.hide || []);
       items = sheet.rows.filter((r) => !r.off && !(hasCode && !r.code) && !hide.has(r.name) && !hide.has("업체:" + r.vendor)).map((r) => ({ ...r }));
-      // FOH 발주 (11/19 KM "온세물류는 똑같이 해줘 계산식 · 재고 발주 필요량 다 같은 인터페이스로"): master.foh 중 온세물류는 발주 시트 품목과 같은 계산(수불 A 등)으로. 화면은 FOH 탭에만(it.foh)
+      // FOH 발주 (11/19 KM "온세물류는 똑같이 해줘 계산식 · 재고 발주 필요량 다 같은 인터페이스로" → "케일부터 한성물산까지 재고 발주카드"): master.foh 전부(발주 탭에서 숨긴 품목이어도 — 케일300g은 hide에 있었음) 발주 시트 품목과 같은 계산(수불 A 등)으로. 화면은 FOH 탭에만(it.foh)
       const hasC = new Set(items.map((r) => String(r.code || "")));
-      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && /온세/.test(r.vendor || "") && !hasC.has(String(r.code)) && !hide.has(r.name)) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: true }); });
+      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && !hasC.has(String(r.code))) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: true }); });
     } else if (lastLedgerMonth) {
       items = mget(lastLedgerMonth).ledger.rows.filter((r) => r.usage > 0).map((r) => ({ name: r.name, group: r.group, code: r.code, vendor: "", unit: "", min: 0, loc: "" }));
     } else items = [];
@@ -2933,7 +2933,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     if ($("tabOrder").getAttribute("aria-selected") === "true") $("mainTitle").textContent = foh ? "FOH 발주" : "발주량 계산";
     renderMain();
   }
-  const fohCalc = (r) => /온세/.test(r.vendor || ""); // 온세물류 FOH 품목은 발주 시트 품목과 같은 카드·계산 (model), 나머지는 아래 간단 목록
+  const fohCalc = (r) => !!r; // 11/19: FOH 품목은 모두 발주 시트 품목과 같은 카드·계산 (model). 아래 간단 목록은 이제 비어 있음
   function fohHist(code) { // 최근 MIS 주문현황에서 이 품목을 시킨 날·수량 (새것 먼저)
     const out = [];
     Object.keys(db).filter((k) => /^misOrder\.\d{4}-\d\d-\d\d$/.test(k)).sort().reverse().forEach((k) => {
