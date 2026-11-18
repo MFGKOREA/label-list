@@ -55,7 +55,7 @@ function doPost(e) {
     if (body.action === 'save') return json_(saveItem(clean_(body.item), store));
     if (body.action === 'delete') return json_(deleteItem(String(body.id).slice(0, 40), store));
     if (body.action === 'clear') return json_(clearItems(store));
-    if (body.action === 'ocr') return json_(ocrOnly_(String(body.data || ''), String(body.color || '').slice(0, 20), !!body.trace));
+    if (body.action === 'ocr') return json_(ocrOnly_(String(body.data || ''), String(body.color || '').slice(0, 20), !!body.trace, String(body.via || '')));
     if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20), !!body.trace));
     if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
     if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
@@ -320,6 +320,7 @@ function savePhoto_(store, id, data, ocr, color, trace) {
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
   const blob = Utilities.newBlob(bytes, 'image/' + m[1], store + '_' + id + '.jpg');
   // 사진은 한 번만 올린다. 글자 읽기는 그 파일을 문서로 복사하며 하고, 임시 문서는 바로 지운다.
+  const t = {}; let t0 = Date.now();
   let file;
   try { file = photoFolder_().createFile(blob); }
   catch (err) { photoFolder_.cached = null; file = photoFolder_().createFile(blob); }
@@ -332,12 +333,18 @@ function savePhoto_(store, id, data, ocr, color, trace) {
       try { text = ocr_(blob); } catch (err2) { ocrError = String(err2) + (err1 ? ' / 복사 방식: ' + err1 : ''); }
     }
   }
+  t.createOcr = Date.now() - t0; t0 = Date.now();
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  t.share = Date.now() - t0; t0 = Date.now();
   setPhoto_(store, id, file.getId());
+  t.map = Date.now() - t0;
   let suggest = [];
   // 이력제 사진은 품목 추천(학습 시트 검색)을 하지 않는다. 한글표시사항만 추천을 쓴다.
   if (text && !trace) { try { suggest = suggest_(text, color); } catch (err) {} }
-  return { photo: file.getId(), text: text, ocrError: ocrError, suggest: suggest };
+  t0 = Date.now();
+  if (!ocr) ocrSweep_(false);
+  t.sweep = Date.now() - t0;
+  return { photo: file.getId(), text: text, ocrError: ocrError, suggest: suggest, t: t };
 }
 
 // 구글 Vision 글자 읽기 (1초 안팎). mg-label 에 Cloud Vision API 가 켜져 있어야 함. 안 되면 10분간 쉬고 드라이브 방식으로.
@@ -350,14 +357,15 @@ function visionOcr_(b64) {
     payload: JSON.stringify({ requests: [{ image: { content: b64 }, features: [{ type: 'DOCUMENT_TEXT_DETECTION' }], imageContext: { languageHints: ['ko', 'en'] } }] }),
   });
   const code = res.getResponseCode(), body = res.getContentText();
-  if (code !== 200) { cache.put('vision_off', code + ' ' + body.slice(0, 200), 600); throw new Error('vision ' + code + ' ' + body.slice(0, 200)); }
+  // 권한·결제 문제(4xx)는 10분 쉬고, 구글 쪽 일시 오류(429·5xx)는 1분만 쉰다
+  if (code !== 200) { cache.put('vision_off', code + ' ' + body.slice(0, 200), code === 429 || code >= 500 ? 60 : 600); throw new Error('vision ' + code + ' ' + body.slice(0, 200)); }
   const r = (JSON.parse(body).responses || [])[0] || {};
   if (r.error) throw new Error('vision ' + JSON.stringify(r.error).slice(0, 200));
   return (r.fullTextAnnotation && r.fullTextAnnotation.text) || '';
 }
 
 // 글자 읽기만 (사진 저장과 동시에 따로 부름 → 기다리는 시간이 줄어듦). 사진은 저장하지 않는다.
-function ocrOnly_(data, color, trace) {
+function ocrOnly_(data, color, trace, via) {
   const t0 = Date.now(), t = {};
   const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
   if (!m) throw new Error('사진 형식이 올바르지 않습니다');
@@ -365,8 +373,15 @@ function ocrOnly_(data, color, trace) {
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
   const blob = Utilities.newBlob(bytes, 'image/' + m[1], 'ocr.jpg');
   let text = '', ocrError = '', vErr = '';
-  try { text = visionOcr_(m[2]); t.by = 'vision'; } catch (err) { vErr = String(err).slice(0, 200); }
-  if (!t.by) { try { text = ocr_(blob, t); t.by = 'drive'; } catch (err) { ocrError = String(err); } }
+  try { text = visionOcr_(m[2]); if (String(text).trim()) t.by = 'vision'; } catch (err) { vErr = String(err).slice(0, 200); }
+  if (!t.by && via === 'copy') {
+    // 시험: 사진 파일을 먼저 만들고 그 파일을 문서로 복사해 읽기 (사진 저장 방식과 같은 길)
+    try {
+      const c0 = Date.now(), f = photoFolder_().createFile(blob); t.create = Date.now() - c0;
+      try { text = ocrFile_(f.getId()); t.by = 'copy'; } finally { ocrLater_(f.getId()); }
+    } catch (err) { ocrError = String(err); }
+  }
+  if (!t.by && !ocrError) { try { text = ocr_(blob, t, true); t.by = 'drive'; } catch (err) { ocrError = String(err); } }
   if (vErr) t.vision = vErr;
   t.ocr = Date.now() - t0;
   let suggest = [];
@@ -413,8 +428,30 @@ function ocrDrop_(fileId) {
   } catch (err) {}
 }
 
+// 다 읽은 임시 문서: 목록에 적어 두고 사진 저장 요청(뒤에서 도는 쪽)이나 새벽 백업 때 지움
+function ocrLater_(fileId) {
+  try {
+    const c = CacheService.getScriptCache(), ids = JSON.parse(c.get('ocr_tmp') || '[]');
+    ids.push(fileId); c.put('ocr_tmp', JSON.stringify(ids.slice(-50)), 21600);
+  } catch (err) { ocrDrop_(fileId); }
+}
+function ocrSweep_(all) {
+  try {
+    const c = CacheService.getScriptCache(), ids = JSON.parse(c.get('ocr_tmp') || '[]');
+    c.remove('ocr_tmp');
+    ids.forEach(ocrDrop_);
+    if (!all) return;
+    // 목록에서 빠진 것: 이름이 ocr_tmp 인 1시간 지난 구글 문서만
+    const old = Date.now() - 3600 * 1000, it = DriveApp.getFilesByName('ocr_tmp');
+    while (it.hasNext()) {
+      const f = it.next();
+      if (f.getMimeType() === 'application/vnd.google-apps.document' && f.getDateCreated().getTime() < old) ocrDrop_(f.getId());
+    }
+  } catch (err) {}
+}
+
 // 사진 바이트로 바로 글자 읽기 (복사 방식이 안 될 때의 대비, 한글표시사항도 이 경로를 쓸 수 있음)
-function ocr_(blob, t) {
+function ocr_(blob, t, later) {
   if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
   let fileId;
   const s0 = Date.now();
@@ -433,7 +470,7 @@ function ocr_(blob, t) {
   try { return ocrPlain_(fileId); }
   finally {
     const s2 = Date.now();
-    ocrDrop_(fileId);
+    if (later) ocrLater_(fileId); else ocrDrop_(fileId); // 글자 읽기만 할 때는 지우기를 미뤄 기다리는 시간을 줄임
     if (t) { t.make = s1 - s0; t.read = s2 - s1; t.drop = Date.now() - s2; }
   }
 }
@@ -860,6 +897,7 @@ function snapshot_() {
 }
 
 function backupDaily() {
+  ocrSweep_(true); // 남은 글자 읽기 임시 문서 정리
   const folder = backupFolder_();
   const name = 'backup-' + today_() + '.json';
   const text = JSON.stringify(snapshot_());
