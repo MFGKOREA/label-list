@@ -60,23 +60,27 @@ async function hrsStep(op, a) {
       if (a5) return { ok: false, msg: `${a5.ep} HTTP ${a5.http}${a5.http === 500 ? " (Internal Server Error)" : ""}` };
       // 저장·상태 변경 응답의 returnCode가 0이 아니면 오류 (문구에 '오류'가 없어도: 예 "OOO님의 주휴일을 설정해주세요")
       const rcBad = H.ajax.slice(from.a).find((x) => /^(saveData_prc|statusChangeData_prc|uploadDayExcelFile_prc)$/.test(x.ep) && x.rc != null && x.rc !== "0");
-      if (rcBad) { await sleep(400); const m2 = H.msgs.slice(from.m).filter((x) => !good.test(x.msg)).pop(); dismiss(); return { ok: false, msg: rcBad.err || (m2 && m2.msg) || `${rcBad.ep} returnCode ${rcBad.rc}` }; }
+      if (rcBad) { await sleep(60); const m2 = H.msgs.slice(from.m).filter((x) => !good.test(x.msg)).pop(); dismiss(); return { ok: false, msg: rcBad.err || (m2 && m2.msg) || `${rcBad.ep} returnCode ${rcBad.rc}` }; }
       if (okIf && okIf()) return { ok: true, msg: "" };
-      await sleep(150);
+      await sleep(35);
     }
     return { ok: false, msg: "", timeout: true };
   }
   function dismiss() { const b = $id("jl_noti_footer_btn1"); if (b && vis(b)) tap(b); } // 오류 알림의 [확인] ("오류 신고"는 안 누름)
   // from(mark) 뒤에 "보낸" 그 엔드포인트 요청의 응답 (ajaxSend 번호로 맞춤. 번호가 없는 옛 기록은 시각으로)
-  async function waitAjax(from, ep, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const x = H.ajax.slice(from.a).find((e) => e.ep === ep && (!e.id || e.id > (from.s || 0))); if (x) return x; await sleep(120); } return null; }
-  async function idle(ms) { // 로딩 덮개(JLAMP.common.loading · kendo)가 사라질 때까지
-    const t0 = Date.now(); await sleep(120);
-    while (Date.now() - t0 < (ms || 15e3)) {
-      if (![...document.querySelectorAll(".k-loading-mask, .k-loading-image, .jlamp-loading, .loading-wrap, .loading_wrap, #loading, .blockUI.blockOverlay, [class*='loading-layer'], [class*='loadingBar'], [id*='loading']")].some(vis)) return true;
-      await sleep(150);
-    }
-    return false;
+  async function waitAjax(from, ep, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const x = H.ajax.slice(from.a).find((e) => e.ep === ep && (!e.id || e.id > (from.s || 0))); if (x) return x; await sleep(25); } return null; }
+  // (1.17.6) 화면 대기: 덮개가 '실제로 떠 있는지'만 30ms 간격으로 본다. 1px짜리 장식이나 계속 남는 로딩 틀 때문에
+  //  15초를 통째로 버리던 자리(open·cond·cardApply에서 최대 45초)를 상한 1.2~1.5초로 줄임 → 뒤에서 서버 응답·값으로 확인
+  const MASK = ".k-loading-mask, .k-loading-image, .jlamp-loading, .loading-wrap, .loading_wrap, #loading, .blockUI.blockOverlay, [class*='loading-layer'], [class*='loadingBar']";
+  const maskOn = () => { try { return [...document.querySelectorAll(MASK)].some((el) => { if (!vis(el)) return false; const r = el.getBoundingClientRect(); return r.width * r.height > 400; }); } catch (e) { return false; } };
+  async function idle(ms) { const t0 = Date.now(), cap = Math.min(ms || 1200, 1500); while (Date.now() - t0 < cap) { if (!maskOn()) return true; await sleep(30); } return !maskOn(); }
+  // (1.17.6) 보낸 요청(from.s 이후)이 모두 답을 받을 때까지 25ms 간격 (200ms씩 자던 자리)
+  async function settled(from, ms) {
+    const done = () => !H.sent.some((x) => x.id > ((from && from.s) || 0) && !H.ajax.some((e) => e.id === x.id));
+    const t0 = Date.now(); while (Date.now() - t0 < (ms || 10e3)) { if (done()) return true; await sleep(25); } return done();
   }
+  // (1.17.6) 바뀐 값을 화면이 읽을 최소 한 틱 (300ms 고정 대기 대신)
+  const nextTick = () => new Promise((r) => { const f = () => setTimeout(r, 0); try { if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(f)); else f(); } catch (e) { f(); } });
   // (1.17.2) 보낸 뒤 아직 답이 안 온 요청 · 저장 안 된 변경이 있는 행(사번)
   const pendingAjax = () => { const done = new Set(H.ajax.map((x) => x.id).filter(Boolean)), t = Date.now() - 60e3; return H.sent.filter((x) => x.t > t && !done.has(x.id)).map((x) => x.ep); };
   // (1.17.3) '저장 안 된 변경' = HR 저장(saveData)이 실제로 보내는 행 = workType U·I·D. kendo의 dirty·hasChanges는 HR 화면이 불러올 때 합계 칸을 스스로 채우며 켤 수 있어 안 봄
@@ -95,7 +99,7 @@ async function hrsStep(op, a) {
   const backdrops = () => document.querySelectorAll(".modal-backdrop").length;
   const popOpen = () => { const m = modal(), el = $id("hrt2325_pop_sub"); return (m ? !!m.isShown : true) && (vis(el) || vis($id("hrt2325_pop_btn_save"))); };
   const popClosed = () => { const m = modal(), el = $id("hrt2325_pop_sub"); let disp = "none"; try { disp = el ? getComputedStyle(el).display : "none"; } catch (e) {} return (!m || m.isShown === false) && disp === "none" && backdrops() === 0; };
-  async function waitClosed(ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (popClosed()) return true; await sleep(100); } return popClosed(); }
+  async function waitClosed(ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (popClosed()) return true; await sleep(35); } return popClosed(); }
   // 멈춘 모달 정리: modal('hide') → 대기 → 남은 backdrop·body.modal-open 지움 (화면이 막힌 채 남지 않게)
   async function unstick() {
     try { if ($) $("#hrt2325_pop_sub").modal("hide"); } catch (e) {}
@@ -105,7 +109,7 @@ async function hrsStep(op, a) {
       document.body.classList.remove("modal-open"); document.body.style.paddingRight = "";
       const el = $id("hrt2325_pop_sub"); if (el) { el.style.display = "none"; el.classList.remove("in"); el.setAttribute("aria-hidden", "true"); }
       const m = modal(); if (m) m.isShown = false;
-      await sleep(200);
+      await sleep(30);
     }
     return popClosed();
   }
@@ -148,16 +152,20 @@ async function hrsStep(op, a) {
     return { ok: true, login: loggedOut(), loggedIn: loggedIn(), menu: !!document.querySelector("a[menu-app-id]"), screen: !!$id("hrt2325_btn_search"), api: !!window.hrt2325, jq: !!$ };
   }
 
-  if (op === "open") { // 근태관리 → 주간스케쥴(시간)
-    const t0 = Date.now(); let i = 0;
+  if (op === "open") { // 근태관리 → 주간스케쥴(시간) — (1.17.6) 1초씩 자던 자리를 60ms 간격 확인으로
+    const t0 = Date.now(), onScreen = () => $id("hrt2325_btn_search") && $id("hrt2325_dept_category");
+    if (onScreen()) { await idle(600); return { ok: true, quick: true, ms: Date.now() - t0 }; } // 이미 그 화면 → 누르지 않음
+    let taps = 0, last = 0;
     while (Date.now() - t0 < 40e3) {
-      if ($id("hrt2325_btn_search") && $id("hrt2325_dept_category")) { await idle(15e3); return { ok: true }; }
+      if (onScreen()) { await idle(1500); return { ok: true, taps, ms: Date.now() - t0 }; }
       if (loggedOut()) return fail("week", "HR 로그인이 풀려 있어요 (HR에 로그인한 뒤 다시 전송)", { code: "login" });
-      const lk = document.querySelector('a[menu-app-id="HRT/W_HRT2325"]') || [...document.querySelectorAll("a[menu-app-id], a")].find((x) => /주간\s*스케[쥴줄]\s*\(\s*시간\s*\)/.test(tx(x)));
-      if (!lk) { const top = document.querySelector('li[menu-desc="근태관리"]'); tap(top && (top.querySelector(".menu-step1") || top)); }
-      else if (i % 2 === 0) { const ul = lk.closest("ul"), grp = ul && ul.previousElementSibling; if (grp && i === 0) tap(grp.querySelector(".jlamp-gnb-menu-label") || grp); await sleep(250); tap(lk); }
-      else tap(lk.querySelector("span") || lk);
-      i++; await sleep(1000);
+      if (taps < 6 && Date.now() - last > 350) { // 누르는 단추의 뜻은 그대로: 근태관리 → 주간스케쥴(시간)
+        const lk = document.querySelector('a[menu-app-id="HRT/W_HRT2325"]') || [...document.querySelectorAll("a[menu-app-id], a")].find((x) => /주간\s*스케[쥴줄]\s*\(\s*시간\s*\)/.test(tx(x)));
+        if (lk && vis(lk)) { if (!taps) { const ul = lk.closest("ul"), grp = ul && ul.previousElementSibling; if (grp) tap(grp.querySelector(".jlamp-gnb-menu-label") || grp); } tap(lk.querySelector("span") || lk); }
+        else { const top = document.querySelector('li[menu-desc="근태관리"]'); tap(top && (top.querySelector(".menu-step1") || top)); }
+        taps++; last = Date.now();
+      }
+      await sleep(60);
     }
     return fail("week", "주간스케쥴(시간) 화면을 못 열었어요 (근태관리 › 주간스케쥴(시간))");
   }
@@ -176,16 +184,22 @@ async function hrsStep(op, a) {
         const box = hid.closest("td, li, .search-item, .form-group, div") || document.body;
         const DEPT = /^(BOH|FOH|STORE|전체|소속구분|선택)?$/;
         const trig = [...box.querySelectorAll("button, a, span, .k-dropdown, .k-picker, [role=listbox], [role=combobox]")].find((b) => vis(b) && /^(BOH|FOH|STORE|전체)$/.test(tx(b))) || [...document.querySelectorAll("button, a, .k-dropdown, .k-picker, [role=combobox]")].find((b) => vis(b) && /^(BOH|FOH|STORE|전체)$/.test(tx(b)));
-        if (trig) { tap(trig); await sleep(300); }
+        if (trig) { tap(trig); await sleep(40); }
         const want = a.dept === "" ? (x) => /^(전체|-\s*전체\s*-|)$/.test(tx(x)) && (x.tagName === "LI" || x.getAttribute("role") === "option") : (x) => tx(x) === a.dept; // 빈칸 = 전체 (11/16 KM)
         const opt = [...document.querySelectorAll("li, a, button, [role=option], label, span")].find((x) => vis(x) && want(x) && x !== trig && !(trig && trig.contains(x)) && DEPT.test(tx(x)));
         if (opt) tap(opt);
-        await sleep(400);
+        await sleep(70);
       }
     }
     if (String(hid.value) !== a.dept) return fail("week", `소속구분을 ${a.dept || "전체(빈칸)"}로 못 맞췄어요 (지금 ${hid.value || "빈칸"})`);
     const md = (d) => d.slice(5, 7) + "/" + d.slice(8, 10);
-    const label = () => { const re = /(\d{1,2})\s*주\s*\(\s*(\d{2})\/(\d{2})\s*~\s*(\d{2})\/(\d{2})\s*\)/; for (const el of document.querySelectorAll("span, div, label, input, button, a, strong, p, td")) { if (!vis(el)) continue; const s = el.tagName === "INPUT" ? el.value : tx(el); const m = re.exec(s || ""); if (m && (s || "").length < 60) return { text: m[0], from: m[2] + "/" + m[3], to: m[4] + "/" + m[5] }; } return null; };
+    const WEEKRE = /(\d{1,2})\s*주\s*\(\s*(\d{2})\/(\d{2})\s*~\s*(\d{2})\/(\d{2})\s*\)/; // (1.17.6) 한 번 찾은 칸을 기억해 두고 그 칸 글자만 다시 읽음 (주차 이동마다 화면 전체를 훑지 않게)
+    let labEl = null;
+    const readLab = (el) => { const s = el.tagName === "INPUT" ? el.value : tx(el); const m = WEEKRE.exec(s || ""); return m && (s || "").length < 60 ? { text: m[0], from: m[2] + "/" + m[3], to: m[4] + "/" + m[5] } : null; };
+    const label = () => {
+      if (labEl && document.documentElement.contains(labEl)) { const v = readLab(labEl); if (v) return v; labEl = null; }
+      for (const el of document.querySelectorAll("span, div, label, strong, p, input, button, a, td")) { if (!vis(el)) continue; const v = readLab(el); if (v) { labEl = el; return v; } } return null;
+    };
     const want = { from: md(a.weekStart), to: md(a.weekEnd) };
     const yyyy = () => +(($id("hrt2325_yyyy") || {}).value || a.weekStart.slice(0, 4));
     const toDate = (mmdd) => { const y = yyyy(), c = [y - 1, y, y + 1].map((yy) => Date.parse(`${yy}-${mmdd.replace("/", "-")}T00:00:00Z`)), t = Date.parse(a.weekStart + "T00:00:00Z"); return c.reduce((b, x) => (Math.abs(x - t) < Math.abs(b - t) ? x : b), c[1]); };
@@ -194,17 +208,17 @@ async function hrsStep(op, a) {
       const dir = toDate(L.from) < Date.parse(a.weekStart + "T00:00:00Z") ? "next" : "prev", before = L.text;
       try { window.hrt2325.moveWeek(dir); } catch (e) { return fail("week", "주차 이동(moveWeek)이 안 돼요: " + (e && e.message)); }
       moves++;
-      for (let k = 0; k < 30; k++) { await sleep(200); L = label(); if (L && L.text !== before) break; }
-      await idle(15e3);
+      for (let k = 0; k < 100; k++) { await sleep(25); L = label(); if (L && L.text !== before) break; }
+      await idle(500);
     }
     if (!L) return fail("week", "주차 표시(예: 48주(11/23~11/29))를 화면에서 못 찾았어요");
     if (!(L.from === want.from && L.to === want.to)) return fail("week", `주차를 ${want.from}~${want.to}로 못 맞췄어요 (지금 ${L.text})`);
     const m0 = mark();
     tap($id("hrt2325_btn_search"));
-    const ax = await waitAjax(m0, "getMasterList_prc", 15e3); await idle(15e3);
+    const ax = await waitAjax(m0, "getMasterList_prc", 15e3);
     if (!ax) return fail("week", "검색 응답(getMasterList_prc)이 안 왔어요");
-    for (let k = 0; k < 75 && pendingAjax().length; k++) await sleep(200); // (1.17.2) 검색 뒤 이어지는 표 불러오기(MAINROWS 등)까지 끝난 뒤 검사
-    await idle(5e3);
+    await settled(m0, 15e3); // (1.17.2) 검색 뒤 이어지는 표 불러오기(MAINROWS 등)까지 — 답이 다 올 때까지만 25ms 간격으로
+    await idle(500);
     if (ax.http >= 400) return fail("week", `검색 응답 HTTP ${ax.http}`);
     const bad = H.msgs.slice(m0.m).find((x) => errText(x.msg)); if (bad) { dismiss(); return fail("week", "검색 중: " + bad.msg); }
     if (!ax.st && ax.n == null) return fail("week", "주차 상태를 못 읽었어요 (infoEnc를 풀지 못함)");
@@ -222,7 +236,7 @@ async function hrsStep(op, a) {
     if (!b || off(b)) return fail("week", "[초기화] 단추가 꺼져 있어요 (지난 주차는 초기화 불가)");
     const m0 = mark(); const seen = await withConfirm(/기존에 등록된 자료가 있다면 삭제 후 초기화/, async () => { tap(b); });
     if (seen.length && !/기존에 등록된 자료가 있다면 삭제 후 초기화/.test(seen[0])) return fail("week", "초기화 확인 문구가 달라 멈춤: " + seen[0]);
-    const r = await waitMsg(m0, /초기화|완료|되었습니다/, 15e3); await idle(15e3);
+    const r = await waitMsg(m0, /초기화|완료|되었습니다/, 15e3); await idle(800);
     if (!r.ok && !r.timeout) return fail("week", "초기화: " + r.msg);
     return { ok: true, toast: r.msg, confirms: seen };
   }
@@ -235,8 +249,8 @@ async function hrsStep(op, a) {
     const lastSave = (() => { for (let i = H.ajax.length - 1; i >= 0; i--) if (H.ajax[i].ep === "saveData_prc") return i; return -1; })();
     while (Date.now() - t0 < ms) {
       const reloaded = lastSave < 0 || H.ajax.slice(lastSave + 1).some((x) => x.ep === "getMasterList_prc");
-      if (!pendingAjax().length && reloaded && (await idle(2e3))) break;
-      await sleep(300);
+      if (!pendingAjax().length && reloaded && (await idle(400))) break;
+      await sleep(25);
     }
     const g = mainGrid();
     return { ok: true, waited: Date.now() - t0, pending: pendingAjax(), dirty: g ? dsChanged(g) : false, dirtyNos: g ? dirtyNos(g) : [] };
@@ -249,7 +263,7 @@ async function hrsStep(op, a) {
     const others = nos.filter((n) => !same(n));
     if (!nos.length || others.length) return { dropped: 0, dirty: true, dirtyNos: others.length ? others : nos };
     try { g.dataSource.cancelChanges(); } catch (e) {}
-    await sleep(200);
+    await sleep(20);
     return { dropped: nos.length, dirty: dsChanged(g), dirtyNos: dirtyNos(g) };
   }
   if (op === "dropOwn") { const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요"); return Object.assign({ ok: true }, await dropOwnRows(g, a.own)); }
@@ -272,14 +286,15 @@ async function hrsStep(op, a) {
     if (dsChanged(g)) return { ok: true, list: [], why: "표에 저장 안 된 변경이 있어 편집기를 열지 않음" };
     let list = [];
     try {
-      g.editCell($(tr.cells[cj])); await sleep(500);
+      g.editCell($(tr.cells[cj]));
+      for (let k = 0; k < 40; k++) { if (tr.cells[cj].querySelector("[data-role='dropdownlist'], [data-role='combobox']")) break; await sleep(20); } // (1.17.6) 편집기가 뜨는 즉시 (500ms 고정 대기 대신)
       const box = $(tr.cells[cj]);
       const dd = (box.find("[data-role='dropdownlist']").data("kendoDropDownList")) || (box.find("[data-role='combobox']").data("kendoComboBox"));
       if (dd) { const vf = dd.options.dataValueField || "value", tf = dd.options.dataTextField || "text"; const raw = dd.dataSource.data(); list = [].slice.call(raw.toJSON ? raw.toJSON() : raw).map((x) => ({ v: String(x[vf] == null ? "" : x[vf]), t: String(x[tf] == null ? "" : x[tf]).slice(0, 20) })).filter((x) => x.v); }
     } catch (e) {}
     try { g.closeCell(); } catch (e) {}
     try { if (g.dataSource.hasChanges()) g.dataSource.cancelChanges(); } catch (e) {}
-    await sleep(200);
+    await sleep(20);
     return { ok: true, list };
   }
   // ---- 바뀐 칸 계산 (11/17 KM 실제 운영 방식) ----
@@ -334,7 +349,7 @@ async function hrsStep(op, a) {
 
   if (op === "cardApply") { // 바뀐 칸만 d.set → 그 행 workType 'U' → hrt2325.saveData() 직접 → 다시 읽어 확인
     const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
-    for (let k = 0; k < 75 && pendingAjax().length; k++) await sleep(200);
+    for (let k = 0; k < 60 && pendingAjax().length; k++) await sleep(30);
     if (dsChanged(g)) { const dr = await dropOwnRows(g, a.own); if (dr.dirty) return fail("save", `HR 표에 저장 안 된 변경이 ${dr.dirtyNos.length || "몇"}행 있어요${dr.dirtyNos.length ? " (사번 " + dr.dirtyNos.slice(0, 5).join(", ") + (dr.dirtyNos.length > 5 ? " 외" : "") + ")" : ""} — 이 확장이 방금 저장한 값이 아니라 누가 화면에서 고치는 중일 수 있어 멈춤. 주차 상태 EDIT(작성 중)와는 다른 것. [검색]으로 새로 고친 뒤 다시`, { code: "dirty", dirtyNos: dr.dirtyNos }); if (dr.dropped) { note("msg", `저장 전 변경 표시 ${dr.dropped}행은 방금 저장한 행이라 지움`); H.droppedOwn = dr.dropped; } }
     const df = diffOf(g, a);
     const dropped = H.droppedOwn || 0; H.droppedOwn = 0;
@@ -349,27 +364,31 @@ async function hrsStep(op, a) {
       touched.add(c.empNo);
     }
     touched.forEach((no) => put(byNo.get(no), "workType", "U")); // 이게 없으면 저장 요청에 안 들어감
-    await sleep(300);
+    await nextTick(); // (1.17.6) 바뀐 값을 표가 읽을 한 틱만 (300ms 고정 대기 대신)
     const m0 = mark(), dlg0 = new Set(dialogs());
     const seen = await withConfirm(/저장/, async () => { try { window.hrt2325.saveData(); } catch (e) { note("msg", "saveData 오류: " + (e && e.message)); } });
     // 확인: 서버에서 다시 받은 표(바꾼 행의 workType이 비고, 값이 입력값과 같음). 오류: 새 대화창·오류 문구·returnCode
     const t0 = Date.now(); let bad = null, okNow = false, why = "";
     while (Date.now() - t0 < 40e3) {
-      await sleep(400);
+      await sleep(30);
       const nd = dialogs().filter((x) => !dlg0.has(x)); if (nd.length) { why = nd[0]; break; }
       const em = H.msgs.slice(m0.m).find((x) => errText(x.msg) && !/저장되었습니다/.test(x.msg)); if (em) { why = em.msg; break; }
-      const rc = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc" && ((x.rc != null && x.rc !== "0") || x.http >= 400)); if (rc) { await sleep(400); why = rc.err || (H.msgs.slice(m0.m).pop() || {}).msg || `saveData_prc ${rc.http}/${rc.rc}`; break; }
+      const rc = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc" && ((x.rc != null && x.rc !== "0") || x.http >= 400)); if (rc) { await sleep(60); why = rc.err || (H.msgs.slice(m0.m).pop() || {}).msg || `saveData_prc ${rc.http}/${rc.rc}`; break; }
+      // (1.17.6) 저장 응답 뒤 표를 다시 불러오면(getMasterList_prc) 서버 값을 봄. 값이 아직 안 맞으면 그 불러오기를 최대 1.2초 기다렸다가 판정 (예전처럼 workType 비고 값이 맞으면 바로 통과)
+      const sv = H.ajax.slice(m0.a).find((x) => x.ep === "saveData_prc"), re = H.ajax.slice(m0.a).filter((x) => x.ep === "getMasterList_prc");
+      const reloaded = re.length && (!sv || re[re.length - 1].t >= sv.t);
       const g2 = mainGrid(); if (!g2) continue;
       const by2 = new Map([].slice.call(g2.dataSource.data()).map((r) => [String(r.emp_code), r]));
       const fresh = [...touched].every((no) => { const r = by2.get(no); return r && (r.workType == null || r.workType === ""); });
       if (!fresh) continue;
       bad = df.changes.filter((c) => { const r = by2.get(c.empNo), D = c.dow; return !r || String(r[D + "_time_item_code_p"] == null ? "" : r[D + "_time_item_code_p"]) !== c.to.code || T(r[D + "_work_on_p_hhmm"]) !== c.to.in || T(r[D + "_work_off_p_hhmm"]) !== c.to.out || T(r[D + "_break_time_p_hhmm"]) !== c.to.brk; });
+      if (bad.length && sv && !reloaded && Date.now() - sv.t < 1200) continue; // 다시 불러온 값이 아직 안 옴 → 조금 더
       okNow = true; break;
     }
-    await idle(10e3);
+    await idle(800);
     // (1.17.2) 저장이 끝나고 서버 값과 맞는 걸 확인한 뒤에도 표에 '저장 안 된 변경' 표시가 남으면(다시 불러오기 중) 잠깐 기다리고, 그래도 남은 게 방금 저장한 행뿐이면 표시만 지움
     if (okNow && !(bad && bad.length)) {
-      for (let k = 0; k < 20 && (pendingAjax().length || dsChanged(mainGrid() || g)); k++) await sleep(300);
+      for (let k = 0; k < 60 && (pendingAjax().length || dsChanged(mainGrid() || g)); k++) await sleep(30);
       const g3 = mainGrid() || g, left = dsChanged(g3) ? dirtyNos(g3) : [];
       if (left.length && left.every((n) => touched.has(n))) { try { g3.dataSource.cancelChanges(); } catch (e) {} note("msg", "저장 뒤 남은 변경 표시(방금 저장한 행) 지움"); }
       H.ownSaved = { at: Date.now(), empNos: [...touched] };
@@ -382,7 +401,7 @@ async function hrsStep(op, a) {
 
   if (op === "status") { // 다시 검색해서 지금 상태 (공지·확정 전 확인)
     const m0 = mark(); tap($id("hrt2325_btn_search"));
-    const ax = await waitAjax(m0, "getMasterList_prc", 15e3); await idle(15e3);
+    const ax = await waitAjax(m0, "getMasterList_prc", 15e3); await settled(m0, 15e3); await idle(500);
     return { ok: !!ax, status: ax && ax.st ? ax.st : [], notice: !off($id("hrt2325_btn_notice")), confirm: !off($id("hrt2325_btn_confirm")), save: !off($id("hrt2325_btn_save")) };
   }
 
@@ -408,7 +427,7 @@ async function hrsStep(op, a) {
     const main = $id("hrt2325_btn_save");
     if (main && vis(main) && !off(main)) {
       const m0 = mark(); const seen = await withConfirm(/저장\s*하시겠습니까/, async () => { tap(main); });
-      const r = await waitMsg(m0, /저장되었습니다/, 20e3); await idle(15e3);
+      const r = await waitMsg(m0, /저장되었습니다/, 20e3); await idle(800);
       if (!r.ok) return fail("save", r.timeout ? "메인 저장 뒤 문구가 안 떴어요" : r.msg, { steps, confirms: seen });
       steps.push({ stage: "save", msg: r.msg });
     } else steps.push({ stage: "save", msg: "메인 저장 꺼져 있음 → 건너뜀" });
@@ -418,17 +437,17 @@ async function hrsStep(op, a) {
     if (!nb || off(nb)) return fail("notice", "[공지] 단추가 꺼져 있어요 (주차 상태 확인)", { steps });
     m0 = mark(); seen = await withConfirm(/공지\s*하시겠습니까/, async () => { tap(nb); });
     if (seen.length && !/공지\s*하시겠습니까/.test(seen[0])) return fail("notice", "공지 확인 문구가 달라 멈춤: " + clean(seen[0]), { steps });
-    r = await waitMsg(m0, /공지\s*되었습니다/, 20e3); await idle(15e3);
+    r = await waitMsg(m0, /공지\s*되었습니다/, 20e3); await idle(800);
     if (!r.ok) return fail("notice", r.timeout ? "공지 뒤 '공지 되었습니다'가 안 떴어요" : r.msg, { steps, confirms: seen });
     steps.push({ stage: "notice", msg: r.msg });
     }
     if (a.stopBefore === "confirm") return { ok: true, steps, noticed: true };
     const cb = $id("hrt2325_btn_confirm");
-    for (let k = 0; k < 40 && (!cb || off(cb)); k++) await sleep(150);
+    for (let k = 0; k < 160 && (!cb || off(cb)); k++) await sleep(25);
     if (!cb || off(cb)) return fail("confirm", "공지 뒤에도 [확정] 단추가 꺼져 있어요", { steps, noticed: true });
     m0 = mark(); seen = await withConfirm(/확정\s*하시겠습니까/, async () => { tap(cb); });
     if (seen.length && !/확정\s*하시겠습니까/.test(seen[0])) return fail("confirm", "확정 확인 문구가 달라 멈춤: " + clean(seen[0]), { steps, noticed: true });
-    r = await waitMsg(m0, /확정\s*되었습니다/, 20e3); await idle(15e3);
+    r = await waitMsg(m0, /확정\s*되었습니다/, 20e3); await idle(800);
     if (!r.ok) return fail("confirm", r.timeout ? "확정 뒤 '확정 되었습니다'가 안 떴어요" : r.msg, { steps, noticed: true, confirms: seen });
     steps.push({ stage: "confirm", msg: r.msg });
     return { ok: true, steps, noticed: true, confirmed: true };
