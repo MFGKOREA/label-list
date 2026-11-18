@@ -293,8 +293,16 @@ async function hrsStep(op, a) {
     const keep = new Set(a.keep || []), weekly = String(a.weekly || "18");
     const changes = [], skipped = [], kept = [], locked = [];
     for (const e of a.emps) {
+      // (1.17.4, 11/18 KM "알맞는 이름·사번을 찾아 맞춰서 시간 넣기"): 소속구분 빈칸(전체)이라 홀·주방·매니저가 섞여 보여도 줄 순서는 안 봄.
+      //  사번으로 찾고, 이름도 HR 그 줄 이름과 같을 때만 넣음(다르면 그 사람은 건너뛰고 알림). 사번이 없으면 이름이 표에 딱 한 명일 때만
+      const nm = (x) => String(x || "").replace(/\s+/g, "").replace(/\(.*?\)/g, "");
       const r = e.empNo ? byNo.get(String(e.empNo)) : byName.get(e.name);
-      if (!r) { skipped.push({ empNo: e.empNo || "", name: e.name, msg: r === null ? "같은 이름이 표에 둘 이상 — 건너뜀" : "표에 없음 — 건너뜀 (HR '누락건 추가'로 따로)" }); continue; }
+      if (!r) {
+        const alt = e.empNo && e.name ? byName.get(e.name) : null;
+        skipped.push({ empNo: e.empNo || "", name: e.name, msg: r === null ? "같은 이름이 표에 둘 이상 — 건너뜀" : alt ? `사번 ${e.empNo}이 HR 표에 없음 (같은 이름은 HR 사번 ${alt.emp_code}) — 건너뜀, HR Board 사번 확인` : "표에 없음 — 건너뜀 (HR '누락건 추가'로 따로)" });
+        continue;
+      }
+      if (e.empNo && e.name && nm(nameOf(r)) && nm(nameOf(r)) !== nm(e.name)) { skipped.push({ empNo: e.empNo, name: e.name, msg: `사번 ${e.empNo}은 HR에서 '${nameOf(r)}' — 이름이 달라 건너뜀 (사번·이름 확인)` }); continue; }
       const who = { empNo: String(r.emp_code), name: e.name || nameOf(r) };
       for (const d of e.days) {
         const D = d.dow, cur = { code: String(r[D + "_time_item_code_p"] == null ? "" : r[D + "_time_item_code_p"]), in: T(r[D + "_work_on_p_hhmm"]), out: T(r[D + "_work_off_p_hhmm"]), brk: T(r[D + "_break_time_p_hhmm"]) };

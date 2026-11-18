@@ -108,13 +108,13 @@ async function hrsRun(req, board, boardWin) {
     const days = mode === "test" ? ["MON"] : ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
     const KN = { 출근: "출근", 휴무: "휴무", 주휴일: "주휴일", 공휴일: "공휴일" };
     await setRun({ stage: "save", tab: tabId });
-    const emps = plan.emps.filter((e) => inHr.has(e.empNo)).map((e) => ({ empNo: e.empNo, name: e.name, days: e.days.filter((d) => days.indexOf(d.dow) >= 0).map((d) => ({ dow: d.dow, code: CODE[d.kind], kname: KN[d.kind], in: d.in, out: d.out, brk: d.brk })) }));
+    const emps = plan.emps.map((e) => ({ empNo: e.empNo, name: e.name, days: e.days.filter((d) => days.indexOf(d.dow) >= 0).map((d) => ({ dow: d.dow, code: CODE[d.kind], kname: KN[d.kind], in: d.in, out: d.out, brk: d.brk })) }));
     const keep = chk.warns.filter((w) => w.keepWeekly).map((w) => w.empNo);
     const { hrSaved: ls2 } = await get("hrSaved"), own2 = ls2 && ls2.week === plan.weekStart && Date.now() - ls2.at < 30 * 60e3 && ls2.rows ? ls2.rows : null;
     r = await hrsExec(tabId, "cardApply", { emps, keep, weekly: CODE["주휴일"], own: own2 }, 90e3);
     if (r && r.code === "dirty") { res = res0({ stage: "save", message: r.message, code: "dirty", dirtyNos: r.dirtyNos || [] }); return; }
     if (r && r.droppedOwn) await step("save", `저장 안 된 변경 표시 ${r.droppedOwn}행은 방금 이 확장이 저장한 행이라 지움(표 값이 저장한 값과 같음)`);
-    const extra = { skipped: [...(r.skipped || []), ...nowhere.map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "표에 없음 — 건너뜀" }))], kept: r.kept || [], locked: r.locked || [], changed: (r.changes || []).length };
+    const extra = { skipped: [...(r.skipped || []), ...nowhere.filter((n) => !(r.skipped || []).some((k) => k.empNo === n)).map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "표에 없음 — 건너뜀" }))], kept: r.kept || [], locked: r.locked || [], changed: (r.changes || []).length };
     if (!r.ok) { res = res0(Object.assign({ stage: "save", message: `저장: ${r.message}`, code: r.code, rowErrors: (r.notSaved || []).map((x) => ({ empNo: x.empNo, name: x.name, day: x.dow, msg: "저장 뒤 값이 다름 · " + x.msg })) }, extra)); return; }
     await step("save", `바뀐 칸 ${r.applied}개(${r.rowsTouched || 0}명) 입력 → 저장 → 다시 읽어 확인 맞음${extra.kept.length ? ` · 주휴일 유지 ${extra.kept.length}` : ""}${extra.locked.length ? ` · 수정 불가 ${extra.locked.length}` : ""}${extra.skipped.length ? ` · 건너뜀 ${extra.skipped.length}명` : ""}`, null, r.ajax);
     const saved = emps.map((e) => e.empNo).filter((n) => !extra.skipped.some((x) => x.empNo === n));

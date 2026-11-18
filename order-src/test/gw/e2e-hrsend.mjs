@@ -229,6 +229,10 @@ ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000020/.test(x.res.message
 S.dirtyAfter = ["90000002"]; S.otherEdit = "90000002"; await hrTab().reload(); await sleep(800);
 x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000002/.test(x.res.message) && S.saves.length === 2, "방금 저장한 사람이라도 표 값을 누가 고쳤으면(06:30) 남의 변경 → 멈춤", brief(x));
+// 10d) (1.17.4) 소속구분 전체 화면: 사번은 맞는데 이름이 다르면 그 사람은 건너뜀(다른 사람 줄에 넣지 않음) · 사번이 HR에 없으면 같은 이름의 HR 사번을 알려 줌 · 나머지는 사번으로 제 줄에
+reset();
+x = await send({ mode: "saveOnly", employees: [emp("90000001", "다른사람"), emp("90000777", "시험이"), emp("90000003", "시험삼")] });
+ok(x.res && x.res.ok && !S.week["90000001"] && S.week["90000003"] && S.week["90000003"].MON.code === "10" && (x.res.skipped || []).some((k) => k.empNo === "90000001" && /이름이 달라/.test(k.msg)) && (x.res.skipped || []).some((k) => k.empNo === "90000777" && /같은 이름은 HR 사번 90000002/.test(k.msg)) && !S.week["90000002"], "사번·이름이 둘 다 맞는 줄에만 넣음: 이름 다름 → 건너뜀 · 사번 틀림 → HR 사번 알려 줌 · 맞는 사람은 저장", brief(x));
 // 11) 로그인 풀림 · 같은 requestId
 reset({ login: false }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0, "HR 로그인 화면 → 바로 멈춤(login)", brief(x));
