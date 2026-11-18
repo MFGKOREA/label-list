@@ -1906,7 +1906,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       if (c && c.ea) it.pk = { ...it.pk, ea: c.ea };
       if (c && c.g) it.pk = { ...it.pk, g: c.g }; // 1단위 무게를 바로잡음 (브리오슈 1PK = 380g × 3개)
       if (c && c.label) { it.pk = { ...it.pk, stock: c.label, order: c.label }; it.unit = c.label; }
-      it.box = (c && c.box) || 0; it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
+      // itemCfg.pack (11/18 KM "치아바타 팩으로 입력"): 박스로 시키고 재고는 팩으로 셈 (1박스 = pack팩). 계산 단위는 박스 그대로, 입력·표시만 팩 → box = 1/pack
+      it.packN = (c && num(c.pack) > 1 && num(c.pack)) || 0; it.boxLabel = it.packN ? "PK" : "BOX";
+      it.box = (c && c.box) || (it.packN ? 1 / it.packN : 0); it.portionG = (c && c.portionG) || 0; it.portionLabel = (c && c.portionLabel) || "포션";
       it.star = (c && c.star && (!c.starUntil || TODAY <= c.starUntil) && c.star) || ""; // 신메뉴 신규 품목: 이름 옆 작은 별 (itemCfg.star = "11월 신메뉴", starUntil = 별을 보일 마지막 날)
       it.outStep = (c && c.outStep) || 0; // 꺼내 쓰는 단위 (버터라이스: 박스째 라인 리치인으로 → 재고가 40개씩 줄어듦)
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
@@ -3424,7 +3426,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       if (c.use < 0.5 * step && ex >= 0.6 * step) {
         const pr = cache && (prepRawOf(cache, it) > 0 || batchRawOf(cache, it) > 0);
         const cap = Math.max(step, cache ? prepRawOf(cache, it) : 0);
-        const open = it.box || step > 1 ? "박스 뜯어 " : "";
+        const open = it.packN ? "팩 뜯어 " : it.box || step > 1 ? "박스 뜯어 " : "";
         out = { q: Math.min(ex, cap), why: pr ? "프랩에 씀" : it.thaw ? open + "해동 중" : open + "라인 셋팅" };
       }
       break;
@@ -3503,7 +3505,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     const draw = () => {
       const n = needOf(), r = n.r; d.dataset.need = n.st;
       // 묶음 단위 발주(10개단위 등)는 필요량도 그 단위로 반올림
-      const m = it.pk.mult || 1, rm = (v) => (it.useStep && v > 0 ? Math.ceil(v / m - 1e-9) * m : m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? Math.ceil(v - 0.05) : r1(v)); // 한 번에 쓰는 품목은 발주 단위로 올림 (11/16 KM "발주는 1통 단위")
+      const m = it.pk.mult || 1, rm = (v) => (it.useStep && v > 0 ? Math.ceil(v / m - 1e-9) * m : m > 1 && v > 0 ? Math.max(m, Math.round(v / m) * m) : it.box ? (it.packN ? Math.ceil(v / it.box - 0.05) * it.box : Math.ceil(v - 0.05)) : r1(v)); // 한 번에 쓰는 품목은 발주 단위로 올림 (11/16 KM "발주는 1통 단위")
       // 몇 포션인지 (itemCfg.portionG): 보이는 필요량 × 1단위 g ÷ 1포션 g
       const por = (q) => (it.portionG && it.pk.g && q > 0 ? `<em class="por">${Math.ceil(q * it.pk.g / it.portionG - 1e-9)}${esc(it.portionLabel)}</em>` : "");
       switch (n.st) {
@@ -3519,7 +3521,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     };
     const c0 = calc(it, win, 0, 0);
     // 작업 중 재고 (꺼내 둔 팩·박스): 발주 계산에 더한 만큼 회색 글씨로
-    const wipTxt = () => { const w = wipOf(it, v); return w ? `${w.why} +${r1(w.q / (it.box || 1))}${it.box ? "BOX" : esc(unit)}` : ""; };
+    const wipTxt = () => { const w = wipOf(it, v); return w ? `${w.why} +${r1(w.q / (it.box || 1))}${it.box ? it.boxLabel : esc(unit)}` : ""; };
     // 입고 전 부족 안내 (11/11): 이번 발주분은 입고일(해동 품목은 다음 날)부터 쓸 수 있어, 그 전에 모자랄 양은 발주해도 못 메움 → 발주량은 입고 뒤 쓸 양까지만. 잘랐을 때만 한 줄로 알림
     const cutTxt = () => {
       if (preMode || offDay || !win.post || num(v.o) > 0) return "";
@@ -3529,7 +3531,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       const m0 = it.pk.mult || 1, p0 = r.short0 <= 0 ? 0 : m0 > 1 ? Math.max(Math.round(r.short0 / m0), Math.ceil((r.use - s1 - inc) / m0 - 1e-9), 0) : Math.ceil(r.short0 - 1e-9);
       if (p0 <= r.packs) return "";
       // 요일은 입고일 (해동 품목은 다음 날부터 씀)
-      const day = DOW[dow(win.deliv)] + (it.thaw ? "요일 입고분은 다음 날부터 써서," : ""), q = (x) => `${r1(x / (it.box || 1))}${it.box ? "BOX" : unit}`;
+      const day = DOW[dow(win.deliv)] + (it.thaw ? "요일 입고분은 다음 날부터 써서," : ""), q = (x) => `${r1(x / (it.box || 1))}${it.box ? it.boxLabel : unit}`;
       return r.preShort > 0.05 ? `${day} 입고 전 ${q(r.preShort)} 모자랄 수 있음(발주로 못 메움)` : `${day} 입고 뒤 쓸 양만 발주`;
     };
     let tag = "";
@@ -3551,7 +3553,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     if (preMode) {
       const d0 = pDay(), pc = preCalc(it, v, d0), w0 = pc.w, inc0 = incomingOf(it, d0); // 입고예정은 실제로 넣은 발주만
       const e = pc.e, sv = pc.sv, r = c0.none ? null : pc.r;
-      const sShow = isFinite(pc.sD) ? r1(pc.sD / (it.box || 1)) + (it.box ? "BOX" : esc(unit)) : "–";
+      const sShow = isFinite(pc.sD) ? r1(pc.sD / (it.box || 1)) + (it.box ? it.boxLabel : esc(unit)) : "–";
       const q = r && !r.none ? r.orderQty : null;
       d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${inc0 ? incHtml(it, d0, unit) : ""}${!w0.canOrder ? `<span class="boxnote">${DOW[dow(d0)]}요일 발주 없음</span>` : ""}</span>` +
         `<span class="fld ro${e ? " est" : ""}"><span>${DOW[dow(w0.deliv)]} 예상 재고</span><b>${sShow}</b></span>` +
@@ -3559,11 +3561,11 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       return d;
     }
     // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
-    const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? "BOX" : esc(unit)}` : ""; })();
+    const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? it.boxLabel : esc(unit)}` : ""; })();
     d.innerHTML = top +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.packN ? `<span class="boxnote">재고는 팩으로<br>1박스 = ${it.packN}팩</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
       // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게")
-      (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? "BOX" : esc(unit)})"></label></div>`)() +
+      (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label></div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -3872,7 +3874,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
       let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
-      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? "BOX" : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
+      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? it.boxLabel : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
         `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm">품목</th>${h1}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
