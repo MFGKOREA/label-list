@@ -108,7 +108,7 @@ async function hrsRun(req, board, boardWin) {
       const unk = [...need].filter((k) => !CODE[k]);
       if (unk.length) { res = res0({ stage: "week", message: `근태 코드를 몰라요: ${unk.join(", ")} — 저장 전에 멈춤`, code: "nocode" }); return; }
     }
-    // 5) 바뀐 칸만 카드 입력(d.set) → 그 행 workType 'U' → hrt2325.saveData() → 다시 읽어 확인 (11/17 KM 실제 방식)
+    // 5) 바뀐 칸만 카드 입력(행 모델에 직접) → 그 행 workType 'U' → hrt2325.saveData() → 다시 읽어 확인 (11/17 KM 실제 방식, 1.17.7에서 표 다시 그리기 제거)
     const days = mode === "test" ? ["MON"] : ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
     const KN = { 출근: "출근", 휴무: "휴무", 주휴일: "주휴일", 공휴일: "공휴일" };
     await setRun({ stage: "save", tab: tabId });
@@ -118,10 +118,13 @@ async function hrsRun(req, board, boardWin) {
     r = await hrsExec(tabId, "cardApply", { emps, keep, weekly: CODE["주휴일"], own: own2 }, 90e3);
     if (r && r.code === "dirty") { res = res0({ stage: "save", message: r.message, code: "dirty", dirtyNos: r.dirtyNos || [] }); return; }
     T.save = Date.now() - startedAt;
+    T.card = (r && r.ms) || {}; // (1.17.7) 4단계 안쪽 갈래: diff(바뀐 칸 계산)·apply(입력)·save(저장 요청 + 다시 읽어 확인)·tail(남은 변경 표시 정리)
     if (r && r.droppedOwn) await step("save", `저장 안 된 변경 표시 ${r.droppedOwn}행은 방금 이 확장이 저장한 행이라 지움(표 값이 저장한 값과 같음)`);
     const extra = { skipped: [...(r.skipped || []), ...nowhere.filter((n) => !(r.skipped || []).some((k) => k.empNo === n)).map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "표에 없음 — 건너뜀" }))], kept: r.kept || [], locked: r.locked || [], changed: (r.changes || []).length };
     if (!r.ok) { res = res0(Object.assign({ stage: "save", message: `저장: ${r.message}`, code: r.code, rowErrors: (r.notSaved || []).map((x) => ({ empNo: x.empNo, name: x.name, day: x.dow, msg: "저장 뒤 값이 다름 · " + x.msg })) }, extra)); return; }
-    await step("save", `바뀐 칸 ${r.applied}개(${r.rowsTouched || 0}명) 입력 → 저장 → 다시 읽어 확인 맞음${extra.kept.length ? ` · 주휴일 유지 ${extra.kept.length}` : ""}${extra.locked.length ? ` · 수정 불가 ${extra.locked.length}` : ""}${extra.skipped.length ? ` · 건너뜀 ${extra.skipped.length}명` : ""}`, null, r.ajax);
+    const card = (r && r.ms) || {};
+    const cardTxt = card.apply != null ? ` · 입력 ${(card.apply / 1000).toFixed(2)}초 · 저장 확인 ${((card.save || 0) / 1000).toFixed(2)}초` : "";
+    await step("save", `바뀐 칸 ${r.applied}개(${r.rowsTouched || 0}명) 입력 → 저장 → 다시 읽어 확인 맞음${cardTxt}${extra.kept.length ? ` · 주휴일 유지 ${extra.kept.length}` : ""}${extra.locked.length ? ` · 수정 불가 ${extra.locked.length}` : ""}${extra.skipped.length ? ` · 건너뜀 ${extra.skipped.length}명` : ""}`, null, r.ajax);
     const saved = emps.map((e) => e.empNo).filter((n) => !extra.skipped.some((x) => x.empNo === n));
     await put({ hrSaved: { at: Date.now(), week: plan.weekStart, rows: Object.fromEntries(emps.filter((e) => saved.includes(e.empNo)).map((e) => [e.empNo, Object.fromEntries(e.days.map((d) => [d.dow, { code: d.code, in: d.in || "", out: d.out || "", brk: d.brk || "" }]))])) } }); // (1.17.2) 다음 실행이 이 행들을 '남의 변경'으로 보지 않게
     days.forEach((d) => savedDays.push(d));

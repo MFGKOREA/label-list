@@ -1,5 +1,5 @@
 {
-  "minVer": "1.17.4",
+  "minVer": "1.17.7",
   "at": "2026-11-18",
   "note": "매장 PC의 GW Agent 확장이 이 버전보다 낮으면 확장이 스스로 진단해 gwDiag에 '새 zip 덮어쓰기' 한 줄을 남깁니다. gw-plan.json에 새 되풀이 종류(menuToday 등)를 더할 때 함께 올립니다."
 }
