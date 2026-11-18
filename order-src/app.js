@@ -720,6 +720,8 @@
       else { prev.members.push(it.name); prev.codes = codes; }
     });
     items = [...byKey.values()];
+    // 11/19 KM "BOH 세제랑 소모품 순서 변경": 세제(이콜랩) 품목은 맨 뒤 → 업체 칩·발주품목순·발주시트에서 소모품(한성물산) 다음
+    items = [...items.filter((i) => i.vendor !== "세제"), ...items.filter((i) => i.vendor === "세제")];
     keyItem = new Map(items.map((it) => [it.key, it])); // 주문현황(misOrder) 줄 → 품목 (묶인 품목은 코드 여러 개: it.codes)
     const conv = (sheet && sheet.conv) || {};
     // itemCfg: 매장에서 알려준 1재고단위 안 개수 (판도우 1BOX = 도우 60개, 하몽 1EA = 8장)
@@ -2782,6 +2784,10 @@
       const g = grpOf(c, "", r.name) || (!custOf.get(c) && SUP.test(r.name || "") ? "한성물산 (소모품)" : null); if (g) extra.set(c, { name: r.name || c, unit: r.unit || "", vendor: g }); }); });
     const GORD = ["세제", "한성물산 (소모품)", "온세물류 (소모품)"]; // 11/16 KM "소모품은 두 종류: 한성, 온세" (바이맥스 기물은 뺌)
     [...extra].sort((x, y) => GORD.indexOf(x[1].vendor) - GORD.indexOf(y[1].vendor)).forEach(([c, x]) => { const v = x.vendor, it = { key: "\u0001x" + c, name: x.name, vendor: v, xcode: c, pk: { stock: x.unit }, box: 0 }; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); order.push(it); });
+    { // 소모품 묶음(한성물산·온세물류 소모품)을 세제 앞으로, 둘 다 FOH에만 있는 업체(롯데칠성·주류)보다 앞 (11/19 KM "세제랑 소모품 순서 변경")
+      const ks0 = [...byV.keys()], sup = ks0.filter((k) => /소모품\)$/.test(k)), det = ks0.filter((k) => k === "세제"), rest = ks0.filter((k) => !sup.includes(k) && !det.includes(k));
+      const at = rest.findIndex((k) => !k.includes("\u0002") && (byV.get(k) || []).every((i) => i.foh)), ins = at < 0 ? rest.length : at;
+      const nk = [...rest.slice(0, ins), ...sup, ...det, ...rest.slice(ins)], nb = new Map(nk.map((k) => [k, byV.get(k)])); byV.clear(); nb.forEach((v, k) => byV.set(k, v)); }
     { const ks = [...byV.keys()]; order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b))); } // 업체별로 모음(안에서는 넣은 순서 그대로)
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
