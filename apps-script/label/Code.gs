@@ -349,7 +349,7 @@ function ocrOnly_(data, color, trace) {
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
   const blob = Utilities.newBlob(bytes, 'image/' + m[1], 'ocr.jpg');
   let text = '', ocrError = '';
-  try { text = ocr_(blob); } catch (err) { ocrError = String(err); }
+  try { text = ocr_(blob, t); } catch (err) { ocrError = String(err); }
   t.ocr = Date.now() - t0;
   let suggest = [];
   if (text && !trace) { try { suggest = suggest_(text, color); } catch (err) {} }
@@ -396,9 +396,10 @@ function ocrDrop_(fileId) {
 }
 
 // 사진 바이트로 바로 글자 읽기 (복사 방식이 안 될 때의 대비, 한글표시사항도 이 경로를 쓸 수 있음)
-function ocr_(blob) {
+function ocr_(blob, t) {
   if (typeof Drive === 'undefined') throw new Error('Drive API 서비스가 추가되지 않았습니다');
   let fileId;
+  const s0 = Date.now();
   // 구글이 가끔 '잠시 후 다시'(rate limit)를 돌려줌: 최대 3번까지 쉬었다 다시
   for (let i = 0; ; i++) {
     try {
@@ -410,8 +411,13 @@ function ocr_(blob) {
       Utilities.sleep(1500 * (i + 1));
     }
   }
+  const s1 = Date.now();
   try { return ocrPlain_(fileId); }
-  finally { ocrDrop_(fileId); }
+  finally {
+    const s2 = Date.now();
+    ocrDrop_(fileId);
+    if (t) { t.make = s1 - s0; t.read = s2 - s1; t.drop = Date.now() - s2; }
+  }
 }
 
 // 매장들이 '제조일로부터 N' 으로 등록한 품목: { 이름키: { name, combos: { '24m': 매장 수 } } }
