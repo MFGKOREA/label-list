@@ -2704,9 +2704,14 @@
     const weeks = logWeeksAll();
     if (!logWeekSel) logWeekSel = new Set(weeks.slice(-3)); // 처음엔 지난 2주 + 이번 주
     $("logWeeks").innerHTML = weeks.map((m) => `<button type="button" data-w="${m}" aria-pressed="${logWeekSel.has(m)}">${isoWeek(m).w}주<small>${mmdd(m)}</small></button>`).join("");
-    const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !i.foh), order = [], byV = new Map(); // BOH 발주시트: FOH 품목은 뺌
-    all.forEach((it) => { const v = it.vendor || "업체 미지정"; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
-    byV.forEach((list) => order.push(...list)); // 발주품목순: 업체(처음 나온 순) 안에서 발주 시트 순서
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), order = [], byV = new Map();
+    // 11/19 KM "발주시트에 FOH 추가, 업체가 겹치면 FOH 파란색 글씨 넣고 분류, 공통 업체 없으면 업체명만 분류":
+    //  BOH 업체와 같은 업체의 FOH 품목 → 그 업체 바로 뒤에 "업체 FOH"(파란 글씨) 묶음, BOH에 없는 업체(롯데칠성·주류·한성물산) → 업체 이름 묶음
+    const bohV = new Set(all.filter((i) => !i.foh).map((i) => i.vendor || "업체 미지정"));
+    const vKey = (it) => (it.foh && bohV.has(it.vendor) ? it.vendor + "\u0002FOH" : it.vendor || "업체 미지정");
+    all.filter((i) => !i.foh).forEach((it) => { const v = vKey(it); if (!byV.has(v)) { byV.set(v, []); if (all.some((f) => f.foh && f.vendor === v)) byV.set(v + "\u0002FOH", []); } byV.get(v).push(it); });
+    all.filter((i) => i.foh).forEach((it) => { const v = vKey(it); if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
+    byV.forEach((list) => order.push(...list)); // 발주품목순: 업체(처음 나온 순) 안에서 발주 시트 순서, FOH는 master.foh 순서
     // (11/16 KM "소모품 세제들도 발주시트에 포함, 업체·소모품 구분") 앱 목록에서 숨긴 소모품·세제(발주 시트 master.order)와, 앱에 없지만 MIS에서 발주한 품목도 줄로 넣음. 재고는 안 세니 발주 칸만.
     const sel0 = weeks.filter((m) => logWeekSel.has(m)), have = new Set(); all.forEach((it) => (it.codes || []).forEach((c) => have.add(String(c))));
     // (11/16 KM "유한락스는 온세물류(소모품)", "발주현황표 다시 확인") 업체는 MIS 주문현황의 거래처명(misOrder 줄의 v)이 우선, 없으면 발주 품목 파일(소모품 = 한성물산, 세제 = 이콜랩)
@@ -2720,7 +2725,7 @@
       const g = grpOf(c, "", r.name) || (!custOf.get(c) && SUP.test(r.name || "") ? "한성물산 (소모품)" : null); if (g) extra.set(c, { name: r.name || c, unit: r.unit || "", vendor: g }); }); });
     const GORD = ["세제", "한성물산 (소모품)", "온세물류 (소모품)"]; // 11/16 KM "소모품은 두 종류: 한성, 온세" (바이맥스 기물은 뺌)
     [...extra].sort((x, y) => GORD.indexOf(x[1].vendor) - GORD.indexOf(y[1].vendor)).forEach(([c, x]) => { const v = x.vendor, it = { key: "\u0001x" + c, name: x.name, vendor: v, xcode: c, pk: { stock: x.unit }, box: 0 }; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); order.push(it); });
-    order.sort((a, b) => [...byV.keys()].indexOf(a.vendor || "업체 미지정") - [...byV.keys()].indexOf(b.vendor || "업체 미지정")); // 업체별로 모음(안에서는 넣은 순서 그대로)
+    { const ks = [...byV.keys()]; order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b))); } // 업체별로 모음(안에서는 넣은 순서 그대로)
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
@@ -2748,7 +2753,7 @@
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
       let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
-      const rows = order.map((it) => { const v = it.vendor || "업체 미지정", head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[v] || v)} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? it.boxLabel : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
+      const rows = order.map((it) => { const v = vKey(it), vn = v.split("\u0002")[0], head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[vn] || vn)}${v !== vn ? ` <b class="fohtag">FOH</b>` : ""} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? it.boxLabel : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
         `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm">품목</th>${h1}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;

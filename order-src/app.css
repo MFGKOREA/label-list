@@ -907,3 +907,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .foh-q input { width: 64px; height: 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); font-size: 16px; font-weight: 700; text-align: right; padding: 0 10px; font-variant-numeric: tabular-nums; }
 .foh-q input:not(:placeholder-shown) { border-color: var(--accent); }
 .foh-q .u { min-width: 28px; font-size: 12px; color: var(--muted); }
+
+/* 발주시트: BOH와 같은 업체의 FOH 묶음 표시 (11/19 KM "FOH 파란색 글씨") */
+.fohtag { color: #1d5fd1; font-weight: 800; }
+@media print { .fohtag { color: #1d5fd1 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fohtag { color: #7aa7ff; } }
+:root[data-theme="dark"] .fohtag { color: #7aa7ff; }
