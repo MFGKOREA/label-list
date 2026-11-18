@@ -922,3 +922,6 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .chips#locScope { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
 .chips#locScope button { width: 100%; min-height: 36px; text-align: center; }
 .chips#locScope button[aria-pressed="true"] { background: var(--fg); color: var(--surface); box-shadow: none; }
+/* FOH 위치 5칸 한 줄 (11/19): 글자·여백 조금 줄임 */
+.chips#locs.foh5 button { padding: 7px 2px; font-size: 13px; letter-spacing: -0.04em; }
+.chips#locs.foh5 button .cnt { margin-left: 2px; }
