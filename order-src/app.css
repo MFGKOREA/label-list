@@ -1009,3 +1009,12 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .misbar .lb-pc { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 800; min-width: 2.6em; }
 .misbar .lb-pc:empty { display: none; }
 .misbar .lbar[data-live="ok"] .lb-pc { color: var(--ok-ink); }
+/* 11/19 KM "여기를 한 줄로 정돈, 너무 들쭉날쭉": 윗줄 매장명 | 사용방법, 아랫줄 제목 | (발주 상태 · 날짜) — 줄마다 가운데 맞춤, 오른쪽 끝·높이 같게 */
+.topbtns { align-items: center; }
+.hdr { align-items: center; margin: 6px 2px 14px; }
+.hdr h1 { line-height: 1.15; }
+.dateblk { display: inline-flex; align-items: center; gap: 6px; }
+.dateblk .ostate { order: -1; display: inline-flex; align-items: center; height: 34px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; }
+.dateblk .datepill { display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: 999px; font-size: 15px; box-shadow: inset 0 0 0 1px var(--line); }
+.dateblk .datepill small { font-size: 15px; }
+.topbtns .tb.help { height: 34px; padding-top: 0; padding-bottom: 0; }
