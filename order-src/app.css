@@ -660,7 +660,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* ---------- 하단 독 (11/3): 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ---------- */
 .dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
   max-width: 480px; margin: 0 auto;
   padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px));
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -892,3 +892,16 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   .misbar .lb-fil { animation: none; left: 0; width: 100%; opacity: .5; }
   .misbar .lbar[data-live="run"] .lb-sp { animation: none; }
 }
+
+/* FOH 발주 (11/19 KM): 발주 탭 아래쪽 목록만 FOH 품목으로. 재고 계산 없이 최근 발주와 오늘 발주 수량 */
+.dock button span { white-space: nowrap; letter-spacing: -0.03em; }
+#fcats { margin-bottom: 14px; }
+.foh-v { padding: 12px 16px 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.foh-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 16px; border-top: 1px solid var(--line); }
+.foh-row:first-of-type { border-top: 0; }
+.foh-n { font-size: 15px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.foh-s { margin-top: 2px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.foh-q { display: flex; align-items: center; gap: 6px; }
+.foh-q input { width: 64px; height: 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); font-size: 16px; font-weight: 700; text-align: right; padding: 0 10px; font-variant-numeric: tabular-nums; }
+.foh-q input:not(:placeholder-shown) { border-color: var(--accent); }
+.foh-q .u { min-width: 28px; font-size: 12px; color: var(--muted); }

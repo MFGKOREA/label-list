@@ -1711,6 +1711,57 @@
     if (b.dataset.go === "files") { unlock().then((ok) => ok && go("files")); return; } // 데이터 파일은 버튼 비밀번호와 같은 번호
     go(b.dataset.go);
   });
+  // FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 정리해서 · 발주품목순대로")
+  //  품목 = 시트 master.foh (MIS 주문현황 10/19~11/17에서 발주 시트에 없는 품목, 업체 → 이름순 = 주문현황 순서). 재고 계산은 없음: 최근 발주(misOrder)와 오늘 발주 수량만.
+  //  오늘 발주 수량은 BOH와 같은 input.오늘[MIS 품목명].o → [GW 전송]이 BOH와 같이 넣음(misItems·mis.js가 master.foh 코드도 봄). 요일 줄·GW 자동입력은 발주 탭 것을 그대로 씀
+  let scope = "boh", fohVendor = "", fohQ = "";
+  const fohRows = () => (((db["master.foh"] || {}).rows) || []).filter((r) => r && r.name && r.code);
+  const shortV = (v) => String(v || "").replace(/\((주|유)\)\s*/g, "").replace(/\s*인터내셔날|음료|판매|종합/g, "").trim();
+  function setScope(x) {
+    scope = x; const foh = x === "foh";
+    $("bohList").hidden = foh; $("fohWrap").hidden = !foh;
+    if ($("tabOrder").getAttribute("aria-selected") === "true") $("mainTitle").textContent = foh ? "FOH 발주" : "발주량 계산";
+    if (foh) renderFoh();
+  }
+  function fohHist(code) { // 최근 MIS 주문현황에서 이 품목을 시킨 날·수량 (새것 먼저)
+    const out = [];
+    Object.keys(db).filter((k) => /^misOrder\.\d{4}-\d\d-\d\d$/.test(k)).sort().reverse().forEach((k) => {
+      const q = (((db[k] || {}).rows) || []).filter((r) => r && String(r.code) === String(code)).reduce((a, r) => a + num(r.qty), 0);
+      if (q > 0) out.push({ d: k.slice(9), q });
+    });
+    return out;
+  }
+  function renderFoh() {
+    if (scope !== "foh" || $("fohWrap").hidden) return;
+    if ($("fohList").contains(document.activeElement)) return; // 수량을 넣는 중엔 다시 그리지 않음 (다른 기기 저장이 와도 칸이 안 날아가게)
+    const rows = fohRows(), inp = todayInput();
+    const vs = [...new Set(rows.map((r) => r.vendor))];
+    if (fohVendor && !vs.includes(fohVendor)) fohVendor = "";
+    $("fcats").innerHTML = [["", `전체 <span class="cnt">${rows.length}</span>`], ...vs.map((v) => [v, `${esc(shortV(v))} <span class="cnt">${rows.filter((r) => r.vendor === v).length}</span>`])]
+      .map(([v, t]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${v === fohVendor}">${t}</button>`).join("");
+    const q = fohQ.trim().toLowerCase();
+    const show = rows.filter((r) => (!fohVendor || r.vendor === fohVendor) && (!q || r.name.toLowerCase().includes(q) || shortV(r.vendor).toLowerCase().includes(q)));
+    if (!rows.length) { $("fohList").innerHTML = `<div class="group"><div class="empty"><b>FOH 품목이 아직 없어요</b>시트 master.foh 가 비어 있어요</div></div>`; return; }
+    if (!show.length) { $("fohList").innerHTML = `<div class="group"><div class="empty">검색 결과가 없습니다</div></div>`; return; }
+    const by = new Map(); show.forEach((r) => { if (!by.has(r.vendor)) by.set(r.vendor, []); by.get(r.vendor).push(r); });
+    $("fohList").innerHTML = [...by].map(([v, list]) => `<div class="group"><div class="foh-v">${esc(shortV(v))} · ${list.length}</div>${list.map((r) => {
+      const h = fohHist(r.code), o = (inp[r.name] || {}).o;
+      const sub = h.length ? `최근 ${h.slice(0, 3).map((x) => `${mmdd(x.d)} ${x.q}`).join(" · ")}${h.length > 1 ? ` · 4주 ${h.filter((x) => x.d >= addDays(TODAY, -28)).length}번` : ""}` : "최근 발주 없음";
+      return `<div class="foh-row"><div><div class="foh-n">${esc(r.name)}</div><div class="foh-s">${sub}</div></div><label class="foh-q"><input type="number" inputmode="numeric" min="0" step="1" placeholder="0" data-n="${esc(r.name)}" value="${num(o) > 0 ? esc(String(o)) : ""}" aria-label="${esc(r.name)} 오늘 발주"><span class="u">${esc(r.unit || "")}</span></label></div>`;
+    }).join("")}</div>`).join("");
+  }
+  $("fcats").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (!b) return; fohVendor = b.dataset.v; renderFoh(); });
+  $("fq").addEventListener("input", (e) => { fohQ = e.target.value; renderFoh(); });
+  $("fohList").addEventListener("change", (e) => {
+    const i = e.target.closest("input[data-n]"); if (!i) return;
+    const name = i.dataset.n, v = i.value.trim(), q = v === "" ? 0 : Math.max(0, Math.round(num(v)));
+    if (v !== "" && !isFinite(num(v))) { i.value = ""; return; }
+    const all = { ...todayInput() }, rec = { ...(all[name] || {}) };
+    if (q > 0) { rec.o = q; rec.foh = 1; all[name] = rec; } else { delete rec.o; if (Object.keys(rec).filter((k) => k !== "foh").length) all[name] = rec; else delete all[name]; }
+    setKey("input." + TODAY, all);
+    i.value = q > 0 ? String(q) : "";
+    renderMis();
+  });
   const tabs = [["tabOrder", "pOrder", "발주량 계산"], ["tabPrep", "pPrep", "프랩량 계산"]];
   tabs.forEach(([t]) => $(t).addEventListener("click", () => {
     tabs.forEach(([t2, p2, title]) => { const on = t2 === t; $(t2).setAttribute("aria-selected", on); $(p2).hidden = !on; if (on) $("mainTitle").textContent = title; });
@@ -1732,9 +1783,10 @@
   $("dock").addEventListener("click", (e) => {
     const b = e.target.closest("[data-dock]"); if (!b) return;
     const k = b.dataset.dock;
-    if (k === "order" || k === "prep") {
+    if (k === "order" || k === "prep" || k === "foh") {
       if ($("v-main").hidden) go("main");
       $(k === "prep" ? "tabPrep" : "tabOrder").click();
+      setScope(k === "foh" ? "foh" : "boh");
       window.scrollTo(0, 0); dockOn(k); return;
     }
     if (k === "files") { unlock().then((ok) => { if (ok) { go("files"); dockOn("files"); } }); return; } // 데이터 파일은 버튼 비밀번호
@@ -1850,13 +1902,14 @@
     }).join("");
     renderList();
     renderMis();
+    try { renderFoh(); } catch (e) {} // FOH 발주 탭이 열려 있으면 같이 (시작 때 아직 준비 전이면 건너뜀)
   }
   // ---------- MIS 자동입력 (폰 → PC) ----------
   // 폰에서 [보내기] → 시트 misPush = {date, status: pending} → PC의 MIS 탭(북마크 "자동 대기", mis-agent.js)이 20초 안에 받아 넣고 저장 → 결과를 misPush에 적음
   //  PC는 2분마다 misAgent.at 기록 → 3분 넘게 없으면 "PC 연결 안 됨"
   let misFastUntil = 0;
   function misItems() {
-    const byName = new Map((((db["master.order"] || {}).rows) || []).map((r) => [r.name, r]));
+    const byName = new Map([...(((db["master.foh"] || {}).rows) || []), ...(((db["master.order"] || {}).rows) || [])].map((r) => [r.name, r])); // 11/19: FOH 발주 품목도 같이 보냄
     return Object.entries(todayInput()).filter(([k, v]) => num((v || {}).o) > 0 && (byName.get(k) || {}).code).map(([k, v]) => ({ name: k, q: num(v.o), vendor: (byName.get(k) || {}).vendor || "", unit: (byName.get(k) || {}).unit || "" }));
   }
   // 자동입력이 안 될 때 MIS에 직접 넣을 목록 (업체별, "품목 수량단위")

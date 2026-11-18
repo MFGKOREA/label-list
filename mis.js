@@ -66,7 +66,7 @@ const fill = async (auto) => {
   }
   catch (e) { return stop("발주앱 데이터를 못 불러왔어요. 인터넷 연결을 확인해 주세요."); }
   const inp = db["input." + TODAY] || {};
-  const master = ((db["master.order"] || {}).rows) || [];
+  const master = [...(((db["master.foh"] || {}).rows) || []), ...(((db["master.order"] || {}).rows) || [])]; // 11/19: 앱 FOH 발주 탭 품목(master.foh)도 같이 넣음
   const byName = new Map(master.map((r) => [r.name, r]));
   const rowName = (r) => { // 표 칸의 품목 이름 (칸에 이름이 없으면 앱의 품목 마스터에서, 그래도 없으면 코드로)
     const code = String(r.CD_ITEM ?? "");
