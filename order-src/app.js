@@ -1796,7 +1796,7 @@
   // 타일·상단 버튼 같은 다른 길로 화면이 바뀌어도 독 표시를 맞춤
   document.addEventListener("click", (e) => {
     const g = e.target.closest("[data-go]"); if (!g) return;
-    const to = g.dataset.go; setTimeout(() => { if (!$("v-" + to)?.hidden) dockOn(to === "main" ? ($("pPrep").hidden ? "order" : "prep") : to); }, 0);
+    const to = g.dataset.go; setTimeout(() => { if (!$("v-" + to)?.hidden) dockOn(to === "main" ? ($("pPrep").hidden ? (scope === "foh" ? "foh" : "order") : "prep") : to); }, 0); // 11/19 UI 점검: FOH 탭에서 다른 화면에 갔다 뒤로 오면 독이 "발주"로 켜지던 것
   });
 
   // ---------- 행간: 2줄 이상인 글만 150% (1줄은 auto) ----------
@@ -1899,7 +1899,8 @@
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && inScope(i)).map((i) => i.vendor).filter(Boolean))];
     if (scope === "foh") fohRows().forEach((r) => { if (r && r.vendor && !vendors.includes(r.vendor)) vendors.push(r.vendor); }); // FOH: 온세물류(계산) + 다른 업체(간단 목록)
     if (cat && !vendors.includes(cat)) cat = null;
-    $("cats").classList.toggle("foh", scope === "foh");
+    // 11/19 UI 점검: 업체가 4개 넘으면 한 줄에 못 들어가 글자가 잘림(발주 탭 한성물산이 생기며 4개) → 4개는 2칸×2줄, 5개부터 3칸씩
+    $("cats").classList.toggle("foh", vendors.length > 3); $("cats").style.setProperty("--vcols", vendors.length === 4 ? 2 : 3);
     $("cats").innerHTML = vendors.map((c) => {
       const n = M.items.filter((it) => !it.ledgerOnly && inScope(it) && it.vendor === c).length + (scope === "foh" ? fohRows().filter((r) => r.vendor === c && !fohCalc(r)).length : 0);
       return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(scope === "foh" ? shortV(c) : c)}<span class="cnt">${n}</span></button>`;
@@ -2695,6 +2696,7 @@
     const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh), idx = new Map(all.map((it, i) => [it.key, i]));
     const LS = locFoh ? LOCS_FOH : LOCS; if (!LS.some(([k]) => k === locTab)) locTab = "dry";
     $("locScope").innerHTML = [["boh", "BOH"], ["foh", "FOH"]].map(([k, t]) => `<button type="button" data-s="${k}" aria-pressed="${(k === "foh") === locFoh}">${t}<span class="cnt">${M.items.filter((i) => !i.ledgerOnly && !!i.foh === (k === "foh")).length}</span></button>`).join("");
+    $("v-loc").classList.toggle("n5", LS.length > 4);
     $("locTabs").innerHTML = LS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${all.filter((i) => locOf(i) === k).length}</span></button>`).join("");
     const list = all.filter((i) => locOf(i) === locTab).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
     const box = $("locList");
@@ -3351,7 +3353,10 @@
     }
     foot();
     // 11/19 KM "줄 정렬로 안 잘리게만, 글씨 조절해서": 데이터 예상 밑 사유는 한 줄 그대로, 칸보다 길면 글씨를 줄여 맞춤 (9px → 6.5px까지)
-    requestAnimationFrame(() => box.querySelectorAll(".dfc small").forEach((el) => { el.style.fontSize = ""; for (let f = 9; f > 6.5 && el.scrollWidth > el.clientWidth + 0.5; f -= 0.5) el.style.fontSize = f - 0.5 + "px"; }));
+    requestAnimationFrame(() => box.querySelectorAll(".dfc small").forEach((el) => { el.style.fontSize = "";
+      const fit = (min) => { for (let f = 9; f > min && el.scrollWidth > el.clientWidth + 0.5; f -= 0.5) el.style.fontSize = f - 0.5 + "px"; };
+      fit(7.5); if (el.scrollWidth > el.clientWidth + 0.5) { el.textContent = el.textContent.replace(/ · /g, "·").replace(/ ([+-]\d)/g, "$1"); el.style.fontSize = ""; fit(7); } // 그래도 길면 띄어쓰기를 줄인 짧은 모양("비-10%·한파-5%·행사")
+    }));
   }
   // 저장은 이 화면에서 사람이 고친 칸만 (입력 멈추고 1.2초 뒤, 또는 칸을 벗어날 때).
   //  11/16 고침: 예전엔 보이는 한 주 7칸을 화면 값 그대로 다 썼음 → 화면을 연 뒤 PC가 채운 실제 매출(시트엔 있는데 화면 칸은 빈칸)을
