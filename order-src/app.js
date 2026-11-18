@@ -1916,13 +1916,29 @@
   // 11/19 KM 4번 "ㅇㅋ 데이터보다 이상하면 빨간 글씨": GW 전송 전 확인 화면. 줄마다 앱 추천(넣을 때 계산한 r)과 넣은 발주량, 많이 다르면 빨강
   //  빨강 = 차이가 1단위보다 크고 추천의 30%보다 큼 (추천 2 → 4, 추천 10 → 14, 추천 0 → 2). 추천이 없던 품목(재고 안 넣음·FOH 재고·발주만)은 회색 "추천 없음"
   const misOdd = (w) => w.r != null && Math.abs(w.q - w.r) > Math.max(1, 0.3 * w.r);
+  // 11/19 KM "발주 추천인데 안 넣은 것도 넣어 줘, 파란색 음수": 오늘 재고를 센 품목 중 앱이 발주 필요(추천 > 0)인데 발주 칸이 비어 있는 것. 보내지는 않고 확인만
+  function misMissed() {
+    const M = model(), inp = todayInput(), out = [];
+    M.items.filter((i) => !i.ledgerOnly && !plainNow(i)).forEach((it) => {
+      const v = { s: "", o: "", ...(inp[it.key] || {}) }; if (!counted(v) || num(v.o) > 0) return;
+      const w = orderWindowFor(it, TODAY); if (!w.canOrder) return;
+      const s0 = availOf(it, v); if (!isFinite(s0)) return;
+      const rc = calc(it, w, s0, incNow(it)); if (!rc || rc.none || !(rc.orderQty > 0)) return;
+      out.push({ name: it.name, key: it.key, q: 0, r: rc.orderQty, vendor: it.vendor || "", unit: it.pk.order || it.pk.stock || "", missed: true });
+    });
+    return out;
+  }
   function misConfirm(list) {
     const dlg = $("misDlg"); if (!dlg || !dlg.showModal) return Promise.resolve(confirm(`오늘(${mmdd(TODAY)}) 발주 ${list.length}개를 PC의 그룹웨어(MIS)에 넣고 저장할까요?\n\n${list.map((w) => `${w.vendor ? "[" + w.vendor + "] " : ""}${w.name}  ${w.q}`).join("\n")}`));
-    const by = new Map(); list.forEach((w) => { const v = w.vendor || "기타"; if (!by.has(v)) by.set(v, []); by.get(v).push(w); });
+    // 11/19 KM "특이사항 있는 애들(빨강) 품목순으로 상단 정렬": 업체 안에서 빨강(추천과 많이 다름) → 파랑(추천인데 안 넣음) → 나머지, 같은 묶음 안은 발주품목순
+    const missed = misMissed(), all = [...list, ...missed], ord = new Map(model().items.map((it, i) => [it.key, i]));
+    const rank = (w) => (w.missed ? 1 : misOdd(w) ? 0 : 2), pos = (w) => ord.get(w.key || w.name) ?? 1e6;
+    const by = new Map(); all.forEach((w) => { const v = w.vendor || "기타"; if (!by.has(v)) by.set(v, []); by.get(v).push(w); });
+    by.forEach((ws) => ws.sort((a, b) => rank(a) - rank(b) || pos(a) - pos(b)));
     const odd = list.filter(misOdd).length;
-    dlg.innerHTML = `<form method="dialog"><h3>오늘(${mmdd(TODAY)}) 발주 ${list.length}개</h3><p class="md-sub">${odd ? `<b class="md-red">앱 추천과 많이 다른 품목 ${odd}개</b> · 숫자 확인 뒤 전송해 주세요` : "PC의 그룹웨어(MIS)에 넣고 저장해요"}</p><div class="md-list">` +
-      [...by].map(([v, ws]) => `<div class="md-v">${esc(shortV(v))} <small>${ws.length}</small></div>` + ws.map((w) => { const o = misOdd(w), d = w.r == null ? "" : w.q - w.r;
-        return `<div class="md-row${o ? " odd" : ""}"><span class="md-n">${esc(keyItem && keyItem.get(w.name) ? cardName(keyItem.get(w.name)) : shortNm(w.name))}</span><span class="md-r">${w.r == null ? "추천 없음" : `추천 ${w.r}`}</span><span class="md-d">${d ? `${d > 0 ? "+" : ""}${Math.round(d * 10) / 10}` : ""}</span><b class="md-q">${w.q}</b><small class="md-u">${esc(w.unit)}</small></div>`; }).join("")).join("") +
+    dlg.innerHTML = `<form method="dialog"><h3>오늘(${mmdd(TODAY)}) 발주 ${list.length}개</h3><p class="md-sub">${odd || missed.length ? [odd ? `<b class="md-red">추천과 많이 다름 ${odd}</b>` : "", missed.length ? `<b class="md-blue">추천인데 안 넣음 ${missed.length}</b>` : ""].filter(Boolean).join(" · ") + " · 확인 뒤 전송" : "PC의 그룹웨어(MIS)에 넣고 저장해요"}</p><div class="md-list">` +
+      [...by].map(([v, ws]) => `<div class="md-v">${esc(shortV(v))} <small>${ws.filter((w) => !w.missed).length}${ws.some((w) => w.missed) ? ` · 안 넣음 ${ws.filter((w) => w.missed).length}` : ""}</small></div>` + ws.map((w) => { const o = misOdd(w), d = w.r == null ? "" : w.q - w.r;
+        return `<div class="md-row${w.missed ? " miss" : o ? " odd" : ""}"><span class="md-n">${esc(keyItem && keyItem.get(w.name) ? cardName(keyItem.get(w.name)) : shortNm(w.name))}</span><span class="md-r">${w.r == null ? "추천 없음" : `추천 ${w.r}`}</span><span class="md-d">${d ? `${d > 0 ? "+" : ""}${Math.round(d * 10) / 10}` : ""}</span><b class="md-q">${w.missed ? "–" : w.q}</b><small class="md-u">${esc(w.unit)}</small></div>`; }).join("")).join("") +
       `</div><div class="md-btns"><button value="no" class="md-no">취소</button><button value="ok" class="md-ok">GW 전송</button></div></form>`;
     return new Promise((res) => { dlg.addEventListener("close", () => res(dlg.returnValue === "ok"), { once: true }); dlg.returnValue = "no"; dlg.showModal(); dlg.querySelector(".md-list").scrollTop = 0; });
   }
@@ -2459,7 +2475,7 @@
     }
     // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
     const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? it.boxLabel : esc(unit)}` : ""; })();
-    const yv = (db["input." + addDays(TODAY, -1)] || {})[it.key], sameBtn = v.s === "" && counted(yv) ? `<button type="button" class="samebtn" data-s="${esc(yv.s)}">어제와 같음 <b>${esc(yv.s)}</b></button>` : "";
+    const yv = (db["input." + addDays(TODAY, -1)] || {})[it.key], sameBtn = v.s === "" && counted(yv) ? `<button type="button" class="samebtn" data-s="${esc(yv.s)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>어제와 같음 <b>${esc(yv.s)}</b></button>` : "";
     // FOH 카드: 이름 아래 한 줄 "지난번 11.16(월) 2BOX · 4주 5번" (11/19 KM "FOH 지난번 줄정렬해서 ㅇㅋ(요일도)") — MIS 주문현황 기준
     const lastLine = (() => { if (!it.foh) return ""; const h = (it.codes || [it.code]).flatMap((c) => fohHist(c)).sort((a, b) => (a.d < b.d ? 1 : -1)); if (!h.length) return ""; const n4 = h.filter((x) => x.d >= addDays(TODAY, -28)).length;
       return `<div class="c-last"><span>지난번</span><b>${mmdd(h[0].d)}(${DOW[dow(h[0].d)]})</b><b>${r1(h[0].q)}${esc(ou)}</b><span>4주 ${n4}번</span></div>`; })();

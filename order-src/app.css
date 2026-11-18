@@ -961,11 +961,19 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 /* 11/19 KM: 행사 줄에 수용 인원을 한 줄로 · 재고칸 아래 작은 [어제와 같음] · FOH 지난번 발주 줄 */
 .f-row .f-ev { flex-wrap: nowrap; }
 .f-row .f-ev-m { flex: none; white-space: nowrap; }
-.c-bot .samebtn { position: absolute; right: 0; top: calc(100% + 4px); border: 0; background: none; padding: 0; white-space: nowrap; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: -0.02em; touch-action: manipulation; }
+.c-bot .samebtn { position: absolute; right: 0; top: calc(100% + 5px); display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); border-radius: 999px; padding: 3px 9px 3px 7px; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--fg); letter-spacing: -0.02em; line-height: 1.2; touch-action: manipulation; transition: transform .1s ease, background-color .1s ease; }
+.c-bot .samebtn svg { color: var(--accent-text); flex: none; }
+.c-bot .samebtn:active { transform: scale(.95); background: var(--fill); }
 .c-bot .samebtn b { color: var(--accent-text); font-weight: 800; }
 .c-bot .samebtn::after { content: ""; position: absolute; inset: -9px -6px; }
-.cell:has(.samebtn) .c-bot { margin-bottom: 20px; }
+.cell:has(.samebtn:not([hidden])) .c-bot { margin-bottom: 26px; }
 .c-last { display: grid; grid-template-columns: auto 54px 36px auto; justify-content: start; align-items: baseline; column-gap: 6px; margin: 3px 0 7px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .c-last b { color: var(--fg); font-weight: 700; }
 .c-last b:nth-child(3) { text-align: right; }
 .c-last span:last-child { margin-left: 6px; }
+/* 전송 전 확인: 추천인데 안 넣은 품목 = 파랑 (11/19 KM) */
+.mdlg .md-blue, .mdlg .md-row.miss .md-r, .mdlg .md-row.miss .md-d { color: #1d5fd1; }
+.mdlg .md-row.miss .md-n, .mdlg .md-row.miss .md-q { color: var(--muted); }
+.mdlg .md-row.miss .md-r, .mdlg .md-row.miss .md-d { font-weight: 800; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mdlg .md-blue, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-r, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-d { color: #7aa7ff; } }
+:root[data-theme="dark"] .mdlg .md-blue, :root[data-theme="dark"] .mdlg .md-row.miss .md-r, :root[data-theme="dark"] .mdlg .md-row.miss .md-d { color: #7aa7ff; }
