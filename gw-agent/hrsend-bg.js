@@ -13,7 +13,7 @@ async function hrsExec(tabId, op, arg, ms) {
   const to = new Promise((res) => setTimeout(() => res({ ok: false, stage: op === "final" ? "notice" : op === "daySave" ? "save" : /^day/.test(op) ? "upload" : "week", message: `HR 화면 단계(${op})가 ${Math.round(ms / 1000)}초 안에 안 끝났어요`, timeout: true }), ms));
   try { return await Promise.race([run, to]); } catch (e) { return { ok: false, stage: "week", message: "HR 화면에 들어가지 못했어요: " + String((e && e.message) || e).slice(0, 160), code: "inject" }; }
 }
-async function hrsTabReady(tabId, ms) { // 다 열릴 때까지. 오류 화면(망 끊김)이면 null
+async function hrsTabReady(tabId, ms) { // 다 열릴 때까지. 오류 화면(망 끊김)이면 null — (1.17.6) 120ms 간격
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
     const t = await chrome.tabs.get(tabId).catch(() => null);
@@ -21,17 +21,17 @@ async function hrsTabReady(tabId, ms) { // 다 열릴 때까지. 오류 화면(�
     const u = t.url || t.pendingUrl || "";
     if (/^chrome-error:/.test(u)) return { tab: t, err: true };
     if (t.status === "complete" && HRS.hr.test(u)) return { tab: t };
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 120));
   }
   const t = await chrome.tabs.get(tabId).catch(() => null);
   return t ? { tab: t, slow: true } : null;
 }
 async function hrsRun(req, board, boardWin) {
-  const id = String(req.requestId || "").slice(0, 80), now = Date.now(), trail = []; // (이름 주의: log는 bg.js의 기록 함수)
+  const id = String(req.requestId || "").slice(0, 80), startedAt = Date.now(), now = startedAt, trail = []; // (이름 주의: log는 bg.js의 기록 함수)
   const mode = req.mode === "test" ? "test" : "saveOnly"; // 11/16 KM: 부서별 전송은 입력·저장까지만. 공지·확정은 매장 전체라 MFG_HR_PUBLISH로 따로 (예전 "full"은 saveOnly로 받음)
   const savedDays = []; let warnsOut = [];
   const res0 = (o) => Object.assign({ type: "MFG_HR_SEND_RESULT", requestId: id, ok: false, stage: "precheck", day: null, message: "", rowErrors: [], warns: warnsOut, savedDays: savedDays.slice(), noticed: false, confirmed: false, savedEmpNos: [], mode, log: trail }, o);
-  const step = async (stage, msg, day, ajax) => { const it = { t: hrsT(), stage, day: day || null, msg: String(msg || "").slice(0, 200) }; if (ajax && ajax.length) it.ajax = ajax.map((x) => `${x.ep} ${x.http}${x.rc != null ? "/" + x.rc : ""}`).join(", "); trail.push(it); await hrsSend(board, { q: "hrSendProgress", requestId: id, item: it }); };
+  const step = async (stage, msg, day, ajax) => { const it = { t: hrsT(), ms: Date.now() - startedAt, stage, day: day || null, msg: String(msg || "").slice(0, 200) }; if (ajax && ajax.length) it.ajax = ajax.map((x) => `${x.ep} ${x.http}${x.rc != null ? "/" + x.rc : ""}`).join(", "); trail.push(it); await hrsSend(board, { q: "hrSendProgress", requestId: id, item: it }); };
   if (!id) return hrsSend(board, { q: "hrSendResult", res: res0({ message: "requestId가 없어요" }) });
   const { hrSend = {} } = await get("hrSend");
   if (hrSend.last && hrSend.last.id === id) return hrsSend(board, { q: "hrSendResult", res: hrSend.last.res });
@@ -39,7 +39,7 @@ async function hrsRun(req, board, boardWin) {
   const setRun = (o) => put({ hrSend: { last: hrSend.last || null, run: Object.assign({ id, at: now }, o) } });
   await setRun({ stage: "precheck" });
   const alive = setInterval(() => { chrome.runtime.getPlatformInfo(() => {}); }, 20e3);
-  let tabId = null, res = null;
+  let tabId = null, res = null; const T = { tab: 0, probe: 0, open: 0, week: 0, save: 0 }; // (1.17.6) 단계별 걸린 시간
     try {
     // 1) 보내기 전 검사
     const chk = hrsCheck(req);
@@ -57,17 +57,21 @@ async function hrsRun(req, board, boardWin) {
     await setRun({ stage: "week", tab: tabId });
     const rd = await hrsTabReady(tabId, 40e3);
     if (!rd || rd.err) { res = res0({ stage: "week", message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 연결을 확인해 주세요", code: "network" }); return; }
+    T.tab = Date.now() - startedAt;
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
-    for (let k = 0; k < 20 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 500)); pr = await hrsExec(tabId, "probe", {}, 15e3); }
+    for (let k = 0; k < 150 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 60)); pr = await hrsExec(tabId, "probe", {}, 15e3); } // (1.17.6) 60ms 간격
     if (!pr.ok) { res = res0({ stage: "week", message: pr.message, code: pr.code || "inject" }); return; }
     if (pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 전송해 주세요 (자동 로그인은 하지 않음)", code: "login" }); return; }
+    T.probe = Date.now() - startedAt;
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
+    T.open = Date.now() - startedAt;
     // 3) 소속구분은 고르지 않음(빈칸 = 전체: BOH·FOH·STORE가 다 나옴, 11/17 KM) → 한 화면에서 보낸 직원을 모두 찾음
     const sentSet = new Set(empNos);
     { const sv = await hrsExec(tabId, "settle", { ms: 20e3 }, 30e3); if (sv && sv.waited > 1500) await step("week", `HR 화면이 앞 작업(저장·다시 불러오기)을 끝낼 때까지 ${Math.round(sv.waited / 1000)}초 기다림`); }
     r = await hrsExec(tabId, "cond", { dept: "", weekStart: plan.weekStart, weekEnd: plan.weekEnd, site: HRS.site }, 120e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message }); return; }
+    T.week = Date.now() - startedAt;
     let st = r.status; const week = r.week;
     await step("week", `검색(전체): ${r.week} · 주차 상태 ${st.length ? st.map((x) => x === "EDIT" ? "EDIT(작성 중 · 공지 전)" : x).join(",") : "없음"} — 저장 안 된 변경 여부와는 따로 봄`, null, r.ajax);
     if (st.indexOf("CONFIRM") >= 0) { res = res0({ stage: "week", message: `이미 확정된 주예요 (${week}) — 확정취소는 자동으로 하지 않아요`, code: "confirmed" }); return; }
@@ -113,6 +117,7 @@ async function hrsRun(req, board, boardWin) {
     const { hrSaved: ls2 } = await get("hrSaved"), own2 = ls2 && ls2.week === plan.weekStart && Date.now() - ls2.at < 30 * 60e3 && ls2.rows ? ls2.rows : null;
     r = await hrsExec(tabId, "cardApply", { emps, keep, weekly: CODE["주휴일"], own: own2 }, 90e3);
     if (r && r.code === "dirty") { res = res0({ stage: "save", message: r.message, code: "dirty", dirtyNos: r.dirtyNos || [] }); return; }
+    T.save = Date.now() - startedAt;
     if (r && r.droppedOwn) await step("save", `저장 안 된 변경 표시 ${r.droppedOwn}행은 방금 이 확장이 저장한 행이라 지움(표 값이 저장한 값과 같음)`);
     const extra = { skipped: [...(r.skipped || []), ...nowhere.filter((n) => !(r.skipped || []).some((k) => k.empNo === n)).map((n) => ({ empNo: n, name: (plan.emps.find((e) => e.empNo === n) || {}).name, msg: "표에 없음 — 건너뜀" }))], kept: r.kept || [], locked: r.locked || [], changed: (r.changes || []).length };
     if (!r.ok) { res = res0(Object.assign({ stage: "save", message: `저장: ${r.message}`, code: r.code, rowErrors: (r.notSaved || []).map((x) => ({ empNo: x.empNo, name: x.name, day: x.dow, msg: "저장 뒤 값이 다름 · " + x.msg })) }, extra)); return; }
@@ -120,18 +125,20 @@ async function hrsRun(req, board, boardWin) {
     const saved = emps.map((e) => e.empNo).filter((n) => !extra.skipped.some((x) => x.empNo === n));
     await put({ hrSaved: { at: Date.now(), week: plan.weekStart, rows: Object.fromEntries(emps.filter((e) => saved.includes(e.empNo)).map((e) => [e.empNo, Object.fromEntries(e.days.map((d) => [d.dow, { code: d.code, in: d.in || "", out: d.out || "", brk: d.brk || "" }]))])) } }); // (1.17.2) 다음 실행이 이 행들을 '남의 변경'으로 보지 않게
     days.forEach((d) => savedDays.push(d));
-    if (mode === "test") { res = res0(Object.assign({ ok: true, stage: "save", day: "MON", message: `시험: 월요일만 넣고 저장했어요 (바뀐 칸 ${extra.changed}개, 공지·확정 안 함)`, test: true }, extra)); return; }
-    res = res0(Object.assign({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${saved.length}명 · 바뀐 칸 ${extra.changed}개${extra.kept.length || extra.skipped.length || extra.locked.length ? " · 확인 필요 있음" : ""}). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: saved }, extra));
+    if (mode === "test") { res = res0(Object.assign({ ok: true, stage: "save", day: "MON", message: `시험: 월요일만 넣고 저장했어요 (바뀐 칸 ${extra.changed}개 · ${((Date.now() - startedAt) / 1000).toFixed(1)}초, 공지·확정 안 함)`, test: true }, extra)); return; }
+    res = res0(Object.assign({ ok: true, stage: "save", message: `${plan.dept} 7일 저장까지 했어요 (${saved.length}명 · 바뀐 칸 ${extra.changed}개 · ${((Date.now() - startedAt) / 1000).toFixed(1)}초${extra.kept.length || extra.skipped.length || extra.locked.length ? " · 확인 필요 있음" : ""}). 공지·확정은 BOH·FOH 모두 저장된 뒤 [공지·확정]으로`, savedEmpNos: saved }, extra));
   } catch (e) {
     res = res0({ stage: "week", message: "확장 오류: " + String((e && e.message) || e).slice(0, 200) });
   } finally {
     clearInterval(alive);
-    if (tabId != null) await hrsExec(tabId, "done", {}, 5e3).catch(() => {});
     if (!res) res = res0({ stage: "week", message: "끝까지 못 갔어요" });
+    res.ms = Date.now() - startedAt; // (1.17.6) 걸린 시간(ms) — 보드·기록에서 바로 볼 수 있게
+    res.timing = T;
     await put({ hrSend: { run: null, last: { id, at: Date.now(), res } } });
-    await log(`HR 전송 ${res.ok ? "끝" : "멈춤"}: ${res.mode} · ${res.stage}${res.day ? " · " + res.day : ""} · 저장 ${res.savedDays.length}일 · ${res.stage === "precheck" ? "검사 오류 " + res.rowErrors.length + "건" : String(res.message).replace(/[^\s(]+님/g, "○○님").slice(0, 80)}`, { quiet: true }); // 이름은 안 남김 (HR 문구 "OOO님의 …"도 가림)
-    await hrsSend(board, { q: "hrSendResult", res });
+    await hrsSend(board, { q: "hrSendResult", res }); // (1.17.6) 결과를 먼저 보냄 — 탭 정리·기록(최대 몇 초)은 그 뒤에
     if (board != null) chrome.tabs.update(board, { active: true }).catch(() => {}); // 보드로 돌아감 (HR 탭은 결과 확인용으로 열어 둠)
+    if (tabId != null) await hrsExec(tabId, "done", {}, 5e3).catch(() => {});
+    await log(`HR 전송 ${res.ok ? "끝" : "멈춤"}: ${res.mode} · ${res.stage}${res.day ? " · " + res.day : ""} · 저장 ${res.savedDays.length}일 · ${(res.ms / 1000).toFixed(1)}초 · ${res.stage === "precheck" ? "검사 오류 " + res.rowErrors.length + "건" : String(res.message).replace(/[^\s(]+님/g, "○○님").slice(0, 80)}`, { quiet: true }); // 이름은 안 남김 (HR 문구 "OOO님의 …"도 가림)
   }
 }
 
@@ -161,7 +168,7 @@ async function hrsPublish(req, board, boardWin) {
     const rd = await hrsTabReady(tabId, 40e3);
     if (!rd || rd.err) { res = res0({ stage: "week", message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 확인", code: "network" }); return; }
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
-    for (let k = 0; k < 20 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 500)); pr = await hrsExec(tabId, "probe", {}, 15e3); }
+    for (let k = 0; k < 150 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 60)); pr = await hrsExec(tabId, "probe", {}, 15e3); } // (1.17.6) 60ms 간격
     if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
@@ -226,7 +233,7 @@ async function hrsRead(req, board, boardWin) {
     const rd = await hrsTabReady(tabId, 40e3);
     if (!rd || rd.err) { res = res0({ message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 확인", code: "network" }); return; }
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
-    for (let k = 0; k < 20 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 500)); pr = await hrsExec(tabId, "probe", {}, 15e3); }
+    for (let k = 0; k < 150 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 60)); pr = await hrsExec(tabId, "probe", {}, 15e3); } // (1.17.6) 60ms 간격
     if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ message: r.message, code: r.code }); return; }
