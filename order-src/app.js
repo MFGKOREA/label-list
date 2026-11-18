@@ -2686,16 +2686,18 @@
   };
   const locOf = (it) => ((db.itemCfg || {})[it.key] || {}).loc || guessLoc(it);
   const roOf = (it, idx) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ro != null ? c.ro : 1e4 + idx; };
-  let locTab = "dry", locSaveT = 0, locPatch = {};
+  let locTab = "dry", locSaveT = 0, locPatch = {}, locFoh = false; // locFoh: 위치·순서 화면에서 FOH 품목을 보는 중 (11/19 KM "보관위치 순서도 FOH 거")
   // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
   const saveLoc = (k, patch) => { locPatch[k] = { ...(locPatch[k] || {}), ...patch }; db.itemCfg = { ...(db.itemCfg || {}), [k]: { ...((db.itemCfg || {})[k] || {}), ...patch } }; clearTimeout(locSaveT); locSaveT = setTimeout(() => { locPatch = {}; setKey("itemCfg", db.itemCfg); }, 600); };
   function renderLocEdit() {
-    const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !i.foh), idx = new Map(all.map((it, i) => [it.key, i]));
-    $("locTabs").innerHTML = LOCS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${all.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh), idx = new Map(all.map((it, i) => [it.key, i]));
+    const LS = locFoh ? LOCS_FOH : LOCS; if (!LS.some(([k]) => k === locTab)) locTab = "dry";
+    $("locScope").innerHTML = [["boh", "BOH"], ["foh", "FOH"]].map(([k, t]) => `<button type="button" data-s="${k}" aria-pressed="${(k === "foh") === locFoh}">${t}<span class="cnt">${M.items.filter((i) => !i.ledgerOnly && !!i.foh === (k === "foh")).length}</span></button>`).join("");
+    $("locTabs").innerHTML = LS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${all.filter((i) => locOf(i) === k).length}</span></button>`).join("");
     const list = all.filter((i) => locOf(i) === locTab).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
     const box = $("locList");
     box.innerHTML = list.map((it) => { const c = (db.itemCfg || {})[it.key] || {}, L = locOf(it);
-      return `<div class="cell lrow" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${c.loc ? "" : " · <b>추정</b>"}</small></span><span class="rloc">${LOCS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}">${t.slice(0, 1)}</button>`).join("")}</span></div>`; }).join("") || `<div class="empty">이 위치 품목이 없어요</div>`;
+      return `<div class="cell lrow" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${c.loc ? "" : " · <b>추정</b>"}</small></span><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span></div>`; }).join("") || `<div class="empty">이 위치 품목이 없어요</div>`;
     locSumUpdate();
   }
   // ---------- BOH 수원컨벤션점 발주시트 (11/16 KM) ----------
@@ -2885,12 +2887,13 @@
 
   $("cats").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; cat = cat === b.dataset.c ? null : b.dataset.c; $("q").value = ""; renderList(); });
   $("q").addEventListener("input", renderList);
+  $("locScope").addEventListener("click", (e) => { const b = e.target.closest("button[data-s]"); if (!b) return; locFoh = b.dataset.s === "foh"; locTab = "dry"; renderLocEdit(); });
   $("locTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; locTab = b.dataset.t; renderLocEdit(); });
   $("locList").addEventListener("click", (e) => {
     const b = e.target.closest("[data-loc]"); if (!b) return;
     const k = b.closest(".lrow").dataset.key, to = b.dataset.loc;
     if (to === locTab) { saveLoc(k, { loc: to }); renderLocEdit(); return; } // 추정 → 확인
-    const M = model(), n = M.items.filter((i) => !i.ledgerOnly && !i.foh && locOf(i) === to).length;
+    const M = model(), n = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh && locOf(i) === to).length;
     saveLoc(k, { loc: to, ro: n + 1000 }); renderLocEdit(); // 다른 위치 맨 아래로
   });
   // 손잡이로 끌어 옮기기 (손가락·마우스 같이). 끄는 동안 행이 손을 따라가고, 놓으면 그 자리에 저장
