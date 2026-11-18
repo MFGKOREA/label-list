@@ -51,13 +51,8 @@
       <div id="orderList"></div>
       <div class="group" id="nores" hidden><div class="empty">검색 결과가 없습니다</div></div>
       </div>
-      <!-- FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 · 발주품목순"): 요일 줄·GW 자동입력은 발주 탭과 같이 씀 -->
+      <!-- FOH 발주 (11/19 KM): 위 발주 목록이 FOH 탭에선 온세물류 FOH 품목(같은 계산·카드), 여기는 다른 업체 FOH 품목(최근 발주 + 오늘 발주 칸) -->
       <div id="fohWrap" hidden>
-        <label class="search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <input id="fq" type="search" placeholder="FOH 품목 검색" aria-label="FOH 품목 검색" autocomplete="off">
-        </label>
-        <div class="chips" id="fcats" role="group" aria-label="FOH 업체"></div>
         <div id="fohList"></div>
       </div>
     </div>

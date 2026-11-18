@@ -915,7 +915,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 
 /* FOH 발주 (11/19 KM): 발주 탭 아래쪽 목록만 FOH 품목으로. 재고 계산 없이 최근 발주와 오늘 발주 수량 */
 .dock button span { white-space: nowrap; letter-spacing: -0.03em; }
-#fcats { margin-bottom: 14px; }
+.chips#cats.foh { display: flex; overflow-x: auto; }
+.chips#cats.foh button { width: auto; flex: 0 0 auto; padding: 7px 12px; }
 .foh-v { padding: 12px 16px 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .foh-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 16px; border-top: 1px solid var(--line); }
 .foh-row:first-of-type { border-top: 0; }
@@ -982,13 +983,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       <div id="orderList"></div>
       <div class="group" id="nores" hidden><div class="empty">검색 결과가 없습니다</div></div>
       </div>
-      <!-- FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 · 발주품목순"): 요일 줄·GW 자동입력은 발주 탭과 같이 씀 -->
+      <!-- FOH 발주 (11/19 KM): 위 발주 목록이 FOH 탭에선 온세물류 FOH 품목(같은 계산·카드), 여기는 다른 업체 FOH 품목(최근 발주 + 오늘 발주 칸) -->
       <div id="fohWrap" hidden>
-        <label class="search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <input id="fq" type="search" placeholder="FOH 품목 검색" aria-label="FOH 품목 검색" autocomplete="off">
-        </label>
-        <div class="chips" id="fcats" role="group" aria-label="FOH 업체"></div>
         <div id="fohList"></div>
       </div>
     </div>
@@ -1238,6 +1234,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // ---------- 저장소: localStorage 캐시 + 구글 시트(Apps Script) ----------
   const LS = "order-calc-db", LS_API = "order-calc-api";
   let db = {};
+  let scope = "boh"; // 발주 탭이 보이는 품목: boh = 발주 시트 품목 · foh = FOH 발주 탭 (11/19)
+  const inScope = (it) => (scope === "foh") === !!(it && it.foh);
   try { db = JSON.parse(localStorage.getItem(LS)) || {}; } catch { db = {}; }
   // 구글 시트 주소(Apps Script 웹앱 /exec). 배포를 새로 만들면 이 주소만 바꾸면 됩니다. 앱에서 바꾼 주소가 있으면 그게 우선.
   const DEFAULT_API = "https://script.google.com/macros/s/AKfycbw56Q_Q3m0ZyZSHlAlRru2MZZ4-Lqj4tvfXFOfhH_YLi4HOiLn9Cj2yEbARK9LTk00t5Q/exec";
@@ -1909,6 +1907,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       // 품목코드 칸이 있는 시트에서 코드 없는 줄은 '날짜', '데일리 매출' 같은 메모 줄. 'hide'는 목록에서 뺀 품목 ("업체:소모품"이면 그 업체 전체)
       const hasCode = (sheet.cols || []).includes("code"), hide = new Set(db.hide || []);
       items = sheet.rows.filter((r) => !r.off && !(hasCode && !r.code) && !hide.has(r.name) && !hide.has("업체:" + r.vendor)).map((r) => ({ ...r }));
+      // FOH 발주 (11/19 KM "온세물류는 똑같이 해줘 계산식 · 재고 발주 필요량 다 같은 인터페이스로"): master.foh 중 온세물류는 발주 시트 품목과 같은 계산(수불 A 등)으로. 화면은 FOH 탭에만(it.foh)
+      const hasC = new Set(items.map((r) => String(r.code || "")));
+      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && /온세/.test(r.vendor || "") && !hasC.has(String(r.code)) && !hide.has(r.name)) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: true }); });
     } else if (lastLedgerMonth) {
       items = mget(lastLedgerMonth).ledger.rows.filter((r) => r.usage > 0).map((r) => ({ name: r.name, group: r.group, code: r.code, vendor: "", unit: "", min: 0, loc: "" }));
     } else items = [];
@@ -2923,15 +2924,15 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 정리해서 · 발주품목순대로")
   //  품목 = 시트 master.foh (MIS 주문현황 10/19~11/17에서 발주 시트에 없는 품목, 업체 → 이름순 = 주문현황 순서). 재고 계산은 없음: 최근 발주(misOrder)와 오늘 발주 수량만.
   //  오늘 발주 수량은 BOH와 같은 input.오늘[MIS 품목명].o → [GW 전송]이 BOH와 같이 넣음(misItems·mis.js가 master.foh 코드도 봄). 요일 줄·GW 자동입력은 발주 탭 것을 그대로 씀
-  let scope = "boh", fohVendor = "", fohQ = "";
   const fohRows = () => (((db["master.foh"] || {}).rows) || []).filter((r) => r && r.name && r.code);
   const shortV = (v) => String(v || "").replace(/\((주|유)\)\s*/g, "").replace(/\s*인터내셔날|음료|판매|종합/g, "").trim();
   function setScope(x) {
     scope = x; const foh = x === "foh";
-    $("bohList").hidden = foh; $("fohWrap").hidden = !foh;
+    $("fohWrap").hidden = !foh; cat = null; locSel = null;
     if ($("tabOrder").getAttribute("aria-selected") === "true") $("mainTitle").textContent = foh ? "FOH 발주" : "발주량 계산";
-    if (foh) renderFoh();
+    renderMain();
   }
+  const fohCalc = (r) => /온세/.test(r.vendor || ""); // 온세물류 FOH 품목은 발주 시트 품목과 같은 카드·계산 (model), 나머지는 아래 간단 목록
   function fohHist(code) { // 최근 MIS 주문현황에서 이 품목을 시킨 날·수량 (새것 먼저)
     const out = [];
     Object.keys(db).filter((k) => /^misOrder\.\d{4}-\d\d-\d\d$/.test(k)).sort().reverse().forEach((k) => {
@@ -2943,15 +2944,10 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   function renderFoh() {
     if (scope !== "foh" || $("fohWrap").hidden) return;
     if ($("fohList").contains(document.activeElement)) return; // 수량을 넣는 중엔 다시 그리지 않음 (다른 기기 저장이 와도 칸이 안 날아가게)
-    const rows = fohRows(), inp = todayInput();
-    const vs = [...new Set(rows.map((r) => r.vendor))];
-    if (fohVendor && !vs.includes(fohVendor)) fohVendor = "";
-    $("fcats").innerHTML = [["", `전체 <span class="cnt">${rows.length}</span>`], ...vs.map((v) => [v, `${esc(shortV(v))} <span class="cnt">${rows.filter((r) => r.vendor === v).length}</span>`])]
-      .map(([v, t]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${v === fohVendor}">${t}</button>`).join("");
-    const q = fohQ.trim().toLowerCase();
-    const show = rows.filter((r) => (!fohVendor || r.vendor === fohVendor) && (!q || r.name.toLowerCase().includes(q) || shortV(r.vendor).toLowerCase().includes(q)));
-    if (!rows.length) { $("fohList").innerHTML = `<div class="group"><div class="empty"><b>FOH 품목이 아직 없어요</b>시트 master.foh 가 비어 있어요</div></div>`; return; }
-    if (!show.length) { $("fohList").innerHTML = `<div class="group"><div class="empty">검색 결과가 없습니다</div></div>`; return; }
+    const rows = fohRows().filter((r) => !fohCalc(r)), inp = todayInput();
+    const q = $("q").value.trim().toLowerCase();
+    const show = rows.filter((r) => (q ? r.name.toLowerCase().includes(q) || shortV(r.vendor).toLowerCase().includes(q) : (!cat || r.vendor === cat) && !locSel));
+    if (!show.length) { $("fohList").innerHTML = ""; return; }
     const by = new Map(); show.forEach((r) => { if (!by.has(r.vendor)) by.set(r.vendor, []); by.get(r.vendor).push(r); });
     $("fohList").innerHTML = [...by].map(([v, list]) => `<div class="group"><div class="foh-v">${esc(shortV(v))} · ${list.length}</div>${list.map((r) => {
       const h = fohHist(r.code), o = (inp[r.name] || {}).o;
@@ -2959,8 +2955,6 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       return `<div class="foh-row"><div><div class="foh-n">${esc(r.name)}</div><div class="foh-s">${sub}</div></div><label class="foh-q"><input type="number" inputmode="numeric" min="0" step="1" placeholder="0" data-n="${esc(r.name)}" value="${num(o) > 0 ? esc(String(o)) : ""}" aria-label="${esc(r.name)} 오늘 발주"><span class="u">${esc(r.unit || "")}</span></label></div>`;
     }).join("")}</div>`).join("");
   }
-  $("fcats").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (!b) return; fohVendor = b.dataset.v; renderFoh(); });
-  $("fq").addEventListener("input", (e) => { fohQ = e.target.value; renderFoh(); });
   $("fohList").addEventListener("change", (e) => {
     const i = e.target.closest("input[data-n]"); if (!i) return;
     const name = i.dataset.n, v = i.value.trim(), q = v === "" ? 0 : Math.max(0, Math.round(num(v)));
@@ -3104,10 +3098,13 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       b.className = "banner" + (win.est ? " soft" : "");
       b.innerHTML = `<span><b class="b1">${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고</b><small class="b2"><em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</small></span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
-    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly).map((i) => i.vendor).filter(Boolean))];
+    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && inScope(i)).map((i) => i.vendor).filter(Boolean))];
+    if (scope === "foh") (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.vendor && !vendors.includes(r.vendor)) vendors.push(r.vendor); }); // FOH: 온세물류(계산) + 다른 업체(간단 목록)
+    if (cat && !vendors.includes(cat)) cat = null;
+    $("cats").classList.toggle("foh", scope === "foh");
     $("cats").innerHTML = vendors.map((c) => {
-      const n = M.items.filter((it) => !it.ledgerOnly && it.vendor === c).length;
-      return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(c)}<span class="cnt">${n}</span></button>`;
+      const n = M.items.filter((it) => !it.ledgerOnly && inScope(it) && it.vendor === c).length + (scope === "foh" ? fohRows().filter((r) => r.vendor === c && !fohCalc(r)).length : 0);
+      return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(scope === "foh" ? shortV(c) : c)}<span class="cnt">${n}</span></button>`;
     }).join("");
     renderList();
     renderMis();
@@ -3910,7 +3907,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     const weeks = logWeeksAll();
     if (!logWeekSel) logWeekSel = new Set(weeks.slice(-3)); // 처음엔 지난 2주 + 이번 주
     $("logWeeks").innerHTML = weeks.map((m) => `<button type="button" data-w="${m}" aria-pressed="${logWeekSel.has(m)}">${isoWeek(m).w}주<small>${mmdd(m)}</small></button>`).join("");
-    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), order = [], byV = new Map();
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !i.foh), order = [], byV = new Map(); // BOH 발주시트: FOH 품목은 뺌
     all.forEach((it) => { const v = it.vendor || "업체 미지정"; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
     byV.forEach((list) => order.push(...list)); // 발주품목순: 업체(처음 나온 순) 안에서 발주 시트 순서
     // (11/16 KM "소모품 세제들도 발주시트에 포함, 업체·소모품 구분") 앱 목록에서 숨긴 소모품·세제(발주 시트 master.order)와, 앱에 없지만 MIS에서 발주한 품목도 줄로 넣음. 재고는 안 세니 발주 칸만.
@@ -3978,16 +3975,17 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   let sortSel = "need"; try { sortSel = localStorage.getItem("order-sort") || "need"; } catch {}
   if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
   function renderLocs(M) {
-    const pool = M.items.filter((i) => !i.ledgerOnly && (!cat || i.vendor === cat));
+    const pool = M.items.filter((i) => !i.ledgerOnly && inScope(i) && (!cat || i.vendor === cat));
     $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${t}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
   }
 
   function renderList() {
+    queueMicrotask(() => { try { renderFoh(); } catch (e) {} }); // FOH 탭: 아래 간단 목록도 같은 검색·업체·위치로
     preMemo = new Map(); wipMemo = new Map(); weeklyMemo = new Map(); weeklyStMemo = new Map();
     const M = model(), win = orderWindow(TODAY), inp = todayInput();
     const q = $("q").value.trim().toLowerCase();
     const box = $("orderList"); box.innerHTML = "";
-    const rk = preMode ? [] : risk86(M, inp); // 예상 재고로는 86 위험을 안 띄움
+    const rk = preMode ? [] : risk86(M, inp).filter((x) => inScope(x.it)); // 예상 재고로는 86 위험을 안 띄움 · 이 탭(BOH/FOH) 품목만
     if (rk.length) {
       const night = rk.some((x) => x.night);
       box.insertAdjacentHTML("beforeend", `<div class="risk86"><div class="r-top"><b>${night ? "내일 86 위험" : "86 위험"}</b>${night ? "<span>영업 끝 · 내일 문 열 때 예상 재고 기준</span>" : ""}</div>` +
@@ -3998,7 +3996,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     }
     let groups = new Map();
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
-    M.items.filter((i) => !i.ledgerOnly).forEach((it) => {
+    M.items.filter((i) => !i.ledgerOnly && inScope(i)).forEach((it) => {
       const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       if (!q) { const ws = weeklyState(it, inp[it.key]); if (ws && ws.fold) { folded.push(it); return; } }
