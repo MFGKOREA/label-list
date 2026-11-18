@@ -1922,6 +1922,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       // FOH 발주 (11/19 KM "온세물류는 똑같이 해줘 계산식 · 재고 발주 필요량 다 같은 인터페이스로" → "케일부터 한성물산까지 재고 발주카드"): master.foh 전부(발주 탭에서 숨긴 품목이어도 — 케일300g은 hide에 있었음) 발주 시트 품목과 같은 계산(수불 A 등)으로. 화면은 FOH 탭에만(it.foh)
       const hasC = new Set(items.map((r) => String(r.code || "")));
       (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && !hasC.has(String(r.code))) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: true }); });
+      // 11/19 KM "입고일 2영업일 뒤 입고 X · 재고 발주만 일단": BOH에 없는 업체(롯데칠성·주류·한성물산)의 FOH 품목은 계산·입고일 추정 없이 재고·발주 칸만 (it.plain)
+      const bohVs = new Set(items.filter((r) => !r.foh).map((r) => r.vendor)); items.forEach((r) => { if (r.foh && !bohVs.has(r.vendor)) r.plain = true; });
     } else if (lastLedgerMonth) {
       items = mget(lastLedgerMonth).ledger.rows.filter((r) => r.usage > 0).map((r) => ({ name: r.name, group: r.group, code: r.code, vendor: "", unit: "", min: 0, loc: "" }));
     } else items = [];
@@ -2550,6 +2552,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // ---------- C: 최종 발주량 ----------
   const Z = 1.65;
   function calc(it, win, s, inc) {
+    if (it.plain) return { none: true, plain: true }; // FOH 재고·발주만 (11/19)
     const g100 = win.gross / 1e6;
     const useA = it.rateA != null ? it.fixedA * win.days + it.rateA * g100 : null;
     const useB = it.rateB != null ? it.rateB * g100 : null;
@@ -3316,6 +3319,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   //  카드에 "월 입고예정 40EA" · "화 입고예정 40EA"처럼 날짜마다 한 줄. 미트카운트로 센 날은 오늘 들어올 것도 "오늘 입고예정"으로
   const incListOf = (it, d) => { const m = new Map(); for (let k = 0; k <= 7; k++) { const x = addDays(d, -k); arrivalsOf(it, x).forEach((a) => { if (a.d > d && (k > 0 || a.legacy || a.mis)) m.set(a.d, (m.get(a.d) || 0) + a.q); }); } return [...m].filter(([, q]) => q > 0).sort((a, b) => (a[0] < b[0] ? -1 : 1)); };
   const incHtml = (it, d, unit) => {
+    if (it.plain) return ""; // 입고일을 모름 (11/19)
     const L = incListOf(it, d);
     if (d === TODAY && meatOn(it, TODAY)) { const t = arrBetween(it, TODAY, true, TODAY, false); if (t > 0) L.unshift([TODAY, t]); }
     return L.map(([dd, q]) => `<span class="incnote">${dd === TODAY ? "오늘" : DOW[dow(dd)]} 입고예정 ${r1(q)}${esc(unit)}</span>`).join("");
@@ -3451,6 +3455,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     menuWMemo.set(it.key, res); return res;
   };
   function estStock(it, d, plan, pre, anchor) { // anchor: 지난 날을 볼 때 그 날(발주시트). 없으면 오늘 기준 7일 안에서 센 값을 찾음(예전 그대로)
+    if (it.plain) return null; // FOH 재고·발주만: 쓸 양을 모르니 예상 재고 없음 (11/19)
     const start = d > TODAY ? TODAY : addDays(d, -1);
     for (let x = start; x >= addDays(anchor && anchor < TODAY ? anchor : TODAY, -7); x = addDays(x, -1)) {
       if (!counted((db["input." + x] || {})[it.key])) continue;
@@ -3582,6 +3587,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
     // 필요량 칸 상태 (한 곳에서 판단, 그리기는 아래 draw): none 계산 못 함 · idle 재고 안 넣음(이번 기간 필요량만) · unknown 재고는 있는데 계산 못 함 ·
     //  done 발주 넣음 · low 앱 예상보다 적게 넣음 · enough 발주 안 해도 됨 · offday 오늘은 그 업체 발주일 아님 · buy 발주필요   (카드 data-need에도 적음 — 시험·에이전트가 읽음)
     const needOf = () => {
+      if (it.plain) return num(v.o) > 0 ? { st: "done" } : { st: "none" }; // FOH 재고·발주만: 필요량 계산 없음
       const est = estFor(it, v), s = est ? est.v : availOf(it, v);
       if (!isFinite(s) && num(v.o) > 0) return { st: "done" };
       if (!isFinite(s)) { const r = calc(it, win, 0, 0); return r.none ? { st: "none" } : { st: "idle", r }; }
@@ -3624,7 +3630,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
       return r.preShort > 0.05 ? `${day} 입고 전 ${q(r.preShort)} 모자랄 수 있음(발주로 못 메움)` : `${day} 입고 뒤 쓸 양만 발주`;
     };
     let tag = "";
-    if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
+    if (it.plain) tag = "";
+    else if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff" title="A·B 차이 ${Math.round(c0.spread * 100)}% → 보정해서 반영">보정 ${Math.round(c0.spread * 100)}%</span>`;
@@ -3821,7 +3828,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // 86 위험 한 건의 모드: counted 오늘 센 값 · est 예상 재고(최근 3일 센 값에서) · night 밤(내일 문 열 때 예상). label = 화면 낱말
   //  "확인필요" = 세어 봐야 아는 것(예상 기준). 밤이라도 오늘 센 값에서 나온 예상이면 "86 위험"
   const riskTag = (k) => (k ? { ...k, mode: k.night ? "night" : k.est ? "est" : "counted", label: k.est && !(k.night && k.from === TODAY) ? "확인필요" : "86 위험" } : null);
-  const risk1 = (it, v) => riskTag(nightNow() ? riskNight(it) : riskOf(it, v) || riskEst(it, v));
+  const risk1 = (it, v) => it.plain ? null : riskTag(nightNow() ? riskNight(it) : riskOf(it, v) || riskEst(it, v));
   function risk86(M, inp) {
     return M.items.filter((i) => !i.ledgerOnly).map((it) => risk1(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
   }
@@ -3851,6 +3858,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   // 오늘 이 품목을 어떻게 보일지: fold = 맨 아래로 접음, why = "today"(오늘 넣음) · "due"(셀 날) · "low"(모자랄 수 있음·예상 없음)
   let weeklyStMemo = new Map();
   function weeklyState(it, v) {
+    if (it.plain) return null;
     if (preMode) return null;
     const w = weeklyOf(it); if (!w) return null;
     const mk = it.key + "|" + (v ? `${v.s}|${v.o}` : ""); if (weeklyStMemo.has(mk)) return weeklyStMemo.get(mk);
