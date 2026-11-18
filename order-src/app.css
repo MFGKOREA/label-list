@@ -940,10 +940,15 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .mdlg .md-sub { margin: 0; padding: 0 20px 12px; font-size: 13px; color: var(--muted); }
 .mdlg .md-red, .mdlg .md-row.odd .md-r, .mdlg .md-row.odd .md-q { color: var(--rose-ink); }
 .mdlg .md-list { overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
-.mdlg .md-v { padding: 12px 20px 4px; font-size: 12px; font-weight: 800; color: var(--muted); }
-.mdlg .md-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; align-items: baseline; gap: 10px; padding: 7px 20px; }
+.mdlg .md-v { padding: 12px 20px 4px; font-size: 12px; font-weight: 800; color: var(--muted); border-top: 1px solid var(--line); background: var(--fill-2); }
+.mdlg .md-list > .md-v:first-child { border-top: 0; }
+.mdlg .md-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px 30px 38px 30px; align-items: baseline; column-gap: 6px; padding: 8px 20px; border-top: 1px solid var(--line); }
+.mdlg .md-v + .md-row { border-top: 0; }
+.mdlg .md-d { font-size: 12px; font-weight: 800; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.mdlg .md-row.odd .md-d { color: var(--rose-ink); }
+.mdlg .md-u { font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; white-space: nowrap; }
 .mdlg .md-n { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; word-break: keep-all; }
-.mdlg .md-r { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mdlg .md-r { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
 .mdlg .md-row.odd .md-r { font-weight: 800; }
 .mdlg .md-q { font-size: 16px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mdlg .md-q small { margin-left: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
@@ -953,3 +958,14 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .mdlg .md-ok { background: var(--accent); color: var(--accent-ink); }
 .c-name[data-full] { cursor: pointer; }
 .f-row input.fc.auto::placeholder { opacity: .65; color: var(--c-de); }
+/* 11/19 KM: 행사 줄에 수용 인원을 한 줄로 · 재고칸 아래 작은 [어제와 같음] · FOH 지난번 발주 줄 */
+.f-row .f-ev { flex-wrap: nowrap; }
+.f-row .f-ev-m { flex: none; white-space: nowrap; }
+.c-bot .samebtn { position: absolute; right: 0; top: calc(100% + 4px); border: 0; background: none; padding: 0; white-space: nowrap; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: -0.02em; touch-action: manipulation; }
+.c-bot .samebtn b { color: var(--accent-text); font-weight: 800; }
+.c-bot .samebtn::after { content: ""; position: absolute; inset: -9px -6px; }
+.cell:has(.samebtn) .c-bot { margin-bottom: 20px; }
+.c-last { display: grid; grid-template-columns: auto 54px 36px auto; justify-content: start; align-items: baseline; column-gap: 6px; margin: 3px 0 7px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.c-last b { color: var(--fg); font-weight: 700; }
+.c-last b:nth-child(3) { text-align: right; }
+.c-last span:last-child { margin-left: 6px; }

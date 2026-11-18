@@ -1922,7 +1922,7 @@
     const odd = list.filter(misOdd).length;
     dlg.innerHTML = `<form method="dialog"><h3>오늘(${mmdd(TODAY)}) 발주 ${list.length}개</h3><p class="md-sub">${odd ? `<b class="md-red">앱 추천과 많이 다른 품목 ${odd}개</b> · 숫자 확인 뒤 전송해 주세요` : "PC의 그룹웨어(MIS)에 넣고 저장해요"}</p><div class="md-list">` +
       [...by].map(([v, ws]) => `<div class="md-v">${esc(shortV(v))} <small>${ws.length}</small></div>` + ws.map((w) => { const o = misOdd(w), d = w.r == null ? "" : w.q - w.r;
-        return `<div class="md-row${o ? " odd" : ""}"><span class="md-n">${esc(shortNm(w.name))}</span><span class="md-r">${w.r == null ? "추천 없음" : `추천 ${w.r}${d ? ` (${d > 0 ? "+" : ""}${Math.round(d * 10) / 10})` : ""}`}</span><b class="md-q">${w.q}<small>${esc(w.unit)}</small></b></div>`; }).join("")).join("") +
+        return `<div class="md-row${o ? " odd" : ""}"><span class="md-n">${esc(keyItem && keyItem.get(w.name) ? cardName(keyItem.get(w.name)) : shortNm(w.name))}</span><span class="md-r">${w.r == null ? "추천 없음" : `추천 ${w.r}`}</span><span class="md-d">${d ? `${d > 0 ? "+" : ""}${Math.round(d * 10) / 10}` : ""}</span><b class="md-q">${w.q}</b><small class="md-u">${esc(w.unit)}</small></div>`; }).join("")).join("") +
       `</div><div class="md-btns"><button value="no" class="md-no">취소</button><button value="ok" class="md-ok">GW 전송</button></div></form>`;
     return new Promise((res) => { dlg.addEventListener("close", () => res(dlg.returnValue === "ok"), { once: true }); dlg.returnValue = "no"; dlg.showModal(); dlg.querySelector(".md-list").scrollTop = 0; });
   }
@@ -2459,10 +2459,14 @@
     }
     // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
     const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? it.boxLabel : esc(unit)}` : ""; })();
-    d.innerHTML = top +
+    const yv = (db["input." + addDays(TODAY, -1)] || {})[it.key], sameBtn = v.s === "" && counted(yv) ? `<button type="button" class="samebtn" data-s="${esc(yv.s)}">어제와 같음 <b>${esc(yv.s)}</b></button>` : "";
+    // FOH 카드: 이름 아래 한 줄 "지난번 11.16(월) 2BOX · 4주 5번" (11/19 KM "FOH 지난번 줄정렬해서 ㅇㅋ(요일도)") — MIS 주문현황 기준
+    const lastLine = (() => { if (!it.foh) return ""; const h = (it.codes || [it.code]).flatMap((c) => fohHist(c)).sort((a, b) => (a.d < b.d ? 1 : -1)); if (!h.length) return ""; const n4 = h.filter((x) => x.d >= addDays(TODAY, -28)).length;
+      return `<div class="c-last"><span>지난번</span><b>${mmdd(h[0].d)}(${DOW[dow(h[0].d)]})</b><b>${r1(h[0].q)}${esc(ou)}</b><span>4주 ${n4}번</span></div>`; })();
+    d.innerHTML = top + lastLine +
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
-      // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게")
-      (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label></div>`)() +
+      // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게") + 그 아래 작은 [어제와 같음 N] (11/19 KM "카드 재고칸 아래로 작게": 오늘 안 셌고 어제 센 값이 있을 때만, 누르면 그 값이 들어가 저장)
+      (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label>${sameBtn}</div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -2479,6 +2483,8 @@
     }
     const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const wn = d.querySelector(".wipnote"); if (wn) { const t = wipTxt(); wn.textContent = t; wn.hidden = !t; } const cn = d.querySelector(".cutnote"); if (cn) { const t = cutTxt(); cn.textContent = t; cn.hidden = !t; } const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
+    si.addEventListener("input", () => { const sb = d.querySelector(".samebtn"); if (sb) sb.hidden = si.value.trim() !== ""; });
+    d.querySelector(".samebtn")?.addEventListener("click", (e) => { si.value = e.currentTarget.dataset.s; si.dispatchEvent(new Event("input", { bubbles: true })); si.dispatchEvent(new Event("change", { bubbles: true })); });
     // 엔터(다음): 다음 품목 재고. 입력하면 목록이 다시 그려지므로 갈 곳을 기억해 두고 그린 뒤 포커스
     const jump = (to) => {
       orderFocus = to;
