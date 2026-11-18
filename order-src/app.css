@@ -232,7 +232,7 @@ html, body { overflow-x: hidden; }
 .f-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 5px; align-items: center; }
 .f-row .dfc { text-align: right; font-size: 14px; font-weight: 600; color: var(--fg); padding-right: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; }
 /* 날씨·행사 보정 사유 (숫자 밑 한 줄) */
-.f-row .dfc small { display: block; font-size: 9px; font-weight: 600; color: var(--c-de); white-space: normal; overflow-wrap: anywhere; line-height: 1.2; letter-spacing: -0.3px; margin-top: 1px; }
+.f-row .dfc small { display: block; font-size: 9px; font-weight: 600; color: var(--c-de); white-space: nowrap; overflow: hidden; line-height: 1.2; letter-spacing: -0.3px; margin-top: 1px; text-align: right; }
 .f-row .day small em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: var(--rose-ink); }
 .lg-de::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; background: var(--c-de); box-shadow: 0 0 6px var(--c-de); }
 .f-row .day { font-size: 14px; font-weight: 700; line-height: normal; }

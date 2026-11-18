@@ -3350,6 +3350,8 @@
       box.appendChild(row);
     }
     foot();
+    // 11/19 KM "줄 정렬로 안 잘리게만, 글씨 조절해서": 데이터 예상 밑 사유는 한 줄 그대로, 칸보다 길면 글씨를 줄여 맞춤 (9px → 6.5px까지)
+    requestAnimationFrame(() => box.querySelectorAll(".dfc small").forEach((el) => { el.style.fontSize = ""; for (let f = 9; f > 6.5 && el.scrollWidth > el.clientWidth + 0.5; f -= 0.5) el.style.fontSize = f - 0.5 + "px"; }));
   }
   // 저장은 이 화면에서 사람이 고친 칸만 (입력 멈추고 1.2초 뒤, 또는 칸을 벗어날 때).
   //  11/16 고침: 예전엔 보이는 한 주 7칸을 화면 값 그대로 다 썼음 → 화면을 연 뒤 PC가 채운 실제 매출(시트엔 있는데 화면 칸은 빈칸)을
