@@ -340,6 +340,22 @@ function savePhoto_(store, id, data, ocr, color, trace) {
   return { photo: file.getId(), text: text, ocrError: ocrError, suggest: suggest };
 }
 
+// 구글 Vision 글자 읽기 (1초 안팎). mg-label 에 Cloud Vision API 가 켜져 있어야 함. 안 되면 10분간 쉬고 드라이브 방식으로.
+function visionOcr_(b64) {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('vision_off')) throw new Error('vision 쉬는 중: ' + cache.get('vision_off'));
+  const auth = fcmAuth_('https://www.googleapis.com/auth/cloud-vision', 'vision_at');
+  const res = UrlFetchApp.fetch('https://vision.googleapis.com/v1/images:annotate', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + auth.at },
+    payload: JSON.stringify({ requests: [{ image: { content: b64 }, features: [{ type: 'DOCUMENT_TEXT_DETECTION' }], imageContext: { languageHints: ['ko', 'en'] } }] }),
+  });
+  const code = res.getResponseCode(), body = res.getContentText();
+  if (code !== 200) { cache.put('vision_off', code + ' ' + body.slice(0, 200), 600); throw new Error('vision ' + code + ' ' + body.slice(0, 200)); }
+  const r = (JSON.parse(body).responses || [])[0] || {};
+  if (r.error) throw new Error('vision ' + JSON.stringify(r.error).slice(0, 200));
+  return (r.fullTextAnnotation && r.fullTextAnnotation.text) || '';
+}
+
 // 글자 읽기만 (사진 저장과 동시에 따로 부름 → 기다리는 시간이 줄어듦). 사진은 저장하지 않는다.
 function ocrOnly_(data, color, trace) {
   const t0 = Date.now(), t = {};
@@ -348,8 +364,10 @@ function ocrOnly_(data, color, trace) {
   const bytes = Utilities.base64Decode(m[2]);
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
   const blob = Utilities.newBlob(bytes, 'image/' + m[1], 'ocr.jpg');
-  let text = '', ocrError = '';
-  try { text = ocr_(blob, t); } catch (err) { ocrError = String(err); }
+  let text = '', ocrError = '', vErr = '';
+  try { text = visionOcr_(m[2]); t.by = 'vision'; } catch (err) { vErr = String(err).slice(0, 200); }
+  if (!t.by) { try { text = ocr_(blob, t); t.by = 'drive'; } catch (err) { ocrError = String(err); } }
+  if (vErr) t.vision = vErr;
   t.ocr = Date.now() - t0;
   let suggest = [];
   if (text && !trace) { try { suggest = suggest_(text, color); } catch (err) {} }
@@ -957,20 +975,21 @@ function pushDrop_(token) {
 }
 
 // Firebase 서비스 계정으로 접근 토큰 (50분 캐시)
-function fcmAuth_() {
+function fcmAuth_(scope, key) {
   const raw = PropertiesService.getScriptProperties().getProperty('FCM_SA');
   if (!raw) throw new Error('FCM_SA 스크립트 속성이 없습니다');
-  const sa = JSON.parse(raw), cache = CacheService.getScriptCache(), hit = cache.get('fcm_at');
+  const ck = key || 'fcm_at';
+  const sa = JSON.parse(raw), cache = CacheService.getScriptCache(), hit = cache.get(ck);
   if (hit) return { at: hit, project: sa.project_id };
   const now = Math.floor(Date.now() / 1000);
   const enc = (o) => Utilities.base64EncodeWebSafe(JSON.stringify(o)).replace(/=+$/, '');
   const head = enc({ alg: 'RS256', typ: 'JWT' });
-  const claim = enc({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+  const claim = enc({ iss: sa.client_email, scope: scope || 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
   const sig = Utilities.base64EncodeWebSafe(Utilities.computeRsaSha256Signature(head + '.' + claim, sa.private_key)).replace(/=+$/, '');
   const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', payload: { grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: head + '.' + claim + '.' + sig }, muteHttpExceptions: true });
   const at = JSON.parse(res.getContentText()).access_token;
   if (!at) throw new Error('Firebase 인증 실패: ' + res.getContentText().slice(0, 200));
-  cache.put('fcm_at', at, 3000);
+  cache.put(ck, at, 3000);
   return { at: at, project: sa.project_id };
 }
 // 매장 폰들에 보내기 (skip 토큰 제외). 없어진 토큰은 지움
