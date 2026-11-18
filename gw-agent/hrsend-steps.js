@@ -347,28 +347,43 @@ async function hrsStep(op, a) {
     return Object.assign({ ok: true, dirty, rows: g.dataSource.data().length }, diffOf(g, a));
   }
 
-  if (op === "cardApply") { // 바뀐 칸만 d.set → 그 행 workType 'U' → hrt2325.saveData() 직접 → 다시 읽어 확인
+  if (op === "cardApply") { // 바뀐 칸만 행 모델에 직접 → 그 행 workType 'U' → hrt2325.saveData() 직접 → 다시 읽어 확인
+    const tStart = Date.now(), tm = {}; // (1.17.7) 구간별 걸린 ms (다음 실측에서 어디가 느린지 바로 보이게)
     const g = mainGrid(); if (!g) return fail("save", "메인 표를 못 읽었어요");
     for (let k = 0; k < 60 && pendingAjax().length; k++) await sleep(30);
     if (dsChanged(g)) { const dr = await dropOwnRows(g, a.own); if (dr.dirty) return fail("save", `HR 표에 저장 안 된 변경이 ${dr.dirtyNos.length || "몇"}행 있어요${dr.dirtyNos.length ? " (사번 " + dr.dirtyNos.slice(0, 5).join(", ") + (dr.dirtyNos.length > 5 ? " 외" : "") + ")" : ""} — 이 확장이 방금 저장한 값이 아니라 누가 화면에서 고치는 중일 수 있어 멈춤. 주차 상태 EDIT(작성 중)와는 다른 것. [검색]으로 새로 고친 뒤 다시`, { code: "dirty", dirtyNos: dr.dirtyNos }); if (dr.dropped) { note("msg", `저장 전 변경 표시 ${dr.dropped}행은 방금 저장한 행이라 지움`); H.droppedOwn = dr.dropped; } }
     const df = diffOf(g, a);
+    tm.diff = Date.now() - tStart;
     const dropped = H.droppedOwn || 0; H.droppedOwn = 0;
-    if (!df.changes.length) return Object.assign({ ok: true, applied: 0, droppedOwn: dropped, msg: "바뀔 칸이 없어요 (이미 같음)" }, df);
+    if (!df.changes.length) return Object.assign({ ok: true, applied: 0, droppedOwn: dropped, msg: "바뀔 칸이 없어요 (이미 같음)", ms: tm }, df);
     const rows = [].slice.call(g.dataSource.data()), byNo = new Map(rows.map((r) => [String(r.emp_code), r])), touched = new Set();
-    const put = (r, f, v) => { if (typeof r.set === "function") r.set(f, v); else { r[f] = v; r.dirty = true; } };
+    // (1.17.7, 11/18 KM 실측 24.8초의 원인) kendo의 set()은 한 번 부를 때마다 표에 '바뀌었다'고 알려(change) HR 화면이 36명×7일 표를 다시 그린다.
+    //  바뀐 칸 117개×5칸 + workType 21명 = 약 600번 → 화면이 20초 넘게 멈췄다.
+    //  kendo Model의 값은 그냥 속성이고(set()도 kendo.setter로 같은 자리에 씀) 직접 넣으면 알림이 0번이다. 값은 toJSON()·저장 요청에 그대로 들어가고,
+    //  화면은 저장 뒤 서버에서 다시 받은 표로 새로 그려지므로 여기서 다시 그릴 필요가 없다. (혹시 set 접근자가 정의된 모델이면 그때만 kendo set — 값을 잃지 않게)
+    const hasSetter = (r, f) => { try { const own = Object.getOwnPropertyDescriptor(r, f), p = Object.getPrototypeOf(r), up = p ? Object.getOwnPropertyDescriptor(p, f) : null; return !!((own && typeof own.set === "function") || (up && typeof up.set === "function")); } catch (e) { return false; } };
+    const batch = new Map(); // 사번 → { r, f: { 칸: 값 } } — 행마다 모아 두었다가 한 번에 넣는다
     for (const c of df.changes) {
-      const r = byNo.get(c.empNo), D = c.dow;
-      put(r, D + "_time_item_code_p", c.to.code);
-      if (c.to.kname) put(r, D + "_time_item_name_p", c.to.kname);
-      put(r, D + "_work_on_p_hhmm", c.to.in); put(r, D + "_work_off_p_hhmm", c.to.out); put(r, D + "_break_time_p_hhmm", c.to.brk);
+      const r = byNo.get(c.empNo); if (!r) continue;
+      const D = c.dow; let e = batch.get(c.empNo); if (!e) { e = { r, f: {} }; batch.set(c.empNo, e); }
+      e.f[D + "_time_item_code_p"] = c.to.code;
+      if (c.to.kname) e.f[D + "_time_item_name_p"] = c.to.kname;
+      e.f[D + "_work_on_p_hhmm"] = c.to.in; e.f[D + "_work_off_p_hhmm"] = c.to.out; e.f[D + "_break_time_p_hhmm"] = c.to.brk;
       touched.add(c.empNo);
     }
-    touched.forEach((no) => put(byNo.get(no), "workType", "U")); // 이게 없으면 저장 요청에 안 들어감
-    await nextTick(); // (1.17.6) 바뀐 값을 표가 읽을 한 틱만 (300ms 고정 대기 대신)
+    let setCalls = 0; const tApply = Date.now();
+    batch.forEach((e) => {
+      e.f.workType = "U"; // 이게 없으면 저장 요청에 안 들어감
+      const dfd = e.r.dirtyFields && typeof e.r.dirtyFields === "object" ? e.r.dirtyFields : null;
+      for (const f in e.f) { const v = e.f[f]; if (hasSetter(e.r, f) && typeof e.r.set === "function") { setCalls++; try { e.r.set(f, v); } catch (er) { e.r[f] = v; } } else e.r[f] = v; if (dfd) dfd[f] = true; }
+      e.r.dirty = true; // kendo Model의 '바뀜' 표시 (hasChanges·dirtyNos가 봄)
+    });
+    tm.apply = Date.now() - tApply;
+    await nextTick(); // (1.17.6) 값은 이미 모델에 있음 — 화면이 한 틱 돌게만 (300ms 고정 대기 대신)
     const m0 = mark(), dlg0 = new Set(dialogs());
     const seen = await withConfirm(/저장/, async () => { try { window.hrt2325.saveData(); } catch (e) { note("msg", "saveData 오류: " + (e && e.message)); } });
     // 확인: 서버에서 다시 받은 표(바꾼 행의 workType이 비고, 값이 입력값과 같음). 오류: 새 대화창·오류 문구·returnCode
-    const t0 = Date.now(); let bad = null, okNow = false, why = "";
+    const tSave = Date.now(), t0 = tSave; let bad = null, okNow = false, why = "";
     while (Date.now() - t0 < 40e3) {
       await sleep(30);
       const nd = dialogs().filter((x) => !dlg0.has(x)); if (nd.length) { why = nd[0]; break; }
@@ -385,18 +400,23 @@ async function hrsStep(op, a) {
       if (bad.length && sv && !reloaded && Date.now() - sv.t < 1200) continue; // 다시 불러온 값이 아직 안 옴 → 조금 더
       okNow = true; break;
     }
-    await idle(800);
+    tm.save = Date.now() - tSave; tm.setCalls = setCalls;
+    const tTail = Date.now();
+    await idle(250);
     // (1.17.2) 저장이 끝나고 서버 값과 맞는 걸 확인한 뒤에도 표에 '저장 안 된 변경' 표시가 남으면(다시 불러오기 중) 잠깐 기다리고, 그래도 남은 게 방금 저장한 행뿐이면 표시만 지움
+    // (1.17.7) 보낸 요청이 다 답을 받았으면(대개 여기서 끝) 60×30ms(최대 1.8초)를 돌지 않고 바로 정리
     if (okNow && !(bad && bad.length)) {
-      for (let k = 0; k < 60 && (pendingAjax().length || dsChanged(mainGrid() || g)); k++) await sleep(30);
-      const g3 = mainGrid() || g, left = dsChanged(g3) ? dirtyNos(g3) : [];
+      let g3 = mainGrid() || g;
+      for (let k = 0; k < 60 && pendingAjax().length; k++) { await sleep(30); g3 = mainGrid() || g; }
+      const left = dsChanged(g3) ? dirtyNos(g3) : [];
       if (left.length && left.every((n) => touched.has(n))) { try { g3.dataSource.cancelChanges(); } catch (e) {} note("msg", "저장 뒤 남은 변경 표시(방금 저장한 행) 지움"); }
       H.ownSaved = { at: Date.now(), empNos: [...touched] };
     }
-    if (why) { try { const b1 = $id("jl_noti_footer_btn1"); if (b1 && vis(b1)) tap(b1); } catch (e) {} try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "HR이 저장을 막음: " + why, { confirms: seen }), df); }
-    if (!okNow) { try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "저장 뒤 40초 안에 표가 다시 안 불려 왔어요 (workType이 그대로)", { confirms: seen }), df); }
-    if (bad.length) return Object.assign(fail("save", `저장 뒤 다시 읽었더니 ${bad.length}칸이 달라요`, { notSaved: bad.map((c) => ({ empNo: c.empNo, name: c.name, dow: c.dow, msg: `보냄 ${c.to.code} ${c.to.in || "-"}~${c.to.out || "-"}/${c.to.brk || "-"}` })) }), df);
-    return Object.assign({ ok: true, applied: df.changes.length, droppedOwn: dropped, rowsTouched: touched.size, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) }, df);
+    tm.tail = Date.now() - tTail; tm.total = Date.now() - tStart;
+    if (why) { try { const b1 = $id("jl_noti_footer_btn1"); if (b1 && vis(b1)) tap(b1); } catch (e) {} try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "HR이 저장을 막음: " + why, { confirms: seen, ms: tm }), df); }
+    if (!okNow) { try { g.dataSource.cancelChanges(); } catch (e) {} return Object.assign(fail("save", "저장 뒤 40초 안에 표가 다시 안 불려 왔어요 (workType이 그대로)", { confirms: seen, ms: tm }), df); }
+    if (bad.length) return Object.assign(fail("save", `저장 뒤 다시 읽었더니 ${bad.length}칸이 달라요`, { notSaved: bad.map((c) => ({ empNo: c.empNo, name: c.name, dow: c.dow, msg: `보냄 ${c.to.code} ${c.to.in || "-"}~${c.to.out || "-"}/${c.to.brk || "-"}` })), ms: tm }), df);
+    return Object.assign({ ok: true, applied: df.changes.length, droppedOwn: dropped, rowsTouched: touched.size, ms: tm, ajax: H.ajax.slice(m0.a).map((x) => ({ ep: x.ep, http: x.http, rc: x.rc })) }, df);
   }
 
   if (op === "status") { // 다시 검색해서 지금 상태 (공지·확정 전 확인)
