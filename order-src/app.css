@@ -913,3 +913,8 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 @media print { .fohtag { color: #1d5fd1 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fohtag { color: #7aa7ff; } }
 :root[data-theme="dark"] .fohtag { color: #7aa7ff; }
+/* 11/19 KM "온세물류 BOH는 빨간 글씨, 새싹도": FOH와 겹치는 업체의 BOH 묶음 */
+.bohtag { color: #d1291d; font-weight: 800; }
+@media print { .bohtag { color: #d1291d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bohtag { color: #ff7a6e; } }
+:root[data-theme="dark"] .bohtag { color: #ff7a6e; }
