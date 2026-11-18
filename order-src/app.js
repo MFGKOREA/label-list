@@ -2918,7 +2918,7 @@
       const ix = new Map(M.items.map((it, i) => [it.key, i]));
       const list = locSel ? [...folded].sort((a, b) => roOf(a, ix.get(a.key)) - roOf(b, ix.get(b.key))) : folded;
       const det = document.createElement("details"); det.className = "weekly"; det.open = weeklyOpen;
-      det.innerHTML = `<summary><span class="wk-t">7일마다 세는 품목 <small>${list.length}</small><em>다음 셀 날까지 안 세도 돼요</em></span><span class="wk-s" aria-hidden="true"></span></summary>`;
+      det.innerHTML = `<summary><span class="wk-t">7일마다 세는 품목 <small>${list.length}</small></span><span class="wk-s" aria-hidden="true"></span></summary>`;
       const g = document.createElement("div"); g.className = "group";
       const fill = () => { if (!g.childElementCount) list.forEach((it) => g.appendChild(rowEl(it, win, inp))); };
       if (det.open) fill();
@@ -3306,8 +3306,8 @@
   setInterval(salesTick, SP.tick);
   const SALES_UI = {
     // 11/13: PC 확장 1.8.0의 상시 수집이 켜져 있으면(misAgent.auto) 누르지 않아도 PC가 스스로 받아 옴 → 그 상태를 보여 줌
-    gross: { bar: "salesBar", go: "salesGo", title: "Gross Sales 불러오기", idle: () => { const r = salesReq("gross"), ag = db.misAgent || {}; return `${ag.auto ? (agAlive() ? "상시 연동 중 · PC가 스스로 받아요 " : "상시 연동 · PC 꺼짐 ") : ""}(${mmdd(r.from)} ~ ${mmdd(r.to)})`; } },
-    menu: { bar: "menuBar", go: "menuGo", title: "메뉴 판매 불러오기", idle: () => `요일별 메뉴 쏠림 → 주말 보정 · 최근 4주 중 ${Object.keys(db).filter((k) => k.startsWith("menuDay.") && k.slice(8) >= addDays(TODAY, -28)).length}일 받음` },
+    gross: { bar: "salesBar", go: "salesGo", title: "Gross Sales 불러오기", idle: () => { const r = salesReq("gross"), ag = db.misAgent || {}; return `${ag.auto ? (agAlive() ? "" : "PC 꺼짐 · ") : ""}${mmdd(r.from)} ~ ${mmdd(r.to)}`; } },
+    menu: { bar: "menuBar", go: "menuGo", title: "메뉴 판매 불러오기", idle: () => `최근 4주 중 ${Object.keys(db).filter((k) => k.startsWith("menuDay.") && k.slice(8) >= addDays(TODAY, -28)).length}일 받음` },
   };
   function renderSalesBar(K) {
     const U = SALES_UI[K], el = $(U.bar); if (!el) return;
@@ -3852,25 +3852,25 @@
     const ago = (ms) => { const m = Math.max(0, Math.round((Date.now() - ms) / 6e4)); return m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.floor(m / 1440)}일 전`; };
     const lastOf = (pre) => Object.keys(db).filter((k) => k.startsWith(pre)).map((k) => k.slice(pre.length)).filter((d) => /^\d{4}-\d\d-\d\d$/.test(d) && d <= TODAY).sort().pop() || null;
     const ag = db.misAgent || {}, agMin = ag.at ? (Date.now() - ag.at) / 6e4 : Infinity, bizH = hNow >= 11 && hNow < 21; // 영업 중
-    rows.push({ k: "pc", t: "매장 PC 연결", sub: `GW Agent${ag.ver ? " " + ag.ver : ""}${ag.at && !ag.auto ? " · 상시 수집 꺼짐" : ""}${!bizH ? " · 밤엔 꺼져도 정상" : ""}`, v: ag.at ? `${ago(ag.at)} 신호` : "신호 없음", s: agMin < 30 || (!bizH && agMin < 16 * 60) ? "ok" : agMin < 1440 ? "warn" : "bad" });
+    rows.push({ k: "pc", t: "매장 PC 연결", sub: `GW Agent${ag.ver ? " " + ag.ver : ""}${ag.at && !ag.auto ? " · 상시 수집 꺼짐" : ""}`, v: ag.at ? `${ago(ag.at)} 신호` : "신호 없음", s: agMin < 30 || (!bizH && agMin < 16 * 60) ? "ok" : agMin < 1440 ? "warn" : "bad" });
     const fc = db.forecast || {}, gLast = Object.keys(fc).filter((d) => d < TODAY && num((fc[d] || {}).act) > 0).sort().pop() || null;
-    rows.push({ k: "gross", t: "실제 매출", sub: "MIS 일별매출 → Forecast 실제", v: gLast ? `${dd(gLast)}까지` : "없음", s: byWant(gLast, 1) });
+    rows.push({ k: "gross", t: "실제 매출", sub: "", v: gLast ? `${dd(gLast)}까지` : "없음", s: byWant(gLast, 1) });
     const mLast = lastOf("menuDay.");
-    rows.push({ k: "menu", t: "메뉴 판매", sub: "메뉴별 매출 → 레시피 사용량", v: mLast ? `${dd(mLast)}까지` : "없음", s: byWant(mLast, 1) });
+    rows.push({ k: "menu", t: "메뉴 판매", sub: "", v: mLast ? `${dd(mLast)}까지` : "없음", s: byWant(mLast, 1) });
     const os = db.misOrderScan || {}, rs = db.misRecvScan || {};
-    rows.push({ k: "order", t: "주문현황", sub: "빠진 발주 채우기", v: os.to ? `${dd(os.to)}까지` : "없음", s: byWant(os.to, 2) });
-    rows.push({ k: "recv", t: "입고현황", sub: "받은 양 · 반품", v: rs.to ? `${dd(rs.to)}까지` : "없음", s: byWant(rs.to, 2) });
+    rows.push({ k: "order", t: "주문현황", sub: "", v: os.to ? `${dd(os.to)}까지` : "없음", s: byWant(os.to, 2) });
+    rows.push({ k: "recv", t: "입고현황", sub: "", v: rs.to ? `${dd(rs.to)}까지` : "없음", s: byWant(rs.to, 2) });
     const hs = db.hourShare || {}, hLag = hs.to ? gap(TODAY, hs.to) : null; // 1주에 한 번 받음
-    rows.push({ k: "hour", t: "시간대 비율", sub: "86 바닥 시각 계산에 씀 · 1주에 한 번", v: hs.to ? `${dd(hs.to)}까지` : "없음", s: hLag == null ? "none" : hLag <= 8 ? "ok" : hLag <= 14 ? "warn" : "bad" });
+    rows.push({ k: "hour", t: "시간대 비율", sub: "", v: hs.to ? `${dd(hs.to)}까지` : "없음", s: hLag == null ? "none" : hLag <= 8 ? "ok" : hLag <= 14 ? "warn" : "bad" });
     const evAt = num((db.events || {}).at);
-    rows.push({ k: "events", t: "행사 일정", sub: "데스크위젯 → 컨벤션센터", v: evAt > 0 ? `${ago(evAt)} 갱신` : "없음", s: !(evAt > 0) ? "none" : Date.now() - evAt < 2 * 864e5 ? "ok" : Date.now() - evAt < 7 * 864e5 ? "warn" : "bad" });
+    rows.push({ k: "events", t: "행사 일정", sub: "", v: evAt > 0 ? `${ago(evAt)} 갱신` : "없음", s: !(evAt > 0) ? "none" : Date.now() - evAt < 2 * 864e5 ? "ok" : Date.now() - evAt < 7 * 864e5 ? "warn" : "bad" });
     const sp = db.salesPush || {}, mp = (sp.parts || {}).menu || {}, ss = db.misSetScan || {};
     // 세트(Set판매현황) 합계: 11/16 첫 실제 수집에서 28일 중 26일이 "다름"이었는데 읽기 오류가 아니라 대조 기준 문제(소계 ROANDPRE·와인 WINE을 겹쳐 더함)였음.
     //  기준을 고친 뒤(mis-sales.js, misSetScan.rule 2)의 결과만 빨강에 넣고, 예전 기준 결과는 참고 글로만
     const setN = Array.isArray(ss.chkBad) ? ss.chkBad.length : 0, setNew = num(ss.rule) >= 2, setBad = setNew ? setN : 0;
     const nBad = (num(mp.chkBad) || 0) + (sp.chk && sp.chk.ok === false ? 1 : 0) + setBad;
     const seen = !!sp.chk || "chkBad" in mp || (setNew && Array.isArray(ss.chkBad));
-    rows.push({ k: "sum", t: "합계 대조", sub: `MIS 화면 합계 = 읽은 값의 합${!setNew && setN ? ` · 세트 ${setN}일은 예전 기준(다음 수집 때 다시 봄)` : ""}`, v: nBad ? `다른 날 ${nBad}` : seen ? "맞음" : "아직 결과 없음", s: nBad ? "bad" : seen ? "ok" : "none" });
+    rows.push({ k: "sum", t: "합계 대조", sub: !setNew && setN ? `세트 ${setN}일은 예전 기준` : "", v: nBad ? `다른 날 ${nBad}` : seen ? "맞음" : "아직 결과 없음", s: nBad ? "bad" : seen ? "ok" : "none" });
     // 자동 수집 (11/15 KM "진행", 기획안 7번): 예약 작업(10:23·15:23)의 collect.py가 돌 때마다 남기는 collectLog(최근 60개)의 마지막 결과·원인
     //  미룸(발주 시간대·다른 요청)·한 번 못 받음은 다음 차례가 다시 받으니 노랑까지. 로그인 풀림·MIS 화면 바뀜·합계 다름(사람이 봐야 함)이나 두 번 연속 못 받음 → 빨강
     //  마지막 기록이 21시간 넘게 없으면 노랑, 45시간 넘으면 빨강(예약 작업이 멈춤). collectLog가 아직 없으면 예전처럼 학습 기록("자동")으로 봄
@@ -3881,22 +3881,22 @@
       let failN = 0; for (let i = cl.length - 1; i >= 0 && (cl[i].r === "fail" || cl[i].why === "pc_off"); i--) failN++;
       const age = Date.now() - Date.parse(String(last.t).replace(" ", "T") + ":00+09:00"), stale = !(age >= 0) ? 0 : age > 45 * 3600e3 ? 2 : age > 21 * 3600e3 ? 1 : 0;
       const s0 = human || failN >= 2 || stale === 2 ? "bad" : last.r === "fail" || last.why === "pc_off" || stale === 1 ? "warn" : "ok";
-      rows.push({ k: "auto", t: "자동 수집", sub: human ? `사람이 확인 · ${String(last.txt || "").slice(0, 40)}` : failN >= 2 ? `${failN}번 연속 못 받음 · 예약 작업 10:23 · 15:23` : stale ? "예약 작업이 안 돈 것 같음 · 10:23 · 15:23" : "예약 작업 10:23 · 15:23 · 미룸은 다음 차례에", v: `${dd(String(last.t).slice(0, 10))} ${String(last.t).slice(11, 16)} ${WHY[last.why] || last.why}`, s: s0 });
+      rows.push({ k: "auto", t: "자동 수집", sub: human ? `사람이 확인 · ${String(last.txt || "").slice(0, 40)}` : failN >= 2 ? `${failN}번 연속 못 받음` : stale ? "예약 작업이 안 돈 것 같음" : "", v: `${dd(String(last.t).slice(0, 10))} ${String(last.t).slice(11, 16)} ${WHY[last.why] || last.why}`, s: s0 });
     } else {
       const auto = (db.learnlog || []).filter((x) => x && /자동/.test(String(x.by || "")) && x.t).sort((a, b) => (a.t < b.t ? -1 : 1)).pop(), aDay = auto ? String(auto.t).slice(0, 10) : null;
-      rows.push({ k: "auto", t: "자동 수집", sub: "예약 작업 10:23 · 15:23", v: aDay ? `${dd(aDay)} ${String(auto.t).slice(11, 16)}` : "없음", s: !aDay ? "none" : gap(after ? TODAY : addDays(TODAY, -1), aDay) <= 0 ? "ok" : "warn" });
+      rows.push({ k: "auto", t: "자동 수집", sub: "", v: aDay ? `${dd(aDay)} ${String(auto.t).slice(11, 16)}` : "없음", s: !aDay ? "none" : gap(after ? TODAY : addDays(TODAY, -1), aDay) <= 0 ? "ok" : "warn" });
     }
     return rows;
   }
   function renderHealth(M) {
     const rows = gwHealth(), nm = (k) => String((M.items.find((i) => i.key === k) || { name: k }).name).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim();
     const sold = []; for (let d = mondayOf(TODAY); d <= TODAY; d = addDays(d, 1)) Object.keys(db["soldout." + d] || {}).forEach((k) => sold.push(nm(k)));
-    rows.push({ k: "86", t: nightNow() ? "내일 86 위험" : "오늘 86 위험", sub: "폰 알림 10·16·20시", v: `${risk86(M, todayInput()).length}개`, s: "info" });
-    rows.push({ k: "sold", t: "이번 주 품절", sub: sold.length ? sold.slice(0, 4).join(", ") + (sold.length > 4 ? ` 외 ${sold.length - 4}` : "") : "발주 탭 카드의 [품절 기록]으로", v: `${sold.length}번`, s: "info" });
+    rows.push({ k: "86", t: nightNow() ? "내일 86 위험" : "오늘 86 위험", sub: "", v: `${risk86(M, todayInput()).length}개`, s: "info" });
+    rows.push({ k: "sold", t: "이번 주 품절", sub: sold.length ? sold.slice(0, 4).join(", ") + (sold.length > 4 ? ` 외 ${sold.length - 4}` : "") : "", v: `${sold.length}번`, s: "info" });
     const bad = rows.filter((r) => r.s === "bad").length, warn = rows.filter((r) => r.s === "warn").length, sum = $("hlthSum");
     sum.textContent = bad ? `확인 필요 ${bad}` : warn ? `늦음 ${warn}` : "이상 없음"; sum.className = bad ? "bad" : warn ? "warn" : "ok";
     const rank = { bad: 0, warn: 1 }; rows.sort((a, b) => (rank[a.s] ?? 2) - (rank[b.s] ?? 2)); // 빨강·노랑을 위로 (나머지는 원래 순서)
-    $("hlth").innerHTML = rows.map((r) => `<div class="cell kv hl"><span><i class="dot ${r.s}" aria-hidden="true"></i>${esc(r.t)}<small>${esc(r.sub)}</small></span><b class="${{ ok: "ok", bad: "bad", warn: "warn" }[r.s] || "mut"}">${esc(r.v)}</b></div>`).join("");
+    $("hlth").innerHTML = rows.map((r) => `<div class="cell kv hl"><span><i class="dot ${r.s}" aria-hidden="true"></i>${esc(r.t)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span><b class="${{ ok: "ok", bad: "bad", warn: "warn" }[r.s] || "mut"}">${esc(r.v)}</b></div>`).join("");
   }
   function renderReport() {
     const M = model();
@@ -3957,8 +3957,8 @@
     //  예상 재고 기준 (2팀 G 백테스트와 같은 정의): 예상 재고(시작 재고 + 입고 − 예상 사용) vs 실제 끝 재고 → 오차는 |예상 사용 − 실제 사용|과 같음. 허용 = max(1단위(박스째 세면 1박스), 끝 재고의 10%), WAPE = Σ|오차| ÷ Σ끝 재고
     const hitOf = (l) => { const z = l.filter((x) => x.pF != null && isFinite(x.actual) && isFinite(x.e)); if (!z.length) return null; const hit = z.filter((x) => Math.abs(x.pF - x.actual) <= Math.max(x.u || 1, 0.1 * Math.abs(x.e))).length, ae = z.reduce((t, x) => t + Math.abs(x.pF - x.actual), 0), se = z.reduce((t, x) => t + Math.abs(x.e), 0); return { n: z.length, hit: hit / z.length * 100, wape: se ? ae / se * 100 : null }; };
     const hw = hitOf(list), hwPrev = pl ? hitOf(pl) : null;
-    const hwRow = hw ? `<div class="cell mrow hw"><span class="nm">예상 재고 적중 · 오차<small>1단위·재고 10% 안이면 적중 · ${hw.n}번 비교${hwPrev ? ` · <span class="nw">지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}</span>` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
-    $("rMethods").innerHTML = hwRow + ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}<small>${s}</small></span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
+    const hwRow = hw ? `<div class="cell mrow hw"><span class="nm">예상 재고 적중 · 오차<small>${hw.n}번 비교${hwPrev ? ` · <span class="nw">지난주 ${Math.round(hwPrev.hit)}%${hwPrev.wape != null ? ` / ${Math.round(hwPrev.wape)}%` : ""}</span>` : ""}</small></span><span class="pc">${Math.round(hw.hit)}%${hw.wape != null ? ` / ${Math.round(hw.wape)}%` : ""}</span></div>` : "";
+    $("rMethods").innerHTML = hwRow + ms.map(([n, s, v]) => `<div class="cell mrow${v === bestV ? " best" : ""}"><span class="nm">${n}</span><span class="mbar"><i style="width:${Math.min(100, v)}%"></i></span><span class="pc">${v.toFixed(1)}%</span></div>`).join("");
     // 오차 범위 큰 품목 10개: 발주 카드의 ± 범위(예상 사용량의 몇 %)가 큰 순서. 범위 = 사용량 계산 오차 + Forecast 오차
     const fmtQ = (v, u) => (/^(g|ml|cc)$/i.test(u) ? String(Math.max(1, Math.round(v))) : (Math.round(v * 10) / 10).toFixed(1));
     const wide = M.items.filter((it) => !it.ledgerOnly).map((it) => { const c = calc(it, orderWindowFor(it, TODAY), 0, 0), u0 = c.useAvg ?? c.use; return c.none || !(u0 > 0) || !(c.sd > 0) ? null : { it, sd: c.sd, use: u0, rel: c.sd / u0, u: it.pk.stock || "" }; })

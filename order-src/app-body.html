@@ -60,7 +60,6 @@
     <div id="pPrep" hidden>
       <div class="banner" id="prepBanner"></div>
       <div class="group" id="prepList"></div>
-      <p class="hint">재고(On Hand)를 적으면 필요량이 나와요. D+N은 쉘프라이프이고, 그 안에 쓸 양까지만 계산해요.</p>
     </div>
   </section>
 
@@ -83,7 +82,6 @@
       <div id="fcRows"></div>
       <div class="cell f-row f-foot" id="fcFoot"></div>
     </div>
-    <p class="hint" style="margin-top:-8px">데이터 예상 = 같은 요일 최근 실제 매출(행사처럼 튀는 날 제외)과 공휴일 실적으로 앱이 낸 값이에요. 숫자 밑 한 줄은 그날 비·한파·컨벤션 행사를 반영한 보정 사유예요(예: 비 -10% · 행사 마이펫페어). 발주·프랩은 Forecast로 계산하고, Forecast가 비어 있으면 데이터 예상을 써요. 학습은 실제 Gross Sales로 합니다.</p>
   </section>
 
   <!-- 데이터 파일 -->
@@ -96,7 +94,6 @@
     </div>
     <div class="chips" id="locScope" role="group" aria-label="BOH · FOH"></div>
     <div class="chips" id="locTabs" role="tablist" aria-label="위치"></div>
-    <p class="hint lochint">손잡이(↕)를 눌러 끌면 순서가 바뀌어요. 위치 버튼을 누르면 그 위치 맨 아래로 가요. <b>추정</b>은 이름으로 짐작한 위치예요.</p>
     <div class="group" id="locList"></div>
   </section>
 
@@ -118,21 +115,21 @@
     </div>
     <div class="conn" id="connState"></div>
 
-    <div class="sect"><span>월별 데이터</span><small>매달 4개</small></div>
+    <div class="sect"><span>월별 데이터</span></div>
     <div class="months" id="months" role="group" aria-label="월 선택"></div>
     <div class="sect"><span id="mTitle"></span><small id="mCount"></small></div>
     <div class="group gross-g">
-      <div class="cell gross"><span class="kv"><span>실제 Gross Sales<small>그달 합계 (원)</small></span></span><input id="grossIn" inputmode="numeric" placeholder="예: 250,000,000" aria-label="그달 실제 Gross Sales"></div>
+      <div class="cell gross"><span class="kv"><span>실제 Gross Sales<small>원</small></span></span><input id="grossIn" inputmode="numeric" placeholder="예: 250,000,000" aria-label="그달 실제 Gross Sales"></div>
     </div>
     <div class="group" id="files"></div>
 
     <div class="sect"><span>레시피 연결 확인</span><small id="mapCount"></small></div>
     <div class="group" id="mapList"></div>
 
-    <div class="sect"><span>품목 목록</span><small>바뀔 때만 교체</small></div>
+    <div class="sect"><span>품목 목록</span></div>
     <div class="group" id="masters"></div>
     <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-    <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b><small>주차별 재고·발주·Forecast · 인쇄</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
     <div class="group" id="learnState"></div>
@@ -140,7 +137,7 @@
     <div class="sect"><span>발주 설정</span></div>
     <div class="group">
       <div class="cell gross">
-        <span class="kv"><span>주말 여유분<small>토·일에 쓸 양을 이만큼 더 잡아요 (안전재고에 더함)</small></span></span>
+        <span class="kv"><span>주말 여유분</span></span>
         <label class="fld"><span>%</span><input id="wkIn" type="number" inputmode="numeric" min="0" max="200" step="5" aria-label="주말 여유분 퍼센트"></label>
       </div>
     </div>
@@ -148,12 +145,12 @@
     <div class="sect"><span>구글 시트 연결</span></div>
     <div class="group">
       <div class="cell set">
-        <span class="kv"><span>Apps Script 웹앱 주소<small>비워 두면 이 기기에만 저장돼요</small></span></span>
+        <span class="kv"><span>Apps Script 웹앱 주소</span></span>
         <input id="apiIn" type="url" placeholder="https://script.google.com/macros/s/.../exec" aria-label="Apps Script 웹앱 주소">
         <div class="row"><button type="button" class="btn" id="apiSave">저장하고 연결</button><button type="button" class="btn ghost" id="apiPush">이 기기 데이터를 시트로 보내기</button></div>
       </div>
       <div class="cell set">
-        <span class="kv"><span>백업에서 되돌리기<small>매일 첫 저장 때 전날 마감 상태를 복사 · 14일 보관</small></span></span>
+        <span class="kv"><span>백업에서 되돌리기<small>14일 보관</small></span></span>
         <div class="row"><select id="bkSel" aria-label="백업 날짜"><option value="">불러오는 중…</option></select><button type="button" class="btn ghost" id="bkGo">되돌리기</button></div>
       </div>
     </div>
@@ -196,9 +193,9 @@
     <div class="group" id="rReq" hidden></div>
     <div class="sect"><span>방식별 정확도</span></div>
     <div class="group" id="rMethods"></div>
-    <div class="sect"><span>오차 범위 큰 품목</span><small>오늘 발주 기준 ±</small></div>
+    <div class="sect"><span>오차 범위 큰 품목</span></div>
     <div class="group" id="rMiss"></div>
-    <div class="sect" id="rSharesH" hidden><span>옵션 비율</span><small>매달 수불로 계산</small></div>
+    <div class="sect" id="rSharesH" hidden><span>옵션 비율</span></div>
     <div class="group" id="rShares" hidden></div>
     
   </section>
