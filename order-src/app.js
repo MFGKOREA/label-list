@@ -618,7 +618,7 @@
   }
   function dataForecast(d) { const b = dataForecastRaw(d); return b == null ? null : b * dfWhy(d).k; }
   // 숫자 밑에 붙는 사유 한 줄: "주말 비 -10% · 행사 마이펫페어" (1% 안쪽으로 배수가 1이면 그 항목은 안 씀)
-  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : `${p.t} ${p.name}`)).join(" · ");
+  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : p.t)).join(" · "); // 11/19 KM "한파 행사 비 글씨 잘려 보여": 행사 이름은 아래 행사 줄에 있으니 "행사"만, 길면 두 줄
   const dfcHTML = (d, de) => {
     const w = dfWhyText(d);
     return `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영${w ? " · " + w : ""}">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}${w ? `<small>${esc(w)}</small>` : ""}</span>`;

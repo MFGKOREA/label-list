@@ -252,7 +252,7 @@ html, body { overflow-x: hidden; }
 .f-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 5px; align-items: center; }
 .f-row .dfc { text-align: right; font-size: 14px; font-weight: 600; color: var(--fg); padding-right: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; }
 /* 날씨·행사 보정 사유 (숫자 밑 한 줄) */
-.f-row .dfc small { display: block; font-size: 9.5px; font-weight: 600; color: var(--c-de); overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px; }
+.f-row .dfc small { display: block; font-size: 9px; font-weight: 600; color: var(--c-de); white-space: normal; overflow-wrap: anywhere; line-height: 1.2; letter-spacing: -0.3px; margin-top: 1px; }
 .f-row .day small em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: var(--rose-ink); }
 .lg-de::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; background: var(--c-de); box-shadow: 0 0 6px var(--c-de); }
 .f-row .day { font-size: 14px; font-weight: 700; line-height: normal; }
@@ -1843,7 +1843,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
   }
   function dataForecast(d) { const b = dataForecastRaw(d); return b == null ? null : b * dfWhy(d).k; }
   // 숫자 밑에 붙는 사유 한 줄: "주말 비 -10% · 행사 마이펫페어" (1% 안쪽으로 배수가 1이면 그 항목은 안 씀)
-  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : `${p.t} ${p.name}`)).join(" · ");
+  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : p.t)).join(" · "); // 11/19 KM "한파 행사 비 글씨 잘려 보여": 행사 이름은 아래 행사 줄에 있으니 "행사"만, 길면 두 줄
   const dfcHTML = (d, de) => {
     const w = dfWhyText(d);
     return `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영${w ? " · " + w : ""}">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}${w ? `<small>${esc(w)}</small>` : ""}</span>`;
