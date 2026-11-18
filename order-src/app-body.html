@@ -20,7 +20,9 @@
         <span class="s" id="tileFcWeek"></span>
         <span class="v" id="tileFcSum"></span>
       </button>
-      <button type="button" class="tile" data-go="files">
+      <!-- 11/19 KM "오른쪽 위 데이터 파일 카드는 없어도 됨 → 같은 크기로 그룹웨어 자동입력·전송": GW 칸이 보일 땐 데이터 파일 카드를 숨김(일요일·사전발주·시트 없음이면 데이터 파일 카드) -->
+      <div class="misbar mistile" id="misBar" hidden></div>
+      <button type="button" class="tile" data-go="files" id="tileFiles">
         <span class="ic df"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
         <span class="t">데이터 파일</span>
         <svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg>
@@ -37,7 +39,6 @@
     <div id="pOrder">
       <div class="weekwrap"><svg class="weekarc" id="weekArc" aria-hidden="true"></svg><div class="week" id="weekStrip" aria-label="요일별 발주와 입고"></div></div>
       <div class="banner" id="orderBanner"></div>
-      <div class="misbar" id="misBar" hidden></div>
 
       <div id="bohList">
       <label class="search">

@@ -1012,6 +1012,18 @@ details.adv > summary { list-style: none; display: flex; justify-content: center
 details.adv > summary::-webkit-details-marker { display: none; }
 details.adv > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s ease; }
 details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+/* 그룹웨어 자동입력을 위 카드 자리로 (11/19 KM): Forecast 카드와 같은 크기 */
+.tiles .misbar.mistile { margin: 0; flex-direction: column; align-items: stretch; justify-content: space-between; flex-wrap: nowrap; gap: 8px; padding: 10px 10px 10px 12px; border-radius: 16px; min-width: 0; }
+.tiles .mistile .mis-t b { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.tiles .mistile .mis-s { font-size: 12px; line-height: 1.3; }
+.tiles .mistile .mis-act { display: flex; gap: 6px; }
+.tiles .mistile .mis-act .btn { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 8px 10px; font-size: 14px; white-space: nowrap; }
+.tiles .mistile .mis-copy { order: 0; flex: none; min-height: 30px; padding: 4px 8px; font-size: 12px; border-radius: 9px; }
+.tiles .mistile .mis-copy.soft { min-height: 28px; padding: 3px 8px; font-weight: 700; }
+.tiles { align-items: stretch; }
+.tiles .tile { align-content: start; }
+.tiles .mistile .lbar { order: 0; flex: none; margin-top: 0; font-size: 11px; }
+.tiles .tile[hidden] { display: none; }
 
 </style>
 </head>
@@ -1038,7 +1050,9 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
         <span class="s" id="tileFcWeek"></span>
         <span class="v" id="tileFcSum"></span>
       </button>
-      <button type="button" class="tile" data-go="files">
+      <!-- 11/19 KM "오른쪽 위 데이터 파일 카드는 없어도 됨 → 같은 크기로 그룹웨어 자동입력·전송": GW 칸이 보일 땐 데이터 파일 카드를 숨김(일요일·사전발주·시트 없음이면 데이터 파일 카드) -->
+      <div class="misbar mistile" id="misBar" hidden></div>
+      <button type="button" class="tile" data-go="files" id="tileFiles">
         <span class="ic df"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
         <span class="t">데이터 파일</span>
         <svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg>
@@ -1055,7 +1069,6 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     <div id="pOrder">
       <div class="weekwrap"><svg class="weekarc" id="weekArc" aria-hidden="true"></svg><div class="week" id="weekStrip" aria-label="요일별 발주와 입고"></div></div>
       <div class="banner" id="orderBanner"></div>
-      <div class="misbar" id="misBar" hidden></div>
 
       <div id="bohList">
       <label class="search">
@@ -3339,8 +3352,9 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     clearTimeout(misTick); // 11/12: 기다리는 중이면 다시 그림 (시트가 안 바뀌어도 시간 기준 상태가 바뀜)
     // 11/16: 시간이 지나 "응답 없음"으로 바뀌는 것을 1초 안에 보여 주려고 30초 → 1초 (html이 같으면 다시 안 그림)
     if (db.misPush && db.misPush.date === TODAY && /pending|running/.test(db.misPush.status)) misTick = setTimeout(() => { if (!$("v-main").hidden) renderMis(); }, 1000);
-    if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
-    el.hidden = false; el.dataset.phase = misState().st;
+    const tf = $("tileFiles");
+    if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; if (tf) tf.hidden = false; return; }
+    el.hidden = false; if (tf) tf.hidden = true; el.dataset.phase = misState().st;
     const ag = db.misAgent || {}, ms = misState(), { p, agOn, stale, busy, failed, slow } = ms, list = misItems();
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
     const stepNow = ag.step && ag.stepAt > ((p && p.at) || 0) && Date.now() - ag.stepAt < 4 * 60e3 ? ag.step : ""; // 확장 1.7이 적는 지금 단계 (GW 로그인 시도, 경영정보 열기 …)
@@ -3348,7 +3362,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     let st = "", cls = "";
     if (ms.st === "run" || ms.st === "wait") { st = ms.st === "run" ? "입력중" : "PC 켜면 자동 입력"; cls = "run"; }
     else if (ms.st === "ok") { st = `✓ ${hhmm(p.doneAt)} 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
-    else if (ms.st === "bad" && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
+    else if (ms.st === "bad" && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요`; cls = "bad"; } // 눌러서 내용 보기 (밑줄)
     else if (ms.st === "bad") { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
     // busy: 넣는 중(running)에만 버튼을 잠금 — 기다리는 중(pending)이어도 다시 누를 수 있게 · failed: 안 됐으면 MIS 직접 입력용 목록 복사 버튼
     // 11/12: 실패·응답 없음이 아니어도 PC 꺼짐·확장 없음이거나 보낸 지 2분 넘게 안 끝나면 작은 [목록 복사]를 미리 보임 (6~13분 기다리지 않고 직접 넣을 수 있게)
@@ -3362,7 +3376,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
       : lbSt === "ok" ? (p && p.saved ? `저장 완료 ${p.saved}${p.total ? "/" + p.total : ""}개 · 다시 읽어 확인함` : "저장 완료")
       : lbSt === "bad" ? (p && p.status === "error" ? "확인 필요 · 눌러서 보기" : "PC 응답 없음 · 다시 보내 주세요") : "";
     const html = `<div class="mis-t"><b>그룹웨어 자동입력</b>${st ? `<span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span>` : ""}</div>` +
-      (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
+      (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 목록 복사 · ${list.length}개</button>` : "") +
       `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="misGo"${busy || lbSt === "run" || lbSt === "wait" || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button></span>`;
     if (el.__html !== html) { // 그대로면 다시 안 그림 (로딩바가 매초 끊겨 보이지 않게, 누르던 버튼이 바뀌지 않게)
       el.__html = html; el.innerHTML = html;

@@ -992,3 +992,15 @@ details.adv > summary { list-style: none; display: flex; justify-content: center
 details.adv > summary::-webkit-details-marker { display: none; }
 details.adv > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s ease; }
 details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+/* 그룹웨어 자동입력을 위 카드 자리로 (11/19 KM): Forecast 카드와 같은 크기 */
+.tiles .misbar.mistile { margin: 0; flex-direction: column; align-items: stretch; justify-content: space-between; flex-wrap: nowrap; gap: 8px; padding: 10px 10px 10px 12px; border-radius: 16px; min-width: 0; }
+.tiles .mistile .mis-t b { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.tiles .mistile .mis-s { font-size: 12px; line-height: 1.3; }
+.tiles .mistile .mis-act { display: flex; gap: 6px; }
+.tiles .mistile .mis-act .btn { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 8px 10px; font-size: 14px; white-space: nowrap; }
+.tiles .mistile .mis-copy { order: 0; flex: none; min-height: 30px; padding: 4px 8px; font-size: 12px; border-radius: 9px; }
+.tiles .mistile .mis-copy.soft { min-height: 28px; padding: 3px 8px; font-weight: 700; }
+.tiles { align-items: stretch; }
+.tiles .tile { align-content: start; }
+.tiles .mistile .lbar { order: 0; flex: none; margin-top: 0; font-size: 11px; }
+.tiles .tile[hidden] { display: none; }

@@ -2020,8 +2020,9 @@
     clearTimeout(misTick); // 11/12: 기다리는 중이면 다시 그림 (시트가 안 바뀌어도 시간 기준 상태가 바뀜)
     // 11/16: 시간이 지나 "응답 없음"으로 바뀌는 것을 1초 안에 보여 주려고 30초 → 1초 (html이 같으면 다시 안 그림)
     if (db.misPush && db.misPush.date === TODAY && /pending|running/.test(db.misPush.status)) misTick = setTimeout(() => { if (!$("v-main").hidden) renderMis(); }, 1000);
-    if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; return; }
-    el.hidden = false; el.dataset.phase = misState().st;
+    const tf = $("tileFiles");
+    if (preMode || dow(TODAY) === 0 || !API) { el.hidden = true; if (tf) tf.hidden = false; return; }
+    el.hidden = false; if (tf) tf.hidden = true; el.dataset.phase = misState().st;
     const ag = db.misAgent || {}, ms = misState(), { p, agOn, stale, busy, failed, slow } = ms, list = misItems();
     const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
     const stepNow = ag.step && ag.stepAt > ((p && p.at) || 0) && Date.now() - ag.stepAt < 4 * 60e3 ? ag.step : ""; // 확장 1.7이 적는 지금 단계 (GW 로그인 시도, 경영정보 열기 …)
@@ -2029,7 +2030,7 @@
     let st = "", cls = "";
     if (ms.st === "run" || ms.st === "wait") { st = ms.st === "run" ? "입력중" : "PC 켜면 자동 입력"; cls = "run"; }
     else if (ms.st === "ok") { st = `✓ ${hhmm(p.doneAt)} 저장 완료 ${p.saved ?? ""}${p.total ? "/" + p.total : ""}개`; cls = "ok"; }
-    else if (ms.st === "bad" && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요 · 눌러서 보기`; cls = "bad"; }
+    else if (ms.st === "bad" && p.status === "error") { st = `⚠ ${hhmm(p.doneAt)} 확인 필요`; cls = "bad"; } // 눌러서 내용 보기 (밑줄)
     else if (ms.st === "bad") { st = "⚠ PC 응답 없음 · 다시 보내 주세요"; cls = "bad"; }
     // busy: 넣는 중(running)에만 버튼을 잠금 — 기다리는 중(pending)이어도 다시 누를 수 있게 · failed: 안 됐으면 MIS 직접 입력용 목록 복사 버튼
     // 11/12: 실패·응답 없음이 아니어도 PC 꺼짐·확장 없음이거나 보낸 지 2분 넘게 안 끝나면 작은 [목록 복사]를 미리 보임 (6~13분 기다리지 않고 직접 넣을 수 있게)
@@ -2043,7 +2044,7 @@
       : lbSt === "ok" ? (p && p.saved ? `저장 완료 ${p.saved}${p.total ? "/" + p.total : ""}개 · 다시 읽어 확인함` : "저장 완료")
       : lbSt === "bad" ? (p && p.status === "error" ? "확인 필요 · 눌러서 보기" : "PC 응답 없음 · 다시 보내 주세요") : "";
     const html = `<div class="mis-t"><b>그룹웨어 자동입력</b>${st ? `<span class="mis-s ${cls}${p && p.status === "error" ? " tap" : ""}">${esc(st)}</span>` : ""}</div>` +
-      (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 입력용 목록 복사 · ${list.length}개</button>` : "") +
+      (copyCls != null && list.length ? `<button type="button" class="mis-copy${copyCls}" id="misCopy">MIS 목록 복사 · ${list.length}개</button>` : "") +
       `<span class="mis-act">${pinBtn()}<button type="button" class="btn" id="misGo"${busy || lbSt === "run" || lbSt === "wait" || !list.length ? " disabled" : ""}>GW 전송 ${list.length}</button></span>`;
     if (el.__html !== html) { // 그대로면 다시 안 그림 (로딩바가 매초 끊겨 보이지 않게, 누르던 버튼이 바뀌지 않게)
       el.__html = html; el.innerHTML = html;
