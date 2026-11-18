@@ -2664,6 +2664,8 @@
   // ---------- 보관 위치 버튼 (11/6 KM): 드라이 · 워크인 · 프리저 — 누르면 그 위치 품목만 ----------
   //  위치 = itemCfg[품목].loc ("dry" | "walk" | "frz"). 없으면 이름으로 짐작 (냉동·고기·새우 → 프리저, 채소·치즈·크림·소스 냉장 → 워크인, 나머지 드라이)
   const LOCS = [["dry", "드라이"], ["walk", "워크인"], ["frz", "프리저"]];
+  // 11/19 KM "식자재 위치랑 구분 · FOH만 드라이 말고 EXPO": FOH 탭에서는 상온 자리 이름이 EXPO (워크인·프리저는 그대로)
+  const locName = (k, t) => (scope === "foh" && k === "dry" ? "EXPO" : t);
   const guessLoc = (it) => {
     const n = it.name;
     if (/냉동|새우|폭립|핑거립|우대갈비|바지락|홍합|오징어|날치알|소시지|떡갈비|판도우|브로컬리컷|감자튀김|양파튀김|어묵|버터라이스|시즐링라이스|부라타|고르곤졸라|잠봉|베이컨|티라미슈|아이스|부채살|채끝|안심|등심|닭가슴살|유린기|생면/.test(n)) return "frz";
@@ -2676,7 +2678,7 @@
   // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
   const saveLoc = (k, patch) => { locPatch[k] = { ...(locPatch[k] || {}), ...patch }; db.itemCfg = { ...(db.itemCfg || {}), [k]: { ...((db.itemCfg || {})[k] || {}), ...patch } }; clearTimeout(locSaveT); locSaveT = setTimeout(() => { locPatch = {}; setKey("itemCfg", db.itemCfg); }, 600); };
   function renderLocEdit() {
-    const M = model(), all = M.items.filter((i) => !i.ledgerOnly), idx = new Map(all.map((it, i) => [it.key, i]));
+    const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !i.foh), idx = new Map(all.map((it, i) => [it.key, i]));
     $("locTabs").innerHTML = LOCS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${all.filter((i) => locOf(i) === k).length}</span></button>`).join("");
     const list = all.filter((i) => locOf(i) === locTab).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
     const box = $("locList");
@@ -2759,7 +2761,7 @@
   });
   window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
   function locSumUpdate() {
-    const all = model().items.filter((i) => !i.ledgerOnly);
+    const all = model().items.filter((i) => !i.ledgerOnly && !i.foh); // 위치 편집은 BOH 보관 자리만 (FOH는 EXPO)
     const sum = LOCS.map(([k, t]) => `${t} ${all.filter((i) => locOf(i) === k).length}`).join(" · "), guess = all.filter((i) => !((db.itemCfg || {})[i.key] || {}).loc).length;
     if ($("locSum")) $("locSum").textContent = sum + (guess ? ` · 추정 ${guess}` : " · 모두 확인됨");
   }
@@ -2771,7 +2773,7 @@
   if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
   function renderLocs(M) {
     const pool = M.items.filter((i) => !i.ledgerOnly && inScope(i) && (!cat || i.vendor === cat));
-    $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${t}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+    $("locs").innerHTML = LOCS.map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${locName(k, t)}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
   }
 
   function renderList() {
@@ -2871,7 +2873,7 @@
     const b = e.target.closest("[data-loc]"); if (!b) return;
     const k = b.closest(".lrow").dataset.key, to = b.dataset.loc;
     if (to === locTab) { saveLoc(k, { loc: to }); renderLocEdit(); return; } // 추정 → 확인
-    const M = model(), n = M.items.filter((i) => !i.ledgerOnly && locOf(i) === to).length;
+    const M = model(), n = M.items.filter((i) => !i.ledgerOnly && !i.foh && locOf(i) === to).length;
     saveLoc(k, { loc: to, ro: n + 1000 }); renderLocEdit(); // 다른 위치 맨 아래로
   });
   // 손잡이로 끌어 옮기기 (손가락·마우스 같이). 끄는 동안 행이 손을 따라가고, 놓으면 그 자리에 저장
