@@ -357,8 +357,9 @@ async function hrsStep(op, a) {
     const dropped = H.droppedOwn || 0; H.droppedOwn = 0;
     if (!df.changes.length) return Object.assign({ ok: true, applied: 0, droppedOwn: dropped, msg: "바뀔 칸이 없어요 (이미 같음)", ms: tm }, df);
     const rows = [].slice.call(g.dataSource.data()), byNo = new Map(rows.map((r) => [String(r.emp_code), r])), touched = new Set();
-    // (1.17.7, 11/18 KM 실측 24.8초의 원인) kendo의 set()은 한 번 부를 때마다 표에 '바뀌었다'고 알려(change) HR 화면이 36명×7일 표를 다시 그린다.
-    //  바뀐 칸 117개×5칸 + workType 21명 = 약 600번 → 화면이 20초 넘게 멈췄다.
+    // (1.17.7, 11/18 KM 실측 4단계 24초의 원인) kendo의 set()은 한 번 부를 때마다 표에 '바뀌었다'고 알린다(change) —
+    //  그 알림마다 화면이 36명×7일 표를 다시 그리거나 합계를 다시 계산한다(600번 가까이 · 한 번에 40ms 안팎 = 24초 ÷ 600).
+    //  바뀐 칸 117개×칸당 4~5개 + workType 21명 = 약 600번 → 화면이 20초 넘게 멈췄다.
     //  kendo Model의 값은 그냥 속성이고(set()도 kendo.setter로 같은 자리에 씀) 직접 넣으면 알림이 0번이다. 값은 toJSON()·저장 요청에 그대로 들어가고,
     //  화면은 저장 뒤 서버에서 다시 받은 표로 새로 그려지므로 여기서 다시 그릴 필요가 없다. (혹시 set 접근자가 정의된 모델이면 그때만 kendo set — 값을 잃지 않게)
     const hasSetter = (r, f) => { try { const own = Object.getOwnPropertyDescriptor(r, f), p = Object.getPrototypeOf(r), up = p ? Object.getOwnPropertyDescriptor(p, f) : null; return !!((own && typeof own.set === "function") || (up && typeof up.set === "function")); } catch (e) { return false; } };
