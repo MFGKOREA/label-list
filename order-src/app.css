@@ -961,9 +961,9 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 /* 11/19 KM: 행사 줄에 수용 인원을 한 줄로 · 재고칸 아래 작은 [어제와 같음] · FOH 지난번 발주 줄 */
 .f-row .f-ev { flex-wrap: nowrap; }
 .f-row .f-ev-m { flex: none; white-space: nowrap; }
-.c-bot .samebtn { position: absolute; right: 0; top: calc(100% + 5px); display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); border-radius: 999px; padding: 3px 9px 3px 7px; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--fg); letter-spacing: -0.02em; line-height: 1.2; touch-action: manipulation; transition: transform .1s ease, background-color .1s ease; }
+.c-bot .samebtn { position: absolute; left: 50%; transform: translateX(-50%); top: calc(100% + 5px); display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); border-radius: 999px; padding: 3px 9px 3px 7px; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--fg); letter-spacing: -0.02em; line-height: 1.2; touch-action: manipulation; transition: transform .1s ease, background-color .1s ease; }
 .c-bot .samebtn svg { color: var(--accent-text); flex: none; }
-.c-bot .samebtn:active { transform: scale(.95); background: var(--fill); }
+.c-bot .samebtn:active { transform: translateX(-50%) scale(.95); background: var(--fill); }
 .c-bot .samebtn b { color: var(--accent-text); font-weight: 800; }
 .c-bot .samebtn::after { content: ""; position: absolute; inset: -9px -6px; }
 .cell:has(.samebtn:not([hidden])) .c-bot { margin-bottom: 26px; }
