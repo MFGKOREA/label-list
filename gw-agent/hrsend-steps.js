@@ -79,8 +79,11 @@ async function hrsStep(op, a) {
   }
   // (1.17.2) 보낸 뒤 아직 답이 안 온 요청 · 저장 안 된 변경이 있는 행(사번)
   const pendingAjax = () => { const done = new Set(H.ajax.map((x) => x.id).filter(Boolean)), t = Date.now() - 60e3; return H.sent.filter((x) => x.t > t && !done.has(x.id)).map((x) => x.ep); };
-  const dirtyNos = (g) => { try { return [].slice.call(g.dataSource.data()).filter((r) => r.dirty || /^[UID]$/.test(String(r.workType || ""))).map((r) => String(r.emp_code)).slice(0, 40); } catch (e) { return []; } };
-  const dsChanged = (g) => { try { return !!g.dataSource.hasChanges(); } catch (e) { return false; } };
+  // (1.17.3) '저장 안 된 변경' = HR 저장(saveData)이 실제로 보내는 행 = workType U·I·D. kendo의 dirty·hasChanges는 HR 화면이 불러올 때 합계 칸을 스스로 채우며 켤 수 있어 안 봄
+  //  (11/18 KM: 1.17.2에서도 저장 직후 같은 멈춤 → 검색만 해도 hasChanges가 켜지는 것으로 봄)
+  const dirtyNos = (g) => { try { return [].slice.call(g.dataSource.data()).filter((r) => /^[UID]$/.test(String(r.workType || ""))).map((r) => String(r.emp_code)).slice(0, 40); } catch (e) { return []; } };
+  const dsChanged = (g) => dirtyNos(g).length > 0;
+  const kendoDirty = (g) => { try { return !!g.dataSource.hasChanges(); } catch (e) { return false; } };
   async function withConfirm(expect, fn) { // 이 단추에서 뜨는 예상 문구에만 "예", 끝나면 되돌림
     const orig = window.confirm, seen = [];
     window.confirm = function (m) { const s = String(m || ""); seen.push(s); return !!expect && expect.test(s); };
@@ -253,8 +256,8 @@ async function hrsStep(op, a) {
   if (op === "cardMap") { // 지금 탭(소속구분)의 메인 표: 사번 + 요일별 수정 가능(edit_yn). 이름·직책은 안 읽음
     const g = mainGrid(); if (!g) return fail("week", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
     const v = (x) => (x == null ? "" : String(x));
-    let dirty = false; try { dirty = !!g.dataSource.hasChanges(); } catch (e) {}
-    return { ok: true, dirty, dirtyNos: dirty ? dirtyNos(g) : [], dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), dept: v(r.dept_code || r.dept_name).slice(0, 20), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
+    const dirty = dsChanged(g);
+    return { ok: true, dirty, kendoDirty: kendoDirty(g), dirtyNos: dirty ? dirtyNos(g) : [], dept: v(($id("hrt2325_dept_category") || {}).value), rows: [].slice.call(g.dataSource.data()).map((r) => ({ empNo: v(r.emp_code), dept: v(r.dept_code || r.dept_name).slice(0, 20), edit: Object.fromEntries(DAYS7.map((D) => [D, v(r[D + "_edit_yn"])])) })) };
   }
   if (op === "learnCodes") { // 근태유형 코드표: 표의 근태 칸 편집기(드롭다운)를 잠깐 열어 목록만 읽고 닫음 (값은 안 바꿈)
     const g = mainGrid(); if (!g) return fail("week", "메인 표를 못 읽었어요");
@@ -266,7 +269,7 @@ async function hrsStep(op, a) {
     let tr = null, cj = ci;
     for (const row of tbl.querySelectorAll("tr[data-uid]")) { let di = null; try { di = g.dataItem(row); } catch (e) {} if (!di) continue; const D = DAYS7.find((x) => String(di[x + "_edit_yn"]) !== "N"); if (D) { tr = row; cj = unl.findIndex((c) => c.field === D + "_time_item_code_p"); break; } }
     if (!tr || cj < 0) return { ok: true, list: [], why: "수정 가능한 칸이 없음" };
-    if (g.dataSource.hasChanges()) return { ok: true, list: [], why: "표에 저장 안 된 변경이 있어 편집기를 열지 않음" };
+    if (dsChanged(g)) return { ok: true, list: [], why: "표에 저장 안 된 변경이 있어 편집기를 열지 않음" };
     let list = [];
     try {
       g.editCell($(tr.cells[cj])); await sleep(500);
@@ -317,7 +320,7 @@ async function hrsStep(op, a) {
 
   if (op === "cardDiff") { // 미리보기: 바뀔 칸만 (아무것도 안 바꿈)
     const g = mainGrid(); if (!g) return fail("week", "메인 표(#hrt2325_info_list_html)를 못 읽었어요");
-    let dirty = false; try { dirty = !!g.dataSource.hasChanges(); } catch (e) {}
+    const dirty = dsChanged(g);
     return Object.assign({ ok: true, dirty, rows: g.dataSource.data().length }, diffOf(g, a));
   }
 

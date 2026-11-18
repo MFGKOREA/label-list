@@ -48,7 +48,7 @@ function draw(){const el=document.getElementById('hrt2325_info_list_html');el.in
   editCell(w){const td=w.el;const s=document.createElement('span');s.setAttribute('data-role','dropdownlist');s.__k={kendoDropDownList:{options:{dataValueField:'time_item_code',dataTextField:'time_item_name'},dataSource:{data(){const L=[{time_item_code:'10',time_item_name:'출근'},{time_item_code:'17',time_item_name:'휴무'},{time_item_code:'18',time_item_name:'주휴일'},{time_item_code:'19',time_item_name:'공휴일'}];return {toJSON(){return L;}};}}}};td.appendChild(s);window.__edited=(window.__edited||0)+1;},
   closeCell(){document.querySelectorAll('#hrt2325_info_list_html [data-role=dropdownlist]').forEach(x=>x.remove());},
   dataSource:{data(){return rows;},view(){return rows;},hasChanges(){return rows.some(r=>r.dirty);},cancelChanges(){window.__cancel=(window.__cancel||0)+1;rows.forEach(r=>{r.dirty=false;});draw();btns();}}}};}
-async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});rows=JSON.parse(decParam(mr.j.data.infoEnc)).map(obs);const S_OTHER=${JSON.stringify(S.otherEdit||'')};if(${JSON.stringify(!!S.preDirty)}&&rows[1]&&!window.__pd){window.__pd=1;rows[1].dirty=true;rows[1].MON_work_on_p_hhmm='07:00';}const DA=${JSON.stringify(S.dirtyAfter||[])};rows.forEach(r=>{if(DA.includes(String(r.emp_code))){r.dirty=true;if(S_OTHER&&String(r.emp_code)===S_OTHER)r.MON_work_on_p_hhmm='06:30';}});draw();btns();}
+async function search(){const r=await ajax('getMasterList_prc',{workType:'MASTER',dept,wk});const a=JSON.parse(decParam(r.j.data.infoEnc));status=a.length?a[0].schedule_status:'';const mr=await ajax('getMasterList_prc',{workType:'MAINROWS',dept,wk});rows=JSON.parse(decParam(mr.j.data.infoEnc)).map(obs);const S_OTHER=${JSON.stringify(S.otherEdit||'')};if(${JSON.stringify(!!S.preDirty)}&&rows[1]&&!window.__pd){window.__pd=1;rows[1].dirty=true;rows[1].workType='U';rows[1].MON_work_on_p_hhmm='07:00';}const DA=${JSON.stringify(S.dirtyAfter||[])};rows.forEach(r=>{if(DA.includes(String(r.emp_code))){r.dirty=true;if(S_OTHER&&String(r.emp_code)===S_OTHER){r.MON_work_on_p_hhmm='06:30';r.workType='U';}}});draw();btns();}
 function render(){document.getElementById('app').innerHTML=\`
  <input type="hidden" id="hrt2325_search_site_code" value="5090"><input type="hidden" id="hrt2325_dept_category" value="\${dept}">
  <input type="hidden" id="hrt2325_yyyy" value="2026"><input type="hidden" id="hrt2325_year_week_seq" value="\${wk}">
@@ -216,16 +216,19 @@ ok(x.res && !x.res.ok && x.res.stage === "save" && /저장 안 된 변경/.test(
 reset({ stickyDirty: true });
 x = await send({ mode: "saveOnly", employees: all3() });
 const hrTab = () => ctx.pages().find((p) => /hr\.pljec/.test(p.url()));
-ok(x.res && x.res.ok && S.saves.length === 1 && (await hrTab().evaluate(() => !jq("#hrt2325_info_list_html").data("kendoGrid").dataSource.hasChanges())), "저장 뒤 남은 '변경' 표시가 방금 저장한 행뿐이면 지움 → 표 깨끗", brief(x));
+ok(x.res && x.res.ok && S.saves.length === 1 && (await hrTab().evaluate(() => !jq("#hrt2325_info_list_html").data("kendoGrid").dataSource.data().some((r) => /^[UID]$/.test(String(r.workType || ""))))), "저장 뒤 kendo 변경 표시가 남아도(다시 불러오기 직후) 저장할 행(workType)은 없음 → 깨끗", brief(x));
 S.dirtyAfter = ["90000001", "90000002", "90000003"]; await hrTab().reload(); await sleep(800); // 매장처럼: 검색 뒤에도 방금 저장한 행에 '변경' 표시가 남는 경우
 x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
-ok(x.res && x.res.ok && S.saves.length === 1 && x.res.log.some((l) => /방금 이 확장이 저장한 행이라 지움/.test(l.msg)) && x.res.log.some((l) => /EDIT\(작성 중 · 공지 전\)/.test(l.msg)), "같은 HR 탭에서 바로 다시 보냄: 표 값이 방금 저장한 값과 같은 행의 '변경' 표시는 지우고 진행 · 주차 상태 EDIT는 '작성 중'으로 따로 적음", brief(x));
+ok(x.res && x.res.ok && S.saves.length === 1 && !x.res.log.some((l) => /저장 안 된 변경 표시|저장 안 된 변경이/.test(l.msg)) && x.res.log.some((l) => /EDIT\(작성 중 · 공지 전\)/.test(l.msg)), "(1.17.3) HR 화면이 불러올 때 켜는 kendo 변경 표시(합계 칸 등, workType 없음)는 '저장 안 된 변경'으로 안 봄 → 같은 탭에서 바로 다시 보내도 진행 · 주차 상태 EDIT는 '작성 중'으로 따로", brief(x));
+S.dirtyAfter = ["90000001", "90000002", "90000003", "90000020", "90000009"]; await hrTab().reload(); await sleep(800);
+x = await send({ mode: "saveOnly", keepHr: true, employees: [emp("90000001", "시험일", ["출근", "휴무", "주휴일", "출근", "출근", "출근", "휴무"]), emp("90000002", "시험이"), emp("90000003", "시험삼")] });
+ok(x.res && x.res.ok && S.saves.length === 2 && S.week["90000001"].TUE.code === "17", "표 전원에 kendo 변경 표시만 켜져 있어도(검색만 해도 켜지는 경우) 멈추지 않고 저장", brief(x));
 S.dirtyAfter = ["90000001", "90000020"]; S.otherEdit = "90000020"; await hrTab().reload(); await sleep(800);
 x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
-ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000020/.test(x.res.message) && !/90000001/.test(x.res.message) && S.saves.length === 1, "남의 행(보내지 않은 90000020, 값을 고침)에 저장 안 된 변경 → 예전처럼 멈춤, 그 사번만 알려 줌", brief(x));
+ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000020/.test(x.res.message) && !/90000001/.test(x.res.message) && S.saves.length === 2, "남의 행(보내지 않은 90000020, 값을 고침)에 저장 안 된 변경 → 예전처럼 멈춤, 그 사번만 알려 줌", brief(x));
 S.dirtyAfter = ["90000002"]; S.otherEdit = "90000002"; await hrTab().reload(); await sleep(800);
 x = await send({ mode: "saveOnly", keepHr: true, employees: all3() });
-ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000002/.test(x.res.message) && S.saves.length === 1, "방금 저장한 사람이라도 표 값을 누가 고쳤으면(06:30) 남의 변경 → 멈춤", brief(x));
+ok(x.res && !x.res.ok && x.res.code === "dirty" && /90000002/.test(x.res.message) && S.saves.length === 2, "방금 저장한 사람이라도 표 값을 누가 고쳤으면(06:30) 남의 변경 → 멈춤", brief(x));
 // 11) 로그인 풀림 · 같은 requestId
 reset({ login: false }); x = await send({ employees: all3() });
 ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0, "HR 로그인 화면 → 바로 멈춤(login)", brief(x));
