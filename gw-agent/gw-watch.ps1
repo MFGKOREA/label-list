@@ -1,5 +1,6 @@
 ﻿# GW Agent 지킴이 (윈도우, 창 없이 돎)
 #  1) 크롬이 꺼져 있으면 창 없이 다시 켬 → 시계 옆(트레이)에 크롬이 남아 확장이 계속 돎 (10/31 KM: 누가 꺼도 다시 켜지게)
+#     11/18 KM: 바로 켜지 않고 꺼진 지 2시간($EVERY_MIN) 뒤에 켬
 #  2) 폰에서 [GW 전송]·[Gross 불러오기]를 누르면 크롬이 꺼져 있을 때 바로(5초 안) 켬 (10/31 KM: 버튼 누르면 켜지게)
 #     11/6: 버튼으로 켤 때도 창 없이 켬 → 확장이 창 하나만 열어 처리 (예전엔 빈 창 + 확장 창 + 크롬이 되살린 창으로 3개까지 떴음)
 #  창 없이 켰는데 바로 닫히면 5분 동안은 1)을 쉬지만 2)는 계속 봄
@@ -12,9 +13,13 @@ function Alive { [bool](Get-Process chrome -ErrorAction SilentlyContinue) }
 Note "지킴이 시작 · 크롬: $chrome"
 if (-not $chrome) { Note "크롬을 못 찾음 → 지킴이 끝"; exit }
 $restUntil = [DateTime]::MinValue; $fails = 0; $handled = ""
+# 11/18 KM "크롬 자체가 켜지는 것도 같은 간격": 누가 크롬을 끄면 바로 다시 켜지 않고 꺼진 지 2시간이 지나면 켬 (폰 버튼은 그대로 바로 켬)
+$EVERY_MIN = 120; $offSince = $null
 while ($true) {
   try {
+    if (Alive) { $offSince = $null }
     if (-not (Alive)) {
+      if (-not $offSince) { $offSince = Get-Date; Note "크롬 꺼짐 확인 · $EVERY_MIN분 뒤 다시 켬 (폰 버튼은 바로)" }
       # 2) 폰 버튼: 시트에서 전송 상태만 읽음 (필요한 두 칸만 글자로 잘라 읽음)
       $raw = ""; try { $raw = (Invoke-WebRequest -Uri ($API + "?api=1&status=1&t=" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds()) -UseBasicParsing -TimeoutSec 20).Content } catch { }  # 인터넷이 끊겨도 아래 항상 켜기는 함
       $pick = { param($k) $m = [regex]::Match($raw, '"' + $k + '":(\{[^{}]*\})'); if ($m.Success) { $m.Groups[1].Value | ConvertFrom-Json } else { $null } }
@@ -29,11 +34,11 @@ while ($true) {
         $handled = $id
         Note ("폰 버튼 → 크롬 켬 · " + $(if ($order) { "GW 전송" } else { "Gross 불러오기" }))
         Start-Sleep -Seconds 30
-      } elseif ((Get-Date) -gt $restUntil) {
+      } elseif ((Get-Date) -gt $restUntil -and ((Get-Date) - $offSince).TotalMinutes -ge $EVERY_MIN) {
         # 1) 항상 켜 두기 (쉬는 중이 아니면)
         Start-Process -FilePath $chrome -ArgumentList "--no-startup-window"
         Start-Sleep -Seconds 20
-        if (Alive) { Note "크롬 꺼짐 → 다시 켬"; $fails = 0 }
+        if (Alive) { Note "크롬 꺼진 지 $EVERY_MIN분 → 다시 켬"; $fails = 0; $offSince = $null }
         else {
           $fails++; $restUntil = (Get-Date).AddMinutes(5)
           Note "크롬을 켰는데 바로 닫힘 ($fails번째) · 크롬 설정 → 시스템 → 'Chrome이 닫혀도 백그라운드 앱 계속 실행'을 켜 주세요 (그동안 폰 버튼으론 켜져요)"
