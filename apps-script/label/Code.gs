@@ -55,6 +55,7 @@ function doPost(e) {
     if (body.action === 'save') return json_(saveItem(clean_(body.item), store));
     if (body.action === 'delete') return json_(deleteItem(String(body.id).slice(0, 40), store));
     if (body.action === 'clear') return json_(clearItems(store));
+    if (body.action === 'ocr') return json_(ocrOnly_(String(body.data || ''), String(body.color || '').slice(0, 20), !!body.trace));
     if (body.action === 'photo') return json_(savePhoto_(store, String(body.id || '').slice(0, 40), String(body.data || ''), !!body.ocr, String(body.color || '').slice(0, 20), !!body.trace));
     if (body.action === 'trace_save') return json_({ trace: traceSave_(store, body) });
     if (body.action === 'trace_delete') return json_({ trace: traceDelete_(store, String(body.id || '').slice(0, 40)) });
@@ -337,6 +338,23 @@ function savePhoto_(store, id, data, ocr, color, trace) {
   // 이력제 사진은 품목 추천(학습 시트 검색)을 하지 않는다. 한글표시사항만 추천을 쓴다.
   if (text && !trace) { try { suggest = suggest_(text, color); } catch (err) {} }
   return { photo: file.getId(), text: text, ocrError: ocrError, suggest: suggest };
+}
+
+// 글자 읽기만 (사진 저장과 동시에 따로 부름 → 기다리는 시간이 줄어듦). 사진은 저장하지 않는다.
+function ocrOnly_(data, color, trace) {
+  const t0 = Date.now(), t = {};
+  const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
+  if (!m) throw new Error('사진 형식이 올바르지 않습니다');
+  const bytes = Utilities.base64Decode(m[2]);
+  if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
+  const blob = Utilities.newBlob(bytes, 'image/' + m[1], 'ocr.jpg');
+  let text = '', ocrError = '';
+  try { text = ocr_(blob); } catch (err) { ocrError = String(err); }
+  t.ocr = Date.now() - t0;
+  let suggest = [];
+  if (text && !trace) { try { suggest = suggest_(text, color); } catch (err) {} }
+  t.all = Date.now() - t0;
+  return { text: text, ocrError: ocrError, suggest: suggest, t: t };
 }
 
 function unPhoto_(store, id) {
