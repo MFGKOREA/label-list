@@ -1004,3 +1004,8 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .tiles .tile { align-content: start; }
 .tiles .mistile .lbar { order: 0; flex: none; margin-top: 0; font-size: 11px; }
 .tiles .tile[hidden] { display: none; }
+/* GW 전송 진행률 막대 (11/19 KM "0~100%") */
+.misbar .lbar.pct .lb-fil { left: 0; animation: none; transition: width .6s ease; }
+.misbar .lb-pc { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 800; min-width: 2.6em; }
+.misbar .lb-pc:empty { display: none; }
+.misbar .lbar[data-live="ok"] .lb-pc { color: var(--ok-ink); }

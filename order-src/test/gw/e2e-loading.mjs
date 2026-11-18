@@ -93,7 +93,7 @@ const bar = (pg, sel) => pg.evaluate((s) => {
   const e = document.querySelector(s + " .lbar"); if (!e) return null;
   const f = e.querySelector(".lb-fil"), t = e.querySelector(".lb-txt"), cs = getComputedStyle(e);
   return { live: e.dataset.live, text: (t ? t.textContent : "").trim(), anim: f ? getComputedStyle(f).animationName : "",
-    opacity: +cs.opacity, h: Math.round(e.getBoundingClientRect().height), css: e.className };
+    opacity: +cs.opacity, h: Math.round(e.getBoundingClientRect().height), css: e.className, pct: e.getAttribute("aria-valuenow") };
 }, sel);
 const btn = (pg, id) => pg.evaluate((i) => { const b = document.getElementById(i); return b ? { disabled: b.disabled, label: b.textContent.trim() } : null; }, id);
 const status = (pg, sel) => pg.evaluate((s) => (document.querySelector(s + " .mis-s")?.textContent || "").trim(), sel);
@@ -116,7 +116,8 @@ const pendIds = (w, key) => [...new Set(w.posts.filter((x) => x.key === key).map
   await sleep(150);
   const b1 = await bar(pg, "#misBar"), v1 = await btn(pg, "misGo");
   ok(!!b1 && b1.live === "run", "누른 즉시 GW 줄 아래에 진행 막대가 보임 (data-live=" + (b1 && b1.live) + ")");
-  ok(!!b1 && b1.anim === "lbSlide" && b1.h > 0 && b1.opacity > 0.9, "막대가 실제로 움직임 (animation=" + (b1 && b1.anim) + ", 높이 " + (b1 && b1.h) + "px, 불투명 " + (b1 && b1.opacity) + ")");
+  // 11/19: GW 전송 막대는 0~100% 진행률(채워지는 막대 + "NN%")
+  ok(!!b1 && /pct/.test(b1.css) && +b1.pct > 0 && +b1.pct < 100 && /^\d+%/.test(b1.text) && b1.h > 0 && b1.opacity > 0.9, "막대에 진행률이 보임 (" + (b1 && b1.pct) + "% · " + (b1 && b1.text) + ")");
   ok(!!v1 && v1.disabled, "누른 즉시 버튼이 잠김 (중복 클릭 방지)");
   await pg.evaluate(() => { for (let i = 0; i < 3; i++) document.getElementById("misGo").click(); }); // 잠긴 동안 세 번 더 눌러 봄
   const pick = await until(async () => { const x = await bar(pg, "#misBar"); return x && x.live === "run" && x.text ? x : null; }, 2000);

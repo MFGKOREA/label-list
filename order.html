@@ -1024,6 +1024,11 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .tiles .tile { align-content: start; }
 .tiles .mistile .lbar { order: 0; flex: none; margin-top: 0; font-size: 11px; }
 .tiles .tile[hidden] { display: none; }
+/* GW 전송 진행률 막대 (11/19 KM "0~100%") */
+.misbar .lbar.pct .lb-fil { left: 0; animation: none; transition: width .6s ease; }
+.misbar .lb-pc { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 800; min-width: 2.6em; }
+.misbar .lb-pc:empty { display: none; }
+.misbar .lbar[data-live="ok"] .lb-pc { color: var(--ok-ink); }
 
 </style>
 </head>
@@ -3319,7 +3324,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
   const LB = { dwell: { ok: 1000, bad: 1800 }, gone: 320, press: 12e3, seen: {} };
   const lbPress = {};
   const lbPressed = (k) => { const t = lbPress[k]; return !!t && Date.now() - t < LB.press; };
-  function lbar(el, key, st, text) {
+  function lbar(el, key, st, text, pct) {
     if (!el) return;
     const s = LB.seen[key] || (LB.seen[key] = { st: "", at: 0 });
     if (s.st !== st) { s.st = st; s.at = Date.now(); }
@@ -3331,13 +3336,37 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     if (!b) { b = document.createElement("div"); b.className = "lbar"; b.setAttribute("role", "progressbar"); b.setAttribute("aria-live", "polite"); el.appendChild(b); }
     b.dataset.live = st;
     b.classList.remove("gone");
+    // 11/19 KM "누르면 로딩바도 0~100%, 전송부터 저장 완료까지": pct가 있으면 진행 막대(왼쪽부터 채움) + "NN%"
+    const hasPct = pct != null && isFinite(pct); b.classList.toggle("pct", hasPct);
     b.setAttribute("aria-valuetext", text || "");
     if (b.__live !== st || b.__txt !== (text || "")) { // 글이 그대로면 손대지 않음 (막대가 끊겨 보이지 않게)
       b.__live = st; b.__txt = text || "";
-      b.innerHTML = `<span class="lb-trk"><span class="lb-fil"></span></span><span class="lb-txt"><i class="lb-sp" aria-hidden="true"></i>${esc(text || "")}</span>`;
+      b.innerHTML = `<span class="lb-trk"><span class="lb-fil"></span></span><span class="lb-txt"><i class="lb-sp" aria-hidden="true"></i><b class="lb-pc"></b>${esc(text || "")}</span>`;
     }
+    if (hasPct) { const v = Math.max(0, Math.min(100, Math.round(pct))); b.querySelector(".lb-fil").style.width = v + "%"; b.querySelector(".lb-pc").textContent = v + "%"; b.setAttribute("aria-valuenow", v); }
+    else { const f = b.querySelector(".lb-fil"); if (f) f.style.width = ""; const pc = b.querySelector(".lb-pc"); if (pc) pc.textContent = ""; b.removeAttribute("aria-valuenow"); }
     clearTimeout(b.__t);
     if (st === "ok" || st === "bad") b.__t = setTimeout(() => { if (!b.isConnected) return; b.classList.add("gone"); b.__t = setTimeout(() => b.remove(), LB.gone); }, LB.dwell[st]);
+  }
+  // GW 전송 진행률 (11/19 KM): 누름 5 → 시트에 들어감 10 → PC가 GW 여는 중 25 → MIS 화면 35 → 넣기 시작 40 → 그룹 열기 45 · 넣는 중 55 · 저장 중 75 · 저장 확인 85
+  //  "저장됨 · 전체 n/N개"가 오면 40 + 55×n/N, 끝나면 100. 뒤로 가지 않게 같은 전송(id) 안에서 가장 큰 값을 씀
+  const misPctMax = { id: null, v: 0 };
+  function misPct(lbSt, ms, p, prog, step) {
+    if (lbSt === "ok") return 100;
+    if (lbSt === "bad") return null;
+    const id = (p && p.id) || "press"; if (misPctMax.id !== id) { misPctMax.id = id; misPctMax.v = 0; }
+    let v = 5;
+    if (p && /pending|running/.test(p.status)) v = 10;
+    if (step) v = 25;
+    const t = String(prog || ""), m = /전체\s*(\d+)\s*\/\s*(\d+)/.exec(t);
+    if (/화면 띄움|입력 준비/.test(t)) v = 35;
+    if (/넣기 시작/.test(t)) v = 40;
+    if (/주문그룹 여는 중/.test(t)) v = 45;
+    if (/넣는 중/.test(t)) v = 55;
+    if (/저장 중/.test(t)) v = 75;
+    if (/저장 확인 중/.test(t)) v = 85;
+    if (m && +m[2] > 0) v = 40 + 55 * Math.min(1, +m[1] / +m[2]);
+    misPctMax.v = Math.max(misPctMax.v, v); return misPctMax.v;
   }
   function misState() {
     const ag = db.misAgent || {}, p = db.misPush && db.misPush.date === TODAY ? db.misPush : null, agOn = pcAlive();
@@ -3397,7 +3426,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
         toast(agOn ? "GW 전송했어요 · 1분 안에 결과가 떠요" : "보냈어요 · PC에서 자동 대기를 켜면 바로 넣어요");
       });
     }
-    lbar(el, "mis", lbSt, lbText);
+    lbar(el, "mis", lbSt, lbText, misPct(lbSt, ms, p, progNow, stepNow));
   }
   const todayInput = () => { const t = db["input." + TODAY] || {}; return t; };
   // 재고를 넣었고 발주가 필요한 품목 → 목록 맨 위 "발주 필요"로
