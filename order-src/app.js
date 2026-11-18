@@ -704,9 +704,9 @@
       items = sheet.rows.filter((r) => !r.off && !(hasCode && !r.code) && !hide.has(r.name) && !hide.has("업체:" + r.vendor)).map((r) => ({ ...r }));
       // FOH 발주 (11/19 KM "온세물류는 똑같이 해줘 계산식 · 재고 발주 필요량 다 같은 인터페이스로" → "케일부터 한성물산까지 재고 발주카드"): master.foh 전부(발주 탭에서 숨긴 품목이어도 — 케일300g은 hide에 있었음) 발주 시트 품목과 같은 계산(수불 A 등)으로. 화면은 FOH 탭에만(it.foh)
       const hasC = new Set(items.map((r) => String(r.code || "")));
-      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && !hasC.has(String(r.code))) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: true }); });
+      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && !hasC.has(String(r.code))) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: !r.boh, fohSheet: true }); }); // r.boh: KM이 BOH로 옮긴 품목 (11/19 레몬주스·소모품 11개)
       // 11/19 KM "입고일 2영업일 뒤 입고 X · 재고 발주만 일단": BOH에 없는 업체(롯데칠성·주류·한성물산)의 FOH 품목은 계산·입고일 추정 없이 재고·발주 칸만 (it.plain)
-      const bohVs = new Set(items.filter((r) => !r.foh).map((r) => r.vendor)); items.forEach((r) => { if (r.foh && !bohVs.has(r.vendor)) r.plain = true; });
+      const bohVs = new Set(items.filter((r) => !r.fohSheet).map((r) => r.vendor)); items.forEach((r) => { if (r.fohSheet && !bohVs.has(r.vendor)) r.plain = true; }); // 발주 시트(master.order)에 없는 업체 = 재고·발주만 (BOH로 옮긴 한성물산 품목도)
     } else if (lastLedgerMonth) {
       items = mget(lastLedgerMonth).ledger.rows.filter((r) => r.usage > 0).map((r) => ({ name: r.name, group: r.group, code: r.code, vendor: "", unit: "", min: 0, loc: "" }));
     } else items = [];
@@ -1722,7 +1722,7 @@
   // FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 정리해서 · 발주품목순대로")
   //  품목 = 시트 master.foh (MIS 주문현황 10/19~11/17에서 발주 시트에 없는 품목, 업체 → 이름순 = 주문현황 순서). 재고 계산은 없음: 최근 발주(misOrder)와 오늘 발주 수량만.
   //  오늘 발주 수량은 BOH와 같은 input.오늘[MIS 품목명].o → [GW 전송]이 BOH와 같이 넣음(misItems·mis.js가 master.foh 코드도 봄). 요일 줄·GW 자동입력은 발주 탭 것을 그대로 씀
-  const fohRows = () => (((db["master.foh"] || {}).rows) || []).filter((r) => r && r.name && r.code);
+  const fohRows = () => (((db["master.foh"] || {}).rows) || []).filter((r) => r && r.name && r.code && !r.boh);
   const shortV = (v) => String(v || "").replace(/\((주|유)\)\s*/g, "").replace(/\s*인터내셔날|음료|판매|종합/g, "").trim();
   function setScope(x) {
     scope = x; const foh = x === "foh";
@@ -1897,7 +1897,7 @@
       b.innerHTML = `<span><b class="b1">${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고</b><small class="b2"><em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</small></span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
     const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && inScope(i)).map((i) => i.vendor).filter(Boolean))];
-    if (scope === "foh") (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.vendor && !vendors.includes(r.vendor)) vendors.push(r.vendor); }); // FOH: 온세물류(계산) + 다른 업체(간단 목록)
+    if (scope === "foh") fohRows().forEach((r) => { if (r && r.vendor && !vendors.includes(r.vendor)) vendors.push(r.vendor); }); // FOH: 온세물류(계산) + 다른 업체(간단 목록)
     if (cat && !vendors.includes(cat)) cat = null;
     $("cats").classList.toggle("foh", scope === "foh");
     $("cats").innerHTML = vendors.map((c) => {
