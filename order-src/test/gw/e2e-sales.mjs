@@ -68,6 +68,12 @@ d = await run({ kind: "menu", from: "2026-11-08", to: "2026-11-08", force: 1 });
 delete swap["menureport.html"];
 const tr = d["menuDay.2026-11-08"] || {}, trm = (tr.rows || []).map((r) => r.m);
 ok(trm.length === 4 && trm.includes("포레스트 스트립 스테이크") && (tr.rows || []).find((r) => r.m === "포레스트 스트립 스테이크").c === "스테이크" && !/판매 없음/.test(d.salesPush.text || ""), "새 POS treegrid: 자식 메뉴 줄 4개 읽음 · 분류는 부모에서 · " + trm.join("/") + " · " + d.salesPush.text);
+// 1d) 11/19: 메뉴명(S) 칸 필드가 비고 이름이 다른 필드에 있으면, 메뉴코드 있는 줄에서 이름 같은 필드를 찾아 읽음 (소계 줄은 뺌)
+swap["menureport.html"] = "menureport-newpos-alt.html";
+d = await run({ kind: "menu", from: "2026-11-09", to: "2026-11-09", force: 1 });
+delete swap["menureport.html"];
+const al = d["menuDay.2026-11-09"] || {}, alm = (al.rows || []).map((r) => r.m);
+ok(alm.length === 4 && alm.includes("포레스트 스트립 스테이크") && !alm.includes("스테이크") && !alm.includes(""), "메뉴명 칸이 비면 이름 필드를 찾아 읽음 · 소계 줄 뺌 · " + alm.join("/") + " · " + d.salesPush.text);
 // 2) Gross 불러오기도 그대로
 gas.post({ action: "set", key: "forecast", value: { "2026-10-20": { fc: "3000000", act: "" } } });
 d = await run({ from: "2026-10-20", to: "2026-10-24" });

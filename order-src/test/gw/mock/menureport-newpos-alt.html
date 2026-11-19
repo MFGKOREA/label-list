@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>메뉴별매출현황</title><script src="jquery.js"></script></head><body>
+<!-- 11/19 실제 화면(menuProbe): 메뉴명(S) 칸 필드에는 값이 없고 메뉴 이름은 다른 필드(NM_MENU)에 있음, 분류 소계 줄은 메뉴코드가 빔 -->
+<!-- 11/18 새 POS 칸 모양: 대분류 | 중분류 | 소분류(분류) | 메뉴코드 | 메뉴명(S). 소계 줄은 메뉴명이 비었거나 소분류와 같음 -->
+<!-- 가짜 MIS 메뉴별 매출현황 (모양은 추측: 실제와 다르면 mis-sales.js가 salesDiag에 머리글을 남김) -->
+<input id="sDate" class="easyui-datebox" value="2026-10-25"><input id="eDate" class="easyui-datebox" value="2026-10-25">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="dataGrid1"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows") return st.rows; if (cmd === "options") return { columns: [[{ field: "NM_CLS1", title: "대분류" }, { field: "NM_CLS2", title: "중분류" }, { field: "NM_CLS3", title: "소분류" }, { field: "CD_MENU", title: "메뉴코드" }, { field: "NM_TYPE4", title: "메뉴명(S)" }, { field: "QT_SALE", title: "판매수량" }, { field: "AM_SALE", title: "판매금액" }]] }; };
+$("#dataGrid1").data("datagrid", 1);
+// 주말엔 플래터가 많이, 평일엔 런치 세트가
+var BY = {
+  we: [["스테이크", "매드 스테이크 & 치킨 플래터", 40], ["Brunch_Plates", "매드 스테이크 & 치킨 플래터", 12], ["스테이크", "포레스트 스트립 스테이크", 14], ["피자", "갈릭 스노잉 피자", 30]],
+  wd: [["스테이크", "매드 스테이크 & 치킨 플래터", 6], ["Lunch Set", "수비드 페퍼 스테이크", 5], ["스테이크", "포레스트 스트립 스테이크", 6], ["피자", "갈릭 스노잉 피자", 10]]
+};
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var s = $("#sDate").val().replace(/[^0-9]/g, ""), dt = new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)), w = dt.getDay();
+  var src = (w === 0 || w === 6) ? BY.we : BY.wd, rows = [];
+  src.forEach(function (r, i) { rows.push({ NM_CLS1: "Food", NM_CLS2: "Master", NM_CLS3: r[0], CD_MENU: "M" + i, NM_MENU: r[1], QT_SALE: String(r[2]), AM_SALE: (r[2] * 30000).toLocaleString() }); });
+  rows.push({ NM_CLS1: "Food", NM_CLS2: "Master", NM_CLS3: "Master", CD_MENU: "", NM_MENU: "", QT_SALE: "999" }); // 중분류 소계: 메뉴명 빔
+  rows.push({ NM_CLS1: "Food", NM_CLS2: "Master", NM_CLS3: "스테이크", CD_MENU: "", NM_MENU: "스테이크", QT_SALE: "999" }); // 소분류 소계: 메뉴명 = 소분류
+  // 합계 줄 = 메뉴 줄 수량 합 (실제 화면처럼). 10/26만 일부러 틀리게 (합계 대조 시험용)
+  var sum = src.reduce(function (a, r) { return a + r[2]; }, 0);
+  rows.push({ NM_CLS1: "합계", NM_CLS2: "", NM_CLS3: "", NM_MENU: "", QT_SALE: String(s === "20261026" ? sum + 5 : sum) });
+  setTimeout(function () { $("#dataGrid1").data("dg", { rows: rows }); }, 300);
+}
+</script></body></html>

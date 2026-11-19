@@ -359,15 +359,30 @@
         const flat = []; const walk = (a, pc) => (a || []).forEach((r) => { const c = catCol ? String(r[catCol.field] ?? "").trim() || pc : ""; flat.push({ r, c }); walk(r.children, c); });
         try { if (isTree) walk($(grid).treegrid("getData"), ""); } catch (e) {}
         if (!flat.length) hit.rows.forEach((r) => { flat.push({ r, c: catCol ? String(r[catCol.field] ?? "").trim() : "" }); (r.children || []).length && walk(r.children, catCol ? String(r[catCol.field] ?? "").trim() : ""); });
+        // 11/19 menuProbe: 새 화면 줄 217개(평평한 표, 분류 소계 줄 + 메뉴 줄)인데 메뉴명(S) 칸(nm_type4) 값이 메뉴 줄에 없었음 →
+        //  메뉴코드가 있는 줄(메뉴 줄)에서 메뉴명 칸이 비면, 그 줄들에서 글자이고 값이 가장 여러 가지인 칸(nm·name·menu 이름 우선, 분류 칸 제외)을 메뉴 이름으로 씀
+        const codeCol = cols.find((c) => /메뉴\s*코드/.test(title(c))) || cols.find((c) => /cd_?menu/i.test(c.field));
+        let mKey = menuCol.field;
+        if (codeCol) {
+          const leaf = flat.filter(({ r }) => String(r[codeCol.field] ?? "").trim());
+          if (leaf.length && !leaf.some(({ r }) => String(r[mKey] ?? "").trim())) {
+            const skip = new Set(cols.filter((c) => /분류/.test(title(c))).map((c) => c.field).concat([codeCol.field, qtyCol.field]));
+            const cand = {}; leaf.forEach(({ r }) => Object.entries(r).forEach(([k, v]) => { if (k === "children" || skip.has(k)) return; const t = String(v ?? "").trim(); if (!t || /^[\d.,\-%:\s]+$/.test(t)) return; (cand[k] = cand[k] || new Set()).add(t); }));
+            const best = Object.keys(cand).sort((a, b) => (/nm|name|menu/i.test(b) - /nm|name|menu/i.test(a)) || cand[b].size - cand[a].size)[0];
+            if (best && cand[best].size >= Math.min(3, leaf.length)) mKey = best;
+          }
+        }
         const rows = [];
-        flat.forEach(({ r, c }) => { if (isTotal(r)) return; const m = String(r[menuCol.field] ?? "").trim(), q = num(r[qtyCol.field]); if (!m || !(q > 0)) return; rows.push({ c, m, q }); });
+        flat.forEach(({ r, c }) => { if (isTotal(r)) return; if (codeCol && mKey !== menuCol.field && !String(r[codeCol.field] ?? "").trim()) return; const m = String(r[mKey] ?? "").trim(), q = num(r[qtyCol.field]); if (!m || !(q > 0)) return; rows.push({ c, m, q }); });
         if (!rows.length) {
           // 줄은 있는데 메뉴 이름이 하나도 없으면 "판매 없음"이 아니라 화면을 못 읽은 것 → 머리글·처음 몇 줄을 menuProbe에 남기고 실패로(다음에 다시 읽음). 이름·숫자만, 매장 밖 정보 없음
-          if (flat.length) { await set("menuProbe", { at: Date.now(), day, tree: isTree, n: flat.length, cols: cols.map((c) => `${c.field}=${title(c)}`).slice(0, 30), menu: title(menuCol), rows: flat.slice(0, 8).map(({ r }) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "children").slice(0, 16).map(([k, v]) => [k, String(v ?? "").slice(0, 30)]))), kids: flat.slice(0, 8).map(({ r }) => (r.children || []).length) }).catch(() => {}); return "noname"; }
+          if (flat.length) { await set("menuProbe", { at: Date.now(), day, tree: isTree, n: flat.length, cols: cols.map((c) => `${c.field}=${title(c)}`).slice(0, 30), menu: title(menuCol), rows: flat.slice(0, 4).map(({ r }) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "children").map(([k, v]) => [k, String(v ?? "").slice(0, 30)]))),
+            leafN: codeCol ? flat.filter(({ r }) => String(r[codeCol.field] ?? "").trim()).length : -1, leaf: (codeCol ? flat.filter(({ r }) => String(r[codeCol.field] ?? "").trim()) : flat.slice(-4)).slice(0, 4).map(({ r }) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "children").map(([k, v]) => [k, String(v ?? "").slice(0, 30)]))),
+            sorts: [...new Set(flat.map(({ r }) => String(r.sort ?? "")))].slice(0, 10), mKey, kids: flat.slice(0, 8).map(({ r }) => (r.children || []).length) }).catch(() => {}); return "noname"; }
           return "empty";
         }
         // 합계 대조: 메뉴 줄 수량 합(0·마이너스 줄 포함) = 화면 합계 줄 수량?
-        const ck = sumCheck(flat.map((x) => x.r), (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
+        const ck = sumCheck(flat.map((x) => x.r).filter((r) => !codeCol || mKey === menuCol.field || String(r[codeCol.field] ?? "").trim()), (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[mKey] ?? "").trim());
         if (ck && !ck.ok) { chkBad.push(day); if (SUM_BLOCK) return "chk"; } // 켜져 있으면 그날은 저장 안 함 (다음에 다시 읽음)
         save(day, rows, { cols: cols.map((c) => title(c) || c.field).slice(0, 30), menu: title(menuCol), cat: catCol ? title(catCol) : "" }); return "ok"; // h: 표 머리글 (11/17 새 POS 첫날 메뉴 이름이 분류 이름으로 옴 — 어느 칸에 메뉴 이름이 있는지 보려고)
       };
