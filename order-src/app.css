@@ -1018,3 +1018,16 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .dateblk .datepill { display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: 999px; font-size: 15px; box-shadow: inset 0 0 0 1px var(--line); }
 .dateblk .datepill small { font-size: 15px; }
 .topbtns .tb.help { height: 34px; padding-top: 0; padding-bottom: 0; }
+/* 홈 화면에 추가 안내 (11/19 KM) */
+.mdlg.a2 .a2-head { display: flex; align-items: center; gap: 14px; padding: 20px 20px 4px; }
+.mdlg.a2 .a2-head img { border-radius: 12px; box-shadow: 0 1px 4px rgba(0, 0, 0, .15); flex: none; }
+.mdlg.a2 .a2-head h3 { padding: 0; }
+.mdlg.a2 .a2-head .md-sub { padding: 2px 0 0; }
+.mdlg.a2 .a2-warn { padding: 6px 0 2px; color: var(--rose-ink); font-weight: 700; }
+.mdlg.a2 .a2-steps { display: grid; gap: 10px; padding: 12px 20px 8px; }
+.mdlg.a2 .a2-st { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 10px; font-size: 15px; line-height: 1.35; }
+.mdlg.a2 .a2-st i { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); font-style: normal; font-size: 13px; font-weight: 800; }
+.mdlg.a2 .a2-st b { font-weight: 800; }
+.mdlg.a2 .a2-ic { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--fill); font-size: 13px; vertical-align: middle; }
+.mdlg .a2-btns:not(:has([data-act="install"]:not([hidden]))) { grid-template-columns: 1fr; }
+.mdlg form:focus { outline: none; }

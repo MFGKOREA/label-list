@@ -1791,6 +1791,38 @@
   }));
   catSync();
 
+  // ---------- 홈 화면에 추가 안내 (11/19 KM "링크로 처음 켜면 홈 화면 추가 팝업, 갤럭시·아이폰") ----------
+  //  홈 화면 앱으로 연 게 아니면(standalone 아님) 처음 한 번 띄움. [나중에]면 7일 뒤 다시. ?a2hs=1이면 늘 띄움(확인용)
+  //  갤럭시 크롬·삼성 인터넷: 브라우저가 설치 창을 줄 수 있으면(beforeinstallprompt) [홈 화면에 추가] 한 번으로, 아니면 메뉴 순서 안내
+  //  아이폰: 사파리 [공유] → [홈 화면에 추가] → "웹 앱으로 열기" 켜기(알림 받으려면 필요). 카카오톡 안 브라우저는 추가가 안 돼 다른 브라우저로 열게 안내
+  let a2hsEvt = null;
+  addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); a2hsEvt = e; const b = document.querySelector("#a2hsDlg [data-act=install]"); if (b) b.hidden = false; });
+  addEventListener("appinstalled", () => { try { localStorage.setItem("a2hs", "done"); } catch (e) {} const d = $("a2hsDlg"); if (d && d.open) d.close(); toast("홈 화면에 추가했어요"); });
+  try { if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {} // 갤럭시에서 설치 창이 뜨는 조건 (sw.js는 order.html을 건드리지 않음)
+  function a2hsShow(force) {
+    const ua = navigator.userAgent || "", standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    if (standalone && !force) return;
+    let st = ""; try { st = localStorage.getItem("a2hs") || ""; } catch (e) {}
+    if (!force && (st === "done" || (/^\d+$/.test(st) && Date.now() - +st < 7 * 864e5))) return;
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1), android = /Android/.test(ua);
+    const kakao = /KAKAOTALK/i.test(ua), inapp = kakao || /NAVER|Instagram|FBAN|FBAV|Line\//i.test(ua), samsung = /SamsungBrowser/i.test(ua), iosOther = ios && /CriOS|FxiOS|EdgiOS|Whale/i.test(ua);
+    if (!ios && !android && !force) return; // PC에선 안 띄움
+    const step = (n, t) => `<div class="a2-st"><i>${n}</i><span>${t}</span></div>`;
+    let body = "", btn = "";
+    if (inapp) body = `<p class="md-sub a2-warn">${kakao ? "카카오톡" : "앱"} 안에서 연 화면은 홈 화면에 추가가 안 돼요</p>` + (ios ? step(1, "오른쪽 아래 <b>⋯</b> 누르기") + step(2, "<b>Safari로 열기</b>") + step(3, "열린 사파리에서 이 안내대로 추가") : step(1, "오른쪽 아래 <b>⋮</b> 또는 <b>⋯</b> 누르기") + step(2, "<b>다른 브라우저로 열기</b> (Chrome·삼성 인터넷)") + step(3, "열린 브라우저에서 이 안내대로 추가"));
+    else if (ios && !iosOther) body = step(1, "화면 아래 <b>공유</b> <span class=a2-ic>⬆︎</span> 누르기") + step(2, "아래로 내려 <b>홈 화면에 추가</b>") + step(3, "<b>웹 앱으로 열기</b> 켠 채로 <b>추가</b>");
+    else if (ios) body = step(1, "주소창 오른쪽 <b>공유</b> <span class=a2-ic>⬆︎</span> 누르기") + step(2, "<b>홈 화면에 추가</b>") + step(3, "<b>추가</b>");
+    else if (samsung) body = step(1, "아래 <b>≡</b> 메뉴 누르기") + step(2, "<b>현재 페이지 추가</b> → <b>홈 화면</b>") + step(3, "<b>추가</b>");
+    else body = step(1, "오른쪽 위 <b>⋮</b> 누르기") + step(2, "<b>홈 화면에 추가</b> 또는 <b>앱 설치</b>") + step(3, "<b>설치</b> · <b>추가</b>");
+    if (!ios && !inapp) btn = `<button type="button" class="md-ok" data-act="install"${a2hsEvt ? "" : " hidden"}>홈 화면에 추가</button>`;
+    const dlg = $("a2hsDlg"); if (!dlg || !dlg.showModal || dlg.open) return;
+    dlg.innerHTML = `<form method="dialog"><div class="a2-head"><img src="icons/order-192.png?v=8" alt="" width="52" height="52"><div><h3>홈 화면에 추가</h3><p class="md-sub">앱처럼 바로 열고, 알림도 받을 수 있어요</p></div></div><div class="a2-steps">${body}</div><div class="md-btns a2-btns"><button value="later" class="md-no">나중에</button>${btn}</div></form>`;
+    dlg.querySelector("[data-act=install]")?.addEventListener("click", async () => { if (!a2hsEvt) return; a2hsEvt.prompt(); try { const r = await a2hsEvt.userChoice; if (r && r.outcome === "accepted") { try { localStorage.setItem("a2hs", "done"); } catch (er) {} dlg.close("install"); } } catch (er) {} a2hsEvt = null; });
+    dlg.addEventListener("close", () => { if (dlg.returnValue !== "install") { try { if (localStorage.getItem("a2hs") !== "done") localStorage.setItem("a2hs", String(Date.now())); } catch (e) {} } }, { once: true });
+    dlg.returnValue = ""; dlg.showModal(); const f = dlg.querySelector("form"); f.tabIndex = -1; f.focus(); // 첫 버튼에 초점 테두리가 안 생기게
+  }
+  setTimeout(() => { if (!document.querySelector("dialog[open]")) a2hsShow(/[?&]a2hs=1/.test(location.search)); }, 1800);
+
   // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
   // 11/12 KM 화면: 아이폰에서 숫자를 입력하고 키보드를 닫으면 하단 독이 키보드가 있던 자리(화면 중간)에 떠서 내용을 가림 (iOS 고정 위치 버그)
   //  → 키보드가 떠 있는 동안은 독을 숨기고, 입력이 끝나면 화면 위치를 한 번 다시 잡아 독을 바닥으로 돌려놓음
