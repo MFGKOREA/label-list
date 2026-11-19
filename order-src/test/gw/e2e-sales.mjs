@@ -62,6 +62,12 @@ ok(np.h && np.h.menu === "메뉴명(S)" && np.h.cat === "소분류", "새 POS: �
 ok(npm.includes("매드 스테이크 & 치킨 플래터") && !npm.includes("Master") && npm.length === 5 && (np.rows || []).find((r) => r.m === "포레스트 스트립 스테이크").c === "스테이크", "새 POS: 메뉴 이름으로 저장 · 빈 메뉴명 소계 줄 뺌 · " + npm.join("/"));
 ok(d["menuDay.2026-11-03"].h.menu === "메뉴명(S)" && d["menuDay.2026-11-03"].rows.some((r) => /플래터/.test(r.m)), "소분류를 메뉴로 잘못 받아 둔 날(11/03)은 다시 받음");
 ok(d["menuDay.2026-11-04"].rows[0].m === "y", "제대로 있던 날(11/04)은 그대로");
+// 1c) 11/19: 새 POS가 treegrid(분류 줄 아래 메뉴 줄이 자식)면 자식까지 펼쳐 읽음 · 메뉴 줄의 분류는 부모 줄에서 이어받음
+swap["menureport.html"] = "menureport-newpos-tree.html";
+d = await run({ kind: "menu", from: "2026-11-08", to: "2026-11-08", force: 1 });
+delete swap["menureport.html"];
+const tr = d["menuDay.2026-11-08"] || {}, trm = (tr.rows || []).map((r) => r.m);
+ok(trm.length === 4 && trm.includes("포레스트 스트립 스테이크") && (tr.rows || []).find((r) => r.m === "포레스트 스트립 스테이크").c === "스테이크" && !/판매 없음/.test(d.salesPush.text || ""), "새 POS treegrid: 자식 메뉴 줄 4개 읽음 · 분류는 부모에서 · " + trm.join("/") + " · " + d.salesPush.text);
 // 2) Gross 불러오기도 그대로
 gas.post({ action: "set", key: "forecast", value: { "2026-10-20": { fc: "3000000", act: "" } } });
 d = await run({ from: "2026-10-20", to: "2026-10-24" });

@@ -343,7 +343,8 @@
         const hit = await L.awaitLoad(prev, T.q);
         if (!hit) return "timeout";
         if (!hit.rows.length) return "empty"; // 그날 판매 없음(휴무)
-        const grid = hit.grid, o = $(grid).datagrid("options"), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
+        const grid = hit.grid, isTree = (() => { try { return !!$(grid).data("treegrid"); } catch (e) { return false; } })();
+        const o = (() => { try { return isTree ? $(grid).treegrid("options") : $(grid).datagrid("options"); } catch (e) { return $(grid).datagrid("options"); } })(), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
         const TT = (c) => title(c) + " " + c.field;
         const qtyCol = cols.find((c) => /판매\s*수량/.test(title(c))) || cols.find((c) => /수량|qty/i.test(TT(c)) && !/금액|율|%|amt/i.test(TT(c)));
         // 11/18 KM "포스기 변경으로 카테고리 / 메뉴명": 새 POS 표 = 대분류 | 중분류 | 소분류(Soup·Salad 같은 분류) | 메뉴코드 | 메뉴명(S).
@@ -353,11 +354,20 @@
         const catCol = (nameCol && cols.find((c) => /^소분류$/.test(title(c)))) || cols.find((c) => /^중분류$/.test(title(c)) && c !== menuCol) || cols.find((c) => /분류|구분|cat/i.test(TT(c)) && c !== menuCol && !/코드|code|cd_/i.test(TT(c)));
         step = "읽기 " + day;
         if (!qtyCol || !menuCol) throw new Error(`메뉴·수량 칸을 못 찾았어요 (머리글: ${cols.map(title).join(", ").slice(0, 200)})`);
+        // 11/19 KM "메뉴 불러오기가 판매 없음으로 뜸, 16일부터 POS 바뀜": 새 화면은 분류(대·중·소분류) 줄 아래에 메뉴 줄이 자식으로 달린 표(treegrid)일 수 있음
+        //  → getRows(맨 위 분류 줄만) 대신 getData를 자식까지 펼쳐 읽고, 메뉴 줄에 분류 칸이 비어 있으면 부모 줄의 분류를 이어받음
+        const flat = []; const walk = (a, pc) => (a || []).forEach((r) => { const c = catCol ? String(r[catCol.field] ?? "").trim() || pc : ""; flat.push({ r, c }); walk(r.children, c); });
+        try { if (isTree) walk($(grid).treegrid("getData"), ""); } catch (e) {}
+        if (!flat.length) hit.rows.forEach((r) => { flat.push({ r, c: catCol ? String(r[catCol.field] ?? "").trim() : "" }); (r.children || []).length && walk(r.children, catCol ? String(r[catCol.field] ?? "").trim() : ""); });
         const rows = [];
-        hit.rows.forEach((r) => { if (isTotal(r)) return; const m = String(r[menuCol.field] ?? "").trim(), q = num(r[qtyCol.field]); if (!m || !(q > 0)) return; rows.push({ c: catCol ? String(r[catCol.field] ?? "").trim() : "", m, q }); });
-        if (!rows.length) return "empty";
+        flat.forEach(({ r, c }) => { if (isTotal(r)) return; const m = String(r[menuCol.field] ?? "").trim(), q = num(r[qtyCol.field]); if (!m || !(q > 0)) return; rows.push({ c, m, q }); });
+        if (!rows.length) {
+          // 줄은 있는데 메뉴 이름이 하나도 없으면 "판매 없음"이 아니라 화면을 못 읽은 것 → 머리글·처음 몇 줄을 menuProbe에 남기고 실패로(다음에 다시 읽음). 이름·숫자만, 매장 밖 정보 없음
+          if (flat.length) { await set("menuProbe", { at: Date.now(), day, tree: isTree, n: flat.length, cols: cols.map((c) => `${c.field}=${title(c)}`).slice(0, 30), menu: title(menuCol), rows: flat.slice(0, 8).map(({ r }) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "children").slice(0, 16).map(([k, v]) => [k, String(v ?? "").slice(0, 30)]))), kids: flat.slice(0, 8).map(({ r }) => (r.children || []).length) }).catch(() => {}); return "noname"; }
+          return "empty";
+        }
         // 합계 대조: 메뉴 줄 수량 합(0·마이너스 줄 포함) = 화면 합계 줄 수량?
-        const ck = sumCheck(hit.rows, (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
+        const ck = sumCheck(flat.map((x) => x.r), (() => { try { return $(grid).datagrid("getFooterRows") || []; } catch (e) { return []; } })(), qtyCol.field, (r) => !isTotal(r) && !!String(r[menuCol.field] ?? "").trim());
         if (ck && !ck.ok) { chkBad.push(day); if (SUM_BLOCK) return "chk"; } // 켜져 있으면 그날은 저장 안 함 (다음에 다시 읽음)
         save(day, rows, { cols: cols.map((c) => title(c) || c.field).slice(0, 30), menu: title(menuCol), cat: catCol ? title(catCol) : "" }); return "ok"; // h: 표 머리글 (11/17 새 POS 첫날 메뉴 이름이 분류 이름으로 옴 — 어느 칸에 메뉴 이름이 있는지 보려고)
       };
@@ -367,7 +377,7 @@
           if (left() < T.q + T.reserve) { rem = days.slice(i); break; } // 시간이 다 돼 가면 여기까지만 (남은 날은 다시 누르면 이어서)
           const r = await readDay(days[i]);
           if (r === "empty") empty.push(days[i]); else if (r !== "ok" && r !== "chk") again.push(days[i]);
-          if (r === "ok" || r === "empty" || r === "chk") stuck = 0;
+          if (r === "ok" || r === "empty" || r === "chk" || r === "noname") stuck = 0; // noname: 화면은 답했는데 메뉴 이름을 못 읽음(멈춘 게 아님)
           else if (++stuck >= 2) { hung = true; failed.push(...again.splice(0)); rem = days.slice(i + 1); break; } // 두 번 연달아 응답 없음 = MIS가 멈춤 → 남은 날을 하나하나 기다리지 않고 바로 알림
           prog(`${i + 1}/${days.length}일`);
         }
