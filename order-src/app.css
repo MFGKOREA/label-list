@@ -1031,3 +1031,4 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .mdlg.a2 .a2-ic { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--fill); font-size: 13px; vertical-align: middle; }
 .mdlg .a2-btns:not(:has([data-act="install"]:not([hidden]))) { grid-template-columns: 1fr; }
 .mdlg form:focus { outline: none; }
+.search.search-low { margin: -4px 0 10px; }
