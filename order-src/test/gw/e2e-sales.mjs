@@ -74,6 +74,20 @@ d = await run({ kind: "menu", from: "2026-11-09", to: "2026-11-09", force: 1 });
 delete swap["menureport.html"];
 const al = d["menuDay.2026-11-09"] || {}, alm = (al.rows || []).map((r) => r.m);
 ok(alm.length === 4 && alm.includes("포레스트 스트립 스테이크") && !alm.includes("스테이크") && !alm.includes(""), "메뉴명 칸이 비면 이름 필드를 찾아 읽음 · 소계 줄 뺌 · " + alm.join("/") + " · " + d.salesPush.text);
+// 1e) 11/20 (어사이드가 실제 화면 스크립트를 읽음): 조회구분 #selCD_SEARCH를 002(메뉴별)로 맞추고 조회 · sort 2 메뉴 줄만 · nm_type3 긴 이름 · 분류 = 대분류>중분류 · 0개 줄·소계 뺌
+//  11/16~ 예전 방식(001)으로 받아 둔 날은 다시 받음, 002로 받은 날은 그대로
+swap["menureport.html"] = "menureport-newpos-002.html";
+gas.post({ action: "set", key: "menuDay.2026-11-17", value: { at: 1, rows: [{ c: "Master", m: "Soup", q: 9 }], h: { cols: ["대분류", "중분류", "소분류", "메뉴코드", "메뉴명(S)", "수량"], menu: "소분류", cat: "중분류" } } });
+let modes = null;
+d = await run({ kind: "menu", from: "2026-11-17", to: "2026-11-18" }, "sales-main.html", async (p) => { for (const f of p.frames()) { const m = await f.evaluate(() => window.__searchMode).catch(() => null); if (m) modes = m; } });
+const n2 = d["menuDay.2026-11-18"] || {}, n2m = (n2.rows || []).map((r) => r.m);
+ok(modes && modes.length === 2 && modes.every((m) => m === "002"), "조회구분을 002(메뉴별)로 맞추고 조회 · " + JSON.stringify(modes));
+ok(n2.h && n2.h.q === "002" && n2m.length === 6 && n2m.filter((m) => m === "포레스트 스트립 스테이크").length === 2 && !n2m.includes("Steak") && !n2m.includes("갈릭 스노잉 피자"), "002 표: 메뉴 줄 6개(0개 줄·소계·합계 뺌, 분류별 따로) · " + n2m.join("/"));
+ok((n2.rows || []).find((r) => r.s === "L포레스트^STK").c === "Lunch>Steak" && (n2.rows || []).find((r) => r.m === "갈릭 명란 파스타[DPF]").q === 2, "분류 = 대분류>중분류 · 짧은 이름 s · 수량");
+ok(d["menuDay.2026-11-17"].h.q === "002" && d.salesPush.parts.menu.chkBad === 0, "예전 방식으로 받아 둔 11/17은 002로 다시 받음 · 합계 대조 통과");
+d = await run({ kind: "menu", from: "2026-11-18", to: "2026-11-18" });
+delete swap["menureport.html"];
+ok(d["menuDay.2026-11-18"].h.q === "002" && !(modes.length > 2), "002로 받은 날은 다시 안 받음");
 // 2) Gross 불러오기도 그대로
 gas.post({ action: "set", key: "forecast", value: { "2026-10-20": { fc: "3000000", act: "" } } });
 d = await run({ from: "2026-10-20", to: "2026-10-24" });

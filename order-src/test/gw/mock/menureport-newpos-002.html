@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><title>메뉴별매출현황</title><script src="jquery.js"></script></head><body>
+<!-- 11/20 어사이드가 실제 MIS(/smvw/SMVW_SalesMenu_S.do)에서 본 모양: 조회구분 콤보 #selCD_SEARCH (001 소분류 = 기본값, 002 메뉴별, 003 대표메뉴별).
+     001이면 분류 줄만(메뉴 이름 없음), 002면 sort 0 합계 · 1 중분류 소계(cd_menu 빈칸) · 2 메뉴 줄(nm_type3 긴 이름 · nm_type4 짧은 이름 · Inquiry_Qty 숫자) -->
+<input id="sDate" class="easyui-datebox" value="2026-11-19"><input id="eDate" class="easyui-datebox" value="2026-11-19">
+<input id="cdStore" value="1345090" disabled><input id="nmStore" value="MG수원컨벤션센터점" disabled>
+<input id="selCD_SEARCH" value="001">
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<table id="dataGrid1"></table>
+<script>
+$("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
+$("#selCD_SEARCH").data("combobox", 1);
+$.fn.combobox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+$.fn.datagrid = function (cmd) { var st = this.data("dg") || { rows: [] }; if (!this.data("dg")) this.data("dg", st); if (cmd === "getRows" ) return st.rows; if (cmd === "getData") return { total: st.rows.length, rows: st.rows }; if (cmd === "options") return { columns: [[{ field: "nm_type1", title: "대분류" }, { field: "nm_type2", title: "중분류" }, { field: "nm_type3", title: "소분류" }, { field: "cd_menu", title: "메뉴코드" }, { field: "nm_type4", title: "메뉴명(S)" }, { field: "Inquiry_Qty", title: "수량" }, { field: "Inquiry_Total", title: "금액" }]] }; };
+$("#dataGrid1").data("datagrid", 1);
+var M = [["Regular", "Steak", "포레스트 스트립 스테이크", "포레스트^STK", 6], ["Lunch", "Steak", "포레스트 스트립 스테이크", "L포레스트^STK", 3], ["Membership", "DPF", "갈릭 명란 파스타[DPF]", "DPF^명란파스타", 2],
+  ["Set", "Set Menu", "매드갈릭 골고루 커플 세트", "골고루세트^2인", 2], ["Master", "Master", "머시룸 수프", "머시룸수프", 9], ["Membership", "Set Group", "M_CLUB 4인 식사권", "M클럽^4인식사권", 1], ["Regular", "Pizza", "갈릭 스노잉 피자", "스노잉피자", 0]];
+window.__searchMode = [];
+function fn_Search() {
+  if (!window.event) throw new Error("no event");
+  var mode = $("#selCD_SEARCH").val(); window.__searchMode.push(mode);
+  var rows = [], sum = 0;
+  if (mode !== "002") { // 001: 분류 줄만 (메뉴 이름 칸 빔)
+    rows.push({ sort: 0, nm_type1: "MG합계", Inquiry_Qty: 23 }); rows.push({ sort: 1, nm_type1: "Regular", nm_type2: "Steak", nm_type3: "Steak", cd_type3: "sum", cd_menu: "", Inquiry_Qty: 6 });
+    rows.push({ sort: 2, nm_type1: "Regular", nm_type2: "Steak", nm_type3: "Steak", cd_menu: "", nm_type4: "", Inquiry_Qty: 6 });
+  } else {
+    M.forEach(function (r, i) { rows.push({ sort: 2, nm_type1: r[0], nm_type2: r[1], cd_type3: "C" + i, cd_menu: "9" + i, nm_type3: r[2], nm_type4: r[3], Inquiry_Qty: r[4], Inquiry_Total: r[4] * 20000 }); sum += r[4]; });
+    rows.push({ sort: 1, nm_type1: "Regular", nm_type2: "Steak", cd_type3: "sum", cd_menu: "", nm_type3: "Steak", Inquiry_Qty: 6 }); // 소계: 세면 두 번
+    rows.unshift({ sort: 0, nm_type1: "MG합계", Inquiry_Qty: sum });
+  }
+  setTimeout(function () { $("#dataGrid1").data("dg", { rows: rows }); }, 300);
+}
+</script></body></html>

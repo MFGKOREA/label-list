@@ -317,7 +317,7 @@
       //  1.17.0 (11/17 KM 1번): job.today = 1이면 오늘 지금까지 중간값 → 완결된 하루 기록(menuDay.날짜)이 아니라 menuNow 에 둠.
       //   영업 중 값이라 학습(요일별 메뉴 쏠림 → 품목별 주말 배수)의 하루 기록에 섞지 않고, 매시간 덮어씀
       // 11/16~17 새 POS 첫날들은 소분류(분류 이름)를 메뉴로 읽었음 → 그렇게 저장된 날은 없는 날로 보고 다시 받음 (머리글에 메뉴명 칸이 있는데 메뉴로 소분류를 씀)
-      const badMenuDay = (v, day) => !!(v && (v.h ? v.h.menu === "소분류" && (v.h.cols || []).some((c) => /메뉴\s*명/.test(String(c))) : day >= "2026-11-16")); // 11/16은 머리글 기록 전에 받음
+      const badMenuDay = (v, day) => !!(v && !(v.h && v.h.q === "002") && (v.h ? v.h.menu === "소분류" && (v.h.cols || []).some((c) => /메뉴\s*명/.test(String(c))) : day >= "2026-11-16")); // 11/16은 머리글 기록 전에 받음
       const today = !!job.today;
       const keyOf = (day) => (today ? "menuNow" : "menuDay." + day);
       const have = await get();
@@ -338,11 +338,30 @@
         if (!(await L.idle(T.q))) return "busy"; // 앞 조회가 아직 안 끝남 → 이 날은 나중에
         const like = $(dbs()[0]).datebox("getValue") || "";
         $(dbs()[0]).datebox("setValue", fmt(day, like)); $(dbs()[1]).datebox("setValue", fmt(day, like));
+        // 11/20 (어사이드가 MIS 화면 스크립트를 읽음): 조회구분 콤보 #selCD_SEARCH 001 = 소분류(기본값, 화면이 열릴 때마다 001), 002 = 메뉴별, 003 = 대표메뉴별.
+        //  새 POS(11/16~)는 001이면 분류 줄만 옴(메뉴 이름 없음 → menuProbe leafN 0). 조회 누르기 전에 002로 맞춤
+        const m002 = (() => { try { const el = d.querySelector("#selCD_SEARCH"); if (!el || !$(el).data("combobox")) return false; if ($(el).combobox("getValue") !== "002") $(el).combobox("setValue", "002"); return $(el).combobox("getValue") === "002"; } catch (e) { return false; } })();
         const prev = L.refs();
         press(R, btn.closest("a, button, input") || btn);
         const hit = await L.awaitLoad(prev, T.q);
         if (!hit) return "timeout";
         if (!hit.rows.length) return "empty"; // 그날 판매 없음(휴무)
+        // 조회구분 002(메뉴별) 표: 평평한 표, sort 0 = 전체 합계(MG합계) · 1 = 중분류 소계(cd_menu 빈칸) · 2 = 메뉴 줄(cd_menu 있음).
+        //  메뉴 줄: nm_type1 대분류 · nm_type2 중분류 · nm_type3 메뉴 긴 이름(머리글은 "소분류") · nm_type4 POS 짧은 이름 · Inquiry_Qty 수량. 소계 줄을 세면 두 번 셈
+        const allRows = (() => { try { const a = hit.grid && $(hit.grid).datagrid("getData"); return (a && a.rows) || hit.rows; } catch (e) { return hit.rows; } })();
+        if (m002 && allRows.some((r) => r && "cd_menu" in r && "sort" in r)) {
+          step = "읽기 " + day;
+          const qOf = (r) => num("Inquiry_Qty" in r ? r.Inquiry_Qty : r.qty);
+          const leaf = allRows.filter((r) => String(r.sort) === "2" && String(r.cd_menu ?? "").trim());
+          const tot = allRows.find((r) => String(r.sort) === "0");
+          const rows2 = [];
+          leaf.forEach((r) => { const m = String(r.nm_type3 ?? "").trim(), q = qOf(r); if (!m || !(q > 0)) return; rows2.push({ c: [r.nm_type1, r.nm_type2].map((x) => String(x ?? "").trim()).filter(Boolean).join(">"), m, s: String(r.nm_type4 ?? "").trim(), q }); });
+          if (!leaf.length) { await set("menuProbe", { at: Date.now(), day, q: "002", n: allRows.length, sorts: [...new Set(allRows.map((r) => String(r.sort ?? "")))].slice(0, 10), keys: Object.keys(allRows[0] || {}).slice(0, 30) }).catch(() => {}); return "noname"; }
+          if (!rows2.length) return "empty";
+          // 합계 대조: 메뉴 줄 수량 합(0·마이너스 포함) = 합계 줄(sort 0)
+          if (tot) { const a = leaf.reduce((t, r) => t + (qOf(r) || 0), 0), b = qOf(tot); if (isFinite(b) && Math.abs(a - b) > 0.5) { chkBad.push(day); if (SUM_BLOCK) return "chk"; } }
+          save(day, rows2, { q: "002", menu: "메뉴(nm_type3)", cat: "대분류>중분류", n: leaf.length }); return "ok";
+        }
         const grid = hit.grid, isTree = (() => { try { return !!$(grid).data("treegrid"); } catch (e) { return false; } })();
         const o = (() => { try { return isTree ? $(grid).treegrid("options") : $(grid).datagrid("options"); } catch (e) { return $(grid).datagrid("options"); } })(), cols = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
         const TT = (c) => title(c) + " " + c.field;

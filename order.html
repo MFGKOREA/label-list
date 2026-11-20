@@ -1832,6 +1832,10 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   // 쿠폰은 읽어 두되(매출 없이 나가는 요리), 레시피 연결에서 직접 고른 쿠폰만 계산에 넣음
   const SKIP_CATS = /주류|음료|upcharge|^기타$|other|pet|미분류/i;
   const COUPON = /쿠폰/;
+  // 11/20 새 POS 메뉴 이름 (어사이드가 MIS 메뉴별매출현황 조회구분 002를 읽고 정리): 꼬리표 떼기 · 표기 맞추기 · 식자재가 아닌 분류
+  const posBase = (n) => String(n || "").replace(/\[[^\]]*\]/g, "").replace(/\s*\d+\s*%\s*$/, "").replace(/_(영화|신규매장)\s*$/, "").replace(/\s+무료\s*이용권\s*$/, "").replace(/\s+/g, " ").trim();
+  const posNz = (n) => posBase(n).toLowerCase().replace(/\s+/g, "").replace(/red/g, "레드").replace(/white/g, "화이트");
+  const NEWPOS_SKIP = /^(Membership|Delivery)>Set Group$|>Image$/;
   async function parseSales(file) {
     const book = await readBook(file);
     const h = findSheet(book, { cat: ["중분류"], menu: ["소분류", "메뉴명", "메뉴"], qty: ["판매수량", "조회일기준", "수량"] }, ["menu"], /메뉴|매출/);
@@ -1924,7 +1928,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   // 날짜별 메뉴 판매의 소계 줄 빼기 (11/13): MIS 메뉴별 매출현황에는 중분류마다 "[스테이크] 스테이크"처럼 이름이 중분류와 같은 소계 줄이 섞여 옴.
   //  이 줄이 엉뚱한 레시피에 붙어(Soup → 머시룸 수프, 파스타 → 포 갈릭 스테이크 파스타 …) 10월만 9,800개를 더 셌음. 같은 중분류에 다른 메뉴가 있을 때만 소계로 봄(메뉴가 하나뿐인 중분류는 그대로)
   // 11/18 새 POS: 메뉴명 칸이 있는데 소분류(Soup·Salad 같은 분류)를 메뉴로 읽은 날(11/16~17)은 없는 날로 봄(11/16은 머리글 기록 전에 받아 머리글 없음 = 새 POS 첫날) — 분류 이름이 비슷한 레시피에 붙어 사용량을 흔듦. 시트 값은 지우지 않음(PC가 다시 받아 덮어씀)
-  function dropBadMenu() { Object.keys(db).forEach((k) => { const v = db[k]; if (/^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && v && (v.h ? v.h.menu === "소분류" && (v.h.cols || []).some((c) => /메뉴\s*명/.test(String(c))) : k.slice(8) >= "2026-11-16")) delete db[k]; }); }
+  function dropBadMenu() { Object.keys(db).forEach((k) => { const v = db[k]; if (/^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && v && !(v.h && v.h.q === "002") && (v.h ? v.h.menu === "소분류" && (v.h.cols || []).some((c) => /메뉴\s*명/.test(String(c))) : k.slice(8) >= "2026-11-16")) delete db[k]; }); }
   const dayRowsOf = (k) => { const rows = (db[k] || {}).rows; if (!Array.isArray(rows)) return []; const multi = new Set(rows.filter((r) => r.c && r.m !== r.c).map((r) => r.c)); return rows.filter((r) => !(r.c && r.c === r.m && multi.has(r.c))); };
   function mset(m, patch) { setKey("month." + m, { ...mget(m), ...patch }); }
   // 최신 레시피 (가장 늦은 달에 올린 것, 같은 이름은 나중 파일이 덮음)
@@ -2204,10 +2208,15 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     const sheetMenus = (sheet && sheet.menuMap) || [];
     const lineByName = (n) => { const k = clean(n); return line.find((r) => clean(r.name) === k) || line.find((r) => dice(r.name, n) > 0.9) || null; };
     const menuMap = new Map();
+    let mapNzMemo = null; const mapNz = () => mapNzMemo || (mapNzMemo = new Map(Object.entries(mapCfg.menu || {}).map(([k, v]) => [posNz(k), v])));
     const resolveMenu = (menu, cat) => {
       const mk = (cat || "") + "|" + menu;
       if (menuMap.has(mk)) return menuMap.get(mk);
-      const fixed = mapCfg.menu[menu];
+      // 11/20 새 POS(11/16~, 조회구분 002): 같은 메뉴에 꼬리표가 붙어 옴([DPF]·[생일쿠폰]·[+웰컴바우처]·[스크래치]·[+패밀리]·끝의 20%·_영화·_신규매장·무료 이용권)
+      //  → 꼬리표를 뗀 이름으로도 연결을 찾음. 표기만 다른 것(RED↔레드, WHITE↔화이트, 띄어쓰기)도 같은 이름으로 봄. 이름이 바뀐 메뉴(예: 매드 글레이즈드 립 → 매드 시그니처 글레이즈드 립)는 KM이 정함
+      if (NEWPOS_SKIP.test(cat || "")) { const res = { skip: true }; menuMap.set(mk, res); return res; } // 식사권·이용권·바우처 판매, 배달 매출 조정용, 안내 이미지 = 식자재 아님
+      const base = posBase(menu);
+      const fixed = mapCfg.menu[menu] || mapCfg.menu[base] || mapNz().get(posNz(base));
       const fromSheet = !fixed && (sheetMenus.find((x) => x.menu === menu && x.cat === cat) || sheetMenus.find((x) => x.menu === menu));
       const sheetRecipe = fromSheet && lineByName(fromSheet.recipe);
       let res = null;
@@ -2216,8 +2225,8 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       else if (sheetRecipe) res = { recipe: sheetRecipe, mult: fromSheet.mult, sheet: true };
       else {
         let top = null, sc = 0;
-        recipeCands.forEach((r) => [r.short, r.name].forEach((k) => { const v = dice(menu, k); if (v > sc) { sc = v; top = r; } }));
-        if (sc >= 0.62) res = { recipe: top, auto: true, sc };
+        recipeCands.forEach((r) => [r.short, r.name].forEach((k) => { const v = dice(base, k); if (v > sc) { sc = v; top = r; } }));
+        if (sc >= 0.62 && !/세트/.test(base)) res = { recipe: top, auto: true, sc }; // 11/20: 세트 이름 줄은 자동 연결 안 함 (구성 메뉴가 따로 옴 — 예전에도 세트는 skip)
       }
       menuMap.set(mk, res);
       return res;
