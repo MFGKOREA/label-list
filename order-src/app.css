@@ -1039,3 +1039,15 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .misbar .lbar.pct .lb-trk { height: 6px; }
 @keyframes lbShine { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .misbar .lbar.pct .lb-fil { transition: none; } .misbar .lbar.pct .lb-fil::after { animation: none; } }
+/* 사전발주 버튼을 맨 위 줄로 · 맨 위로 버튼 (11/20 KM) */
+.topbtns { gap: 6px; }
+.topbtns .store { margin-right: auto; }
+.tb.prebtn { height: 34px; padding: 0 12px; background: var(--surface); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; font-weight: 800; touch-action: manipulation; }
+.tb.prebtn.on { background: var(--rose-ink); color: #fff; box-shadow: none; }
+.totop { position: fixed; right: max(16px, calc((100vw - 480px) / 2 + 16px)); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 35; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 16px 0 12px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 88%, transparent); color: var(--surface); font-size: 14px; font-weight: 800; box-shadow: 0 6px 20px rgba(0, 0, 0, .22); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); opacity: 0; transform: translateY(12px) scale(.96); pointer-events: none; transition: opacity .2s ease, transform .25s cubic-bezier(.22, 1, .36, 1); touch-action: manipulation; }
+.totop.on { opacity: 1; transform: none; pointer-events: auto; }
+.totop:active { transform: scale(.95); }
+.totop-pos { position: fixed; right: max(16px, calc((100vw - 480px) / 2 + 16px)); bottom: calc(138px + env(safe-area-inset-bottom, 0px)); z-index: 35; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--surface); padding: 3px 8px; border-radius: 999px; box-shadow: 0 1px 4px rgba(0, 0, 0, .12); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.totop-pos.on { opacity: 1; }
+body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
+@media (prefers-reduced-motion: reduce) { .totop { transition: none; } }

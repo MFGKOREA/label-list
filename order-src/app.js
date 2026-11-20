@@ -172,6 +172,9 @@
   function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms || 2600); }
 
   // ---------- 이름 비교 ----------
+  // 초성 검색 (11/20 KM "품목 검색 편의성"): "ㄷㅅ" → 등심, "ㅂㅊㅅ" → 부채살. 초성만 넣었을 때만 씀
+  const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ", CHO_Q = /^[ㄱ-ㅎ\s]+$/;
+  const choOf = (s) => [...String(s || "")].map((ch) => { const c = ch.charCodeAt(0) - 0xac00; return c >= 0 && c < 11172 ? CHO[Math.floor(c / 588)] : /[ㄱ-ㅎ]/.test(ch) ? ch : ""; }).join("");
   const norm = (s) => String(s || "").toLowerCase()
     .replace(/\(.*?\)|\[.*?\]/g, "")
     .replace(/사용중단|단위\s*발주|단위발주|발주|단발성|냉장|냉동|통합|_+/g, " ")
@@ -1790,6 +1793,14 @@
     catSync();
   }));
   catSync();
+  $("preBtn")?.addEventListener("click", () => { setPre(!preMode); renderMain(); });
+  // 맨 위로 (11/20 KM "맨 위로 버튼 좋은데"): 화면을 한 화면 반 넘게 내리면 독 위 오른쪽에 [↑ 맨 위로] + 지금 보는 품목 순번(발주·FOH 목록에서만)
+  (() => {
+    const btn = $("toTop"), pos = $("toTopPos"); if (!btn) return; let raf = 0;
+    const upd = () => { raf = 0; const show = scrollY > innerHeight * 1.5 && !document.querySelector("dialog[open]"); btn.classList.toggle("on", show); if (pos) { let t = ""; if (show && !$("v-main").hidden && !$("pOrder").hidden) { const cells = [...document.querySelectorAll("#orderList .cell[data-key]")]; const i = cells.findIndex((c) => c.getBoundingClientRect().bottom > 90); if (cells.length && i >= 0) t = `${i + 1} / ${cells.length}`; } pos.textContent = t; pos.classList.toggle("on", !!t); } };
+    addEventListener("scroll", () => { if (!raf) raf = requestAnimationFrame(upd); }, { passive: true });
+    btn.addEventListener("click", () => { scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); });
+  })();
 
   // ---------- 홈 화면에 추가 안내 (11/19 KM "링크로 처음 켜면 홈 화면 추가 팝업, 갤럭시·아이폰") ----------
   //  홈 화면 앱으로 연 게 아니면(standalone 아님) 처음 한 번 띄움. [나중에]면 7일 뒤 다시. ?a2hs=1이면 늘 띄움(확인용)
@@ -2948,7 +2959,7 @@
     let groups = new Map();
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly && inScope(i)).forEach((it) => {
-      const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
+      const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       if (!q) { const ws = weeklyState(it, inp[it.key]); if (ws && ws.fold) { folded.push(it); return; } }
       const v = it.vendor || "업체 미지정";
@@ -2966,8 +2977,8 @@
     top = top.map(([, it]) => it);
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 ON 버튼)
-    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${nBuy}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
-    box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderMain(); });
+    // 11/20 KM "사전발주 버튼 그냥 제일 맨 위로": 목록 위 줄에서 화면 맨 위(매장명 줄, #preBtn)로 옮김
+    { const pb = $("preBtn"); if (pb) { pb.className = "tb prebtn" + (preMode ? " on" : ""); pb.setAttribute("aria-pressed", preMode); pb.textContent = `사전발주 ${preMode ? "ON" : "OFF"}`; } }
     // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고) + 그날 발주분 입고일로 화살표
     if (preMode) {
       const pd = pDay(), dl = delivery(pd);

@@ -1059,6 +1059,18 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .misbar .lbar.pct .lb-trk { height: 6px; }
 @keyframes lbShine { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .misbar .lbar.pct .lb-fil { transition: none; } .misbar .lbar.pct .lb-fil::after { animation: none; } }
+/* 사전발주 버튼을 맨 위 줄로 · 맨 위로 버튼 (11/20 KM) */
+.topbtns { gap: 6px; }
+.topbtns .store { margin-right: auto; }
+.tb.prebtn { height: 34px; padding: 0 12px; background: var(--surface); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; font-weight: 800; touch-action: manipulation; }
+.tb.prebtn.on { background: var(--rose-ink); color: #fff; box-shadow: none; }
+.totop { position: fixed; right: max(16px, calc((100vw - 480px) / 2 + 16px)); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 35; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 16px 0 12px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--fg) 88%, transparent); color: var(--surface); font-size: 14px; font-weight: 800; box-shadow: 0 6px 20px rgba(0, 0, 0, .22); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); opacity: 0; transform: translateY(12px) scale(.96); pointer-events: none; transition: opacity .2s ease, transform .25s cubic-bezier(.22, 1, .36, 1); touch-action: manipulation; }
+.totop.on { opacity: 1; transform: none; pointer-events: auto; }
+.totop:active { transform: scale(.95); }
+.totop-pos { position: fixed; right: max(16px, calc((100vw - 480px) / 2 + 16px)); bottom: calc(138px + env(safe-area-inset-bottom, 0px)); z-index: 35; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--surface); padding: 3px 8px; border-radius: 999px; box-shadow: 0 1px 4px rgba(0, 0, 0, .12); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.totop-pos.on { opacity: 1; }
+body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
+@media (prefers-reduced-motion: reduce) { .totop { transition: none; } }
 
 </style>
 </head>
@@ -1069,6 +1081,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
   <section class="view" id="v-main" aria-label="발주와 프랩">
     <div class="topbtns">
       <span class="store" id="storeName">MG수원컨벤션점</span>
+      <button type="button" class="tb prebtn" id="preBtn" aria-pressed="false">사전발주 OFF</button>
       <button type="button" class="tb help" data-go="help"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17.2h.01"/></svg>사용방법</button>
       <button type="button" class="tb report" data-go="report"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>데이터 리포트</button>
     </div>
@@ -1365,6 +1378,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 </nav>
 <dialog id="misDlg" class="mdlg" aria-label="GW 전송 확인"></dialog>
 <dialog id="a2hsDlg" class="mdlg a2" aria-label="홈 화면에 추가"></dialog>
+<span class="totop-pos" id="toTopPos" aria-hidden="true"></span><button type="button" class="totop" id="toTop" aria-label="맨 위로"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>맨 위로</button>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -1542,6 +1556,9 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
   function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), ms || 2600); }
 
   // ---------- 이름 비교 ----------
+  // 초성 검색 (11/20 KM "품목 검색 편의성"): "ㄷㅅ" → 등심, "ㅂㅊㅅ" → 부채살. 초성만 넣었을 때만 씀
+  const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ", CHO_Q = /^[ㄱ-ㅎ\s]+$/;
+  const choOf = (s) => [...String(s || "")].map((ch) => { const c = ch.charCodeAt(0) - 0xac00; return c >= 0 && c < 11172 ? CHO[Math.floor(c / 588)] : /[ㄱ-ㅎ]/.test(ch) ? ch : ""; }).join("");
   const norm = (s) => String(s || "").toLowerCase()
     .replace(/\(.*?\)|\[.*?\]/g, "")
     .replace(/사용중단|단위\s*발주|단위발주|발주|단발성|냉장|냉동|통합|_+/g, " ")
@@ -3160,6 +3177,14 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     catSync();
   }));
   catSync();
+  $("preBtn")?.addEventListener("click", () => { setPre(!preMode); renderMain(); });
+  // 맨 위로 (11/20 KM "맨 위로 버튼 좋은데"): 화면을 한 화면 반 넘게 내리면 독 위 오른쪽에 [↑ 맨 위로] + 지금 보는 품목 순번(발주·FOH 목록에서만)
+  (() => {
+    const btn = $("toTop"), pos = $("toTopPos"); if (!btn) return; let raf = 0;
+    const upd = () => { raf = 0; const show = scrollY > innerHeight * 1.5 && !document.querySelector("dialog[open]"); btn.classList.toggle("on", show); if (pos) { let t = ""; if (show && !$("v-main").hidden && !$("pOrder").hidden) { const cells = [...document.querySelectorAll("#orderList .cell[data-key]")]; const i = cells.findIndex((c) => c.getBoundingClientRect().bottom > 90); if (cells.length && i >= 0) t = `${i + 1} / ${cells.length}`; } pos.textContent = t; pos.classList.toggle("on", !!t); } };
+    addEventListener("scroll", () => { if (!raf) raf = requestAnimationFrame(upd); }, { passive: true });
+    btn.addEventListener("click", () => { scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); });
+  })();
 
   // ---------- 홈 화면에 추가 안내 (11/19 KM "링크로 처음 켜면 홈 화면 추가 팝업, 갤럭시·아이폰") ----------
   //  홈 화면 앱으로 연 게 아니면(standalone 아님) 처음 한 번 띄움. [나중에]면 7일 뒤 다시. ?a2hs=1이면 늘 띄움(확인용)
@@ -4318,7 +4343,7 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     let groups = new Map();
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly && inScope(i)).forEach((it) => {
-      const hit = q ? it.name.toLowerCase().includes(q) || norm(it.name).includes(norm(q)) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
+      const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       if (!q) { const ws = weeklyState(it, inp[it.key]); if (ws && ws.fold) { folded.push(it); return; } }
       const v = it.vendor || "업체 미지정";
@@ -4336,8 +4361,8 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
     top = top.map(([, it]) => it);
     if (top.length) groups = new Map([["발주 필요", top], ...groups]);
     // "발주 필요 N" 줄은 항상 (오른쪽에 사전발주 ON 버튼)
-    box.insertAdjacentHTML("beforeend", `<div class="sect sect-need${top.length ? "" : " zero"}"><span>발주 필요 <small>${nBuy}</small></span><button type="button" class="pre${preMode ? " on" : ""}" id="preBtn" aria-pressed="${preMode}">사전발주 ${preMode ? "ON" : "OFF"}</button></div>`);
-    box.querySelector("#preBtn").addEventListener("click", () => { setPre(!preMode); renderMain(); });
+    // 11/20 KM "사전발주 버튼 그냥 제일 맨 위로": 목록 위 줄에서 화면 맨 위(매장명 줄, #preBtn)로 옮김
+    { const pb = $("preBtn"); if (pb) { pb.className = "tb prebtn" + (preMode ? " on" : ""); pb.setAttribute("aria-pressed", preMode); pb.textContent = `사전발주 ${preMode ? "ON" : "OFF"}`; } }
     // 사전발주: 발주할 날 고르기 (오늘부터 일주일, 일요일 빼고) + 그날 발주분 입고일로 화살표
     if (preMode) {
       const pd = pDay(), dl = delivery(pd);
