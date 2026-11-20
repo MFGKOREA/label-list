@@ -1,6 +1,6 @@
 {
-  "name": "MFG 발주",
-  "short_name": "MFG 발주",
+  "name": "발주",
+  "short_name": "발주",
   "start_url": "./order.html",
   "scope": "./",
   "display": "standalone",
