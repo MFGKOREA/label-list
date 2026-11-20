@@ -2562,7 +2562,7 @@
     // 품절 기록 (11/15 KM "2주안 기획들 실행해", 3번): 86 위험·검색한 품목·0을 센 품목·이미 기록한 품목에만 [품절 기록] → soldout.날짜 = {품목: "18:12"}.
     //  다시 누르면 지움. 품절 횟수를 재야 86 알림 효과("품절 −50%")를 볼 수 있음. 계산에는 아직 안 씀
     const soldMap = () => db["soldout." + TODAY] || {}, showSold = !preMode && (!!soldMap()[it.key] || !!rk86 || !!($("q") && $("q").value.trim()) || (counted(v) && num(v.s) === 0));
-    const top = `<div class="c-top"><span class="c-name" data-full="${esc(it.name)}" data-short="${esc(cardName(it))}">${esc(cardName(it))}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}${it.nw ? `<span class="nwtag" title="MIS 주문등록에만 있던 품목 (11/20 추가)">NEW</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
+    const top = `<div class="c-top"><span class="c-name" data-full="${esc(it.name)}" data-short="${esc(cardName(it))}">${esc(cardName(it))}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}${it.nw ? `<span class="nwtag" title="MIS 주문등록에만 있던 품목 (11/20 추가)">NEW</span>` : ""}${vcfg(it).days ? `<span class="odtag" title="${esc(it.vendor || "")} 발주 요일">${vcfg(it).days.map((x) => DOW[x]).join("·")} 발주</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
     // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
       const d0 = pDay(), pc = preCalc(it, v, d0), w0 = pc.w, inc0 = incomingOf(it, d0); // 입고예정은 실제로 넣은 발주만
@@ -2581,7 +2581,7 @@
     const lastLine = (() => { if (!it.foh) return ""; const h = (it.codes || [it.code]).flatMap((c) => fohHist(c)).sort((a, b) => (a.d < b.d ? 1 : -1)); if (!h.length) return ""; const n4 = h.filter((x) => x.d >= addDays(TODAY, -28)).length;
       return `<div class="c-last"><span>지난번</span><b>${mmdd(h[0].d)}(${DOW[dow(h[0].d)]})</b><b>${r1(h[0].q)}${esc(ou)}</b><span>4주 ${n4}번</span></div>`; })();
     d.innerHTML = top + lastLine +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days ? `<span class="boxnote">${esc(vc.note ? vc.note + " · " : "")}${vc.days.map((x) => DOW[x]).join("·")}요일 발주</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days && vc.note ? `<span class="boxnote">${esc(vc.note)}</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
       // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게") + 그 아래 작은 [어제와 같음 N] (11/19 KM "카드 재고칸 아래로 작게": 오늘 안 셌고 어제 센 값이 있을 때만, 누르면 그 값이 들어가 저장)
       (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label>${sameBtn}</div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
@@ -2764,7 +2764,7 @@
   //  근거: 10/19~11/14 전체를 센 18일 2,242번 중 38%가 거의 발주 안 하는 품목(기획안 세부 분석 2번). 안전 기준을 넣은 앱 규칙으로는 하루 약 16개(13%) 덜 셈
   // minCount 3: 7일마다 세면 28일에 3~4번(쉬는 날이 끼면 3번)이라 4로 두면 주간 품목이 매일로 돌아갔다 다시 주간이 됨
   const WEEKLY = { every: 7, look: 28, maxNeed: 2, minCount: 3 };
-  let weeklyMemo = new Map(), weeklyOpen = false;
+  let weeklyMemo = new Map(), weeklyOpen = false; let offOpen = false; // 11/20 발주일 아닌 품목 접힘
   function weeklyOf(it) {
     if (weeklyMemo.has(it.key)) return weeklyMemo.get(it.key);
     let out = null;
@@ -2969,10 +2969,13 @@
       rbox.querySelector(".risk86").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const el = box.querySelector(`.cell[data-key="${CSS.escape(b.dataset.key)}"]`); if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } });
     }
     let groups = new Map();
+    const offFold = []; // 오늘 발주일이 아닌 업체 품목 (11/20)
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly && inScope(i)).forEach((it) => {
       const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
+      // 11/20 KM "온세·새싹 빼고 나머지 업체는 발주 요일만 체크, 발주 아닌 날엔 품목 가리기": 업체 발주 요일(vendorCfg.days)이 아닌 날은 맨 아래 접어 둠 (검색하면 보임)
+      if (!q && vcfg(it).days && !isOrderDay(it, preMode ? pDay() : TODAY)) { offFold.push(it); return; }
       if (!q) { const ws = weeklyState(it, inp[it.key]); if (ws && ws.fold) { folded.push(it); return; } }
       const v = it.vendor || "업체 미지정";
       if (!groups.has(v)) groups.set(v, []);
@@ -3032,6 +3035,16 @@
         g.appendChild(rowEl(it, win, inp)); });
       box.appendChild(g); n += list.length;
     });
+    if (offFold.length) { // 11/20: 오늘 발주일 아닌 업체 품목 — 접어 둠, 누르면 펼침
+      const vs = [...new Set(offFold.map((it) => it.vendor))].map((v) => `${shortV(v)} ${(vcfg({ vendor: v }).days || []).map((x) => DOW[x]).join("·")}`).join(" · ");
+      const det = document.createElement("details"); det.className = "weekly offday"; det.open = offOpen;
+      det.innerHTML = `<summary title="${esc(vs)}"><span class="wk-t">오늘 발주일 아닌 품목 <small>${offFold.length}</small></span><span class="wk-s" aria-hidden="true"></span></summary>`;
+      const g = document.createElement("div"); g.className = "group";
+      const fill = () => { if (!g.childElementCount) offFold.forEach((it) => g.appendChild(rowEl(it, win, inp))); };
+      if (det.open) fill();
+      det.addEventListener("toggle", () => { offOpen = det.open; if (det.open) fill(); });
+      det.appendChild(g); box.appendChild(det);
+    }
     // 7일마다 세는 품목: 접어 두고 누르면 펼침 (펼칠 때 그림). 펼친 상태는 다시 그려도 그대로
     if (folded.length) {
       const ix = new Map(M.items.map((it, i) => [it.key, i]));
