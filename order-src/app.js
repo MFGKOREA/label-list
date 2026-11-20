@@ -2970,6 +2970,8 @@
     let fohOrd = null;
     if (scope === "foh") { const LI = new Map(LOCS_FOH.map(([k], i) => [k, i])), mi = new Map(M.items.map((it, i) => [it, i]));
       groups.forEach((list) => list.sort((a, b) => (LI.get(locOf(a)) ?? 9) - (LI.get(locOf(b)) ?? 9) || roOf(a, mi.get(a)) - roOf(b, mi.get(b)) || mi.get(a) - mi.get(b))); let i = 0; fohOrd = new Map(); groups.forEach((list) => list.forEach((it) => fohOrd.set(it, i++))); }
+    // 11/20 KM 승인(어사이드 전달) "발주 탭 발주품목순을 MIS 주문등록 순서에 맞춰": BOH 발주품목순은 업체 순서는 그대로, 업체 안은 MIS처럼 품목명 가나다순("-" 빼고 Intl.Collator ko, MIS 온세물류 176개와 같은 순서). BOH로 옮긴 품목도 섞임. 발주필요순·FOH 탭·발주시트는 그대로
+    if (scope !== "foh" && sortSel === "sheet") { const co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); groups.forEach((list) => list.sort((a, b) => co.compare(nk(a), nk(b)))); }
     // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
     // 위치 버튼을 켰을 땐(선반 순서로 세는 중) 끌어올리지 않음 — 재고를 넣은 카드가 위로 튀면 순서가 흐트러짐
