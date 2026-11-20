@@ -1074,6 +1074,19 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 /* 11/20 KM "검색창 고정": 목록을 내려도 검색창이 화면 위에 붙어 있음 */
 .search.search-low { position: sticky; top: max(8px, env(safe-area-inset-top, 0px)); z-index: 25; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 6px 16px rgba(0, 0, 0, .08); }
 .search.search-low:focus-within { box-shadow: 0 0 0 2px var(--accent), 0 6px 16px rgba(0, 0, 0, .08); }
+/* 11/20 KM "시각적 정렬": ① 머리(매장명·제목·알약)·화면 제목 줄의 좌우 끝을 카드 끝(16px)에 맞춤 (예전 2px 안쪽)
+   ② 발주 화면 세로 간격: 묶음 사이 14px · 같은 묶음 안 8px (예전 16·8·10·18로 들쭉날쭉) ③ 리포트·데이터 파일 분류 카드 아래 간격 14px */
+.topbtns { margin: 4px 0 0; }
+.hdr { margin: 6px 0 14px; }
+.nav { margin-left: 0; margin-right: 0; }
+#v-loc .nav { margin-left: -4px; }
+#orderBanner { margin-bottom: 14px; }
+.chips#sorts { margin: -10px 0 14px; }
+.catgrid { margin-bottom: 14px; }
+.tiles .misbar.mistile { padding: 12px 10px 10px 11px; } /* Forecast 카드와 글자 시작(왼쪽 11px)·제목 높이 맞춤 */
+.chips#sorts button { min-height: 40px; } /* 업체·위치 칩과 같은 높이 */
+/* 예상이 섞인 안내 줄(.banner.soft)은 바탕이 화면색과 같아(#f4f4f4) 글자만 떠 보였음 → 다른 카드처럼 흰 카드 + 얇은 테두리, 글자색만 옅게 */
+.banner.soft { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
 
 </style>
 </head>
