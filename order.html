@@ -763,6 +763,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* 발주 필요 칸 안 작은 머리글 (11/12): 덜 넣음 · 발주완료 */
 .subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
 .subhead.low { color: var(--rose-ink); }
+.subhead.cls { color: var(--fg); } /* 11/20 업체 안 소모품·세제 머리글: 상태색 아님 */
 .subhead small { font-size: 12px; font-weight: 700; opacity: .75; margin-left: 2px; }
 
 /* ---------- 화면 정리 (11/15 KM "전체 글 정렬… 지저분… 정리 및 순서") ---------- */
@@ -4220,6 +4221,8 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     return "dry";
   };
   const locOf = (it) => ((db.itemCfg || {})[it.key] || {}).loc || guessLoc(it);
+  // 11/20 KM "세제나 소모품은 아래로 빼야지" · "분류를 해줘야지": BOH 품목 분류 0 = 식자재, 1 = 소모품(위치 = 소모품), 2 = 세제(소모품 중 세제·락스·세정제 등)
+  const supCls = (it) => (it.foh || locOf(it) !== "sup" ? 0 : /세제|에이퐁|락스|기름제거제|세정제|클리너|린스/.test(it.name) ? 2 : 1), SUPN = ["", "소모품", "세제"];
   const roOf = (it, idx) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ro != null ? c.ro : 1e4 + idx; };
   let locTab = "dry", locSaveT = 0, locPatch = {}, locFoh = false; // locFoh: 위치·순서 화면에서 FOH 품목을 보는 중 (11/19 KM "보관위치 순서도 FOH 거")
   // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
@@ -4258,7 +4261,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     // 11/19 KM "발주시트에 FOH 추가, 업체가 겹치면 FOH 파란색 글씨 넣고 분류, 공통 업체 없으면 업체명만 분류":
     //  BOH 업체와 같은 업체의 FOH 품목 → 그 업체 바로 뒤에 "업체 FOH"(파란 글씨) 묶음, BOH에 없는 업체(롯데칠성·주류·한성물산) → 업체 이름 묶음
     const bohV = new Set(all.filter((i) => !i.foh).map((i) => i.vendor || "업체 미지정"));
-    const vKey = (it) => (it.foh && bohV.has(it.vendor) ? it.vendor + "\u0002FOH" : it.vendor || "업체 미지정");
+    const vKey = (it) => (it.foh && bohV.has(it.vendor) ? it.vendor + "\u0002FOH" : !it.xcode && supCls(it) ? `${it.vendor || "업체 미지정"} (${SUPN[supCls(it)]})` : it.vendor || "업체 미지정"); // 11/20 KM "분류": BOH 소모품·세제는 업체 (소모품)/(세제) 묶음
     all.filter((i) => !i.foh).forEach((it) => { const v = vKey(it); if (!byV.has(v)) { byV.set(v, []); if (all.some((f) => f.foh && f.vendor === v)) byV.set(v + "\u0002FOH", []); } byV.get(v).push(it); });
     all.filter((i) => i.foh).forEach((it) => { const v = vKey(it); if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); });
     byV.forEach((list) => order.push(...list)); // 발주품목순: 업체(처음 나온 순) 안에서 발주 시트 순서, FOH는 master.foh 순서
@@ -4276,11 +4279,11 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     const GORD = ["세제", "한성물산 (소모품)", "온세물류 (소모품)"]; // 11/16 KM "소모품은 두 종류: 한성, 온세" (바이맥스 기물은 뺌)
     [...extra].sort((x, y) => GORD.indexOf(x[1].vendor) - GORD.indexOf(y[1].vendor)).forEach(([c, x]) => { const v = x.vendor, it = { key: "\u0001x" + c, name: x.name, vendor: v, xcode: c, pk: { stock: x.unit }, box: 0 }; if (!byV.has(v)) byV.set(v, []); byV.get(v).push(it); order.push(it); });
     { // 소모품 묶음(한성물산·온세물류 소모품)을 세제 앞으로, 둘 다 FOH에만 있는 업체(롯데칠성·주류)보다 앞 (11/19 KM "세제랑 소모품 순서 변경")
-      const ks0 = [...byV.keys()], sup = ks0.filter((k) => /소모품\)$/.test(k)), det = ks0.filter((k) => k === "세제"), rest = ks0.filter((k) => !sup.includes(k) && !det.includes(k));
+      const ks0 = [...byV.keys()], sup = ks0.filter((k) => /소모품\)$/.test(k)), det = ks0.filter((k) => k === "세제" || /\(세제\)$/.test(k)), rest = ks0.filter((k) => !sup.includes(k) && !det.includes(k));
       const at = rest.findIndex((k) => !k.includes("\u0002") && (byV.get(k) || []).every((i) => i.foh)), ins = at < 0 ? rest.length : at;
       const nk = [...rest.slice(0, ins), ...sup, ...det, ...rest.slice(ins)], nb = new Map(nk.map((k) => [k, byV.get(k)])); byV.clear(); nb.forEach((v, k) => byV.set(k, v)); }
     // 11/20 KM(어사이드 전달) "발주시트도 순서대로 바꾸자": BOH 줄은 업체 안에서 MIS 주문등록 순서(품목명 "-" 빼고 가나다, 발주 탭 발주품목순과 같음). FOH 줄은 master.foh 순서 그대로
-    { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? (a.xcode ? 0 : locOf(a) === "sup" ? 1 : 0) - (b.xcode ? 0 : locOf(b) === "sup" ? 1 : 0) || co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
+    { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
@@ -4373,7 +4376,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     if (scope === "foh") { const LI = new Map(LOCS_FOH.map(([k], i) => [k, i])), mi = new Map(M.items.map((it, i) => [it, i]));
       groups.forEach((list) => list.sort((a, b) => (LI.get(locOf(a)) ?? 9) - (LI.get(locOf(b)) ?? 9) || roOf(a, mi.get(a)) - roOf(b, mi.get(b)) || mi.get(a) - mi.get(b))); let i = 0; fohOrd = new Map(); groups.forEach((list) => list.forEach((it) => fohOrd.set(it, i++))); }
     // 11/20 KM 승인(어사이드 전달) "발주 탭 발주품목순을 MIS 주문등록 순서에 맞춰": BOH 발주품목순은 업체 순서는 그대로, 업체 안은 MIS처럼 품목명 가나다순("-" 빼고 Intl.Collator ko, MIS 온세물류 176개와 같은 순서). BOH로 옮긴 품목도 섞임. 발주필요순·FOH 탭·발주시트는 그대로
-    if (scope !== "foh" && sortSel === "sheet") { const co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""), sp = (it) => (locOf(it) === "sup" ? 1 : 0); groups.forEach((list) => list.sort((a, b) => sp(a) - sp(b) || co.compare(nk(a), nk(b)))); } // 11/20 KM "세제나 소모품은 아래로 빼야지": 업체 안에서 소모품(위치 = 소모품)은 맨 아래, 그 안도 가나다
+    if (scope !== "foh" && sortSel === "sheet") { const co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""), sp = supCls; groups.forEach((list) => list.sort((a, b) => sp(a) - sp(b) || co.compare(nk(a), nk(b)))); } // 11/20 KM "세제나 소모품은 아래로 빼야지": 업체 안에서 소모품(위치 = 소모품)은 맨 아래, 그 안도 가나다
     // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
     // 위치 버튼을 켰을 땐(선반 순서로 세는 중) 끌어올리지 않음 — 재고를 넣은 카드가 위로 튀면 순서가 흐트러짐
@@ -4416,7 +4419,10 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       // 업체·위치 머리글은 안 씀 (위 버튼에 이미 있음, 11/6 KM). 버튼을 다 끄면 발주 시트 순서, 위치 버튼을 켜면 그 위치 품목만 선반 순서(보관 위치 · 순서)대로
       const g = document.createElement("div"); g.className = "group";
       const ix = new Map(M.items.map((it, i) => [it.key, i]));
-      (locSel ? [...list].sort((a, b) => roOf(a, ix.get(a.key)) - roOf(b, ix.get(b.key))) : list).forEach((it) => g.appendChild(rowEl(it, win, inp)));
+      const subOn = scope !== "foh" && sortSel === "sheet" && !locSel && !q; let lastC = 0; // 업체 안 소모품·세제 머리글 (발주품목순일 때)
+      (locSel ? [...list].sort((a, b) => roOf(a, ix.get(a.key)) - roOf(b, ix.get(b.key))) : list).forEach((it) => { const c = subOn ? supCls(it) : 0;
+        if (c && c !== lastC) g.insertAdjacentHTML("beforeend", `<div class="subhead cls">${SUPN[c]} <small>${list.filter((x) => supCls(x) === c).length}</small></div>`); lastC = c;
+        g.appendChild(rowEl(it, win, inp)); });
       box.appendChild(g); n += list.length;
     });
     // 7일마다 세는 품목: 접어 두고 누르면 펼침 (펼칠 때 그림). 펼친 상태는 다시 그려도 그대로

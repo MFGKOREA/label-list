@@ -743,6 +743,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* 발주 필요 칸 안 작은 머리글 (11/12): 덜 넣음 · 발주완료 */
 .subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
 .subhead.low { color: var(--rose-ink); }
+.subhead.cls { color: var(--fg); } /* 11/20 업체 안 소모품·세제 머리글: 상태색 아님 */
 .subhead small { font-size: 12px; font-weight: 700; opacity: .75; margin-left: 2px; }
 
 /* ---------- 화면 정리 (11/15 KM "전체 글 정렬… 지저분… 정리 및 순서") ---------- */
