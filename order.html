@@ -4278,7 +4278,8 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       const ks0 = [...byV.keys()], sup = ks0.filter((k) => /소모품\)$/.test(k)), det = ks0.filter((k) => k === "세제"), rest = ks0.filter((k) => !sup.includes(k) && !det.includes(k));
       const at = rest.findIndex((k) => !k.includes("\u0002") && (byV.get(k) || []).every((i) => i.foh)), ins = at < 0 ? rest.length : at;
       const nk = [...rest.slice(0, ins), ...sup, ...det, ...rest.slice(ins)], nb = new Map(nk.map((k) => [k, byV.get(k)])); byV.clear(); nb.forEach((v, k) => byV.set(k, v)); }
-    { const ks = [...byV.keys()]; order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b))); } // 업체별로 모음(안에서는 넣은 순서 그대로)
+    // 11/20 KM(어사이드 전달) "발주시트도 순서대로 바꾸자": BOH 줄은 업체 안에서 MIS 주문등록 순서(품목명 "-" 빼고 가나다, 발주 탭 발주품목순과 같음). FOH 줄은 master.foh 순서 그대로
+    { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
