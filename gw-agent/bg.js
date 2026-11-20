@@ -422,13 +422,14 @@ async function tickOnce(why) {
 //  hr.js(hr.pljec.cloud에 들어가는 스크립트)가 읽어서 보내 주면 시트 kv의 hrStatus에 적고 탭을 닫는다.
 //  사람이 쓰는 창 뒤에 탭 하나를 열어 조용히 읽는다(창을 띄우지 않음). 발주·매출 자동 창이 도는 중이면 양보.
 const HR_URL = "https://hr.pljec.cloud/";
-const HR = { mins: [5, 20, 35, 50], from: 8 * 60 + 30, to: 22 * 60 + 30, gap: 8 * 60e3, late: 18 * 60e3, budget: 4 * 60e3, errGap: 15 * 60e3, loginGap: 60 * 60e3 };
+const HR = { mins: [5], from: 9 * 60, to: 22 * 60 + 30, gap: 50 * 60e3, late: 70 * 60e3, // 1.17.8 (11/20 KM "매장 크롬 너무 자주 띄우지 말자"): 15분마다 → 1시간에 한 번(:05)
+  budget: 4 * 60e3, errGap: 15 * 60e3, loginGap: 60 * 60e3 };
 function hrDue(now, st) {
   const d = new Date(now), hm = d.getHours() * 60 + d.getMinutes();
   if (hm < HR.from || hm > HR.to) return false; // 영업시간 밖에는 쉼
   if (st.fg && now - (st.at || 0) >= 60e3) return true; // 숨은 탭에서 화면이 안 그려졌을 때: 1분 뒤 화면에 보이게 한 번
   if (now - (st.at || 0) < HR.gap) return false;
-  if (HR.mins.indexOf(d.getMinutes()) >= 0) return true; // :05·:20·:35·:50
+  if (HR.mins.indexOf(d.getMinutes()) >= 0) return true; // 매시 :05
   return now - (st.at || 0) > HR.late; // 밀린 차례는 18분이 지나면 따라잡음
 }
 async function hrWindowId() { // 사람이 보는 보통 창에 뒤 탭으로 (최소화된 창이면 다른 창)
@@ -439,7 +440,8 @@ async function hrWindowId() { // 사람이 보는 보통 창에 뒤 탭으로 (�
 async function hrStart(why, now) {
   const { hrSt = {} } = await get("hrSt");
   if (hrSt.run) return;
-  const wid = await hrWindowId(), fg = !!hrSt.fg, opt = { url: HR_URL, active: fg }; // fg: 숨은 탭에서 화면이 안 그려질 때만 화면에 보이게(한 번)
+  const wid = await hrWindowId(), fg = false, opt = { url: HR_URL, active: false }; // 1.17.8: 화면에 앞세우지 않음(fg 안 씀) · 보통 창이 없으면 새 창을 띄우지 않고 이번 차례는 건너뜀
+  if (wid == null) { await put({ hrSt: { ...hrSt, at: now, msg: "열린 크롬 창이 없어 이번 HR 읽기는 건너뜀 (새 창 안 띄움)", next: now + 50 * 60e3 } }); return; } // fg: 숨은 탭에서 화면이 안 그려질 때만 화면에 보이게(한 번)
   if (wid != null) opt.windowId = wid;
   let tab;
   try { tab = await chrome.tabs.create(opt); }

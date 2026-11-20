@@ -11,15 +11,17 @@ const ms = (s) => Date.parse(s + ":00+09:00");
 let pass = 0, n = 0;
 const t = (name, r, check) => { n++; let ok = false; try { ok = !!check(r); } catch (e) { ok = false; } if (ok) pass++; console.log((ok ? "통과  " : "실패  ") + name + (ok ? "" : "\n   " + JSON.stringify(r).slice(0, 400))); };
 const SHIP_JOBS = periodJobs(SHIPPED); // 실제 gw-plan.json의 되풀이 항목(now·setsToday·menuToday, 11/18부터 2시간·:40)
-const JOBS = SHIP_JOBS.map((j) => ({ ...j, everyMin: 60 })); // 시간대 규칙 시험은 1시간 주기로 (2시간 주기는 A2·E2에서)
+const JOBS = SHIP_JOBS.map((j) => ({ ...j, everyMin: 60, from: 8 * 60 + 30, to: 23 * 60 })); // 시간대 규칙 시험은 1시간 주기·08:30~23:00으로 (실제 계획 4시간·11~21시는 A·E2에서)
 const due = (s, st, jobs, o) => periodDue(ms(s), st || {}, jobs || JOBS, o || {});
 const T = "2026-11-16", Y = "2026-11-15"; // 월요일
 
-t("A 실제 계획 → 되풀이 항목 셋(당일 Gross·Set판매현황·메뉴 판매), 2시간·:40 (11/18 KM '크롬 자꾸 켜짐, 길게')", { jobs: SHIP_JOBS }, (r) => r.jobs.length === 3 && r.jobs.every((j) => j.everyMin === 120 && j.at === 40 && j.from === 8 * 60 + 30 && j.to === 23 * 60) && r.jobs.map((j) => j.kind).join() === "now,setsToday,menuToday");
+t("A 실제 계획 → 되풀이 항목 셋(당일 Gross·Set판매현황·메뉴 판매), 4시간·:40·11~21시 (11/20 KM '매장 크롬 너무 자주 띄우지 말자')", { jobs: SHIP_JOBS }, (r) => r.jobs.length === 3 && r.jobs.every((j) => j.everyMin === 240 && j.at === 40 && j.from === 11 * 60 && j.to === 21 * 60) && r.jobs.map((j) => j.kind).join() === "now,setsToday,menuToday");
 t("B 09:39는 아직(:40 전) → 안 함", due(`${T}T09:39`), (r) => !r.go && /40분 뒤/.test(r.why));
 t("C 09:40 → 셋 다 할 차례", due(`${T}T09:40`), (r) => r.go && r.jobs.length === 3 && /당일 Gross/.test(r.why));
 t("D 09:55에 이번 시간 이미 함 → 안 함", due(`${T}T09:55`, { day: T, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } }), (r) => !r.go && /이미 함/.test(r.why));
-t("E2 실제 계획(2시간): 09:40에 했으면 10:40은 쉼, 11:40에 다시", { a: periodDue(ms(`${T}T10:40`), { day: T, n: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } }, SHIP_JOBS), b: periodDue(ms(`${T}T11:40`), { day: T, n: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } }, SHIP_JOBS) }, (r) => !r.a.go && r.b.go && r.b.jobs.length === 3);
+{ const at = (h) => ({ now: ms(`${T}T${h}`), setsToday: ms(`${T}T${h}`), menuToday: ms(`${T}T${h}`) }), D = (s, st) => periodDue(ms(`${T}T${s}`), st, SHIP_JOBS);
+  t("E2 실제 계획(4시간·11~21시): 10:40 아직(11시 전) · 11:40 함 · 그 뒤 12:40~14:40 쉼 · 15:40 다시 · 21:40 끝", { a: D("10:40", {}), b: D("11:40", {}), c: [D("12:40", { day: T, n: 1, jobAt: at("11:40") }), D("14:40", { day: T, n: 1, jobAt: at("11:40") })], d: D("15:40", { day: T, n: 1, jobAt: at("11:40") }), e: D("21:40", { day: T, n: 3, jobAt: at("19:40") }) },
+    (r) => !r.a.go && r.b.go && r.b.jobs.length === 3 && r.c.every((x) => !x.go) && r.d.go && !r.e.go); }
 t("E 10:40 → 다음 시간이므로 다시", due(`${T}T10:40`, { day: T, n: 1, jobAt: { now: ms(`${T}T09:40`), setsToday: ms(`${T}T09:40`), menuToday: ms(`${T}T09:40`) } }), (r) => r.go && r.jobs.length === 3);
 t("F 한쪽만 했으면 안 한 쪽만", due(`${T}T10:43`, { day: T, jobAt: { now: ms(`${T}T10:40`), setsToday: ms(`${T}T10:40`) } }), (r) => r.go && r.jobs.length === 1 && r.jobs[0].kind === "menuToday");
 t("F3 발주 시간대를 건너뛰어 14:46에 했어도 다음은 15:40 (시각에 다시 맞춤)", due(`${T}T15:40`, { day: T, jobAt: { now: ms(`${T}T14:46`), setsToday: ms(`${T}T14:46`), menuToday: ms(`${T}T14:46`) } }), (r) => r.go && r.jobs.length === 3);
