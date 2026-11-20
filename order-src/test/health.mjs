@@ -44,7 +44,10 @@ const report = (p) => dock(p, "report");
 const board = (p) => p.evaluate(() => ({ sum: document.getElementById("hlthSum").textContent, sumCls: document.getElementById("hlthSum").className, rows: [...document.querySelectorAll("#hlth .kv.hl")].map((r) => ({ t: r.querySelector("span").firstChild.nextSibling.textContent, dot: r.querySelector(".dot").className.replace("dot ", ""), v: r.querySelector("b").textContent, cls: r.querySelector("b").className })) }));
 
 // ---------- 1) 발주 탭: 품절 기록 ----------
-const A = await open();
+const yest = (() => { const x = new Date(day + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); })();
+// 11/20: 사본의 그날 운영 상태(자동 수집 실패·입고현황 늦음·PC 신호 시각)에 기대지 않게, "정상인 날"로 맞춘 뒤 시험 (calm)
+const calm = (d, agAt) => { d.collectLog = [{ t: yest + " 15:23", r: "ok", why: "ok", g: 1, m: 1 }]; d.misRecvScan = { ...(d.misRecvScan || {}), to: yest }; d.misOrderScan = { ...(d.misOrderScan || {}), to: yest }; d.misAgent = { ...(d.misAgent || {}), mode: "ondemand", at: agAt }; };
+const A = await open((d) => calm(d, new Date(yest + "T22:00:00+09:00").getTime())); // 어젯밤 10시 마지막 신호(밤엔 꺼져도 정상)
 const vis = await A.p.evaluate(() => {
   const C = window.__orderCalc, db = C.db(), T = C.TODAY, inp = db["input." + T] || {}, M = C.model(), out = { bad: [], n: 0, cells: 0, first: null, plain: null };
   for (const el of document.querySelectorAll("#orderList > .group .cell[data-key]")) {
@@ -110,8 +113,7 @@ await B.ctx.close();
 
 // ---------- 3) 같은 자료를 낮 1시에 열면: 어제 매출이 아직 없음 · 영업 중 PC 신호 없음 → 노랑 ----------
 // (사본에 어제 매출·합계 결과가 이미 들어 있어도 같은 조건이 되게: 어제 매출·메뉴와 매출 요청 기록을 뺌)
-const yest = (() => { const x = new Date(day + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); })();
-const C3 = await open((d) => { delete d.salesPush; delete d["menuDay." + yest]; if ((d.forecast || {})[yest]) d.forecast[yest] = { ...d.forecast[yest], act: "" }; }, "13:00");
+const C3 = await open((d) => { calm(d, new Date(day + "T12:00:00+09:00").getTime()); delete d.salesPush; delete d["menuDay." + yest]; if ((d.forecast || {})[yest]) d.forecast[yest] = { ...d.forecast[yest], act: "" }; }, "13:00");
 await report(C3.p);
 bd = await board(C3.p);
 const g3 = (t) => bd.rows.find((r) => r.t === t) || {};
@@ -146,13 +148,16 @@ for (const [log, want, label] of [
     rows.forEach((tr, r) => { const it = items.find((x) => x.name === tr.querySelector("th").title); if (!it) return; vendorOrder.push(it.vendor || "");
       days.forEach((md, k) => { const o = Number(((db["input." + iso(md)] || {})[it.key] || {}).o); if (o > 0) { appN++; if (tr.querySelectorAll("td.o")[k].textContent !== String(Math.round(o * 10) / 10)) appBad++; } }); });
     let switches = 0; for (let k = 1; k < vendorOrder.length; k++) if (vendorOrder[k] !== vendorOrder[k - 1]) switches++;
-    return { title: document.querySelector("#v-log h2").textContent, h3: wk.querySelector("h3").textContent, first: hs[0], n: hs.length, rows: rows.length, items: items.length, fc: !!wk.querySelector("tr.fcrow"), legend: !!document.querySelector("#v-log .loglegend, #logHead"), groupRows: wk.querySelectorAll("tr.lg").length, appN, appBad, vendors: new Set(vendorOrder).size, switches, chips: document.querySelectorAll("#logWeeks button[aria-pressed=true]").length };
+    const names = rows.filter((tr) => !tr.classList.contains("vrow")).map((tr) => (tr.querySelector("th") || {}).title).filter((t) => items.some((x) => x.name === t));
+    const itemRows = names.length, dupRows = names.length - new Set(names).size, vrows = rows.filter((tr) => tr.classList.contains("vrow")).length;
+    return { itemRows, dupRows, vrows, title: document.querySelector("#v-log h2").textContent, h3: wk.querySelector("h3").textContent, first: hs[0], n: hs.length, rows: rows.length, items: items.length, fc: !!wk.querySelector("tr.fcrow"), legend: !!document.querySelector("#v-log .loglegend, #logHead"), groupRows: wk.querySelectorAll("tr.lg").length, appN, appBad, vendors: new Set(vendorOrder).size, switches, chips: document.querySelectorAll("#logWeeks button[aria-pressed=true]").length };
   });
   const mon = new Date(day + "T00:00:00Z"); mon.setUTCDate(mon.getUTCDate() - ((mon.getUTCDay() + 6) % 7) - 14);
   const want0 = `${mon.getUTCMonth() + 1}/${mon.getUTCDate()}`;
   ok(lv.title === "BOH 수원컨벤션점 발주시트" && /^\d+주차/.test(lv.h3) && lv.chips === 3, `제목 "${lv.title}" · "${lv.h3}" · 고른 주 ${lv.chips}개`);
   ok(lv.first.startsWith(want0) && /월$/.test(lv.first) && lv.n === 7 && lv.fc, `첫 주 ${lv.first} ~ 7일 · Forecast 줄`);
-  ok(lv.rows === lv.items && lv.groupRows === 0 && lv.switches === lv.vendors - 1 && !lv.legend, `품목 ${lv.rows}/${lv.items} · 위치 나눔 없음 · 업체별로 한 번씩 이어짐(발주품목순) · 설명 문구 없음`);
+  // 11/16~19: 발주시트에 업체 머리줄(vrow)·소모품 줄(xcode)·FOH 품목 묶음이 들어감 → 품목 줄(앱 품목과 이름이 같은 줄)이 앱 품목 수와 같고 한 번씩만 나오는지로 봄
+  ok(lv.itemRows === lv.items && lv.dupRows === 0 && lv.groupRows === 0 && !lv.legend, `품목 줄 ${lv.itemRows}/${lv.items}(중복 ${lv.dupRows}) · 업체 머리줄 ${lv.vrows} · 위치 나눔 없음 · 설명 문구 없음`);
   ok(lv.appN > 0 && lv.appBad === 0, `앱 발주 칸 ${lv.appN}개 모두 앱 값으로 표시`);
   if (shotDir) await L.p.screenshot({ path: shotDir + "/6-log.png" });
   ok(L.errs.length === 0, "페이지 오류 " + (L.errs.length ? L.errs.slice(0, 2).join(" | ") : "없음"));

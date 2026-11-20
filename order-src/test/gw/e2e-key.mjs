@@ -32,6 +32,7 @@ const api = (r) => {
   const b = JSON.parse(q.postData()); log.post.push(b.k);
   if (b.k !== KEY) return r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: false, auth: true, error: "가게 키가 필요해요" }) });
   if (b.action === "set") store[b.key] = b.value;
+  else if (b.action === "merge") { const mg = (c, p) => { const o = { ...(c && typeof c === "object" ? c : {}) }; Object.keys(p || {}).forEach((k) => { const v = p[k]; if (v === null) delete o[k]; else if (v && typeof v === "object" && !Array.isArray(v) && o[k] && typeof o[k] === "object") o[k] = mg(o[k], v); else o[k] = v; }); return o; }; store[b.key] = mg(store[b.key], b.patch); } // 11/16부터 mis-agent.js 결과는 merge로 씀
   r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, data: store }) });
 };
 const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });

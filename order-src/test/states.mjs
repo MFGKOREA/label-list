@@ -29,7 +29,7 @@ const spRun = pick(app, /const SP = Object\.assign\(\{[^}]*runMax: ([^,}]+)/, "�
 const cRun = pick(col, /== "running" and now - .*? < (\d+ \* MIN) or/, "collect.py running"), cPend = pick(col, /age < \(([^)]*?) if alive/, "collect.py pending"), cOff = pick(col, /if alive else ([^)]+)\)/, "collect.py PC 꺼짐");
 ok(spRun === cRun && spPend === cPend && spOff === cOff, `매출 요청이 살아 있는 시간: 읽는 중 ${min(spRun)} = ${min(cRun)} · 기다림 ${min(spPend)} = ${min(cPend)} · PC 꺼짐 ${min(spOff)} = ${min(cOff)} (앱 = collect.py)`);
 ok(spRun > lSales, `매출 읽는 중 ${min(spRun)} > 확장이 스스로 끝내는 ${min(lSales)}`);
-const bgSales = pick(bg, /salesWaiting = .*< ([^;]+);/, "확장 salesWaiting");
+const bgSales = pick(bg, /salesWaiting = .*< ([\d\s.*e]+?)\s*(?:&&|;)/, "확장 salesWaiting"); // 11/16 bg.js에 "&& !ownStale" 꼬리가 붙어 숫자만 잡음
 ok(bgSales <= spOff, `확장이 받아 주는 매출 요청 나이 ${min(bgSales)} ≤ 앱이 기다리는 ${min(spOff)} (그 사이는 앱·collect.py가 다시 보냄 — STATES.md "알려진 틈")`);
 // ---- 4) 상태 낱말 ----
 const ST = new Set(["pending", "running", "done", "error"]);

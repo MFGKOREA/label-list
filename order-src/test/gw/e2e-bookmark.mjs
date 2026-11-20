@@ -23,6 +23,7 @@ const apiRoute = async (r) => {
   const q = r.request();
   if (q.method() === "GET") return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(/ver=1/.test(q.url()) ? { ok: true, data: {} } : { ok: true, data: store }) });
   const b = JSON.parse(q.postData());
+  if (b.action === "merge") { const mg = (c, p) => { const o = { ...(c && typeof c === "object" ? c : {}) }; Object.keys(p || {}).forEach((k) => { const v = p[k]; if (v === null) delete o[k]; else if (v && typeof v === "object" && !Array.isArray(v) && o[k] && typeof o[k] === "object") o[k] = mg(o[k], v); else o[k] = v; }); return o; }; b.value = mg(store[b.key], b.patch); b.action = "set"; } // 11/16부터 결과를 merge로 씀
   if (b.action !== "set") return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: false, error: "알 수 없는 요청" }) });
   store[b.key] = b.value; writes.push(b.key + ":" + (b.value && b.value.status || ""));
   r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { [b.key]: b.value } }) });

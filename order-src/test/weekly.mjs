@@ -8,7 +8,8 @@ const { chromium } = await req("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url)), html = path.resolve(here, "../../order.html");
 const [kvPath, day = "2026-11-16", shotDir] = process.argv.slice(2);
 if (!kvPath) { console.log("사용: node weekly.mjs <kv.json> [날짜] [사진 폴더]"); process.exit(2); }
-const kv = fs.readFileSync(kvPath, "utf8");
+// 11/20: 그날 아침(재고 넣기 전)으로 봄 — 사본에 그날 입력이 이미 다 있으면(11/18: 119품목) 고를 시험 품목이 없어 실패했음
+const kv = (() => { const j = JSON.parse(fs.readFileSync(kvPath, "utf8")), d = j.data || j; delete d["input." + day]; return JSON.stringify(j); })();
 const exe = fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined;
 const b = await chromium.launch({ executablePath: exe });
 const ctx = await b.newContext({ timezoneId: "Asia/Seoul", viewport: { width: 390, height: 844 }, deviceScaleFactor: shotDir ? 2 : 1 });

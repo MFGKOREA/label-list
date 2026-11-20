@@ -40,6 +40,7 @@ async function run(autoSt, now, L = { autoAnyTime: true }) {
     ymd: (d = new Date()) => dayOf(d.getTime()),
     autoPlan: () => ({ act: "none", why: "시험" }), hrStart: () => {}, postOk: async () => true,
     log: async () => {}, fast: () => {}, tick: () => {}, setTimeout: () => 0,
+    diagSet: async () => {}, // 1.17.0부터 autoCheck가 진단을 적음 (시험에선 아무것도 안 함)
   };
   vm.createContext(ctx);
   vm.runInContext(FN, ctx);
