@@ -707,7 +707,7 @@
       items = sheet.rows.filter((r) => !r.off && !(hasCode && !r.code) && !hide.has(r.name) && !hide.has("업체:" + r.vendor)).map((r) => ({ ...r }));
       // FOH 발주 (11/19 KM "온세물류는 똑같이 해줘 계산식 · 재고 발주 필요량 다 같은 인터페이스로" → "케일부터 한성물산까지 재고 발주카드"): master.foh 전부(발주 탭에서 숨긴 품목이어도 — 케일300g은 hide에 있었음) 발주 시트 품목과 같은 계산(수불 A 등)으로. 화면은 FOH 탭에만(it.foh)
       const hasC = new Set(items.map((r) => String(r.code || "")));
-      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && !hasC.has(String(r.code))) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: !r.boh, fohSheet: true }); }); // r.boh: KM이 BOH로 옮긴 품목 (11/19 레몬주스·소모품 11개)
+      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.name && !hasC.has(String(r.code))) items.push({ name: r.name, code: String(r.code), group: "", vendor: r.vendor, unit: r.unit || "", spec: "", price: 0, min: 0, loc: "", off: false, shelf: null, foh: !r.boh, fohSheet: true, nw: !!r.nw }); }); // r.boh: KM이 BOH로 옮긴 품목 (11/19 레몬주스·소모품 11개)
       // 11/19 KM "입고일 2영업일 뒤 입고 X · 재고 발주만 일단": BOH에 없는 업체(롯데칠성·주류·한성물산)의 FOH 품목은 계산·입고일 추정 없이 재고·발주 칸만 (it.plain)
       const bohVs = new Set(items.filter((r) => !r.fohSheet).map((r) => r.vendor)); items.forEach((r) => { if (r.fohSheet && !bohVs.has(r.vendor)) r.plain = true; }); // 발주 시트(master.order)에 없는 업체 = 재고·발주만 (BOH로 옮긴 한성물산 품목도)
     } else if (lastLedgerMonth) {
@@ -2553,7 +2553,7 @@
     // 품절 기록 (11/15 KM "2주안 기획들 실행해", 3번): 86 위험·검색한 품목·0을 센 품목·이미 기록한 품목에만 [품절 기록] → soldout.날짜 = {품목: "18:12"}.
     //  다시 누르면 지움. 품절 횟수를 재야 86 알림 효과("품절 −50%")를 볼 수 있음. 계산에는 아직 안 씀
     const soldMap = () => db["soldout." + TODAY] || {}, showSold = !preMode && (!!soldMap()[it.key] || !!rk86 || !!($("q") && $("q").value.trim()) || (counted(v) && num(v.s) === 0));
-    const top = `<div class="c-top"><span class="c-name" data-full="${esc(it.name)}" data-short="${esc(cardName(it))}">${esc(cardName(it))}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
+    const top = `<div class="c-top"><span class="c-name" data-full="${esc(it.name)}" data-short="${esc(cardName(it))}">${esc(cardName(it))}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}${it.nw ? `<span class="nwtag" title="MIS 주문등록에만 있던 품목 (11/20 추가)">NEW</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
     // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
       const d0 = pDay(), pc = preCalc(it, v, d0), w0 = pc.w, inc0 = incomingOf(it, d0); // 입고예정은 실제로 넣은 발주만
@@ -2879,7 +2879,7 @@
       const at = rest.findIndex((k) => !k.includes("\u0002") && (byV.get(k) || []).every((i) => i.foh)), ins = at < 0 ? rest.length : at;
       const nk = [...rest.slice(0, ins), ...sup, ...det, ...rest.slice(ins)], nb = new Map(nk.map((k) => [k, byV.get(k)])); byV.clear(); nb.forEach((v, k) => byV.set(k, v)); }
     // 11/20 KM(어사이드 전달) "발주시트도 순서대로 바꾸자": BOH 줄은 업체 안에서 MIS 주문등록 순서(품목명 "-" 빼고 가나다, 발주 탭 발주품목순과 같음). FOH 줄은 master.foh 순서 그대로
-    { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
+    { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? (a.xcode ? 0 : locOf(a) === "sup" ? 1 : 0) - (b.xcode ? 0 : locOf(b) === "sup" ? 1 : 0) || co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
@@ -2972,7 +2972,7 @@
     if (scope === "foh") { const LI = new Map(LOCS_FOH.map(([k], i) => [k, i])), mi = new Map(M.items.map((it, i) => [it, i]));
       groups.forEach((list) => list.sort((a, b) => (LI.get(locOf(a)) ?? 9) - (LI.get(locOf(b)) ?? 9) || roOf(a, mi.get(a)) - roOf(b, mi.get(b)) || mi.get(a) - mi.get(b))); let i = 0; fohOrd = new Map(); groups.forEach((list) => list.forEach((it) => fohOrd.set(it, i++))); }
     // 11/20 KM 승인(어사이드 전달) "발주 탭 발주품목순을 MIS 주문등록 순서에 맞춰": BOH 발주품목순은 업체 순서는 그대로, 업체 안은 MIS처럼 품목명 가나다순("-" 빼고 Intl.Collator ko, MIS 온세물류 176개와 같은 순서). BOH로 옮긴 품목도 섞임. 발주필요순·FOH 탭·발주시트는 그대로
-    if (scope !== "foh" && sortSel === "sheet") { const co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); groups.forEach((list) => list.sort((a, b) => co.compare(nk(a), nk(b)))); }
+    if (scope !== "foh" && sortSel === "sheet") { const co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""), sp = (it) => (locOf(it) === "sup" ? 1 : 0); groups.forEach((list) => list.sort((a, b) => sp(a) - sp(b) || co.compare(nk(a), nk(b)))); } // 11/20 KM "세제나 소모품은 아래로 빼야지": 업체 안에서 소모품(위치 = 소모품)은 맨 아래, 그 안도 가나다
     // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
     // 위치 버튼을 켰을 땐(선반 순서로 세는 중) 끌어올리지 않음 — 재고를 넣은 카드가 위로 튀면 순서가 흐트러짐
