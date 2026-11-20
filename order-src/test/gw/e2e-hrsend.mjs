@@ -104,7 +104,8 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
       if (ep === "init_prc") { S.init++; S.status[b.wk] = "EDIT"; return json({ returnCode: 0 }); }
       if (ep === "copy_prc") { S.copy = 1; return json({ returnCode: 0 }); }
     }
-    if (!S.login) return html(`<!doctype html><meta charset="utf-8"><body><input type="text" id="login_id"><input type="password"><button class="login_btn">로그인</button></body>`);
+    if (u.pathname === "/__login") { S.loginTry = (S.loginTry || 0) + 1; if (u.searchParams.get("id") === "hrid" && u.searchParams.get("pw") === "goodpw") S.login = true; return json({ ok: S.login }); } // (1.17.9) 자동 로그인 시험
+    if (!S.login) return html(`<!doctype html><meta charset="utf-8"><body><input type="text" id="login_id"><input type="password" id="pw"><button class="login_btn" onclick="fetch('/__login?id='+encodeURIComponent(login_id.value)+'&pw='+encodeURIComponent(pw.value)).then(()=>location.reload())">로그인</button></body>`);
     return html(hrPage());
   }
   if (host === "hr-board-teal.vercel.app") return html(boardPage);
@@ -235,7 +236,20 @@ x = await send({ mode: "saveOnly", employees: [emp("90000001", "다른사람"), 
 ok(x.res && x.res.ok && !S.week["90000001"] && S.week["90000003"] && S.week["90000003"].MON.code === "10" && (x.res.skipped || []).some((k) => k.empNo === "90000001" && /이름이 달라/.test(k.msg)) && (x.res.skipped || []).some((k) => k.empNo === "90000777" && /같은 이름은 HR 사번 90000002/.test(k.msg)) && !S.week["90000002"], "사번·이름이 둘 다 맞는 줄에만 넣음: 이름 다름 → 건너뜀 · 사번 틀림 → HR 사번 알려 줌 · 맞는 사람은 저장", brief(x));
 // 11) 로그인 풀림 · 같은 requestId
 reset({ login: false }); x = await send({ employees: all3() });
-ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0, "HR 로그인 화면 → 바로 멈춤(login)", brief(x));
+ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0 && !S.loginTry, "HR 로그인 화면 + 저장된 HR 아이디 없음 → 멈춤(login), 로그인 시도 안 함", brief(x));
+// 11b) (1.17.9, 11/20 KM "HR도 자동 로그인"): 저장된 HR 아이디·비밀번호가 있으면 스스로 로그인하고 이어서 저장 · 틀린 비밀번호면 멈춤(1시간 2번까지)
+await sw(() => chrome.storage.local.set({ hrId: "hrid", hrPw: "goodpw", hrTries: [] }));
+reset({ login: false }); x = await send({ employees: all3() });
+ok(x.res && x.res.ok && S.login && S.loginTry === 1 && S.saves.length >= 1, "로그인 풀림 → 저장된 HR 아이디로 로그인 → 이어서 저장", brief(x));
+const tr1 = await sw(() => chrome.storage.local.get(["hrTries", "logs"]));
+ok(!(tr1.hrTries || []).length && !JSON.stringify(tr1.logs || "").includes("goodpw"), "로그인 되면 시도 기록 지움 · 확장 기록에 비밀번호 없음");
+await sw(() => chrome.storage.local.set({ hrPw: "badpw", hrTries: [] }));
+reset({ login: false }); x = await send({ employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "login" && S.saves.length === 0 && S.loginTry === 1 && /비밀번호/.test(x.res.message), "틀린 비밀번호 → 한 번 시도하고 멈춤(login)", brief(x));
+reset({ login: false }); x = await send({ employees: all3() });
+reset({ login: false }); x = await send({ employees: all3() });
+ok(x.res && !x.res.ok && x.res.code === "login" && !S.loginTry && /2번 실패/.test(x.res.message), "1시간에 2번 실패하면 더 시도 안 함", brief(x));
+await sw(() => chrome.storage.local.set({ hrId: "", hrPw: "", hrTries: [] }));
 reset();
 const r1 = await send({ mode: "test", requestId: "same-1", employees: all3() }), saves1 = S.saves.length;
 const r2 = await send({ mode: "test", requestId: "same-1", employees: all3() }, 20000);

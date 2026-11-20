@@ -2,7 +2,7 @@
 //  보드(hr-board-teal.vercel.app)의 [전송] → hrsend-board.js → 여기(q "hrSend") → HR 탭에서 hrsStep을 한 단계씩 → 결과를 보드로
 //  순서(1.14.1, 11/17 KM: 업로드 안 씀 · 소속구분 안 고름): 검사 → HR 탭 → 주간스케쥴(시간) 소속구분 빈칸(전체) [검색] → 근태 코드 → 메인 표 행에 카드 입력(workType U) → [저장] 한 번 → 다시 읽어 확인
 //  mode: test(월요일 1일) · saveOnly(7일 저장까지) · full(+ 공지·확정). 상태 없는 주는 full이면 멈춤(allowInit일 때만 업로드 전에 초기화)
-//  안전: 요청 하나씩(requestId 잠금) · 로그인·망이 끊기면 바로 멈춤(자동 로그인 안 함) · 이미 확정된 주는 손대지 않음 · 개인정보(이름)는 기록에 남기지 않음
+//  안전: 요청 하나씩(requestId 잠금) · 망이 끊기면 바로 멈춤 · 로그인이 풀려 있으면 저장된 HR 아이디로 로그인(1.17.9, 1시간 2번까지) · 이미 확정된 주는 손대지 않음 · 개인정보(이름)는 기록에 남기지 않음
 //  bg.js의 get·put·log·VER를 씀 (bg.js가 importScripts로 불러옴)
 const HRS = { budget: 25 * 60e3, site: "5090", board: /^https:\/\/hr-board-teal\.vercel\.app\//, hr: /^https:\/\/hr\.pljec\.cloud\// };
 const hrsB64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
@@ -25,6 +25,38 @@ async function hrsTabReady(tabId, ms) { // 다 열릴 때까지. 오류 화면(�
   }
   const t = await chrome.tabs.get(tabId).catch(() => null);
   return t ? { tab: t, slow: true } : null;
+}
+// 1.17.9 (11/20 KM "HR 보드 전송·저장에서 HR도 자동으로 로그인하는 게 아니네"): HR 덤프(hr.js)처럼 확장 설정에 저장된 HR 아이디·비밀번호로 스스로 로그인.
+//  같은 시도 기록(hrTries)을 써서 1시간에 2번까지만(계정 잠김 방지). 비밀번호는 이 PC의 확장 저장소에서 HR 화면 칸으로만 넘어감(기록·보드로 안 보냄)
+const hrsNeedLogin = (pr) => pr.ok && (pr.login || (!pr.loggedIn && !pr.menu && !pr.screen));
+async function hrsLogin(tabId) {
+  const cfg = await chrome.storage.local.get(["hrId", "hrPw", "hrTries"]);
+  if (!cfg.hrId || !cfg.hrPw) return { ok: false, msg: "HR 로그인이 풀려 있어요 — 확장 설정에 HR 아이디·비밀번호가 없어 스스로 로그인 못 함 (설정에 넣거나 이 크롬에서 HR에 로그인한 뒤 다시)" };
+  const now = Date.now(), tries = (cfg.hrTries || []).filter((t) => now - t < 3600e3);
+  if (tries.length >= 2) return { ok: false, msg: "HR 로그인 2번 실패 · 1시간 쉬고 다시 (비밀번호 확인)" };
+  const fill = (id, pw) => {
+    const vis = (el) => !!el && el.offsetParent !== null && !el.disabled && el.getBoundingClientRect().width > 4;
+    const setV = (el, v) => { try { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, v); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) { el.value = v; } };
+    const p = [...document.querySelectorAll('input[type="password"]')].find(vis);
+    if (!p) { if (!/^\/main\/login/.test(location.pathname)) { location.href = "/main/login"; return "go"; } return "nopw"; }
+    const i = document.querySelector("#login_id") || [...document.querySelectorAll('input[type="text"], input[type="email"], input:not([type])')].filter((x) => vis(x) && (x.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING)).pop();
+    if (i) setV(i, id); setV(p, pw);
+    const b = document.querySelector("button.login_btn") || [...document.querySelectorAll('button, input[type="submit"], a')].find((x) => vis(x) && /로그인|login/i.test(x.textContent || x.value || ""));
+    setTimeout(() => { if (b) b.click(); else if (p.form) (p.form.requestSubmit ? p.form.requestSubmit() : p.form.submit()); }, 150);
+    return "sent";
+  };
+  const run = async () => { try { const r = await chrome.scripting.executeScript({ target: { tabId }, func: fill, args: [cfg.hrId, cfg.hrPw] }); return (r && r[0] && r[0].result) || "none"; } catch (e) { return "none"; } };
+  let r = await run();
+  if (r === "go") { await new Promise((ok) => setTimeout(ok, 800)); await hrsTabReady(tabId, 20e3); for (let k = 0; k < 20 && (r = await run()) === "nopw"; k++) await new Promise((ok) => setTimeout(ok, 300)); }
+  if (r !== "sent") return { ok: false, msg: "HR 로그인 화면에서 아이디·비밀번호 칸을 못 찾았어요 (이 크롬에서 HR에 로그인한 뒤 다시)" };
+  tries.push(now); await chrome.storage.local.set({ hrTries: tries });
+  await log("HR 전송: HR 로그인 시도 (저장된 HR 아이디)");
+  await new Promise((ok) => setTimeout(ok, 1500)); await hrsTabReady(tabId, 30e3);
+  let pr = { ok: false };
+  for (let k = 0; k < 60; k++) { pr = await hrsExec(tabId, "probe", {}, 15e3); if (pr.ok && (pr.menu || pr.screen || pr.loggedIn) && !pr.login) break; await new Promise((ok) => setTimeout(ok, 500)); }
+  if (!(pr.ok && (pr.menu || pr.screen || pr.loggedIn) && !pr.login)) return { ok: false, msg: "HR 자동 로그인 뒤에도 로그인 화면이에요 — 비밀번호를 확인해 주세요 (1시간에 2번까지만 시도)" };
+  await chrome.storage.local.set({ hrTries: [] }); // 됐으면 시도 기록 지움
+  return { ok: true, pr };
 }
 async function hrsRun(req, board, boardWin) {
   const id = String(req.requestId || "").slice(0, 80), startedAt = Date.now(), now = startedAt, trail = []; // (이름 주의: log는 bg.js의 기록 함수)
@@ -61,7 +93,7 @@ async function hrsRun(req, board, boardWin) {
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
     for (let k = 0; k < 150 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 60)); pr = await hrsExec(tabId, "probe", {}, 15e3); } // (1.17.6) 60ms 간격
     if (!pr.ok) { res = res0({ stage: "week", message: pr.message, code: pr.code || "inject" }); return; }
-    if (pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 전송해 주세요 (자동 로그인은 하지 않음)", code: "login" }); return; }
+    if (hrsNeedLogin(pr)) { await step("week", "HR 로그인이 풀려 있음 → 저장된 HR 아이디로 로그인"); const lg = await hrsLogin(tabId); if (!lg.ok) { res = res0({ stage: "week", message: lg.msg, code: "login" }); return; } pr = lg.pr; await step("week", "HR 로그인 됨"); }
     T.probe = Date.now() - startedAt;
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
@@ -172,7 +204,8 @@ async function hrsPublish(req, board, boardWin) {
     if (!rd || rd.err) { res = res0({ stage: "week", message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 확인", code: "network" }); return; }
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
     for (let k = 0; k < 150 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 60)); pr = await hrsExec(tabId, "probe", {}, 15e3); } // (1.17.6) 60ms 간격
-    if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
+    if (hrsNeedLogin(pr)) { const lg = await hrsLogin(tabId); if (!lg.ok) { res = res0({ stage: "week", message: lg.msg, code: "login" }); return; } pr = lg.pr; }
+    if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ stage: "week", message: pr.message || "HR 화면을 못 읽었어요", code: pr.code || "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ stage: "week", message: r.message, code: r.code }); return; }
     // 1) 전체(소속구분 빈칸) 한 번 [검색] → 메인 표 전원(BOH·FOH·STORE) 점검 (11/17 KM: 부서 따로 안 고름)
@@ -237,7 +270,8 @@ async function hrsRead(req, board, boardWin) {
     if (!rd || rd.err) { res = res0({ message: "HR(hr.pljec.cloud)에 접속이 안 돼요 — 회사망(SSL VPN) 확인", code: "network" }); return; }
     let pr = await hrsExec(tabId, "probe", {}, 15e3);
     for (let k = 0; k < 150 && pr.ok && !pr.login && !pr.menu && !pr.screen; k++) { await new Promise((r) => setTimeout(r, 60)); pr = await hrsExec(tabId, "probe", {}, 15e3); } // (1.17.6) 60ms 간격
-    if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ message: "HR 로그인이 풀려 있어요 — 이 크롬에서 HR에 로그인한 뒤 다시 (자동 로그인 안 함)", code: "login" }); return; }
+    if (hrsNeedLogin(pr)) { const lg = await hrsLogin(tabId); if (!lg.ok) { res = res0({ message: lg.msg, code: "login" }); return; } pr = lg.pr; }
+    if (!pr.ok || pr.login || (!pr.loggedIn && !pr.menu && !pr.screen)) { res = res0({ message: pr.message || "HR 화면을 못 읽었어요", code: pr.code || "login" }); return; }
     let r = await hrsExec(tabId, "open", {}, 50e3);
     if (!r.ok) { res = res0({ message: r.message, code: r.code }); return; }
     await hrsExec(tabId, "settle", { ms: 20e3 }, 30e3); // (1.17.2) 앞 저장·다시 불러오기가 끝난 뒤 검색
