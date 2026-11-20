@@ -2966,12 +2966,17 @@
       if (!groups.has(v)) groups.set(v, []);
       groups.get(v).push(it);
     });
+    // 11/20 KM "FOH는 발주품목순을 EXPO부터 쭉 위치 순서대로": FOH 탭은 업체 안에서 위치(EXPO → BAR → 워크인 → 프리저 → 소모품) → 위치 안 순서(ro) → master.foh 순서
+    let fohOrd = null;
+    if (scope === "foh") { const LI = new Map(LOCS_FOH.map(([k], i) => [k, i])), mi = new Map(M.items.map((it, i) => [it, i]));
+      groups.forEach((list) => list.sort((a, b) => (LI.get(locOf(a)) ?? 9) - (LI.get(locOf(b)) ?? 9) || roOf(a, mi.get(a)) - roOf(b, mi.get(b)) || mi.get(a) - mi.get(b))); let i = 0; fohOrd = new Map(); groups.forEach((list) => list.forEach((it) => fohOrd.set(it, i++))); }
     // 재고 넣은 품목 중 발주필요 → 부족·여유 → 발주완료 순으로 맨 위 "발주 필요"에 모음
     let top = [];
     // 위치 버튼을 켰을 땐(선반 순서로 세는 중) 끌어올리지 않음 — 재고를 넣은 카드가 위로 튀면 순서가 흐트러짐
     if (!locSel && sortSel === "need") groups.forEach((list, v) => { const keep = list.filter((it) => { const k = pinRank(it, win, inp[it.key]); if (k < 0) return true; top.push([k, it]); return false; }); if (keep.length) groups.set(v, keep); else groups.delete(v); });
     const nBuy = top.filter(([k]) => k === 0).length;
     const ord = new Map(M.items.map((it, i) => [it, i])); // 같은 순위 안에서는 발주 시트 순서
+    if (fohOrd) fohOrd.forEach((v, k) => ord.set(k, v)); // FOH: 위치 순서
     top = top.sort((a, b) => a[0] - b[0] || ord.get(a[1]) - ord.get(b[1]));
     const topRank = new Map(top.map(([k, it]) => [it, k]));
     top = top.map(([, it]) => it);
