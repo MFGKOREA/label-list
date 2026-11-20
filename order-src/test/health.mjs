@@ -192,7 +192,7 @@ const N = await open(null, "21:00");
 const nv = await N.p.evaluate(() => {
   const C = window.__orderCalc, M = C.model(), db = C.db(), inp = db["input." + C.TODAY] || {};
   const l = M.items.filter((i) => !i.ledgerOnly).map((it) => C.risk1(it, inp[it.key])).filter(Boolean);
-  return { night: C.nightNow(), n: l.length, today: l.filter((x) => /^오늘/.test(x.when)).length, past: l.filter((x) => x.at < 1).length, allNight: l.every((x) => x.night), head: ((document.querySelector("#orderList .risk86 .r-top b") || {}).textContent || ""), sub: ((document.querySelector("#orderList .risk86 .r-top span") || {}).textContent || ""), first: l.sort((a, b) => a.at - b.at).slice(0, 3).map((x) => x.when) };
+  return { night: C.nightNow(), n: l.length, today: l.filter((x) => /^오늘/.test(x.when)).length, past: l.filter((x) => x.at < 1).length, allNight: l.every((x) => x.night), head: ((document.querySelector("#riskBox .risk86 .r-top b") || {}).textContent || ""), sub: ((document.querySelector("#riskBox .risk86 .r-top span") || {}).textContent || ""), first: l.sort((a, b) => a.at - b.at).slice(0, 3).map((x) => x.when) };
 });
 ok(nv.night && nv.n > 0 && nv.today === 0 && nv.past === 0 && nv.allNight, `21:00: 86 ${nv.n}개 · "오늘" ${nv.today}개 · 지난 시각 ${nv.past}개 · 앞 3개 ${JSON.stringify(nv.first)}`);
 ok(nv.head === "내일 86 위험" && /내일 문 열 때/.test(nv.sub), `제목 "${nv.head}" · "${nv.sub}"`);
