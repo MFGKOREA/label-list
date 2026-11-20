@@ -2038,8 +2038,8 @@
       b.__live = st; b.__txt = text || "";
       b.innerHTML = `<span class="lb-trk"><span class="lb-fil"></span></span><span class="lb-txt"><i class="lb-sp" aria-hidden="true"></i><b class="lb-pc"></b>${esc(text || "")}</span>`;
     }
-    if (hasPct) { const v = Math.max(0, Math.min(100, Math.round(pct))); b.querySelector(".lb-fil").style.width = v + "%"; b.querySelector(".lb-pc").textContent = v + "%"; b.setAttribute("aria-valuenow", v); }
-    else { const f = b.querySelector(".lb-fil"); if (f) f.style.width = ""; const pc = b.querySelector(".lb-pc"); if (pc) pc.textContent = ""; b.removeAttribute("aria-valuenow"); }
+    if (hasPct) { const v = Math.max(0, Math.min(100, Math.round(pct))); b.querySelector(".lb-fil").style.setProperty("--p", v / 100); b.setAttribute("aria-valuemin", 0); b.setAttribute("aria-valuemax", 100); b.querySelector(".lb-pc").textContent = v + "%"; b.setAttribute("aria-valuenow", v); }
+    else { const f = b.querySelector(".lb-fil"); if (f) f.style.removeProperty("--p"); const pc = b.querySelector(".lb-pc"); if (pc) pc.textContent = ""; b.removeAttribute("aria-valuenow"); }
     clearTimeout(b.__t);
     if (st === "ok" || st === "bad") b.__t = setTimeout(() => { if (!b.isConnected) return; b.classList.add("gone"); b.__t = setTimeout(() => b.remove(), LB.gone); }, LB.dwell[st]);
   }
@@ -3304,6 +3304,25 @@
   };
   const salesWant = {}; // 이 기기에서 누른 버튼 (kind → 누른 시각): 덧붙인 요청이 처리 안 된 채 끝나면 따로 다시 보냄
   const salesReq = (K) => { const to = addDays(TODAY, -1); return K === "menu" ? { from: addDays(TODAY, -28), to } : { from: mondayOf(to), to }; };
+  // Gross·메뉴 불러오기 진행률 (11/20 KM "모든 로딩바를 0~100%"): 누름 5 → 시트에 들어감 12 (PC 꺼져 기다림 8) → 앞 작업 기다림 15 → PC가 읽기 시작 30
+  //  → 날짜를 읽는 중이면 "n/N일"로 30 + 65×n/N (메뉴 판매·세트), Gross는 한 화면이라 60 → 끝나면 100. 같은 요청 안에서는 뒤로 안 감
+  const salesPctMax = {};
+  function salesPct(K, lbSt, s) {
+    if (lbSt === "ok") return 100;
+    if (lbSt === "bad") return null;
+    const p = db.salesPush || {}, id = K + ":" + (p.id || "press"), m = salesPctMax[K] && salesPctMax[K].id === id ? salesPctMax[K] : (salesPctMax[K] = { id, v: 0 });
+    let v = 5;
+    if (lbSt === "wait") v = 8;
+    else if (/pending|running/.test(p.status || "")) {
+      const t = String((s && s.text) || "");
+      v = /앞 작업/.test(t) ? 15 : p.status === "pending" ? 12 : 30;
+      if (p.status === "running" && (p.cur || spKind(p)) === K) {
+        const n = /(\d+)\s*\/\s*(\d+)\s*일/.exec(String(p.prog || ""));
+        if (n && +n[2] > 0) v = 30 + 65 * Math.min(1, +n[1] / +n[2]); else if (K === "gross") v = Math.max(v, 60);
+      }
+    }
+    m.v = Math.max(m.v, v); return m.v;
+  }
   function salesState(K) {
     const p = db.salesPush; if (!p) return { st: "idle" };
     const part = (p.parts || {})[K], mine = spKind(p) === K, queued = !!(p.also || {})[K];
@@ -3411,7 +3430,7 @@
     const busy = lbSt === "run" || lbSt === "wait";
     // 로딩바를 그리고, 도는·기다리는 동안은 1초마다 다시 그림 — 시간이 지나 "응답 없음"으로 바뀌는 것을 바로 보여 주려고
     const paint = () => {
-      lbar(el, "sales:" + K, lbSt, lbText);
+      lbar(el, "sales:" + K, lbSt, lbText, salesPct(K, lbSt, s));
       clearTimeout(el.__soon);
       if (busy) el.__soon = setTimeout(() => { if (!$("v-forecast").hidden && !document.hidden) renderSalesBar(K); }, 1000);
     };

@@ -1032,3 +1032,10 @@ details.adv[open] > summary::after { transform: translateY(2px) rotate(-135deg);
 .mdlg .a2-btns:not(:has([data-act="install"]:not([hidden]))) { grid-template-columns: 1fr; }
 .mdlg form:focus { outline: none; }
 .search.search-low { margin: -4px 0 10px; }
+/* 모든 로딩바 0~100% (11/20 KM, ui-ux-pro-max: 진행 단계 표시 · 너비 대신 transform 애니메이션 · 움직임 줄이기 설정 존중) */
+.misbar .lbar.pct .lb-fil { left: 0; width: 100% !important; transform-origin: left center; transform: scaleX(var(--p, 0)); transition: transform .7s cubic-bezier(.22, 1, .36, 1); overflow: hidden; }
+.misbar .lbar.pct .lb-fil::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .55) 50%, transparent 100%); transform: translateX(-100%); animation: lbShine 1.6s ease-in-out infinite; }
+.misbar .lbar.pct[data-live="ok"] .lb-fil::after, .misbar .lbar.pct[data-live="bad"] .lb-fil::after { animation: none; opacity: 0; }
+.misbar .lbar.pct .lb-trk { height: 6px; }
+@keyframes lbShine { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .misbar .lbar.pct .lb-fil { transition: none; } .misbar .lbar.pct .lb-fil::after { animation: none; } }
