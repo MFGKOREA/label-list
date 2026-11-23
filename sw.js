@@ -1,6 +1,6 @@
 // 한글표시사항 리스트: 앱 화면을 휴대폰에 저장해 두고 바로 띄움 (열 때마다 뒤에서 새 버전 받아 둠)
 // 같은 저장소의 다른 페이지(order.html 등)와 구글 요청은 건드리지 않음
-const CACHE = "label-list-shell-v8";
+const CACHE = "label-list-shell-v9"; // 화면(index.html)·스크립트를 고칠 때마다 이 이름을 올린다. 안 올리면 휴대폰이 예전 화면을 계속 연다(v8 → v9: 사진 인식 패치)
 const BASE = new URL("./", self.location).pathname; // /label-list/
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -17,6 +17,8 @@ self.addEventListener("fetch", (e) => {
   if (url.origin !== self.location.origin) return;
   const isApp = req.mode === "navigate" && (url.pathname === BASE || url.pathname === BASE + "index.html");
   const isIcon = url.pathname.startsWith(BASE + "icons/label-");
+  // 스크립트는 주소의 ?v= 를 뺀 경로로 기억한다(photo-prep.js?v=2 도 photo-prep.js).
+  // 그래서 ?v= 만 올려서는 예전 사본이 계속 나올 수 있다 → 바꿀 때는 위 CACHE 이름도 같이 올린다.
   const isScript = url.pathname === BASE + "trace-nos.js" || url.pathname === BASE + "ocr-preprocess.js" || url.pathname === BASE + "barcode-decoder.js" || url.pathname === BASE + "photo-prep.js";
   if (!isApp && !isIcon && !isScript) return;
   const key = isApp ? BASE : url.pathname;
