@@ -1376,7 +1376,7 @@ li.expired .name { text-decoration: none; }
       if (String(alt || "").trim() && (r2.found || !String(text || "").trim())) { text = alt; r = r2; prepped = true; }
     }
     d = { ...d, text, ocrError: text.trim() ? "" : d.ocrError };
-    formOcr = { text: d.text || "", color };
+    formOcr = { text: d.text || "", color, suggest: d.suggest || [] };
     await Promise.race([loadCatalog(), new Promise((z) => setTimeout(z, 1500))]); // 이름 목록이 늦으면 기다리지 않음
     if (!live()) return;
     suggestNames(d.text || "", d.suggest || []);
@@ -1492,30 +1492,61 @@ li.expired .name { text-decoration: none; }
   let catalog = null;
   let catLoading = null;
   function loadCatalog() { return catLoading || (catLoading = loadCatalog_()); }
+  function asItemList(d) {
+    if (Array.isArray(d)) return d;
+    if (d && Array.isArray(d.items)) return d.items;
+    return null;
+  }
+  function fillNameList() {
+    const names = new Set(items.map((x) => x.name).filter(Boolean));
+    if (catalog) Object.values(catalog).forEach((v) => { if (v && v.name) names.add(v.name); });
+    $("nameList").innerHTML = [...names].sort((a, b) => a.localeCompare(b, "ko")).map((n) => `<option value="${esc(n).replace(/"/g, "&quot;")}"></option>`).join("");
+  }
   async function loadCatalog_() {
-    const CK = "label-list-catalog-v2";
-    try { const c = JSON.parse(localStorage.getItem(CK)); if (c && Date.now() - c.at < 6 * 3600e3) { catalog = c.map; return; } } catch {}
+    const CK = "label-list-catalog-v3"; // v2 는 실패한 빈 목록도 6시간 저장해서 다른 매장이 안 나왔음
+    try {
+      const c = JSON.parse(localStorage.getItem(CK));
+      if (c && c.map && Object.keys(c.map).length && Date.now() - c.at < 6 * 3600e3) { catalog = c.map; fillNameList(); catHint(); return; }
+    } catch {}
     const map = {};
     const addStore = (list) => {
       const seen = {};
       (Array.isArray(list) ? list : []).forEach((x) => {
-        if (!x.name || x.id === NOTICE_ID || x.mode === "note") return;
+        if (!x || !x.name || x.id === NOTICE_ID || x.mode === "note") return;
         const k = ckey(x.name), combo = x.num + x.unit;
-        map[k] = map[k] || { name: x.name, combos: {} }; // 이름은 모두 (사진 글자 속 품목 찾기용)
+        map[k] = map[k] || { name: x.name, combos: {} }; // 이름은 모두 (사진 글자 속 품목 찾기·자동완성)
         if (x.mode !== "period" || !(x.num > 0) || seen[k + combo]) return; seen[k + combo] = 1;
         map[k].combos[combo] = (map[k].combos[combo] || 0) + 1;
       });
     };
-    const jobs = [fetch(HUB + "?api=1&catalog=1&t=" + Date.now()).then((r) => r.json()).then((d) => {
-      if (!d || Array.isArray(d) || d.error) return;
-      Object.entries(d).forEach(([k, v]) => { const m = (map[k] = map[k] || { name: v.name, combos: {} }); Object.entries(v.combos || {}).forEach(([c, n]) => { m.combos[c] = (m.combos[c] || 0) + n; }); });
-    })];
-    Object.entries(STORES).filter(([, v]) => v.api && v.api !== HUB).forEach(([k, v]) => jobs.push(
-      fetch(v.api + "?api=1&store=" + k + "&t=" + Date.now()).then((r) => r.json()).then(addStore)));
+    const pullStore = (k, api) => fetch(api + "?api=1&store=" + encodeURIComponent(k) + "&t=" + Date.now()).then((r) => r.json()).then((d) => addStore(asItemList(d))).catch(() => {});
+    let hubOk = false;
+    try {
+      const d = await (await fetch(HUB + "?api=1&catalog=1&t=" + Date.now())).json();
+      if (d && !Array.isArray(d) && !d.error && !d.items) {
+        hubOk = true;
+        Object.entries(d).forEach(([k, v]) => {
+          if (!v || typeof v !== "object" || !v.name) return;
+          const m = (map[k] = map[k] || { name: v.name, combos: {} });
+          if (!m.name) m.name = v.name;
+          Object.entries(v.combos || {}).forEach(([c, n]) => { m.combos[c] = (m.combos[c] || 0) + (Number(n) || 0); });
+        });
+      }
+    } catch {}
+    const jobs = [];
+    // 매장모음 한 방 조회가 없으면(구버전 스크립트·오류) 매장마다 목록을 받는다. 전용 주소 매장은 항상 따로.
+    Object.entries(STORES).forEach(([k, v]) => {
+      if (!v.api) return;
+      if (v.api === HUB && hubOk) return;
+      jobs.push(pullStore(k, v.api));
+    });
     await Promise.allSettled(jobs);
+    if (!Object.keys(map).length) { catLoading = null; return; } // 빈 결과는 저장하지 않음. 다음에 다시 받음
     catalog = map;
     try { localStorage.setItem(CK, JSON.stringify({ at: Date.now(), map })); } catch {}
+    fillNameList();
     catHint();
+    if (formOcr && formOcr.text) suggestNames(formOcr.text, formOcr.suggest || []);
   }
   function catFind() {
     const k = ckey($("fName").value);
@@ -1636,7 +1667,7 @@ li.expired .name { text-decoration: none; }
     const go = () => scrollTo({ top: $("form").getBoundingClientRect().top + scrollY - 12, behavior: "smooth" });
     go(); setTimeout(go, 350);
   }
-  $("addOpen").onclick = () => { openForm(true); if (!photoReady) $("fName").focus({ preventScroll: true }); formToTop(); }; // 사진 기능이 있으면 키보드 대신 사진 버튼부터 보이게
+  $("addOpen").onclick = () => { openForm(true); loadCatalog(); if (!photoReady) $("fName").focus({ preventScroll: true }); formToTop(); }; // 사진 기능이 있으면 키보드 대신 사진 버튼부터 보이게. 다른 매장 이름은 여기서 받음
   // 닫기·취소: 수정 중이었으면 그 줄로 돌아감
   function closeForm() { const id = editId; discardFormPhoto(); resetForm(); openForm(false); if (id) backToRow(id); }
   $("formClose").onclick = closeForm;
@@ -1725,9 +1756,7 @@ li.expired .name { text-decoration: none; }
         !needAll ? `<button type="button" class="c more-c" data-need="1" aria-expanded="false"><span class="nm">외 ${need.length - needVis.length}개</span><b>더 보기</b></button>`
         : need.length > NEED_MAX ? `<button type="button" class="c more-c" data-need="1" aria-expanded="true"><span class="nm">접기</span><b>↑</b></button>` : ""}</div>`
       : `<span class="none">교체가 필요한 품목이 없습니다</span>`);
-    // 자동완성 목록
-    const names = [...new Set(items.map((x) => x.name))].sort((a, b) => a.localeCompare(b, "ko"));
-    $("nameList").innerHTML = names.map((n) => `<option value="${esc(n).replace(/"/g, "&quot;")}"></option>`).join("");
+    fillNameList(); // 이 매장 이름 + 다른 매장에서 쓰던 이름
 
     const q = $("q").value.trim().toLowerCase();
     const shown = q ? rows.filter((r) => (r.it.name + " " + (r.it.memo || "")).toLowerCase().includes(q)) : rows;
