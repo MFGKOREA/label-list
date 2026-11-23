@@ -1098,6 +1098,22 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 #v-loc .nav { margin-left: -4px; }
 #orderBanner { margin-bottom: 14px; }
 .chips#sorts { margin: -10px 0 14px; }
+/* 발주 필터: 부서·업체·위치·정렬이 같은 라벨 칸, 같은 칩 높이·모서리·간격. 2개 칩은 4칸 중 2칸씩, 4개는 한 칸씩이라 세로 선이 맞음. 5개 이상은 한 줄 가로 스크롤. */
+#pOrder .filters { display: grid; gap: 6px; margin: 0 0 12px; }
+#pOrder .frow { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; align-items: center; min-width: 0; }
+#pOrder .flab { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: -0.03em; line-height: 1; }
+#pOrder .frow > .chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: row; grid-auto-columns: auto; gap: 6px; margin: 0; min-width: 0; overflow: visible; }
+#pOrder .frow > .chips::before { content: none; }
+#pOrder .frow > .chips button { width: auto; min-height: 44px; min-width: 0; margin: 0; padding: 4px 4px 3px; border-radius: 12px; font-size: 14px; font-weight: 700; line-height: 1.05; text-align: center; white-space: nowrap; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: var(--surface); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+#pOrder .frow > .chips button .cnt { margin-left: 0; font-size: 11px; font-weight: 600; opacity: .72; line-height: 1; }
+#pOrder .frow > .chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: none; font-weight: 800; }
+#pOrder .frow > .chips button[aria-pressed="true"] .cnt { opacity: .9; }
+#pOrder .frow > .chips > button:first-child:nth-last-child(2),
+#pOrder .frow > .chips > button:first-child:nth-last-child(2) ~ button { grid-column: span 2; }
+#pOrder .frow > .chips:has(> button:nth-child(3):last-child) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#pOrder .frow > .chips:has(> button:nth-child(5)) { display: flex; overflow-x: auto; scrollbar-width: none; }
+#pOrder .frow > .chips:has(> button:nth-child(5))::-webkit-scrollbar { display: none; }
+#pOrder .frow > .chips:has(> button:nth-child(5)) > button { flex: 1 0 72px; grid-column: auto; }
 .catgrid { margin-bottom: 14px; }
 .tiles .misbar.mistile { padding: 12px 10px 10px 11px; } /* Forecast 카드와 글자 시작(왼쪽 11px)·제목 높이 맞춤 */
 .chips#sorts button { min-height: 40px; } /* 업체·위치 칩과 같은 높이 */
@@ -1151,10 +1167,12 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       <div class="banner" id="orderBanner"></div>
 
       <div id="bohList">
-      <div class="chips deptchips" id="depts" role="group" aria-label="부서"></div>
-      <div class="chips" id="cats" role="group" aria-label="업체"></div>
-      <div class="chips locchips" id="locs" role="group" aria-label="보관 위치"></div>
-      <div class="chips" id="sorts" role="group" aria-label="정렬"><button type="button" data-s="sheet" aria-pressed="false">발주품목순</button><button type="button" data-s="need" aria-pressed="true">발주필요순</button></div>
+      <div class="filters">
+        <div class="frow"><span class="flab">부서</span><div class="chips" id="depts" role="group" aria-label="부서"></div></div>
+        <div class="frow"><span class="flab">업체</span><div class="chips" id="cats" role="group" aria-label="업체"></div></div>
+        <div class="frow"><span class="flab">위치</span><div class="chips" id="locs" role="group" aria-label="보관 위치"></div></div>
+        <div class="frow"><span class="flab">정렬</span><div class="chips" id="sorts" role="group" aria-label="정렬"><button type="button" data-s="sheet" aria-pressed="false">발주품목순</button><button type="button" data-s="need" aria-pressed="true">발주필요순</button></div></div>
+      </div>
 
       <!-- 11/19 KM "검색창이 품목 바로 위로": 업체·위치·정렬 칩 아래, 목록 바로 위 -->
       <div id="riskBox"></div>
