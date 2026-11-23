@@ -21,14 +21,26 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 function mergeGs(cur, patch) {
   const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
   const out = isObj(cur) ? Object.assign({}, cur) : {};
-  Object.keys(patch).forEach((k) => {
+  const atCur = isObj(out._at) ? Object.assign({}, out._at) : {};
+  const atNew = isObj(patch && patch._at) ? patch._at : null;
+  Object.keys(patch || {}).forEach((k) => {
+    if (k === "_at") return;
     const v = patch[k];
+    if (atNew && atNew[k] != null && atCur[k] != null && atNew[k] < atCur[k]) return;
     if (v === null) delete out[k];
     else if (isObj(v) && isObj(out[k])) out[k] = mergeGs(out[k], v);
     else out[k] = v;
+    if (atNew && atNew[k] != null) atCur[k] = atNew[k];
   });
+  if (Object.keys(atCur).length) out._at = atCur; else delete out._at;
   return out;
 }
+const devA = { "양파": { loc: "walk", _at: { loc: 200 } }, "콜라": { loc: "bar", hide: 1, _at: { loc: 100, hide: 100 } } };
+const devB = { "양파": { ro: 3, _at: { ro: 150 } }, "콜라": { loc: "frz", _at: { loc: 50 } } };
+const both = mergeGs(mergeGs({}, devA), devB);
+ok("다른 품목·다른 칸은 둘 다 남음", both["양파"].loc === "walk" && both["양파"].ro === 3 && both["콜라"].hide === 1, JSON.stringify(both));
+ok("같은 칸은 나중 시각만 이김", both["콜라"].loc === "bar");
+ok("시각 없는 옛 값은 그대로 덮임", mergeGs({ weekendPlus: 25 }, { weekendPlus: 30 }).weekendPlus === 30);
 // 로스 중앙값. app.js lossOf와 같은 규칙: 1/3~3배만, 홀수면 가운데, 짝수면 가운데 둘 평균, 없으면 1.
 function lossMedian(ratios) {
   const rs = ratios.filter((x) => x && x > 1 / 3 && x < 3).sort((a, b) => a - b);
@@ -138,6 +150,9 @@ const r = await page.evaluate(() => {
   out.leftClose = C.leftOf(15, "2026-11-23");
   out.hourMid = C.hourCum("2026-11-23", 15.5);
   out.merge = C.mergeObj({ a: 1, nest: { x: 1, y: 2 }, gone: 3 }, { a: null, nest: { y: 9 }, add: [1, 2] });
+  const a = { "양파": { loc: "walk", _at: { loc: 200 } }, "콜라": { loc: "bar", hide: 1, _at: { loc: 100, hide: 100 } } };
+  const b = { "양파": { ro: 3, _at: { ro: 150 } }, "콜라": { loc: "frz", _at: { loc: 50 } } };
+  out.lww = C.mergeObj(C.mergeObj({}, a), b);
   out.errs = 0;
   return out;
 });
@@ -205,6 +220,7 @@ ok("14:30은 마감 시각이라 남은 비율 1, 15시는 그보다 작음", r.
 ok("시간대 비율 없으면 10:30~20:30 비례", near(r.hourMid, (15.5 - 10.5) / (20.5 - 10.5)));
 ok("merge 중첩·null·배열", JSON.stringify(r.merge) === JSON.stringify({ nest: { x: 1, y: 9 }, gone: 3, add: [1, 2] }), JSON.stringify(r.merge));
 ok("merge가 Apps Script와 같음", JSON.stringify(r.merge) === JSON.stringify(mergeGs({ a: 1, nest: { x: 1, y: 2 }, gone: 3 }, { a: null, nest: { y: 9 }, add: [1, 2] })));
+ok("두 기기 같은 칸은 앱도 나중 시각", r.lww && r.lww["콜라"].loc === "bar" && r.lww["양파"].ro === 3 && r.lww["콜라"].hide === 1, JSON.stringify(r.lww));
 
 console.log(`단위 시험 통과 ${pass} · 실패 ${fail}`);
 if (bad.length) console.log(bad.join("\n"));

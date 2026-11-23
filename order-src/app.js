@@ -74,21 +74,44 @@
     });
     return out;
   }
+  // 칸마다 _at 시각이 있으면 더 나중 것만 이긴다. 시각이 없는 옛 값은 그대로 덮어쓴다.
   function mergeObj(cur, patch) {
     const out = isObj(cur) ? { ...cur } : {};
-    Object.keys(patch).forEach((k) => { const v = patch[k]; if (v === null) delete out[k]; else if (isObj(v) && isObj(out[k])) out[k] = mergeObj(out[k], v); else out[k] = v; });
+    const atCur = isObj(out._at) ? { ...out._at } : {};
+    const atNew = isObj(patch && patch._at) ? patch._at : null;
+    Object.keys(patch || {}).forEach((k) => {
+      if (k === "_at") return;
+      const v = patch[k];
+      if (atNew && atNew[k] != null && atCur[k] != null && atNew[k] < atCur[k]) return;
+      if (v === null) delete out[k];
+      else if (isObj(v) && isObj(out[k])) out[k] = mergeObj(out[k], v);
+      else out[k] = v;
+      if (atNew && atNew[k] != null) atCur[k] = atNew[k];
+    });
+    if (Object.keys(atCur).length) out._at = atCur; else delete out._at;
     return out;
+  }
+  function stampPatch(node, t) {
+    if (!isObj(node)) return;
+    const at = isObj(node._at) ? { ...node._at } : {};
+    Object.keys(node).forEach((k) => {
+      if (k === "_at") return;
+      if (isObj(node[k])) stampPatch(node[k], t);
+      else if (at[k] == null) at[k] = t;
+    });
+    if (Object.keys(at).length) node._at = at;
   }
   let syncBase = {}, noMerge = false;
   const baseOf = (k) => (k in pend.base ? pend.base[k] : syncBase[k]);
   // 한 키를 시트로: 기준이 있는 객체면 바뀐 칸만(merge), 아니면 통째로(set). 옛 Apps Script면 set으로
   async function pushKey(key) {
     // 기준이 없으면(시트에 아직 없는 새 날짜 키 등) 빈 객체 기준 = 이 기기 칸만 얹음 (시트에 있는 다른 칸은 안 건드림)
-    const value = clone(db[key] ?? null), base = isObj(baseOf(key)) ? baseOf(key) : {};
+    const value = clone(db[key] ?? null), hadBase = isObj(baseOf(key)), base = hadBase ? baseOf(key) : {};
     let data;
     if (!noMerge && isObj(value)) {
       const patch = diffObj(base, value);
       if (!Object.keys(patch).length) return;
+      if (hadBase) stampPatch(patch, Date.now());
       try { data = await apiCall({ action: "merge", key, patch }); }
       catch (e) { if (!/알 수 없는 요청/.test(e.message)) throw e; noMerge = true; }
     }
@@ -2905,27 +2928,40 @@
   // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
   const saveLoc = (k, patch) => {
     const cur = { ...((db.itemCfg || {})[k] || {}) };
-    Object.keys(patch).forEach((p) => { if (patch[p] == null) delete cur[p]; else cur[p] = patch[p]; });
+    const at = { ...(cur._at || {}) }, now = Date.now();
+    Object.keys(patch).forEach((p) => {
+      if (p === "_at") return;
+      if (patch[p] == null) delete cur[p]; else cur[p] = patch[p];
+      at[p] = now;
+    });
+    cur._at = at;
     db.itemCfg = { ...(db.itemCfg || {}), [k]: cur };
     invalidate();
     clearTimeout(locSaveT); locSaveT = setTimeout(() => setKey("itemCfg", db.itemCfg), 600);
   };
+  const locHit = (it, q) => {
+    if (CHO_Q.test(q)) return choOf(it.name).includes(q.replace(/\s+/g, ""));
+    return it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)));
+  };
   function renderLocEdit() {
-    const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh), idx = new Map(all.map((it, i) => [it.key, i]));
-    const LS = locFoh ? LOCS_FOH : LOCS; if (locTab !== "hide" && !LS.some(([k]) => k === locTab)) locTab = "dry";
-    const shown = all.filter((i) => !i.hidden), hidden = all.filter((i) => i.hidden);
+    const M = model(), scoped = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh), idx = new Map(M.items.map((it, i) => [it.key, i]));
+    const q = ($("locQ") && $("locQ").value || "").trim().toLowerCase();
+    const LS0 = locFoh ? LOCS_FOH : LOCS; if (locTab !== "hide" && !LS0.some(([k]) => k === locTab)) locTab = "dry";
+    const shown = scoped.filter((i) => !i.hidden), hidden = scoped.filter((i) => i.hidden);
     $("locScope").innerHTML = [["boh", "BOH"], ["foh", "FOH"]].map(([k, t]) => `<button type="button" data-s="${k}" aria-pressed="${(k === "foh") === locFoh}">${t}<span class="cnt">${M.items.filter((i) => !i.ledgerOnly && !i.hidden && !!i.foh === (k === "foh")).length}</span></button>`).join("");
-    $("v-loc").classList.toggle("n5", LS.length > 4);
-    $("locTabs").innerHTML = LS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${shown.filter((i) => locOf(i) === k).length}</span></button>`).join("");
-    const hb = $("locHide"); if (hb) { hb.setAttribute("aria-pressed", locTab === "hide"); hb.textContent = `숨긴 품목 ${hidden.length}`; }
-    const list = (locTab === "hide" ? hidden : shown.filter((i) => locOf(i) === locTab)).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
+    $("v-loc").classList.toggle("n5", LS0.length > 4);
+    $("locTabs").innerHTML = LS0.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${!q && locTab === k}">${t}<span class="cnt">${shown.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+    const hb = $("locHide"); if (hb) { hb.setAttribute("aria-pressed", !q && locTab === "hide"); hb.textContent = `숨긴 품목 ${hidden.length}`; }
+    const pool = q ? M.items.filter((i) => !i.ledgerOnly && locHit(i, q)) : (locTab === "hide" ? hidden : shown.filter((i) => locOf(i) === locTab));
+    const list = pool.sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
     const box = $("locList");
-    box.innerHTML = list.map((it) => { const c = (db.itemCfg || {})[it.key] || {}, L = locOf(it);
+    box.innerHTML = list.map((it) => { const c = (db.itemCfg || {})[it.key] || {}, L = locOf(it), LS = it.foh ? LOCS_FOH : LOCS;
+      const where = (it.foh ? "FOH" : "BOH") + " · " + ((LS.find(([k]) => k === L) || [, L])[1]);
       const tools = it.hidden
         ? `<button type="button" class="lbtn" data-show>다시 보이기</button>`
-        : `<button type="button" class="lbtn" data-mv="-1" aria-label="${esc(it.name)} 위로">위로</button><button type="button" class="lbtn" data-mv="1" aria-label="${esc(it.name)} 아래로">아래로</button><button type="button" class="lbtn" data-hide>숨김</button><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span>`;
-      return `<div class="cell lrow${it.hidden ? " is-hide" : ""}" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${it.hidden ? " · 숨김" : c.loc ? "" : " · <b>추정</b>"}</small></span><button type="button" class="sidebtn" data-side>${it.foh ? "BOH로" : "FOH로"}</button><div class="ltools">${tools}</div></div>`;
-    }).join("") || `<div class="empty">${locTab === "hide" ? "숨긴 품목이 없어요" : "이 위치 품목이 없어요"}</div>`;
+        : `${q ? "" : `<button type="button" class="lbtn" data-mv="-1" aria-label="${esc(it.name)} 위로">위로</button><button type="button" class="lbtn" data-mv="1" aria-label="${esc(it.name)} 아래로">아래로</button>`}<button type="button" class="lbtn" data-hide>숨김</button><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span>`;
+      return `<div class="cell lrow${it.hidden ? " is-hide" : ""}" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${q ? " · " + where : ""}${it.hidden ? " · 숨김" : c.loc ? "" : " · <b>추정</b>"}</small></span><button type="button" class="sidebtn" data-side>${it.foh ? "BOH로" : "FOH로"}</button><div class="ltools">${tools}</div></div>`;
+    }).join("") || `<div class="empty">${q ? "찾는 품목이 없어요" : locTab === "hide" ? "숨긴 품목이 없어요" : "이 위치 품목이 없어요"}</div>`;
     locSumUpdate();
   }
   // ---------- BOH 수원컨벤션점 발주시트 (11/16 KM) ----------
@@ -3152,7 +3188,8 @@
 
   $("cats").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; cat = cat === b.dataset.c ? null : b.dataset.c; $("q").value = ""; renderList(); });
   $("q").addEventListener("input", renderList);
-  $("locScope").addEventListener("click", (e) => { const b = e.target.closest("button[data-s]"); if (!b) return; locFoh = b.dataset.s === "foh"; locTab = "dry"; renderLocEdit(); });
+  $("locScope").addEventListener("click", (e) => { const b = e.target.closest("button[data-s]"); if (!b) return; locFoh = b.dataset.s === "foh"; locTab = "dry"; if ($("locQ")) $("locQ").value = ""; renderLocEdit(); });
+  $("locQ").addEventListener("input", renderLocEdit);
   $("locTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; locTab = b.dataset.t; renderLocEdit(); });
   $("locHide").addEventListener("click", () => { locTab = locTab === "hide" ? "dry" : "hide"; renderLocEdit(); });
   $("locList").addEventListener("click", (e) => {
@@ -3181,6 +3218,7 @@
   });
   // 손잡이로 끌어 옮기기 (손가락·마우스 같이). 끄는 동안 행이 손을 따라가고, 놓으면 그 자리에 저장
   $("locList").addEventListener("pointerdown", (e) => {
+    if (($("locQ").value || "").trim()) return;
     const h = e.target.closest(".grip"); if (!h) return;
     e.preventDefault();
     const row = h.closest(".lrow"), box = $("locList"), y0 = e.clientY, top0 = row.offsetTop;

@@ -725,6 +725,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .locentry b { font-size: 16px; font-weight: 700; }
 .locentry small { font-size: 12px; color: var(--muted); }
 .locentry .chev { color: var(--muted); }
+#locQ { width: 100%; min-height: 44px; margin: 0 0 8px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--fill); color: var(--fg); font-size: 16px; }
 #locTabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 8px; }
 #locTabs button { width: 100%; min-height: 40px; text-align: center; }
 .lochint { margin: 0 4px 10px; font-size: 12px; color: var(--muted); }
