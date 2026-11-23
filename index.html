@@ -415,6 +415,19 @@ li.expired .name { text-decoration: none; }
 .note { font-size: 12px; color: var(--muted); text-align: center; }
 .packsec { display: grid; gap: 10px; margin-top: 6px; }
 .pack-sub { margin: -4px 2px 0; font-size: 13px; color: var(--muted); }
+.peersec { display: grid; gap: 8px; margin-top: 8px; }
+.peer-open { width: 100%; min-height: 48px; font: inherit; font-size: 16px; font-weight: 800; text-align: left; border: 0; border-radius: 16px; padding: 14px 16px; background: var(--surface); color: var(--fg); cursor: pointer; }
+.peer-open[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--fg); }
+#peerQ { font: inherit; font-size: 16px; border: 0; background: var(--surface); border-radius: 14px; padding: 13px 16px; width: 100%; color: var(--fg); }
+#peerList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.peer-li { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 14px; padding: 12px 12px 12px 14px; }
+.peer-li .txt { min-width: 0; flex: 1; }
+.peer-li .name { font-weight: 800; font-size: 15px; }
+.peer-tag { display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 800; color: #3f7a62; background: #e6f1ec; border-radius: 8px; padding: 2px 7px; vertical-align: 1px; }
+.peer-li .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.peer-get { flex: none; min-height: 44px; padding: 0 12px; font: inherit; font-size: 14px; font-weight: 800; border: 0; border-radius: 12px; background: #76ac95; color: #fff; cursor: pointer; }
+.peer-get:disabled { background: var(--fill); color: var(--muted); cursor: default; }
+.peer-sub { margin: 0 2px; font-size: 13px; color: var(--muted); line-height: 1.45; }
 .dday.pack { background: var(--fill); color: var(--fg); font-size: 12px; }
 .reset { display: flex; justify-content: center; padding-top: 12px; }
 .reset-open { font: inherit; font-size: 14px; font-weight: 700; color: var(--rose-ink); background: none; border: 0; cursor: pointer; padding: 8px 14px; border-radius: 10px; }
@@ -716,6 +729,15 @@ li.expired .name { text-decoration: none; }
     <div class="listhead"><h2>포장일자만 있는 품목 <span id="packTotal"></span></h2></div>
     <p class="pack-sub">유통기한 계산에서 빠지고, 포장일 순서로 보여요.</p>
     <ul id="packList" class="rows"></ul>
+  </section>
+
+  <section class="peersec" id="peerSec">
+    <button type="button" class="peer-open" id="peerOpen" aria-expanded="false" aria-controls="peerBox">다른 매장 품목 <span id="peerN"></span></button>
+    <div id="peerBox" hidden>
+      <input id="peerQ" type="search" placeholder="품목·매장 검색" autocomplete="off">
+      <p class="peer-sub" id="peerMsg">다른 매장에 등록된 품목입니다. 가져오기를 누르면 이 매장 목록에 복사됩니다.</p>
+      <ul id="peerList"></ul>
+    </div>
   </section>
 
   <div class="reset" id="resetZone">
@@ -1548,6 +1570,93 @@ li.expired .name { text-decoration: none; }
     catHint();
     if (formOcr && formOcr.text) suggestNames(formOcr.text, formOcr.suggest || []);
   }
+
+  // 다른 매장에 등록된 품목. 한 번에 주는 peers 가 없으면(구글 코드 배포 전) 매장마다 목록을 받는다.
+  let peers = null, peerErr = "", peerBusy = false;
+  const peerKey = (s, it, i) => s + ":" + (it.id || i);
+  function peerWhen(it) {
+    if (it.mode === "period" && it.num) return `제조 ${fmt(it.mfg)} · ${it.num}${UNIT[it.unit] || ""}`;
+    if (it.mode === "pack") return `포장 ${fmt(it.mfg)}`;
+    return it.expiry ? `유통 ${fmt(it.expiry)}` : "";
+  }
+  function renderPeers() {
+    const q = ($("peerQ").value || "").replace(/\s+/g, "").toLowerCase();
+    const rows = (peers || []).filter((p) => !q || (p.name + p.storeName).replace(/\s+/g, "").toLowerCase().includes(q));
+    const shown = q ? rows : rows.slice(0, 80);
+    $("peerList").innerHTML = shown.map((p) => `<li class="peer-li"><div class="txt"><div class="name">${esc(p.name)}<span class="peer-tag">${esc(p.storeName)}</span></div><div class="meta">${esc(peerWhen(p))}${p.memo ? " · " + esc(p.memo) : ""}</div></div><button type="button" class="peer-get" data-peer="${esc(p.key)}"${p.brought ? " disabled" : ""}>${p.brought ? "가져옴" : "가져오기"}</button></li>`).join("");
+    const more = !q && rows.length > shown.length ? ` · 검색하면 나머지 ${rows.length - shown.length}개` : "";
+    if (peerBusy) $("peerMsg").textContent = "다른 매장 목록을 불러오는 중…";
+    else if (peerErr && !(peers && peers.length)) $("peerMsg").textContent = peerErr;
+    else $("peerMsg").textContent = (peers ? `다른 매장 ${new Set((peers).map((p) => p.store)).size}곳 · ${peers.length}개` : "") + (peerErr ? " · " + peerErr : "") + more + (peers && peers.length ? ". 가져오기를 누르면 이 매장 목록에 복사됩니다." : "");
+  }
+  async function pool(list, n, fn) {
+    const out = new Array(list.length);
+    let i = 0;
+    await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => {
+      while (i < list.length) { const j = i++; out[j] = await fn(list[j], j); }
+    }));
+    return out;
+  }
+  async function loadPeers() {
+    if (peerBusy) return;
+    peerBusy = true; peerErr = ""; renderPeers();
+    const byStore = {};
+    let via = "";
+    try {
+      const d = await (await fetch(HUB + "?api=1&peers=1&t=" + Date.now())).json();
+      if (d && d.stores && !Array.isArray(d.stores) && !d.error) { Object.assign(byStore, d.stores); via = "peers"; }
+    } catch {}
+    if (!via) {
+      const jobs = Object.entries(STORES).filter(([k, v]) => k !== STORE && v.api);
+      let fail = 0;
+      await pool(jobs, 4, async ([k, v]) => {
+        try {
+          const d = await (await fetch(v.api + "?api=1&store=" + encodeURIComponent(k) + "&t=" + Date.now())).json();
+          const list = asItemList(d);
+          if (list) byStore[k] = list;
+          else fail++;
+        } catch { fail++; }
+      });
+      if (fail) peerErr = fail + "곳은 목록을 못 받았어요";
+    }
+    const out = [];
+    Object.entries(byStore).forEach(([k, list]) => {
+      if (k === STORE || !Array.isArray(list)) {
+        if (list && list.error) peerErr = (peerErr ? peerErr + " · " : "") + (STORES[k] ? STORES[k].name : k) + " 오류";
+        return;
+      }
+      list.forEach((it, i) => {
+        if (!it || !it.name || it.id === NOTICE_ID || it.mode === "note") return;
+        out.push({ key: peerKey(k, it, i), store: k, storeName: (STORES[k] && STORES[k].name) || k, name: it.name, memo: it.memo || "", mode: it.mode || "date", expiry: it.expiry || "", mfg: it.mfg || "", num: Number(it.num) || 0, unit: it.unit || "", brought: false });
+      });
+    });
+    out.sort((a, b) => a.storeName.localeCompare(b.storeName, "ko") || a.name.localeCompare(b.name, "ko"));
+    peers = out;
+    peerBusy = false;
+    $("peerN").textContent = out.length ? out.length + "개" : "";
+    if (!out.length && !peerErr) peerErr = "다른 매장에 등록된 품목이 없습니다";
+    renderPeers();
+  }
+  $("peerOpen").onclick = () => {
+    const open = $("peerBox").hidden;
+    $("peerBox").hidden = !open;
+    $("peerOpen").setAttribute("aria-expanded", String(open));
+    if (open && !peers && !peerBusy) loadPeers();
+  };
+  $("peerQ").addEventListener("input", renderPeers);
+  $("peerList").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-peer]"); if (!b || b.disabled) return;
+    const p = (peers || []).find((x) => x.key === b.dataset.peer); if (!p) return;
+    b.disabled = true; b.textContent = "가져오는 중";
+    const it = { id: newId(), name: p.name, memo: p.memo, mode: p.mode, expiry: p.expiry, mfg: p.mfg, num: p.num, unit: p.unit, updatedAt: Date.now() };
+    try {
+      await save(it);
+      p.brought = true; b.textContent = "가져옴";
+    } catch {
+      b.disabled = false; b.textContent = "가져오기";
+      $("peerMsg").textContent = "이 매장에 넣지 못했어요. 인터넷을 확인하고 다시 눌러 주세요.";
+    }
+  });
   function catFind() {
     const k = ckey($("fName").value);
     const e = k && catalog && catalog[k];
