@@ -10,8 +10,11 @@ fs.writeFileSync(kv, JSON.stringify({
   "master.order": { at: "2026-11-23", cols: ["name", "code", "vendor", "unit"], rows: [
     { name: "양파", code: "100001", vendor: "온세물류", unit: "EA" },
     { name: "소모품장갑", code: "100002", vendor: "한성물산", unit: "EA" },
+    { name: "평판수세미", code: "340000447", vendor: "소모품", unit: "EA" },
+    { name: "날짜", code: "한성물산(월 발주)", vendor: "소모품", unit: "" },
   ] },
   "master.foh": { rows: [{ name: "콜라", code: "200001", vendor: "롯데칠성", unit: "EA" }] },
+  hide: ["업체:소모품"],
   itemCfg: { "소모품장갑": { hide: 1 }, "양파": { side: "foh", loc: "bar", ro: 1 } },
 }));
 
@@ -25,6 +28,8 @@ const r = await page.evaluate(() => {
     onion: onion && { foh: !!onion.foh, hidden: !!onion.hidden },
     glove: glove && { foh: !!glove.foh, hidden: !!glove.hidden, calc: C.calc(glove, win, 0, 0) },
     coke: coke && { foh: !!coke.foh, hidden: !!coke.hidden },
+    sponge: (() => { const it = by("평판수세미"); return it && { foh: !!it.foh, hidden: !!it.hidden, sheetHide: !!it.sheetHide }; })(),
+    junk: !!by("날짜"),
     title: document.querySelector("#v-loc h2") && document.querySelector("#v-loc h2").textContent,
     entry: document.querySelector(".locentry b") && document.querySelector(".locentry b").textContent,
   };
@@ -36,6 +41,8 @@ ok("설정 없으면 FOH 시트 품목은 FOH", r.coke && r.coke.foh && !r.coke.
 ok("side foh 면 발주 시트 품목도 FOH", r.onion && r.onion.foh && !r.onion.hidden, JSON.stringify(r.onion));
 ok("hide 면 계산을 안 함", r.glove && r.glove.hidden && r.glove.calc && r.glove.calc.hidden && r.glove.calc.none, JSON.stringify(r.glove && r.glove.calc));
 ok("화면 이름이 발주 품목 설정", r.title === "발주 품목 설정" && r.entry === "발주 품목 설정", r.title + "/" + r.entry);
+ok("업체:소모품 숨김이어도 평판수세미는 설정에 있음", r.sponge && r.sponge.sheetHide && r.sponge.hidden && !r.sponge.foh, JSON.stringify(r.sponge));
+ok("소모품 머리글 줄은 품목이 아님", r.junk === false);
 ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
 await page.evaluate(() => {
   document.querySelector("#tileFiles").click();
@@ -70,6 +77,13 @@ const found = await page.evaluate(() => {
 });
 ok("초성 ㅇㅍ 은 양파", found.cho.length === 1 && found.cho[0] === "양파", JSON.stringify(found.cho));
 ok("콜 은 콜라", found.part.length === 1 && found.part[0] === "콜라", JSON.stringify(found.part));
+const sup = await page.evaluate(() => {
+  document.querySelector('#locScope button[data-s="boh"]').click();
+  const q = document.querySelector("#locQ"); q.value = ""; q.dispatchEvent(new Event("input", { bubbles: true }));
+  document.querySelector('#locTabs button[data-t="sup"]').click();
+  return [...document.querySelectorAll("#locList .lrow .lnm")].map((n) => n.childNodes[0].textContent);
+});
+ok("BOH 소모품 설정에 평판수세미", sup.includes("평판수세미"), JSON.stringify(sup));
 console.log(`품목 설정 시험 통과 ${pass} · 실패 ${fail}`);
 if (bad.length) console.log(bad.join("\n"));
 await close();
