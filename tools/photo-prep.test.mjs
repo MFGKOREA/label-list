@@ -91,6 +91,7 @@ assert.match(html, /PhotoPrep/);
 assert.match(html, /return \{ buffer: buf, type: type, name: name, size: buf\.byteLength \}/);
 assert.doesNotMatch(html, /new File\(\[buf\]/);
 assert.match(html, /id="ocrFile"[^>]*class="cam"/);
+assert.match(html, /id="ocrFile"[^>]*capture="environment"/); // 브라우저가 고른 사진첩 대신 카메라를 바로 띄운다(갤럭시에서 사진첩이 열리던 문제)
 assert.doesNotMatch(html, /id="ocrFile"[^>]*\shidden/);
 assert.match(html, /id="trFile"[^>]*capture="environment"/);
 assert.match(html, /holdFile/);
@@ -100,7 +101,7 @@ new Function(fs.readFileSync(new URL("../photo-prep.js", import.meta.url), "utf8
 
 // 서비스워커: 화면·스크립트를 바꿀 때마다 캐시 이름을 올려야 휴대폰이 예전 사본을 열지 않는다
 const sw = fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8");
-assert.match(sw, /const CACHE = "label-list-shell-v9"/);
+assert.match(sw, /const CACHE = "label-list-shell-v10"/); // v10: 라벨 사진 버튼 갤럭시 카메라 바로 열기
 assert.match(sw, /BASE \+ "photo-prep\.js"/);
 
 async function browser() {
@@ -247,8 +248,9 @@ async function browser() {
     await new Promise((r) => setTimeout(r, 120));
     const b = document.getElementById("ocrBtn");
     let ready = "?"; try { ready = localStorage.getItem("label-list-photo-ready"); } catch {}
-    return { hidden: b.hidden, text: b.textContent.trim(), form: !document.getElementById("form").hidden, ready: ready };
+    return { hidden: b.hidden, text: b.textContent.trim(), form: !document.getElementById("form").hidden, ready: ready, cap: document.getElementById("ocrFile").getAttribute("capture") };
   });
+  assert.equal(withStore.cap, "environment", "사진 칸이 카메라를 바로 열도록 capture 속성이 화면에 살아 있어야 한다");
   assert.equal(withStore.form, true, "입력칸은 열린다");
   assert.notEqual(withStore.ready, "1", "사진 목록을 아직 확인하지 못한 상태여야 한다");
   assert.equal(withStore.hidden, false, "매장 주소가 있으면 사진 목록 확인 전에도 사진 버튼이 보인다");

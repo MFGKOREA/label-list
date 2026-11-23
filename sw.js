@@ -1,6 +1,6 @@
 // 한글표시사항 리스트: 앱 화면을 휴대폰에 저장해 두고 바로 띄움 (열 때마다 뒤에서 새 버전 받아 둠)
 // 같은 저장소의 다른 페이지(order.html 등)와 구글 요청은 건드리지 않음
-const CACHE = "label-list-shell-v9"; // 화면(index.html)·스크립트를 고칠 때마다 이 이름을 올린다. 안 올리면 휴대폰이 예전 화면을 계속 연다(v8 → v9: 사진 인식 패치)
+const CACHE = "label-list-shell-v10"; // 화면(index.html)·스크립트를 고칠 때마다 이 이름을 올린다. 안 올리면 휴대폰이 예전 화면을 계속 연다(v9 → v10: 라벨 사진 버튼에서 갤럭시 카메라가 바로 열리게)
 const BASE = new URL("./", self.location).pathname; // /label-list/
 
 self.addEventListener("install", () => self.skipWaiting());
