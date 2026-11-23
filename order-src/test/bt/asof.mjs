@@ -13,7 +13,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-const req = (m) => import(m).catch(() => import("/opt/node22/lib/node_modules/" + m + "/index.mjs"));
+const req = (m) => import(m).catch(() => import(process.env.PW_MODULE || ("/opt/node22/lib/node_modules/" + m + "/index.mjs")));
 const { chromium } = await req("playwright");
 const HERE = path.dirname(fileURLToPath(import.meta.url)), REPO = path.resolve(HERE, "../../..");
 const NAMES = "ORDER_CUTOFF_H, riskEst, risk1, recvPlausible, ordMaxOf, misTrust, misOn, recvTrust, recvOn, recvCovers, arrivalsOrd, ordCnt, unknownArr, menuW, estWin, menuUseSpan, meatOn, estStock, dayRowsOf, COUPON, wholeStep, OPEN_H, CLOSE_H, arrivalsOf, sumGross, dayGross, leftOf, hourOf, hourCum, isMeat, logOn, inputLog, arrBetween, weSum, isWE, stockOf, counted, batchRawOf, prepRawOf, weMix, isOrderDay, deliveryOf, nextOrderDay, fcGroup, isHoliday, addDays, addBiz, delivery, dow, parseISO, num, MEAT_H, effDays, wkGross, weekendPlus, vcfg, countStepOf, riskOf, applyScores, mergeLogs, fcHist".split(", ");
@@ -49,7 +49,8 @@ export async function openApp({ kvPath, html, asOf = null, hour = 11, today = "c
   const raw = JSON.parse(fs.readFileSync(kvPath, "utf8")); let data = cutKv(raw.data || raw, asOf, { today, dropMonths });
   if (mutate) data = mutate(data) || data;
   const body = JSON.stringify({ ok: true, data });
-  const browser = await chromium.launch({ executablePath: fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined });
+  const exe = process.env.PW_CHROME || (fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
+  const browser = await chromium.launch({ executablePath: exe });
   const ctx = await browser.newContext({ timezoneId: "Asia/Seoul" }); const page = await ctx.newPage();
   const errs = []; page.on("pageerror", (e) => errs.push(e.message));
   if (asOf) await page.clock.setFixedTime(new Date(`${asOf}T${String(Math.floor(hour)).padStart(2, "0")}:${String(Math.round((hour % 1) * 60)).padStart(2, "0")}:00+09:00`));
