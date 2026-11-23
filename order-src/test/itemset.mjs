@@ -59,6 +59,17 @@ const after = await page.evaluate(() => {
 });
 ok("숨김을 누르면 itemCfg.hide", ui.clicked && after.hidden && after.cfg && after.cfg.hide === 1 && after.calc.hidden, JSON.stringify(after.cfg));
 ok("숨긴 뒤에도 side 는 남음", after.cfg && after.cfg.side === "foh");
+ok("숨김 칸에 시각이 있음", after.cfg && after.cfg._at && after.cfg._at.hide > 0);
+const found = await page.evaluate(() => {
+  const q = document.querySelector("#locQ");
+  q.value = "ㅇㅍ"; q.dispatchEvent(new Event("input", { bubbles: true }));
+  const cho = [...document.querySelectorAll("#locList .lrow .lnm")].map((n) => n.childNodes[0].textContent);
+  q.value = "콜"; q.dispatchEvent(new Event("input", { bubbles: true }));
+  const part = [...document.querySelectorAll("#locList .lrow .lnm")].map((n) => n.childNodes[0].textContent);
+  return { cho, part };
+});
+ok("초성 ㅇㅍ 은 양파", found.cho.length === 1 && found.cho[0] === "양파", JSON.stringify(found.cho));
+ok("콜 은 콜라", found.part.length === 1 && found.part[0] === "콜라", JSON.stringify(found.part));
 console.log(`품목 설정 시험 통과 ${pass} · 실패 ${fail}`);
 if (bad.length) console.log(bad.join("\n"));
 await close();

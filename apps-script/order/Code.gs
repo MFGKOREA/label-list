@@ -141,16 +141,23 @@ function write_(key, value) {
   try { for (let i = old.length - 1; i >= 0; i--) sh.deleteRow(old[i]); } catch (err) { if (value === null || value === undefined) throw err; console.error("옛 행 정리 실패", err); }
 }
 
-// 객체끼리는 칸별로 합치고, null이면 지움. 배열·숫자·글자는 통째로 바꿈
+// 객체끼리는 칸별로 합치고, null이면 지움. 배열·숫자·글자는 통째로 바꿈.
+// _at[칸]이 양쪽 다 있으면 시각이 더 나중인 칸만 이긴다. 시각이 없으면 예전처럼 덮어쓴다.
 function isObj_(v) { return v && typeof v === "object" && !Array.isArray(v); }
 function merge_(cur, patch) {
   const out = isObj_(cur) ? Object.assign({}, cur) : {};
-  Object.keys(patch).forEach((k) => {
+  const atCur = isObj_(out._at) ? Object.assign({}, out._at) : {};
+  const atNew = isObj_(patch && patch._at) ? patch._at : null;
+  Object.keys(patch || {}).forEach((k) => {
+    if (k === "_at") return;
     const v = patch[k];
+    if (atNew && atNew[k] != null && atCur[k] != null && atNew[k] < atCur[k]) return;
     if (v === null) delete out[k];
     else if (isObj_(v) && isObj_(out[k])) out[k] = merge_(out[k], v);
     else out[k] = v;
+    if (atNew && atNew[k] != null) atCur[k] = atNew[k];
   });
+  if (Object.keys(atCur).length) out._at = atCur; else delete out._at;
   return out;
 }
 
