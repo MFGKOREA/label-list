@@ -9,6 +9,7 @@ const kv = path.join(os.tmpdir(), "itemset-kv.json");
 fs.writeFileSync(kv, JSON.stringify({
   "master.order": { at: "2026-11-23", cols: ["name", "code", "vendor", "unit"], rows: [
     { name: "양파", code: "100001", vendor: "온세물류", unit: "EA" },
+    { name: "감자", code: "100003", vendor: "온세물류", unit: "EA" },
     { name: "소모품장갑", code: "100002", vendor: "한성물산", unit: "EA" },
     { name: "평판수세미", code: "340000447", vendor: "소모품", unit: "EA" },
     { name: "날짜", code: "한성물산(월 발주)", vendor: "소모품", unit: "" },
@@ -30,6 +31,16 @@ const r = await page.evaluate(() => {
     coke: coke && { foh: !!coke.foh, hidden: !!coke.hidden },
     sponge: (() => { const it = by("평판수세미"); return it && { foh: !!it.foh, hidden: !!it.hidden, sheetHide: !!it.sheetHide }; })(),
     junk: !!by("날짜"),
+    dept: {
+      potato: C.deptOf(by("감자")),
+      onion: C.deptOf(by("양파")),
+      coke: C.deptOf(by("콜라")),
+      glove: C.deptOf(by("소모품장갑")),
+      sponge: C.deptOf(by("평판수세미")),
+    },
+    sheetTitle: document.querySelector("#v-log h2") && document.querySelector("#v-log h2").textContent,
+    sheetBtn: [...document.querySelectorAll(".locentry b")].map((b) => b.textContent).find((t) => t.includes("발주시트")),
+    deptBtns: [...document.querySelectorAll("#depts button")].map((b) => b.textContent.replace(/\d+/g, "").trim()),
     title: document.querySelector("#v-loc h2") && document.querySelector("#v-loc h2").textContent,
     entry: document.querySelector(".locentry b") && document.querySelector(".locentry b").textContent,
   };
@@ -43,6 +54,9 @@ ok("hide 면 계산을 안 함", r.glove && r.glove.hidden && r.glove.calc && r.
 ok("화면 이름이 발주 품목 설정", r.title === "발주 품목 설정" && r.entry === "발주 품목 설정", r.title + "/" + r.entry);
 ok("업체:소모품 숨김이어도 평판수세미는 설정에 있음", r.sponge && r.sponge.sheetHide && r.sponge.hidden && !r.sponge.foh, JSON.stringify(r.sponge));
 ok("소모품 머리글 줄은 품목이 아님", r.junk === false);
+ok("부서: 감자는 주방, 양파·콜라는 바/음료, 장갑·수세미는 소모품", r.dept && r.dept.potato === "kit" && r.dept.onion === "bar" && r.dept.coke === "bar" && r.dept.glove === "sup" && r.dept.sponge === "sup", JSON.stringify(r.dept));
+ok("발주시트 제목에 BOH가 없음", r.sheetTitle === "수원컨벤션점 발주시트" && r.sheetBtn === "수원컨벤션점 발주시트", r.sheetTitle + "/" + r.sheetBtn);
+ok("발주 화면에 주방·소모품 수가 있음", r.deptBtns.includes("주방") && r.deptBtns.includes("소모품"), JSON.stringify(r.deptBtns));
 ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
 await page.evaluate(() => {
   document.querySelector("#tileFiles").click();

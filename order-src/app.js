@@ -1828,7 +1828,7 @@
   const shortV = (v) => String(v || "").replace(/\((주|유)\)\s*/g, "").replace(/\s*인터내셔날|음료|판매|종합/g, "").trim();
   function setScope(x) {
     scope = x; const foh = x === "foh";
-    $("fohWrap").hidden = !foh; cat = null; locSel = null;
+    $("fohWrap").hidden = !foh; cat = null; locSel = null; deptSel = null;
     if ($("tabOrder").getAttribute("aria-selected") === "true") $("mainTitle").textContent = foh ? "FOH 발주" : "발주량 계산";
     renderMain();
   }
@@ -2929,6 +2929,16 @@
   const locOf = (it) => ((db.itemCfg || {})[it.key] || {}).loc || guessLoc(it);
   // 11/20 KM "세제나 소모품은 아래로 빼야지" · "분류를 해줘야지": BOH 품목 분류 0 = 식자재, 1 = 소모품(위치 = 소모품), 2 = 세제(소모품 중 세제·락스·세정제 등)
   const supCls = (it) => (it.foh || locOf(it) !== "sup" ? 0 : /세제|에이퐁|락스|기름제거제|세정제|클리너|린스/.test(it.name) ? 2 : 1), SUPN = ["", "소모품", "세제"];
+  // 부서: BOH 식자재는 주방, FOH 바 위치·주류는 바/음료, 그 외 FOH는 홀, 소모품·세제는 소모품. side(it.foh)와 보관 위치를 같이 본다.
+  const DEPTN = { kit: "주방", hall: "홀", bar: "바/음료", sup: "소모품" };
+  function deptOf(it) {
+    const v = it.vendor || "", loc = it.xcode ? "" : locOf(it);
+    if (it.sheetHide || loc === "sup" || v === "소모품" || v === "세제" || /소모품|세제/.test(v) || supCls(it) > 0) return "sup";
+    if (it.foh && (loc === "bar" || /롯데칠성|주류/.test(v))) return "bar";
+    if (it.foh) return "hall";
+    return "kit";
+  }
+  let deptSel = null;
   const roOf = (it, idx) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ro != null ? c.ro : 1e4 + idx; };
   let locTab = "dry", locSaveT = 0, locPatch = {}, locFoh = false; // locFoh: 위치·순서 화면에서 FOH 품목을 보는 중 (11/19 KM "보관위치 순서도 FOH 거")
   // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
@@ -3017,6 +3027,7 @@
       const nk = [...rest.slice(0, ins), ...sup, ...det, ...rest.slice(ins)], nb = new Map(nk.map((k) => [k, byV.get(k)])); byV.clear(); nb.forEach((v, k) => byV.set(k, v)); }
     // 11/20 KM(어사이드 전달) "발주시트도 순서대로 바꾸자": BOH 줄은 업체 안에서 MIS 주문등록 순서(품목명 "-" 빼고 가나다, 발주 탭 발주품목순과 같음). FOH 줄은 master.foh 순서 그대로
     { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
+    { const rank = { kit: 0, hall: 1, bar: 2, sup: 3 }, vi = new Map(); order.forEach((it) => { const v = vKey(it); if (!vi.has(v)) vi.set(v, vi.size); }); order.sort((a, b) => rank[deptOf(a)] - rank[deptOf(b)] || vi.get(vKey(a)) - vi.get(vKey(b))); }
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
@@ -3044,8 +3055,12 @@
       const days = [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(m, k)), wk = isoWeek(m).w, fcSum = days.reduce((t, d) => t + (fcOf(d) || 0), 0);
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
-      let lastV = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
-      const rows = order.map((it) => { const v = vKey(it), vn = v.split("\u0002")[0], head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[vn] || vn)}${v !== vn || it.foh ? ` <b class="fohtag">FOH</b>` : byV.has(v + "\u0002FOH") ? ` <b class="bohtag">BOH</b>` : ""} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "" /* 11/17 KM "업체랑 품목 사이로": 칸 이름은 업체 줄에 */; lastV = v; return head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? it.boxLabel : it.pk.stock || "")}</small></th>${days.map((d) => `<td class="s ds">${stockCell(it, d)}</td><td class="o">${orderCell(it, d)}</td>`).join("")}</tr>`; }).join("");
+      let lastV = null, lastD = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
+      const rows = order.map((it) => { const d = deptOf(it), v = vKey(it), vn = v.split("\u0002")[0];
+        const dhead = d !== lastD ? `<tr class="drow"><th class="nm" colspan="${1 + days.length * 2}">${DEPTN[d]} <small>${order.filter((x) => deptOf(x) === d).length}</small></th></tr>` : "";
+        if (d !== lastD) lastV = null;
+        const head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[vn] || vn)}${v !== vn || it.foh ? ` <b class="fohtag">FOH</b>` : byV.has(v + "\u0002FOH") ? ` <b class="bohtag">BOH</b>` : ""} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "";
+        lastD = d; lastV = v; return dhead + head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? it.boxLabel : it.pk.stock || "")}</small></th>${days.map((d0) => `<td class="s ds">${stockCell(it, d0)}</td><td class="o">${orderCell(it, d0)}</td>`).join("")}</tr>`; }).join("");
       return `<section class="logwk"><h3>${wk}주차 <span>${mmdd(m)}(월) ~ ${mmdd(addDays(m, 6))}(일)</span>${fcSum > 0 ? `<span class="fcsum">Forecast ${Math.round(fcSum / 1e4).toLocaleString()}만</span>` : ""}</h3>` +
         `<div class="logscroll"><table class="logt"><colgroup><col class="cn">${days.map(() => `<col class="cs"><col class="co">`).join("")}</colgroup><thead><tr><th class="nm">품목</th>${h1}</tr></thead><tbody><tr class="fcrow"><th class="nm" scope="row">Forecast</th>${fc}</tr>${rows}</tbody></table></div></section>`;
     }).join("") : `<p class="hint">주차를 골라 주세요.</p>`;
@@ -3053,7 +3068,7 @@
   $("logWeeks").addEventListener("click", (e) => { const b = e.target.closest("button[data-w]"); if (!b) return; const w = b.dataset.w; logWeekSel.has(w) ? logWeekSel.delete(w) : logWeekSel.add(w); renderStockLog(); });
   $("logPrint").addEventListener("click", () => {
     const t0 = document.title, ws = [...(logWeekSel || [])].sort().map((m) => isoWeek(m).w);
-    document.body.classList.add("log-print"); document.title = `BOH 수원컨벤션점 발주시트 ${ws.length ? ws[0] + (ws.length > 1 ? "~" + ws[ws.length - 1] : "") + "주차" : ""}`;
+    document.body.classList.add("log-print"); document.title = `수원컨벤션점 발주시트 ${ws.length ? ws[0] + (ws.length > 1 ? "~" + ws[ws.length - 1] : "") + "주차" : ""}`;
     window.print(); setTimeout(() => { document.body.classList.remove("log-print"); document.title = t0; }, 800);
   });
   window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
@@ -3069,6 +3084,13 @@
   // 정렬 (11/12 KM): sheet = 발주품목순(발주 시트 순서 그대로) · need = 발주필요순(발주 필요한 것 위로, 예전 그대로). 이 기기에만 기억
   let sortSel = "need"; try { sortSel = localStorage.getItem("order-sort") || "need"; } catch {}
   if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
+  function renderDepts(M) {
+    const opts = scope === "foh" ? [["hall", "홀"], ["bar", "바/음료"], ["sup", "소모품"]] : [["kit", "주방"], ["sup", "소모품"]];
+    if (deptSel && !opts.some(([k]) => k === deptSel)) deptSel = null;
+    const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i));
+    const el = $("depts"); if (!el) return;
+    el.innerHTML = opts.map(([k, t]) => `<button type="button" data-d="${k}" aria-pressed="${deptSel === k}">${t}<span class="cnt">${pool.filter((i) => deptOf(i) === k).length}</span></button>`).join("");
+  }
   function renderLocs(M) {
     const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && (!cat || i.vendor === cat));
     $("locs").classList.toggle("foh5", scope === "foh"); $("locs").innerHTML = locsNow().map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${locName(k, t)}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
@@ -3100,7 +3122,7 @@
     const offFold = []; // 오늘 발주일이 아닌 업체 품목 (11/20)
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i)).forEach((it) => {
-      const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
+      const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!deptSel || deptOf(it) === deptSel) && (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       // 11/20 KM "온세·새싹 빼고 나머지 업체는 발주 요일만 체크, 발주 아닌 날엔 품목 가리기": 업체 발주 요일(vendorCfg.days)이 아닌 날은 맨 아래 접어 둠 (검색하면 보임)
       if (!q && vcfg(it).days && !isOrderDay(it, preMode ? pDay() : TODAY)) { offFold.push(it); return; }
@@ -3188,6 +3210,7 @@
     $("nores").hidden = n + folded.length > 0;
     if (orderFocus) { const el = document.querySelector(`#v-main .cell[data-key="${CSS.escape(orderFocus.key)}"]`); if (el) el.querySelectorAll("input")[orderFocus.f].focus(); orderFocus = null; }
     $("cats").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === cat));
+    renderDepts(M);
     renderLocs(M);
     $("sorts").hidden = !!locSel;
     $("sorts").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === sortSel));
@@ -3249,6 +3272,7 @@
     };
     h.addEventListener("pointermove", move); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
   });
+  $("depts").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; deptSel = deptSel === b.dataset.d ? null : b.dataset.d; $("q").value = ""; renderList(); });
   $("locs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; locSel = locSel === b.dataset.l ? null : b.dataset.l; $("q").value = ""; renderList(); });
 
   // ---------- 프랩 ----------
@@ -4336,5 +4360,5 @@
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth };
+  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, deptOf };
 })();
