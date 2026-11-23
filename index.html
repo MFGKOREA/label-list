@@ -1096,7 +1096,8 @@ li.expired .name { text-decoration: none; }
   }
   function parseLabel(text, now) {
     const t0 = now || today();
-    const lines = String(text || "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    text = String(text || "").normalize("NFKC").replace(/\u00a0/g, " ");
+    const lines = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
     const res = { mode: "", expiry: "", mfg: "", num: 0, unit: "", choices: [], role: "", found: false };
     // 제조일로부터 N개월 / N년 / N일
     const per = String(text || "").match(/제조\s*일?\s*(?:자|로)?\s*(?:로)?\s*부터\s*(\d{1,3})\s*(개월|달|년|일)/) || String(text || "").match(/(\d{1,3})\s*(months?|years?|days?)\s*(?:from|after)\s*(?:the\s*)?(?:date\s*of\s*)?(?:production|manufactur)/i);
@@ -1209,13 +1210,29 @@ li.expired .name { text-decoration: none; }
     } finally { delete localPhoto[id]; render(); }
   }
   // 사진 저장과 글자 읽기를 동시에 보낸다 (예전엔 서버가 차례로 해서 2배 걸림). 글자 읽기가 실패하면 휴대폰에서 읽는다.
+  function ocrFailMessage(e) {
+    const m = String((e && e.message) || e || "");
+    if (m === "timeout") return "글자 읽기가 시간 안에 끝나지 않았어요";
+    if (/형식이 올바르지 않/.test(m)) return "서버가 이 사진 형식을 받지 않았어요";
+    if (/너무 큽니다/.test(m)) return "사진이 너무 커서 서버가 거절했어요";
+    if (/HTTP/.test(m)) return "서버에 사진을 보내지 못했어요";
+    if (/Failed to fetch|NetworkError|Load failed|응답 오류/i.test(m)) return "인터넷이 불안정해 글자를 읽지 못했어요";
+    return "서버에서 글자를 읽지 못했어요";
+  }
   async function photoOcr(data, color, trace, save) {
-    // 글자 읽기가 40초 안에 안 끝나면 서버 결과를 버리고 휴대폰에서 읽는다 (삼성에서 큰 사진이 멈춘 것처럼 보임)
+    const norm = window.PhotoPrep && PhotoPrep.normalizeDataUrl(data);
+    if (norm) data = norm;
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(data || ""))) {
+      const s = await save().catch(() => ({}));
+      return { ...s, text: "", ocrError: "이 사진 형식은 서버가 받지 않아요. JPEG로 다시 찍어 주세요", suggest: [] };
+    }
+    // 글자 읽기가 40초 안에 안 끝나면 이유를 남기고 휴대폰에서 읽는다
     const ocrP = withTimeout(hubPost({ action: "ocr", store: STORE, data, color: color || "", trace: !!trace }), 40000)
-      .then((o) => (o && o.t ? o : null)).catch(() => null);
+      .then((o) => (o && (o.t || o.text || o.ocrError) ? o : null))
+      .catch((e) => ({ text: "", ocrError: ocrFailMessage(e), suggest: [], t: { fail: 1 } }));
     const [s, o] = await Promise.all([save(), ocrP]);
     if (o) return { ...s, text: o.text || "", ocrError: o.ocrError || "", suggest: o.suggest || [] };
-    return { ...s, text: "", ocrError: "서버 글자 읽기 실패", suggest: [] };
+    return { ...s, text: "", ocrError: "서버에서 글자를 읽지 못했어요", suggest: [] };
   }
   function dropPhoto(id) {
     if (!photos[id]) return;
@@ -1379,7 +1396,10 @@ li.expired .name { text-decoration: none; }
       });
       return;
     }
-    if (d.ocrError && !String(text || "").trim()) { show({ img: data, title: "글자를 읽지 못했어요", note: "날짜는 직접 입력해 주세요" + (bcLine ? " · " + bcLine : "") }); return; }
+    if (!String(text || "").trim()) {
+      show({ img: data, title: "글자를 읽지 못했어요", err: true, note: (d.ocrError || "날짜는 직접 입력해 주세요") + (bcLine ? " · " + bcLine : "") });
+      return;
+    }
     if (r.mode) { setMode(r.mode); modeTouched = true; }
     if (r.mode === "period") {
       if (r.mfg) $("fMfg").value = r.mfg;
@@ -1387,7 +1407,11 @@ li.expired .name { text-decoration: none; }
       else catApply(true);
     } else if (r.expiry) $("fExpiry").value = r.expiry;
     updatePreview();
-    if (!r.found) { show({ img: data, title: "날짜를 찾지 못했어요", err: true, note: "날짜는 직접 입력해 주세요" + (bcLine ? " · " + bcLine : "") }); return; }
+    if (!r.found) {
+      const heard = String(text || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      show({ img: data, title: "날짜를 찾지 못했어요", err: true, note: (heard ? "읽은 글자: " + heard + ". " : "") + "날짜는 직접 입력해 주세요" + (bcLine ? " · " + bcLine : "") });
+      return;
+    }
     show({
       img: data, title: "사진에서 읽었어요", sub: roleText(r) || (r.role === "mfg" ? "제조일자를 골라 주세요" : "유통기한을 골라 주세요"),
       note: (prepped ? "구김·그림자를 편 사본에서 읽었어요. " : "") + (r.pre
@@ -2526,7 +2550,7 @@ li.expired .name { text-decoration: none; }
       c.docPhotos.push(d.photo);
       found.forEach(placeDocNo);
       relinkFromBoxes();
-      job.detail = found.length ? `번호 ${found.length}개` : "번호 없음";
+      job.detail = found.length ? `번호 ${found.length}개` : (!String(text || "").trim() && d.ocrError ? d.ocrError : "번호 없음");
     } else {
       const nos = found.map((f) => f.no);
       const cut = c.cuts[kind];
@@ -2536,7 +2560,7 @@ li.expired .name { text-decoration: none; }
       else if (nos.length > 1) { cut.boxNo = nos.find((n) => n === docNo) || ""; cut.choices = nos; }
       else cut.choices = [];
       relinkFromBoxes();
-      job.detail = nos.length ? `번호 ${nos.length}개` : "번호 없음";
+      job.detail = nos.length ? `번호 ${nos.length}개` : (!String(text || "").trim() && d.ocrError ? d.ocrError : "번호 없음");
     }
     // 이력 조회: 박스 번호(없으면 명세서 번호)로 도축일·등급 또는 "미확정"을 한 줄로
     const info = await traceInfo(kind === "doc" ? (found[0] && found[0].no) : (c.cuts[kind].boxNo || ""));
@@ -2544,7 +2568,7 @@ li.expired .name { text-decoration: none; }
     job.state = "done"; trInFlight--;
     refreshCuts();
     if (!typingCut() && TraceNos.traceVerdict(c.cuts) === "wait") {
-      $("trInvHint").textContent = found.length ? "번호를 읽었습니다. 틀린 칸은 직접 고치세요." : "번호를 못 찾았어요. 칸에 직접 적거나 다시 찍으세요.";
+      $("trInvHint").textContent = found.length ? "번호를 읽었습니다. 틀린 칸은 직접 고치세요." : (!String(text || "").trim() && d.ocrError ? d.ocrError : "번호를 못 찾았어요. 칸에 직접 적거나 다시 찍으세요.");
     }
     maybeAutoSave();
   }

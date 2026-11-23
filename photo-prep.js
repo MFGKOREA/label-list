@@ -118,10 +118,32 @@
     } catch { return ""; }
   }
 
+  // 서버(매장모음)는 data:image/jpeg|png|webp;base64 만 받는다.
+  // 삼성 인터넷은 FileReader 결과에 줄바꿈을 넣거나 image/jpg, application/octet-stream 으로 준다.
+  // 미리보기는 그때도 뜨지만, 글자 읽기 요청은 거절되고 화면에는 이유가 안 남는다.
+  function normalizeDataUrl(data) {
+    const s = String(data || "").replace(/\s+/g, "");
+    const m = /^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,([A-Za-z0-9+/=]+)$/i.exec(s);
+    if (!m) return "";
+    let mime = String(m[1] || "").toLowerCase();
+    const b64 = m[2];
+    if (mime === "image/jpg" || mime === "image/pjpeg" || mime === "image/jfif") mime = "image/jpeg";
+    if (mime !== "image/jpeg" && mime !== "image/png" && mime !== "image/webp") {
+      let head = "";
+      try { head = atob(b64.slice(0, 24)); } catch { head = ""; }
+      const c0 = head.charCodeAt(0), c1 = head.charCodeAt(1);
+      if (c0 === 0xff && c1 === 0xd8) mime = "image/jpeg";
+      else if (head.slice(0, 4) === "\x89PNG") mime = "image/png";
+      else if (head.slice(0, 4) === "RIFF" && head.slice(8, 12) === "WEBP") mime = "image/webp";
+      else return "";
+    }
+    return "data:" + mime + ";base64," + b64;
+  }
+
   function canvasJpeg(canvas, q) {
     return new Promise((ok, fail) => {
       let done = false;
-      const finish = (data) => { if (done) return; done = true; ok(data); };
+      const finish = (data) => { if (done) return; done = true; ok(normalizeDataUrl(data)); };
       const viaData = () => {
         try { finish(canvas.toDataURL("image/jpeg", q)); }
         catch (e) { if (!done) { done = true; fail(e); } }
@@ -174,6 +196,56 @@
     }
     try { return { bmp: await decodeElement(blob), manual: false }; }
     catch (e) { throw last || e; }
+  }
+
+  // 삼성 GPU 는 한 변이 4096을 넘는 사진을 drawImage 하면 빈 캔버스가 된다. 2048 칸으로 나눠 줄인다.
+  async function fitSource(bmp, edge) {
+    let cur = bmp;
+    let guard = 0;
+    while (cur && Math.max(cur.width, cur.height) > 2048 && guard < 6) {
+      guard++;
+      const sw = cur.width, sh = cur.height;
+      const k = Math.min(0.5, 2048 / Math.max(sw, sh));
+      const dw = Math.max(1, Math.round(sw * k)), dh = Math.max(1, Math.round(sh * k));
+      let next = null;
+      try { next = await createImageBitmap(cur, { resizeWidth: dw, resizeHeight: dh, resizeQuality: "high" }); }
+      catch { next = null; }
+      if (!next || Math.max(next.width, next.height) >= Math.max(sw, sh)) {
+        if (next && next.close) { try { next.close(); } catch {} }
+        next = await tileDownscale(cur, dw, dh);
+      }
+      if (cur !== bmp && cur.close) { try { cur.close(); } catch {} }
+      cur = next;
+      if (!cur || Math.max(cur.width, cur.height) >= Math.max(sw, sh)) break;
+    }
+    if (cur && Math.max(cur.width, cur.height) > 4096) throw photoError(MSG.big);
+    if (cur && Math.max(cur.width, cur.height) > edge) {
+      const k = edge / Math.max(cur.width, cur.height);
+      const dw = Math.max(1, Math.round(cur.width * k)), dh = Math.max(1, Math.round(cur.height * k));
+      try {
+        const next = await createImageBitmap(cur, { resizeWidth: dw, resizeHeight: dh, resizeQuality: "high" });
+        if (cur !== bmp && cur.close) { try { cur.close(); } catch {} }
+        cur = next;
+      } catch { /* paint 가 한 번 더 줄인다 */ }
+    }
+    return cur;
+  }
+  async function tileDownscale(bmp, dw, dh) {
+    const sw = bmp.width, sh = bmp.height;
+    const c = document.createElement("canvas");
+    c.width = dw; c.height = dh;
+    const ctx = c.getContext("2d", { alpha: false }) || c.getContext("2d");
+    if (!ctx) throw photoError(MSG.big);
+    const step = 2048;
+    for (let sy = 0; sy < sh; sy += step) {
+      for (let sx = 0; sx < sw; sx += step) {
+        const cw = Math.min(step, sw - sx), ch = Math.min(step, sh - sy);
+        const tile = await createImageBitmap(bmp, sx, sy, cw, ch);
+        try { ctx.drawImage(tile, Math.round(sx * dw / sw), Math.round(sy * dh / sh), Math.max(1, Math.round(cw * dw / sw)), Math.max(1, Math.round(ch * dh / sh))); }
+        finally { if (tile.close) { try { tile.close(); } catch {} } }
+      }
+    }
+    return c;
   }
 
   function paint(bmp, orientation, edge) {
@@ -229,9 +301,15 @@
     } else if (!decoded.manual && (info.orientation || 1) >= 5 && info.width > 0 && bmp.width === info.width && bmp.height === info.height) {
       orientation = info.orientation; // 폴백 디코드가 방향을 안 돌렸으면 직접 세운다
     }
+    let fitted = bmp;
+    try { fitted = await fitSource(bmp, edge); }
+    catch { throw photoError(MSG.big); }
     let canvas;
-    try { canvas = paint(bmp, orientation, edge); }
-    finally { if (bmp.close) { try { bmp.close(); } catch {} } }
+    try { canvas = paint(fitted, orientation, edge); }
+    finally {
+      if (fitted !== bmp && fitted.close) { try { fitted.close(); } catch {} }
+      if (bmp.close) { try { bmp.close(); } catch {} }
+    }
     let data = "";
     for (let n = 0; n < 4; n++) {
       try { data = await canvasJpeg(canvas, q); }
@@ -242,9 +320,9 @@
         canvas = paint(canvas, 1, Math.round(edge * 0.75));
       }
     }
-    if (!data || data.indexOf("data:image/") !== 0 || data.length < 32) throw photoError(MSG.open);
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(data) || data.length < 32) throw photoError(MSG.open);
     return { data: data, color: mainColor(canvas), width: canvas.width, height: canvas.height };
   }
 
-  g.PhotoPrep = { version: VERSION, inspect: inspect, shrink: shrink, MSG: MSG };
+  g.PhotoPrep = { version: VERSION, inspect: inspect, shrink: shrink, normalizeDataUrl: normalizeDataUrl, MSG: MSG };
 })(typeof globalThis !== "undefined" ? globalThis : this);

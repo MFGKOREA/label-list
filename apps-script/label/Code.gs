@@ -312,13 +312,21 @@ function setPhoto_(store, id, file) {
   if (old && old !== file) { try { DriveApp.getFileById(old).setTrashed(true); } catch (err) {} }
 }
 
-function savePhoto_(store, id, data, ocr, color, trace) {
-  if (!id) throw new Error('id 없음');
-  const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
+// 삼성 인터넷은 data URL 에 줄바꿈을 넣거나 image/jpg 로 보낸다. 공백을 빼고 jpeg 로 맞춘다.
+function photoPayload_(data) {
+  const s = String(data || '').replace(/\s+/g, '');
+  const m = s.match(/^data:image\/(jpeg|jpg|pjpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/i);
   if (!m) throw new Error('사진 형식이 올바르지 않습니다');
+  const kind = /png/i.test(m[1]) ? 'png' : /webp/i.test(m[1]) ? 'webp' : 'jpeg';
   const bytes = Utilities.base64Decode(m[2]);
   if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
-  const blob = Utilities.newBlob(bytes, 'image/' + m[1], store + '_' + id + '.jpg');
+  return { kind: kind, b64: m[2], bytes: bytes };
+}
+
+function savePhoto_(store, id, data, ocr, color, trace) {
+  if (!id) throw new Error('id 없음');
+  const pic = photoPayload_(data);
+  const blob = Utilities.newBlob(pic.bytes, 'image/' + pic.kind, store + '_' + id + '.jpg');
   // 사진은 한 번만 올린다. 글자 읽기는 그 파일을 문서로 복사하며 하고, 임시 문서는 바로 지운다.
   const t = {}; let t0 = Date.now();
   let file;
@@ -367,13 +375,10 @@ function visionOcr_(b64) {
 // 글자 읽기만 (사진 저장과 동시에 따로 부름 → 기다리는 시간이 줄어듦). 사진은 저장하지 않는다.
 function ocrOnly_(data, color, trace, via) {
   const t0 = Date.now(), t = {};
-  const m = data.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
-  if (!m) throw new Error('사진 형식이 올바르지 않습니다');
-  const bytes = Utilities.base64Decode(m[2]);
-  if (bytes.length > 4 * 1024 * 1024) throw new Error('사진이 너무 큽니다');
-  const blob = Utilities.newBlob(bytes, 'image/' + m[1], OCR_SRC);
+  const pic = photoPayload_(data);
+  const blob = Utilities.newBlob(pic.bytes, 'image/' + pic.kind, OCR_SRC);
   let text = '', ocrError = '', vErr = '';
-  try { text = visionOcr_(m[2]); if (String(text).trim()) t.by = 'vision'; } catch (err) { vErr = String(err).slice(0, 200); }
+  try { text = visionOcr_(pic.b64); if (String(text).trim()) t.by = 'vision'; } catch (err) { vErr = String(err).slice(0, 200); }
   if (!t.by && via !== 'insert') {
     // 사진 파일을 만들고 그 파일을 문서로 복사해 읽는다 (11/18 매장 사진 26장: 26장 모두 읽음, 바로 올려 읽기는 10장이 '요청 많음'으로 거절)
     try {

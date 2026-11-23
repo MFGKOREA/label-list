@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 
-const sandbox = { console, setTimeout, clearTimeout };
+const sandbox = { console, setTimeout, clearTimeout, atob, btoa };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(new URL("../photo-prep.js", import.meta.url), "utf8"), sandbox);
@@ -11,6 +11,16 @@ const P = sandbox.PhotoPrep;
 assert.equal(P.version, 1);
 assert.equal(typeof P.inspect, "function");
 assert.equal(typeof P.shrink, "function");
+assert.equal(typeof P.normalizeDataUrl, "function");
+
+{
+  const raw = "data:image/jpg;base64," + "abc\n def==";
+  assert.equal(P.normalizeDataUrl(raw), "data:image/jpeg;base64,abcdef==");
+  const jpeg = btoa("\xff\xd8\xff\x00rest");
+  const wrapped = "data:application/octet-stream;base64," + jpeg.slice(0, 20) + "\r\n" + jpeg.slice(20);
+  assert.equal(P.normalizeDataUrl(wrapped), "data:image/jpeg;base64," + jpeg);
+  assert.equal(P.normalizeDataUrl("data:text/plain;base64,YQ=="), "");
+}
 
 function exifApp1(orientation) {
   // II, 42, IFD at 8, one SHORT tag 0x0112, next IFD 0
