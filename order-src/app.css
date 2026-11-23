@@ -18,7 +18,7 @@
   --c-de: #259a00; --c-fc: #b88600; --c-act: #e0244a;
   --rose: #fdeeec; --rose-line: #f5b8b0; --rose-ink: #d6402f;
   --shadow: 0 0 0 0 transparent;
-  --font: "Pretendard", -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font: "Microsoft GothicNeo", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
