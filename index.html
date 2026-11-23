@@ -202,7 +202,8 @@ body.typing .dock { display: none; } /* 키보드가 떠 있을 땐 숨김 (입�
 .tr-job.err { color: var(--rose-ink); }
 .tr-job i { font-style: normal; }
 .tr-job.on i::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; border: 2px solid #cfe3da; border-top-color: #3f7a62; animation: spin .8s linear infinite; vertical-align: -1px; }
-.cam { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+/* 삼성 인터넷은 clip·hidden(display:none) 파일 입력이면 카메라가 빈 파일을 주거나 열리지 않는다 */
+.cam { position: fixed; left: 0; top: 0; width: 48px; height: 48px; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .asg { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
 .asg .act, .cut .act { display: flex; gap: 6px; flex: none; flex-wrap: wrap; }
 .cut .why { font-size: 13px; color: var(--muted); line-height: 1.45; }
@@ -640,7 +641,7 @@ li.expired .name { text-decoration: none; }
         <img id="ocrImg" alt="라벨 사진">
         <div><b id="ocrT"></b><span id="ocrS"></span><em id="ocrE"></em><div class="ocr-ch" id="ocrCh"></div><button type="button" class="again" id="ocrAgain">다시 찍기</button></div>
       </div>
-      <input type="file" id="ocrFile" accept="image/*" hidden>
+      <input type="file" id="ocrFile" class="cam" accept="image/*">
     </div>
     <div class="sug" id="sugBox" hidden>
       <span class="sug-h">이 라벨과 비슷한 품목 · 누르면 제품명에 넣어요</span>
@@ -824,6 +825,7 @@ li.expired .name { text-decoration: none; }
   </div>
 </div>
 
+<script src="photo-prep.js?v=1"></script>
 <script src="ocr-preprocess.js?v=1"></script>
 <script src="trace-nos.js"></script>
 <script src="barcode-decoder.js?v=1"></script>
@@ -1168,36 +1170,33 @@ li.expired .name { text-decoration: none; }
     if (!d || d.error) throw new Error(d && d.error || "응답 오류");
     return d;
   }
-  // 사진의 대표 색 (비닐·포장 색): 24×24로 줄여 가장 많은 색 묶음의 평균 "r,g,b"
-  function mainColor(src) {
-    try {
-      const c = document.createElement("canvas"); c.width = c.height = 24;
-      const g = c.getContext("2d"); g.drawImage(src, 0, 0, 24, 24);
-      const px = g.getImageData(0, 0, 24, 24).data, box = {};
-      for (let i = 0; i < px.length; i += 4) {
-        const k = (px[i] >> 5) + "," + (px[i + 1] >> 5) + "," + (px[i + 2] >> 5);
-        const b = (box[k] = box[k] || [0, 0, 0, 0]); b[0] += px[i]; b[1] += px[i + 1]; b[2] += px[i + 2]; b[3]++;
-      }
-      const top = Object.values(box).sort((a, b) => b[3] - a[3])[0];
-      return top.slice(0, 3).map((v) => Math.round(v / top[3])).join(",");
-    } catch { return ""; }
-  }
-  // 휴대폰 사진을 긴 변 1400px JPEG로 줄임 (약 200KB). 작은 잉크젯 날짜가 뭉개지지 않게 이 크기는 유지
-  // 이력제 명세서는 글자가 작아서 더 크게(1800) 올린다.
+  // 휴대폰 사진을 긴 변 1400px JPEG로 줄임 (약 200KB). 작은 잉크젯 날짜가 뭉개지지 않게 이 크기는 유지.
+  // 방향·HEIC·큰 사진은 photo-prep.js. 이력제 명세서는 글자가 작아서 더 크게(1600) 올린다.
   function shrink(file, maxEdge, quality) {
-    const edge = maxEdge || 1400, q = quality || 0.72;
+    const P = window.PhotoPrep;
+    if (!P || typeof P.shrink !== "function") return Promise.reject(new Error("사진을 열 수 없어요. 화면을 새로고침한 뒤 다시 찍어 주세요."));
+    return P.shrink(file, maxEdge, quality);
+  }
+  // 삼성 카메라는 입력칸을 비우는 순간 방금 찍은 파일을 무효로 만든다. 바이트를 먼저 복사한다.
+  async function holdFile(input) {
+    const f = input.files && input.files[0];
+    if (!f) { input.value = ""; return null; }
+    try {
+      const buf = await f.arrayBuffer();
+      const type = f.type || "image/jpeg";
+      const name = f.name || "photo.jpg";
+      input.value = "";
+      if (!buf || !buf.byteLength) throw new Error("사진이 비어 있어요. 다시 찍어 주세요.");
+      return new File([buf], name, { type: type });
+    } catch (e) {
+      input.value = "";
+      throw new Error((e && e.message) || "사진을 받지 못했어요. 다시 찍어 주세요.");
+    }
+  }
+  function withTimeout(p, ms) {
     return new Promise((ok, fail) => {
-      const url = URL.createObjectURL(file), img = new Image();
-      img.onload = () => {
-        const k = Math.min(1, edge / Math.max(img.naturalWidth, img.naturalHeight));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        URL.revokeObjectURL(url);
-        ok({ data: c.toDataURL("image/jpeg", q), color: mainColor(c) });
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); fail(new Error("사진을 열 수 없습니다")); };
-      img.src = url;
+      const t = setTimeout(() => fail(new Error("timeout")), ms);
+      Promise.resolve(p).then((v) => { clearTimeout(t); ok(v); }, (e) => { clearTimeout(t); fail(e); });
     });
   }
   async function uploadPhoto(id, data, ocr, color) {
@@ -1211,7 +1210,8 @@ li.expired .name { text-decoration: none; }
   }
   // 사진 저장과 글자 읽기를 동시에 보낸다 (예전엔 서버가 차례로 해서 2배 걸림). 글자 읽기가 실패하면 휴대폰에서 읽는다.
   async function photoOcr(data, color, trace, save) {
-    const ocrP = hubPost({ action: "ocr", store: STORE, data, color: color || "", trace: !!trace })
+    // 글자 읽기가 40초 안에 안 끝나면 서버 결과를 버리고 휴대폰에서 읽는다 (삼성에서 큰 사진이 멈춘 것처럼 보임)
+    const ocrP = withTimeout(hubPost({ action: "ocr", store: STORE, data, color: color || "", trace: !!trace }), 40000)
       .then((o) => (o && o.t ? o : null)).catch(() => null);
     const [s, o] = await Promise.all([save(), ocrP]);
     if (o) return { ...s, text: o.text || "", ocrError: o.ocrError || "", suggest: o.suggest || [] };
@@ -1325,7 +1325,7 @@ li.expired .name { text-decoration: none; }
     const shot = ++formShotSeq; // 다시 찍거나 입력을 닫으면 이 사진의 결과는 버림
     const live = () => shot === formShotSeq && (editId || formNew) === id;
     let data, color;
-    try { ({ data, color } = await shrink(file)); } catch (e) { showOcr({ title: "사진을 열 수 없습니다", err: true }); return; }
+    try { ({ data, color } = await shrink(file)); } catch (e) { showOcr({ title: (e && e.message) || "사진을 열 수 없어요", err: true, note: "다시 찍거나, 갤러리에서 JPEG 사진을 골라 주세요" }); return; }
     showOcr({ img: data, title: "사진에서 날짜를 읽는 중…", note: "몇 초 걸려요. 그동안 제품명을 적어도 돼요", busy: true });
     showSug([]);
     const bcP = barcodeOf(data); // 바코드는 휴대폰에서 동시에
@@ -1399,7 +1399,12 @@ li.expired .name { text-decoration: none; }
   }
   $("ocrBtn").onclick = () => $("ocrFile").click();
   $("ocrAgain").onclick = () => $("ocrFile").click();
-  $("ocrFile").onchange = () => { const f = $("ocrFile").files[0]; $("ocrFile").value = ""; takeFormPhoto(f); };
+  $("ocrFile").onchange = async () => {
+    let f;
+    try { f = await holdFile($("ocrFile")); }
+    catch (e) { showOcr({ title: (e && e.message) || "사진을 받지 못했어요", err: true, note: "다시 찍거나, 갤러리에서 JPEG 사진을 골라 주세요" }); return; }
+    takeFormPhoto(f);
+  };
 
   // ---- 사진으로 품목 추천: ① 사진 글자에 이미 아는 품목 이름이 있으면 그것, ② 매장들이 쌓은 학습 기록에서 글자가 많이 겹치는 품목 ----
   const formSaved = new Set(); // [추가]·[수정 저장]을 누른 품목 id
@@ -2501,7 +2506,7 @@ li.expired .name { text-decoration: none; }
     const alive = () => trCur && trCur.id === shotId;
     let shrunk;
     try { shrunk = await shrink(file, kind === "doc" ? 1600 : 1200, kind === "doc" ? 0.66 : 0.6); }
-    catch { job.state = "err"; trInFlight--; renderJobs(); if (alive()) $("trInvHint").textContent = "사진을 열 수 없습니다"; maybeAutoSave(); return; }
+    catch (e) { job.state = "err"; trInFlight--; renderJobs(); if (alive()) $("trInvHint").textContent = (e && e.message) || "사진을 열 수 없어요"; maybeAutoSave(); return; }
     if (!alive()) { trInFlight--; return; }
     trPreview[key] = shrunk.data;
     let d;
@@ -2550,7 +2555,7 @@ li.expired .name { text-decoration: none; }
     const hint = kind === "doc" ? $("trDocHint") : $("trBoxHint");
     const key = `${shotId}_${kind[0]}${++trSeq}`.slice(0, 40);
     let data;
-    try { ({ data } = await shrink(file)); } catch { hint.textContent = "사진을 열 수 없습니다"; return; }
+    try { ({ data } = await shrink(file)); } catch (e) { hint.textContent = (e && e.message) || "사진을 열 수 없어요"; return; }
     if (!trCur || trCur.id !== shotId) return;
     hint.textContent = "읽는 중…";
     trInFlight++;
@@ -2577,14 +2582,19 @@ li.expired .name { text-decoration: none; }
   }
   $("trDocShot").onclick = () => { trChain = false; trShot = "doc"; $("trFile").click(); };
   $("trBoxShot").onclick = () => { trChain = false; trShot = "box"; $("trFile").click(); };
-  $("trFile").onchange = () => {
-    const f = $("trFile").files && $("trFile").files[0];
+  $("trFile").onchange = async () => {
     const kind = trShot;
-    $("trFile").value = "";
-    if (!f || !trCur || !kind) { trShot = ""; return; }
-    const next = trChain && trCur.cuts ? TraceNos.nextTraceShot(kind) : "";
+    const next = trChain && trCur && trCur.cuts ? TraceNos.nextTraceShot(kind) : "";
     trShot = next || "";
+    let f = null;
+    try { f = await holdFile($("trFile")); }
+    catch (e) {
+      if ($("trInvHint")) $("trInvHint").textContent = (e && e.message) || "사진을 받지 못했어요. 다시 찍어 주세요.";
+      return;
+    }
+    // 바이트를 복사한 뒤에 다음 카메라를 연다. 입력을 먼저 비우면 삼성에서 방금 찍은 파일이 사라진다.
     if (next) { try { $("trFile").click(); } catch (e) {} }
+    if (!f || !trCur || !kind) return;
     traceShot(kind, f);
   };
   const cleanNo = (v) => (typeof TraceNos !== "undefined" ? TraceNos.normTrace(v) : "");
