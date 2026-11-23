@@ -3,10 +3,11 @@
 //  - 1200만 화소 원본을 그대로 디코드하면 메모리가 부족해 탭이 죽는다. 긴 변을 먼저 줄여 디코드한다.
 //  - 카메라 JPEG 의 EXIF 방향을 직접 적용한다. imageOrientation:"none" 으로 받아 두 번 돌리지 않는다.
 //  - HEIC·빈 파일·영상·캔버스 실패는 한글 메시지로 돌려준다.
+//  - 갤럭시 카메라 '고효율 사진'(HEIC/HEIF)은 안드로이드 크롬·삼성 인터넷이 못 연다. 그때만 변환기를 내려받아 JPEG로 바꿔 다시 연다.
 // index.html 과 tools/photo-prep.test.mjs 가 같이 쓴다.
 (function (g) {
   "use strict";
-  const VERSION = 1;
+  const VERSION = 2;
   const MSG = {
     empty: "사진이 비어 있어요. 다시 찍어 주세요.",
     video: "사진이 아니라 영상이 들어왔어요. 다시 찍어 주세요.",
@@ -175,6 +176,55 @@
     });
   }
 
+  // ---- HEIC/HEIF: 갤럭시 '고효율 사진'처럼 브라우저가 못 여는 형식만 여기로 온다 ----
+  // 변환기(heic2any)는 처음 필요할 때 한 번만 내려받는다(약 2MB). 그전에는 앱이 무거워지지 않는다.
+  const HEIC_LIB = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+  let heicLoad = null;
+  function loadHeic() {
+    if (typeof g.heic2any === "function") return Promise.resolve(g.heic2any); // 이미 받아 둠·시험용 주입
+    if (heicLoad) return heicLoad;
+    heicLoad = new Promise((ok, fail) => {
+      if (typeof document === "undefined" || !document.head) { fail(new Error("HEIC 변환기를 쓸 수 없어요")); return; }
+      const sc = document.createElement("script");
+      sc.src = HEIC_LIB;
+      sc.async = true;
+      sc.onload = () => (typeof g.heic2any === "function" ? ok(g.heic2any) : fail(new Error("HEIC 변환기를 쓸 수 없어요")));
+      sc.onerror = () => { heicLoad = null; fail(new Error("HEIC 변환기를 내려받지 못했어요")); }; // 다음 사진에서 다시 시도
+      document.head.appendChild(sc);
+    });
+    return heicLoad;
+  }
+  // HEIC 바이트 → JPEG 바이트. 변환기가 회전을 풀어서 내주므로 결과 JPEG 에는 EXIF 방향이 없다.
+  async function heicToJpeg(buf, type) {
+    const convert = await loadHeic();
+    const src = new Blob([buf], { type: type === "image/heif" ? "image/heif" : "image/heic" });
+    const out = await convert({ blob: src, toType: "image/jpeg", quality: 0.9 });
+    const jpeg = Array.isArray(out) ? out[0] : out;
+    if (!jpeg || !jpeg.size) throw photoError(MSG.heic);
+    const jbuf = await jpeg.arrayBuffer();
+    if (!jbuf || !jbuf.byteLength) throw photoError(MSG.heic);
+    return jbuf;
+  }
+
+  // index.html 의 holdFile 이 읽어 둔 바이트가 있으면 다시 읽지 않는다.
+  // (갤럭시 50MP·200MP 원본에서 arrayBuffer 를 두 번 읽으면 메모리 피크가 2배가 되어 탭이 죽는다)
+  function asBytes(v) {
+    if (!v || typeof ArrayBuffer === "undefined") return null;
+    if (v instanceof ArrayBuffer) return v;
+    if (ArrayBuffer.isView(v)) return v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength);
+    return null;
+  }
+  function heldBytes(file) {
+    if (!file) return null;
+    return asBytes(file) || asBytes(file._buf) || asBytes(file.buffer);
+  }
+  // 저장된 가로·세로 → 긴 변 edge 로 줄인 디코드 크기. 크기를 모르면 0(브라우저가 알아서 연다).
+  function decodeSize(info, edge) {
+    if (!(info && info.width > 0 && info.height > 0)) return { rw: 0, rh: 0 };
+    const s = Math.min(1, edge / Math.max(info.width, info.height));
+    return { rw: Math.max(1, Math.round(info.width * s)), rh: Math.max(1, Math.round(info.height * s)) };
+  }
+
   async function decodeBitmap(blob, rw, rh, orientation) {
     const attempts = [];
     if (typeof createImageBitmap === "function") {
@@ -269,30 +319,44 @@
   }
 
   // file → { data: dataURL, color: "r,g,b" }. 긴 변은 maxEdge(기본 1400). 결과 JPEG 가 크면 화질을 낮춘다.
+  // file 은 File·Blob, 또는 holdFile 이 넘긴 { buffer, type, name, size } 다. 뒤의 것은 바이트를 다시 읽지 않는다.
   async function shrink(file, maxEdge, quality) {
-    if (!file || !(file.size > 0)) throw photoError(MSG.empty);
+    if (!file) throw photoError(MSG.empty);
     const type = String(file.type || "").toLowerCase();
     const name = String(file.name || "").toLowerCase();
     if (type.indexOf("video/") === 0) throw photoError(MSG.video);
     const edge = maxEdge > 0 ? maxEdge : 1400;
     let q = quality > 0 && quality <= 1 ? quality : 0.72;
-    let buf;
-    try { buf = await file.arrayBuffer(); }
-    catch { throw photoError(MSG.open); }
-    if (!buf || !buf.byteLength) throw photoError(MSG.empty);
-    const info = inspect(buf);
-    const heic = info.heic || type === "image/heic" || type === "image/heif" || /\.hei[cf]$/.test(name);
-    const mime = type && type.indexOf("image/") === 0 ? type : "image/jpeg";
-    const blob = new Blob([buf], { type: mime });
-    let rw = 0, rh = 0;
-    if (info.width > 0 && info.height > 0) {
-      const s = Math.min(1, edge / Math.max(info.width, info.height));
-      rw = Math.max(1, Math.round(info.width * s));
-      rh = Math.max(1, Math.round(info.height * s));
+    let buf = heldBytes(file);
+    let size = file.size > 0 ? file.size : (buf ? buf.byteLength : 0);
+    if (!buf) {
+      try { buf = await file.arrayBuffer(); }
+      catch { throw photoError(MSG.open); }
+      size = buf && buf.byteLength ? buf.byteLength : 0;
     }
+    if (!size) throw photoError(MSG.empty);
+    let info = inspect(buf);
+    const heic = info.heic || type === "image/heic" || type === "image/heif" || /\.hei[cf]$/.test(name);
+    let mime = type && type.indexOf("image/") === 0 ? type : "image/jpeg";
+    let blob = new Blob([buf], { type: mime });
+    let dec = decodeSize(info, edge);
     let decoded;
-    try { decoded = await decodeBitmap(blob, rw, rh, info.orientation || 1); }
-    catch { throw photoError(heic ? MSG.heic : (file.size > 8 * 1024 * 1024 ? MSG.big : MSG.open)); }
+    try { decoded = await decodeBitmap(blob, dec.rw, dec.rh, info.orientation || 1); }
+    catch (e) {
+      if (!heic) throw photoError(size > 8 * 1024 * 1024 ? MSG.big : MSG.open);
+      // 브라우저가 못 여는 HEIC/HEIF 만 변환기를 내려받아 JPEG 로 바꾼 뒤 다시 연다. 변환도 실패하면 안내 문구.
+      let jbuf = null;
+      try { jbuf = await heicToJpeg(buf, mime); } catch (e2) { jbuf = null; }
+      if (!jbuf) throw photoError(MSG.heic);
+      buf = jbuf; size = jbuf.byteLength;
+      info = inspect(buf);
+      mime = "image/jpeg";
+      blob = new Blob([buf], { type: mime });
+      dec = decodeSize(info, edge);
+      try { decoded = await decodeBitmap(blob, dec.rw, dec.rh, info.orientation || 1); }
+      catch (e2) { throw photoError(MSG.heic); }
+    }
+    const rw = dec.rw, rh = dec.rh;
     const bmp = decoded.bmp;
     let orientation = decoded.manual ? (info.orientation || 1) : 1;
     if (decoded.manual && rw > 0 && rh > 0 && Math.abs(rw - rh) > 1) {

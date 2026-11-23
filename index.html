@@ -847,7 +847,7 @@ li.expired .name { text-decoration: none; }
   </div>
 </div>
 
-<script src="photo-prep.js?v=1"></script>
+<script src="photo-prep.js?v=2"></script>
 <script src="ocr-preprocess.js?v=1"></script>
 <script src="trace-nos.js"></script>
 <script src="barcode-decoder.js?v=1"></script>
@@ -1171,6 +1171,9 @@ li.expired .name { text-decoration: none; }
   let photos = {}; try { photos = JSON.parse(localStorage.getItem(PH)) || {}; } catch {}
   const localPhoto = {}; // 올리는 중인 사진은 기기 안의 사진으로 먼저 보여 줌
   let photoReady = false; try { photoReady = localStorage.getItem("label-list-photo-ready") === "1"; } catch {}
+  // 사진으로 날짜 채우기 버튼: 매장 주소(API)만 있으면 연다.
+  // 예전엔 첫 사진 목록 확인이 실패하면 photoReady 가 계속 false 라 버튼 자체가 숨었다(갤럭시에서 사진을 못 찍던 원인).
+  const photoOn = () => !!API || photoReady;
   const photoSrc = (id, w) => localPhoto[id] || `https://drive.google.com/thumbnail?id=${encodeURIComponent(photos[id])}&sz=w${w}`;
   function thumbHtml(id) {
     if (!photos[id] && !localPhoto[id]) return "";
@@ -1201,6 +1204,8 @@ li.expired .name { text-decoration: none; }
     return P.shrink(file, maxEdge, quality);
   }
   // 삼성 카메라는 입력칸을 비우는 순간 방금 찍은 파일을 무효로 만든다. 바이트를 먼저 복사한다.
+  // File 로 다시 감싸면 바이트를 한 번 더 복사해 50MP·200MP 에서 메모리가 2배가 된다(탭이 죽던 원인).
+  // 그래서 읽은 바이트를 그대로 넘긴다. photo-prep.js 의 shrink 는 이 모양도 받는다.
   async function holdFile(input) {
     const f = input.files && input.files[0];
     if (!f) { input.value = ""; return null; }
@@ -1210,7 +1215,7 @@ li.expired .name { text-decoration: none; }
       const name = f.name || "photo.jpg";
       input.value = "";
       if (!buf || !buf.byteLength) throw new Error("사진이 비어 있어요. 다시 찍어 주세요.");
-      return new File([buf], name, { type: type });
+      return { buffer: buf, type: type, name: name, size: buf.byteLength };
     } catch (e) {
       input.value = "";
       throw new Error((e && e.message) || "사진을 받지 못했어요. 다시 찍어 주세요.");
@@ -1265,7 +1270,7 @@ li.expired .name { text-decoration: none; }
 
   // 입력칸의 사진 상자
   function showOcr(o) {
-    $("ocrBtn").hidden = !!o || !photoReady; $("ocrRes").hidden = !o;
+    $("ocrBtn").hidden = !!o || !photoOn(); $("ocrRes").hidden = !o;
     if (!o) { $("ocrCh").innerHTML = ""; return; }
     $("ocrImg").src = o.img || "";
     $("ocrT").textContent = o.title || ""; $("ocrT").classList.toggle("err", !!o.err); $("ocrT").classList.toggle("busy", !!o.busy);
@@ -1769,14 +1774,14 @@ li.expired .name { text-decoration: none; }
   // 열 때 아래쪽 여백을 잠깐 늘려, 목록이 짧아도 입력칸을 화면 맨 위로 올릴 수 있게
   function openForm(open) {
     $("form").hidden = !open; $("addOpen").hidden = open; document.body.style.paddingBottom = open ? "70vh" : ""; paintFab();
-    if (open && $("ocrRes").hidden) $("ocrBtn").hidden = !photoReady; // 사진 버튼: 처음 열 때부터 바로 보이게
+    if (open && $("ocrRes").hidden) $("ocrBtn").hidden = !photoOn(); // 사진 버튼: 처음 열 때부터 바로 보이게
   }
   // 입력칸을 화면 맨 위로: 키보드가 올라와도 입력칸이 가려지지 않게 (아이폰은 키보드가 뜨며 화면을 한 번 더 밀어서 두 번)
   function formToTop() {
     const go = () => scrollTo({ top: $("form").getBoundingClientRect().top + scrollY - 12, behavior: "smooth" });
     go(); setTimeout(go, 350);
   }
-  $("addOpen").onclick = () => { openForm(true); loadCatalog(); if (!photoReady) $("fName").focus({ preventScroll: true }); formToTop(); }; // 사진 기능이 있으면 키보드 대신 사진 버튼부터 보이게. 다른 매장 이름은 여기서 받음
+  $("addOpen").onclick = () => { openForm(true); loadCatalog(); if (!photoOn()) $("fName").focus({ preventScroll: true }); formToTop(); }; // 사진 기능이 있으면 키보드 대신 사진 버튼부터 보이게. 다른 매장 이름은 여기서 받음
   // 닫기·취소: 수정 중이었으면 그 줄로 돌아감
   function closeForm() { const id = editId; discardFormPhoto(); resetForm(); openForm(false); if (id) backToRow(id); }
   $("formClose").onclick = closeForm;
@@ -1828,7 +1833,7 @@ li.expired .name { text-decoration: none; }
     resetForm();
     // 수정이면 입력칸을 닫고 고친 줄로 돌아가 연두빛으로 보여줌 / 추가면 입력칸은 그대로 (사진이 있으면 키보드는 띄우지 않음)
     if (wasEdit) { openForm(false); if (document.activeElement) document.activeElement.blur(); }
-    else { if (!photoReady) $("fName").focus(); $("preview").innerHTML = `<b class="saved">✓ ${esc(it.name)} 추가됨</b> · ${isPack(it) ? "포장 " + fmt(it.mfg) : ddayText(daysLeft(expiryOf(it)))}`; }
+    else { if (!photoOn()) $("fName").focus(); $("preview").innerHTML = `<b class="saved">✓ ${esc(it.name)} 추가됨</b> · ${isPack(it) ? "포장 " + fmt(it.mfg) : ddayText(daysLeft(expiryOf(it)))}`; }
     const saving = save(it);
     if (wasEdit) backToRow(it.id);
     try { await saving; }
