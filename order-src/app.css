@@ -729,8 +729,14 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 #locTabs button { width: 100%; min-height: 40px; text-align: center; }
 .lochint { margin: 0 4px 10px; font-size: 12px; color: var(--muted); }
 .lochint b { color: var(--fg); }
-.lrow { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-block: 6px; background: var(--surface); position: relative; }
-.lrow .grip { width: 40px; height: 44px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; touch-action: none; cursor: grab; }
+.lrow { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-block: 8px; background: var(--surface); position: relative; }
+.lrow .grip { width: 44px; height: 44px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; touch-action: none; cursor: grab; }
+.lrow .sidebtn, .lrow .lbtn { min-height: 44px; border: 0; border-radius: 10px; background: var(--fill); color: var(--fg); font-weight: 800; }
+.lrow .sidebtn { min-width: 72px; padding: 0 12px; }
+.lrow .ltools { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 8px 4px 8px; }
+.lrow .lbtn { min-width: 64px; padding: 0 12px; }
+.lochide { width: 100%; min-height: 44px; margin: 0 0 8px; border: 0; border-radius: 12px; background: var(--fill); color: var(--fg); font-weight: 800; }
+.lochide[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .lrow .lnm { min-width: 0; font-size: 14px; font-weight: 700; }
 .lrow .lnm small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
 .lrow .lnm small b { color: var(--rose-ink); font-weight: 700; }
