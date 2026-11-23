@@ -90,14 +90,15 @@
 
   <!-- 데이터 파일 -->
   <!-- 보관 위치 · 순서 (11/6 KM): 품목마다 드라이·워크인·프리저, 손잡이를 끌어 선반 순서대로 -->
-  <section class="view" id="v-loc" aria-label="보관 위치와 순서" hidden>
+  <section class="view" id="v-loc" aria-label="발주 품목 설정" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
-      <h2>보관 위치 · 순서</h2>
+      <h2>발주 품목 설정</h2>
       <span class="right"></span>
     </div>
     <div class="chips" id="locScope" role="group" aria-label="BOH · FOH"></div>
     <div class="chips" id="locTabs" role="tablist" aria-label="위치"></div>
+    <button type="button" id="locHide" class="lochide" aria-pressed="false">숨긴 품목</button>
     <div class="group" id="locList"></div>
   </section>
 
@@ -143,7 +144,7 @@
     <div class="group" id="masters"></div>
     </div>
     <div class="catpane" data-cat="order">
-    <button type="button" class="locentry" data-go="loc"><span><b>보관 위치 · 순서</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="loc"><span><b>발주 품목 설정</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
     <button type="button" class="locentry" data-go="log"><span><b>BOH 수원컨벤션점 발주시트</b></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>발주 설정</span></div>

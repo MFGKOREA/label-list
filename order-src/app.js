@@ -801,6 +801,9 @@
       // 한 번에 쓰는 양 (11/16 KM "대두유가 0.1씩 사용하는 품목이 아니야, 프라이어에 1.5통씩 들어가서"): 조금씩 줄지 않고 쓸 때 통째로 나감
       //  → 86 위험·발주는 "다음 입고 전까지 쓸 횟수(올림) × 한 번 양"이 있어야 함. useName = 화면에 쓸 이름("기름 교체")
       it.useStep = (c && num(c.useStep) > 0 && num(c.useStep)) || 0; it.useName = (c && c.useName) || "";
+      // 발주 품목 설정: side가 없으면 발주 시트=BOH, master.foh의 boh 표시=BOH. hide가 없으면 그대로 보임
+      if (c && c.side === "foh") it.foh = true; else if (c && c.side === "boh") it.foh = false;
+      it.hidden = !!(c && c.hide);
     };
     items.forEach((it) => { it.pk = packOf(it, conv[it.code]); withCfg(it); });
     const byName = new Map(); items.forEach((it) => it.members.forEach((n) => byName.set(n, it)));
@@ -1397,6 +1400,7 @@
   // ---------- C: 최종 발주량 ----------
   const Z = 1.65;
   function calc(it, win, s, inc) {
+    if (it.hidden) return { none: true, hidden: true }; // 발주 품목 설정에서 숨긴 품목은 발주·예상 재고를 내지 않음
     if (plainNow(it)) return { none: true, plain: true }; // FOH 재고·발주만 (11/19)
     const g100 = win.gross / 1e6;
     const useA = it.rateA != null ? it.fixedA * win.days + it.rateA * g100 : null;
@@ -2025,13 +2029,13 @@
       b.className = "banner" + (win.est ? " soft" : "");
       b.innerHTML = `<span><b class="b1">${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고</b><small class="b2"><em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</small></span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
-    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && inScope(i)).map((i) => i.vendor).filter(Boolean))];
+    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i)).map((i) => i.vendor).filter(Boolean))];
     if (scope === "foh") fohRows().forEach((r) => { if (r && r.vendor && !vendors.includes(r.vendor)) vendors.push(r.vendor); }); // FOH: 온세물류(계산) + 다른 업체(간단 목록)
     if (cat && !vendors.includes(cat)) cat = null;
     // 11/19 UI 점검: 업체가 4개 넘으면 한 줄에 못 들어가 글자가 잘림(발주 탭 한성물산이 생기며 4개) → 4개는 2칸×2줄, 5개부터 3칸씩
     $("cats").classList.toggle("foh", vendors.length > 3); $("cats").style.setProperty("--vcols", vendors.length === 4 ? 2 : 3);
     $("cats").innerHTML = vendors.map((c) => {
-      const n = M.items.filter((it) => !it.ledgerOnly && inScope(it) && it.vendor === c).length + (scope === "foh" ? fohRows().filter((r) => r.vendor === c && !fohCalc(r)).length : 0);
+      const n = M.items.filter((it) => !it.ledgerOnly && !it.hidden && inScope(it) && it.vendor === c).length + (scope === "foh" ? fohRows().filter((r) => r.vendor === c && !fohCalc(r)).length : 0);
       return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(scope === "foh" ? shortV(c) : c)}<span class="cnt">${n}</span></button>`;
     }).join("");
     renderList();
@@ -2420,7 +2424,7 @@
     menuWMemo.set(it.key, res); return res;
   };
   function estStock(it, d, plan, pre, anchor) { // anchor: 지난 날을 볼 때 그 날(발주시트). 없으면 오늘 기준 7일 안에서 센 값을 찾음(예전 그대로)
-    if (plainNow(it)) return null; // FOH 재고·발주만: 쓸 양을 모르니 예상 재고 없음 (11/19)
+    if (it.hidden || plainNow(it)) return null; // 숨긴 품목·재고만 품목은 예상 재고 없음
     const start = d > TODAY ? TODAY : addDays(d, -1);
     for (let x = start; x >= addDays(anchor && anchor < TODAY ? anchor : TODAY, -7); x = addDays(x, -1)) {
       if (!counted((db["input." + x] || {})[it.key])) continue;
@@ -2820,7 +2824,7 @@
   const riskTag = (k) => (k ? { ...k, mode: k.night ? "night" : k.est ? "est" : "counted", label: k.est && !(k.night && k.from === TODAY) ? "확인필요" : "86 위험" } : null);
   const risk1 = (it, v) => plainNow(it) ? null : riskTag(nightNow() ? riskNight(it) : riskOf(it, v) || riskEst(it, v));
   function risk86(M, inp) {
-    return M.items.filter((i) => !i.ledgerOnly).map((it) => risk1(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순
+    return M.items.filter((i) => !i.ledgerOnly && !i.hidden).map((it) => risk1(it, inp[it.key])).filter(Boolean).sort((a, b) => a.at - b.at || b.p - a.p); // 가장 먼저 바닥나는 순. 숨긴 품목은 제외
   }
   // ---------- 7일마다 세는 품목 (11/15 KM "둘 다 넣기") ----------
   //  최근 28일 동안 발주가 필요했던 날(앱 추천 r>0 또는 KM 발주 o>0)이 2일 이하이고 3번 넘게 센 품목은 매일 말고 7일마다 셈.
@@ -2899,17 +2903,29 @@
   const roOf = (it, idx) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ro != null ? c.ro : 1e4 + idx; };
   let locTab = "dry", locSaveT = 0, locPatch = {}, locFoh = false; // locFoh: 위치·순서 화면에서 FOH 품목을 보는 중 (11/19 KM "보관위치 순서도 FOH 거")
   // 바꾼 것만 모아서 0.6초 뒤 한 번에 저장 (끌 때마다 시트에 쓰지 않게)
-  const saveLoc = (k, patch) => { locPatch[k] = { ...(locPatch[k] || {}), ...patch }; db.itemCfg = { ...(db.itemCfg || {}), [k]: { ...((db.itemCfg || {})[k] || {}), ...patch } }; clearTimeout(locSaveT); locSaveT = setTimeout(() => { locPatch = {}; setKey("itemCfg", db.itemCfg); }, 600); };
+  const saveLoc = (k, patch) => {
+    const cur = { ...((db.itemCfg || {})[k] || {}) };
+    Object.keys(patch).forEach((p) => { if (patch[p] == null) delete cur[p]; else cur[p] = patch[p]; });
+    db.itemCfg = { ...(db.itemCfg || {}), [k]: cur };
+    invalidate();
+    clearTimeout(locSaveT); locSaveT = setTimeout(() => setKey("itemCfg", db.itemCfg), 600);
+  };
   function renderLocEdit() {
     const M = model(), all = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh), idx = new Map(all.map((it, i) => [it.key, i]));
-    const LS = locFoh ? LOCS_FOH : LOCS; if (!LS.some(([k]) => k === locTab)) locTab = "dry";
-    $("locScope").innerHTML = [["boh", "BOH"], ["foh", "FOH"]].map(([k, t]) => `<button type="button" data-s="${k}" aria-pressed="${(k === "foh") === locFoh}">${t}<span class="cnt">${M.items.filter((i) => !i.ledgerOnly && !!i.foh === (k === "foh")).length}</span></button>`).join("");
+    const LS = locFoh ? LOCS_FOH : LOCS; if (locTab !== "hide" && !LS.some(([k]) => k === locTab)) locTab = "dry";
+    const shown = all.filter((i) => !i.hidden), hidden = all.filter((i) => i.hidden);
+    $("locScope").innerHTML = [["boh", "BOH"], ["foh", "FOH"]].map(([k, t]) => `<button type="button" data-s="${k}" aria-pressed="${(k === "foh") === locFoh}">${t}<span class="cnt">${M.items.filter((i) => !i.ledgerOnly && !i.hidden && !!i.foh === (k === "foh")).length}</span></button>`).join("");
     $("v-loc").classList.toggle("n5", LS.length > 4);
-    $("locTabs").innerHTML = LS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${all.filter((i) => locOf(i) === k).length}</span></button>`).join("");
-    const list = all.filter((i) => locOf(i) === locTab).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
+    $("locTabs").innerHTML = LS.map(([k, t]) => `<button type="button" role="tab" data-t="${k}" aria-pressed="${locTab === k}">${t}<span class="cnt">${shown.filter((i) => locOf(i) === k).length}</span></button>`).join("");
+    const hb = $("locHide"); if (hb) { hb.setAttribute("aria-pressed", locTab === "hide"); hb.textContent = `숨긴 품목 ${hidden.length}`; }
+    const list = (locTab === "hide" ? hidden : shown.filter((i) => locOf(i) === locTab)).sort((a, b) => roOf(a, idx.get(a.key)) - roOf(b, idx.get(b.key)));
     const box = $("locList");
     box.innerHTML = list.map((it) => { const c = (db.itemCfg || {})[it.key] || {}, L = locOf(it);
-      return `<div class="cell lrow" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${c.loc ? "" : " · <b>추정</b>"}</small></span><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span></div>`; }).join("") || `<div class="empty">이 위치 품목이 없어요</div>`;
+      const tools = it.hidden
+        ? `<button type="button" class="lbtn" data-show>다시 보이기</button>`
+        : `<button type="button" class="lbtn" data-mv="-1" aria-label="${esc(it.name)} 위로">위로</button><button type="button" class="lbtn" data-mv="1" aria-label="${esc(it.name)} 아래로">아래로</button><button type="button" class="lbtn" data-hide>숨김</button><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span>`;
+      return `<div class="cell lrow${it.hidden ? " is-hide" : ""}" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${it.hidden ? " · 숨김" : c.loc ? "" : " · <b>추정</b>"}</small></span><button type="button" class="sidebtn" data-side>${it.foh ? "BOH로" : "FOH로"}</button><div class="ltools">${tools}</div></div>`;
+    }).join("") || `<div class="empty">${locTab === "hide" ? "숨긴 품목이 없어요" : "이 위치 품목이 없어요"}</div>`;
     locSumUpdate();
   }
   // ---------- BOH 수원컨벤션점 발주시트 (11/16 KM) ----------
@@ -2998,18 +3014,19 @@
   });
   window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
   function locSumUpdate() {
-    const all = model().items.filter((i) => !i.ledgerOnly && !i.foh); // 위치 편집은 BOH 보관 자리만 (FOH는 EXPO)
+    const all = model().items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden);
+    const hid = model().items.filter((i) => !i.ledgerOnly && i.hidden).length;
     const sum = LOCS.map(([k, t]) => `${t} ${all.filter((i) => locOf(i) === k).length}`).join(" · "), guess = all.filter((i) => !((db.itemCfg || {})[i.key] || {}).loc).length;
-    if ($("locSum")) $("locSum").textContent = sum + (guess ? ` · 추정 ${guess}` : " · 모두 확인됨");
+    if ($("locSum")) $("locSum").textContent = sum + (guess ? ` · 추정 ${guess}` : " · 모두 확인됨") + (hid ? ` · 숨김 ${hid}` : "");
   }
   // 순서 다시 매김: 지금 화면 순서대로 0,1,2… (이 위치 품목만)
-  const renumber = () => [...$("locList").querySelectorAll(".lrow")].forEach((r, i) => saveLoc(r.dataset.key, { loc: locTab, ro: i }));
+  const renumber = () => { if (locTab === "hide") return; [...$("locList").querySelectorAll(".lrow")].forEach((r, i) => saveLoc(r.dataset.key, { loc: locTab, ro: i })); };
   let locSel = null;
   // 정렬 (11/12 KM): sheet = 발주품목순(발주 시트 순서 그대로) · need = 발주필요순(발주 필요한 것 위로, 예전 그대로). 이 기기에만 기억
   let sortSel = "need"; try { sortSel = localStorage.getItem("order-sort") || "need"; } catch {}
   if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
   function renderLocs(M) {
-    const pool = M.items.filter((i) => !i.ledgerOnly && inScope(i) && (!cat || i.vendor === cat));
+    const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && (!cat || i.vendor === cat));
     $("locs").classList.toggle("foh5", scope === "foh"); $("locs").innerHTML = locsNow().map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${locName(k, t)}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
   }
 
@@ -3038,7 +3055,7 @@
     let groups = new Map();
     const offFold = []; // 오늘 발주일이 아닌 업체 품목 (11/20)
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
-    M.items.filter((i) => !i.ledgerOnly && inScope(i)).forEach((it) => {
+    M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i)).forEach((it) => {
       const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       // 11/20 KM "온세·새싹 빼고 나머지 업체는 발주 요일만 체크, 발주 아닌 날엔 품목 가리기": 업체 발주 요일(vendorCfg.days)이 아닌 날은 맨 아래 접어 둠 (검색하면 보임)
@@ -3137,11 +3154,29 @@
   $("q").addEventListener("input", renderList);
   $("locScope").addEventListener("click", (e) => { const b = e.target.closest("button[data-s]"); if (!b) return; locFoh = b.dataset.s === "foh"; locTab = "dry"; renderLocEdit(); });
   $("locTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; locTab = b.dataset.t; renderLocEdit(); });
+  $("locHide").addEventListener("click", () => { locTab = locTab === "hide" ? "dry" : "hide"; renderLocEdit(); });
   $("locList").addEventListener("click", (e) => {
+    const row = e.target.closest(".lrow"); if (!row) return;
+    const k = row.dataset.key, it = model().items.find((i) => i.key === k); if (!it) return;
+    if (e.target.closest("[data-side]")) {
+      const toFoh = !it.foh, LS = toFoh ? LOCS_FOH : LOCS, patch = { side: toFoh ? "foh" : "boh" };
+      if (!LS.some(([x]) => x === locOf(it))) patch.loc = "dry";
+      saveLoc(k, patch); locFoh = toFoh; if (locTab !== "hide" && !LS.some(([x]) => x === (patch.loc || locOf(it)))) locTab = "dry";
+      renderLocEdit(); return;
+    }
+    if (e.target.closest("[data-hide]")) { saveLoc(k, { hide: 1 }); renderLocEdit(); return; }
+    if (e.target.closest("[data-show]")) { saveLoc(k, { hide: null }); locTab = (locFoh ? LOCS_FOH : LOCS).some(([x]) => x === locOf(it)) ? locOf(it) : "dry"; renderLocEdit(); return; }
+    const mv = e.target.closest("[data-mv]");
+    if (mv && locTab !== "hide") {
+      const rows = [...$("locList").querySelectorAll(".lrow")], i = rows.indexOf(row), j = i + (+mv.dataset.mv);
+      if (j < 0 || j >= rows.length) return;
+      if (+mv.dataset.mv < 0) $("locList").insertBefore(row, rows[j]); else $("locList").insertBefore(rows[j], row);
+      renumber(); return;
+    }
     const b = e.target.closest("[data-loc]"); if (!b) return;
-    const k = b.closest(".lrow").dataset.key, to = b.dataset.loc;
+    const to = b.dataset.loc;
     if (to === locTab) { saveLoc(k, { loc: to }); renderLocEdit(); return; } // 추정 → 확인
-    const M = model(), n = M.items.filter((i) => !i.ledgerOnly && !!i.foh === locFoh && locOf(i) === to).length;
+    const n = model().items.filter((i) => !i.ledgerOnly && !i.hidden && !!i.foh === locFoh && locOf(i) === to).length;
     saveLoc(k, { loc: to, ro: n + 1000 }); renderLocEdit(); // 다른 위치 맨 아래로
   });
   // 손잡이로 끌어 옮기기 (손가락·마우스 같이). 끄는 동안 행이 손을 따라가고, 놓으면 그 자리에 저장
