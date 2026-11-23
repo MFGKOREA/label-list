@@ -1395,9 +1395,46 @@
   }
 
   // 업체별 발주 요일·입고 (시트 vendorCfg): {"세제": {days:[1], lead:2, note:"택배"}} = 월요일만 발주, 2영업일 뒤 택배 도착
-  const vcfg = (it) => ((db.vendorCfg || {})[it && it.vendor] || {});
+  // 발주 요일이 비어 있으면 주문현황(misOrder)으로 채움. 요일이 5개 이상이거나 주문일이 6일 미만이면 일정이 없다고 보고 항상 보여 줌.
+  let inferDb = null, inferMap = null;
+  function inferSched(vendor) {
+    if (!vendor) return null;
+    if (inferDb !== db) {
+      inferDb = db; inferMap = new Map();
+      const codes = new Map();
+      (((db["master.order"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.vendor) codes.set(String(r.code), r.vendor); });
+      (((db["master.foh"] || {}).rows) || []).forEach((r) => { if (r && r.code && r.vendor && !codes.has(String(r.code))) codes.set(String(r.code), r.vendor); });
+      const acc = new Map();
+      Object.keys(db).forEach((k) => {
+        const m = /^misOrder\.(\d{4}-\d\d-\d\d)$/.exec(k); if (!m) return;
+        const seen = new Set();
+        ((db[k].rows) || []).forEach((r) => {
+          if (!(num(r && r.qty) > 0)) return;
+          const v = codes.get(String(r && r.code || "")) || "";
+          if (!v || seen.has(v)) return;
+          seen.add(v);
+          let o = acc.get(v); if (!o) acc.set(v, o = { n: 0, wd: [0, 0, 0, 0, 0, 0, 0] });
+          o.n++; o.wd[dow(m[1])]++;
+        });
+      });
+      acc.forEach((o, v) => {
+        const active = o.wd.filter((c) => c >= 2).length;
+        const max = Math.max(...o.wd);
+        const days = o.n >= 6 && active < 5 ? o.wd.map((c, i) => (c >= 3 && c >= max * 0.6 ? i : -1)).filter((i) => i >= 0) : [];
+        inferMap.set(v, { days: days.length ? days : null, n: o.n });
+      });
+    }
+    return inferMap.get(vendor) || null;
+  }
+  const vcfg = (it) => {
+    const raw = ((db.vendorCfg || {})[it && it.vendor]) || {};
+    const set = Array.isArray(raw.days) && raw.days.length ? raw.days : null;
+    const inf = set ? null : inferSched(it && it.vendor);
+    return { ...raw, days: set || (inf && inf.days) || null };
+  };
   const deliveryOf = (it, x) => addBiz(x, vcfg(it).lead || 2);
   const isOrderDay = (it, d) => { const ds = vcfg(it).days; return !ds || ds.includes(dow(d)); };
+  const showsToday = (it) => isOrderDay(it, preMode ? pDay() : TODAY);
   const nextOrderDay = (it, d) => { let x = d; for (let k = 0; k < 8 && !isOrderDay(it, x); k++) x = addDays(x, 1); return x; };
   // 해동이 필요한 품목은 다음 발주분도 입고 다음 날부터 쓸 수 있으니 기간을 해동 일수만큼 늘림
   function orderWindowFor(it, today) {
@@ -2058,13 +2095,13 @@
       b.className = "banner" + (win.est ? " soft" : "");
       b.innerHTML = `<span><b class="b1">${od === TODAY ? "오늘 발주" : `${DOW[dow(od)]} ${mmdd(od)} 사전발주`} → ${DOW[dow(win.deliv)]} ${mmdd(win.deliv)} 입고</b><small class="b2"><em>${win.covered.join("·")}</em> 사용분${win.est ? ` · Forecast 없는 날 ${win.est}일은 추정` : ""}${fcBias().label ? ` · Forecast 보정 ${fcBias().label}` : ""}${win.wkGross > 0 && weekendPlus() > 0 ? ` · 주말 여유 +${Math.round(weekendPlus() * 100)}%` : ""}${preMode && od > TODAY ? ` · 그 사이 발주는 추천량대로 넣는다고 보고 계산` : ""}</small></span><span class="bsum"><small>${win.days > 1 ? `${DOW[dow(od)]}~${DOW[dow(addDays(win.end, -1))]} ${win.days}일 매출 합계` : `${DOW[dow(od)]} 매출`}</small>${won(win.gross)}원</span>`;
     }
-    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i)).map((i) => i.vendor).filter(Boolean))];
+    const vendors = [...new Set(M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && showsToday(i)).map((i) => i.vendor).filter(Boolean))];
     if (scope === "foh") fohRows().forEach((r) => { if (r && r.vendor && !vendors.includes(r.vendor)) vendors.push(r.vendor); }); // FOH: 온세물류(계산) + 다른 업체(간단 목록)
     if (cat && !vendors.includes(cat)) cat = null;
     // 11/19 UI 점검: 업체가 4개 넘으면 한 줄에 못 들어가 글자가 잘림(발주 탭 한성물산이 생기며 4개) → 4개는 2칸×2줄, 5개부터 3칸씩
     $("cats").classList.toggle("foh", vendors.length > 3); $("cats").style.setProperty("--vcols", vendors.length === 4 ? 2 : 3);
     $("cats").innerHTML = vendors.map((c) => {
-      const n = M.items.filter((it) => !it.ledgerOnly && !it.hidden && inScope(it) && it.vendor === c).length + (scope === "foh" ? fohRows().filter((r) => r.vendor === c && !fohCalc(r)).length : 0);
+      const n = M.items.filter((it) => !it.ledgerOnly && !it.hidden && inScope(it) && showsToday(it) && it.vendor === c).length + (scope === "foh" ? fohRows().filter((r) => r.vendor === c && !fohCalc(r)).length : 0);
       return `<button type="button" data-c="${esc(c)}" aria-pressed="${c === cat}">${esc(scope === "foh" ? shortV(c) : c)}<span class="cnt">${n}</span></button>`;
     }).join("");
     renderList();
@@ -3090,12 +3127,12 @@
   function renderDepts(M) {
     const opts = [["food", "식자재"], ["bev", "주류/음료"], ["sup", "소모품"], ["det", "세제"]];
     if (deptSel && !opts.some(([k]) => k === deptSel)) deptSel = null;
-    const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i));
+    const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && showsToday(i));
     const el = $("depts"); if (!el) return;
     el.innerHTML = opts.map(([k, t]) => `<button type="button" data-d="${k}" aria-pressed="${deptSel === k}">${t}<span class="cnt">${pool.filter((i) => catOf(i) === k).length}</span></button>`).join("");
   }
   function renderLocs(M) {
-    const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && (!cat || i.vendor === cat));
+    const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && showsToday(i) && (!cat || i.vendor === cat));
     $("locs").classList.toggle("foh5", scope === "foh"); $("locs").innerHTML = locsNow().map(([k, t]) => `<button type="button" data-l="${k}" aria-pressed="${locSel === k}">${locName(k, t)}<span class="cnt">${pool.filter((i) => locOf(i) === k).length}</span></button>`).join("");
   }
 
@@ -3125,10 +3162,9 @@
     const offFold = []; // 오늘 발주일이 아닌 업체 품목 (11/20)
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i)).forEach((it) => {
+      if (!showsToday(it)) { offFold.push(it); return; }
       const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!deptSel || catOf(it) === deptSel) && (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
-      // 11/20 KM "온세·새싹 빼고 나머지 업체는 발주 요일만 체크, 발주 아닌 날엔 품목 가리기": 업체 발주 요일(vendorCfg.days)이 아닌 날은 맨 아래 접어 둠 (검색하면 보임)
-      if (!q && vcfg(it).days && !isOrderDay(it, preMode ? pDay() : TODAY)) { offFold.push(it); return; }
       if (!q) { const ws = weeklyState(it, inp[it.key]); if (ws && ws.fold) { folded.push(it); return; } }
       const v = it.vendor || "업체 미지정";
       if (!groups.has(v)) groups.set(v, []);
@@ -3191,7 +3227,7 @@
     if (offFold.length) { // 11/20: 오늘 발주일 아닌 업체 품목 — 접어 둠, 누르면 펼침
       const vs = [...new Set(offFold.map((it) => it.vendor))].map((v) => `${shortV(v)} ${(vcfg({ vendor: v }).days || []).map((x) => DOW[x]).join("·")}`).join(" · ");
       const det = document.createElement("details"); det.className = "weekly offday"; det.open = offOpen;
-      det.innerHTML = `<summary title="${esc(vs)}"><span class="wk-t">오늘 발주일 아닌 품목 <small>${offFold.length}</small></span><span class="wk-s" aria-hidden="true"></span></summary>`;
+      det.innerHTML = `<summary title="${esc(vs)}"><span class="wk-t">숨김 <small>${offFold.length}</small></span></summary>`;
       const g = document.createElement("div"); g.className = "group";
       const fill = () => { if (!g.childElementCount) offFold.forEach((it) => g.appendChild(rowEl(it, win, inp))); };
       if (det.open) fill();
