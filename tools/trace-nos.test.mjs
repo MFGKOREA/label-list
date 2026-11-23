@@ -130,6 +130,7 @@ assert.match(html, /window\.OcrPreprocess/);
 assert.match(html, /P\.preprocessDataUrl\(dataUrl\)/);
 assert.match(html, /ocrPreprocessed\(data, false\)/);
 assert.match(html, /id="trFile"[^>]*capture="environment"/);
+assert.match(html, /id="ocrFile"[^>]*capture="environment"/); // 라벨 사진 버튼도 카메라를 바로 연다(갤럭시에서 사진첩이 열리던 문제)
 assert.match(html, /오늘 입고 찍기/);
 assert.match(html, /trace:\s*true/);
 assert.match(html, /id="trCuts"/);
@@ -138,7 +139,7 @@ new Function(fs.readFileSync(new URL("../trace-nos.js", import.meta.url), "utf8"
 new Function(fs.readFileSync(new URL("../ocr-preprocess.js", import.meta.url), "utf8"));
 new Function(fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8"));
 const sw = fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8");
-assert.match(sw, /label-list-shell-v9/); // 화면·스크립트를 고치면 올린다(v9: 사진 인식 패치)
+assert.match(sw, /label-list-shell-v10/); // 화면·스크립트를 고치면 올린다(v10: 라벨 사진 버튼 갤럭시 카메라 바로 열기)
 assert.match(sw, /ocr-preprocess\.js/); // 오프라인에서도 2차 읽기 모듈을 받는다
 assert.match(sw, /photo-prep\.js/);
 assert.match(sw, /barcode-decoder\.js/); // 바코드 모듈도 앱과 같은 판으로 맞춰 둔다
