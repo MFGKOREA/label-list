@@ -10,12 +10,14 @@ fs.writeFileSync(kv, JSON.stringify({
   "master.order": { at: "2026-11-23", cols: ["name", "code", "vendor", "unit"], rows: [
     { name: "양파", code: "100001", vendor: "온세물류", unit: "EA" },
     { name: "감자", code: "100003", vendor: "온세물류", unit: "EA" },
+    { name: "상추", code: "100004", vendor: "새싹농산", unit: "EA" },
     { name: "소모품장갑", code: "100002", vendor: "한성물산", unit: "EA" },
     { name: "평판수세미", code: "340000447", vendor: "소모품", unit: "EA" },
     { name: "날짜", code: "한성물산(월 발주)", vendor: "소모품", unit: "" },
   ] },
   "master.foh": { rows: [{ name: "콜라", code: "200001", vendor: "롯데칠성", unit: "EA" }] },
   hide: ["업체:소모품"],
+  vendorCfg: { "온세물류": { days: [2] }, "새싹농산": { days: [1] } },
   itemCfg: { "소모품장갑": { hide: 1 }, "양파": { side: "foh", loc: "bar", ro: 1 } },
 }));
 
@@ -57,6 +59,16 @@ ok("소모품 머리글 줄은 품목이 아님", r.junk === false);
 ok("분류: 양파·감자는 식자재, 콜라는 주류/음료, 장갑·수세미는 소모품", r.dept && r.dept.potato === "food" && r.dept.onion === "food" && r.dept.coke === "bev" && r.dept.glove === "sup" && r.dept.sponge === "sup", JSON.stringify(r.dept));
 ok("발주시트 제목에 BOH가 없음", r.sheetTitle === "수원컨벤션점 발주시트" && r.sheetBtn === "수원컨벤션점 발주시트", r.sheetTitle + "/" + r.sheetBtn);
 ok("발주 화면 분류는 식자재·주류/음료·소모품·세제", ["식자재", "주류/음료", "소모품", "세제"].every((t) => r.deptBtns.includes(t)), JSON.stringify(r.deptBtns));
+const day = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll("#orderList .cell .c-name")].map((n) => n.textContent);
+  const hide = document.querySelector("#orderList .offday summary");
+  const sang = cards.find((t) => t.includes("상추")) || "";
+  return { today: window.__orderCalc.TODAY, cards, sang, hide: hide ? hide.textContent.replace(/\s+/g, " ") : "" };
+});
+const dow = new Date(day.today + "T00:00:00").getDay();
+ok("발주 요일이 아닌 감자는 카드에 없음", (dow === 2) === day.cards.some((t) => t.includes("감자")), day.today + " " + day.cards.join("|"));
+ok("발주일인 상추는 월 발주 배지", (dow === 1) === (day.sang.includes("상추") && day.sang.includes("월 발주")), day.sang || day.today);
+ok("발주일 아닌 품목은 아래 숨김", dow === 2 || /숨김/.test(day.hide), day.hide || "없음");
 ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
 await page.evaluate(() => {
   document.querySelector("#tileFiles").click();
