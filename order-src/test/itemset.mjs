@@ -32,11 +32,11 @@ const r = await page.evaluate(() => {
     sponge: (() => { const it = by("평판수세미"); return it && { foh: !!it.foh, hidden: !!it.hidden, sheetHide: !!it.sheetHide }; })(),
     junk: !!by("날짜"),
     dept: {
-      potato: C.deptOf(by("감자")),
-      onion: C.deptOf(by("양파")),
-      coke: C.deptOf(by("콜라")),
-      glove: C.deptOf(by("소모품장갑")),
-      sponge: C.deptOf(by("평판수세미")),
+      potato: C.catOf(by("감자")),
+      onion: C.catOf(by("양파")),
+      coke: C.catOf(by("콜라")),
+      glove: C.catOf(by("소모품장갑")),
+      sponge: C.catOf(by("평판수세미")),
     },
     sheetTitle: document.querySelector("#v-log h2") && document.querySelector("#v-log h2").textContent,
     sheetBtn: [...document.querySelectorAll(".locentry b")].map((b) => b.textContent).find((t) => t.includes("발주시트")),
@@ -54,9 +54,9 @@ ok("hide 면 계산을 안 함", r.glove && r.glove.hidden && r.glove.calc && r.
 ok("화면 이름이 발주 품목 설정", r.title === "발주 품목 설정" && r.entry === "발주 품목 설정", r.title + "/" + r.entry);
 ok("업체:소모품 숨김이어도 평판수세미는 설정에 있음", r.sponge && r.sponge.sheetHide && r.sponge.hidden && !r.sponge.foh, JSON.stringify(r.sponge));
 ok("소모품 머리글 줄은 품목이 아님", r.junk === false);
-ok("부서: 감자는 주방, 양파·콜라는 바/음료, 장갑·수세미는 소모품", r.dept && r.dept.potato === "kit" && r.dept.onion === "bar" && r.dept.coke === "bar" && r.dept.glove === "sup" && r.dept.sponge === "sup", JSON.stringify(r.dept));
+ok("분류: 양파·감자는 식자재, 콜라는 주류/음료, 장갑·수세미는 소모품", r.dept && r.dept.potato === "food" && r.dept.onion === "food" && r.dept.coke === "bev" && r.dept.glove === "sup" && r.dept.sponge === "sup", JSON.stringify(r.dept));
 ok("발주시트 제목에 BOH가 없음", r.sheetTitle === "수원컨벤션점 발주시트" && r.sheetBtn === "수원컨벤션점 발주시트", r.sheetTitle + "/" + r.sheetBtn);
-ok("발주 화면에 주방·소모품 수가 있음", r.deptBtns.includes("주방") && r.deptBtns.includes("소모품"), JSON.stringify(r.deptBtns));
+ok("발주 화면 분류는 식자재·주류/음료·소모품·세제", ["식자재", "주류/음료", "소모품", "세제"].every((t) => r.deptBtns.includes(t)), JSON.stringify(r.deptBtns));
 ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
 await page.evaluate(() => {
   document.querySelector("#tileFiles").click();

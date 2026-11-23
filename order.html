@@ -12,9 +12,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/order-192.png?v=8">
 <link rel="apple-touch-icon" href="icons/order-180.png?v=8">
 <title>발주량·프랩량 계산</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
@@ -38,7 +36,7 @@
   --c-de: #259a00; --c-fc: #b88600; --c-act: #e0244a;
   --rose: #fdeeec; --rose-line: #f5b8b0; --rose-ink: #d6402f;
   --shadow: 0 0 0 0 transparent;
-  --font: "Microsoft GothicNeo", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font: "Pretendard", -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -1168,7 +1166,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 
       <div id="bohList">
       <div class="filters">
-        <div class="frow"><span class="flab">부서</span><div class="chips" id="depts" role="group" aria-label="부서"></div></div>
+        <div class="frow"><span class="flab">분류</span><div class="chips" id="depts" role="group" aria-label="분류"></div></div>
         <div class="frow"><span class="flab">업체</span><div class="chips" id="cats" role="group" aria-label="업체"></div></div>
         <div class="frow"><span class="flab">위치</span><div class="chips" id="locs" role="group" aria-label="보관 위치"></div></div>
         <div class="frow"><span class="flab">정렬</span><div class="chips" id="sorts" role="group" aria-label="정렬"><button type="button" data-s="sheet" aria-pressed="false">발주품목순</button><button type="button" data-s="need" aria-pressed="true">발주필요순</button></div></div>
@@ -4488,14 +4486,17 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   const locOf = (it) => ((db.itemCfg || {})[it.key] || {}).loc || guessLoc(it);
   // 11/20 KM "세제나 소모품은 아래로 빼야지" · "분류를 해줘야지": BOH 품목 분류 0 = 식자재, 1 = 소모품(위치 = 소모품), 2 = 세제(소모품 중 세제·락스·세정제 등)
   const supCls = (it) => (it.foh || locOf(it) !== "sup" ? 0 : /세제|에이퐁|락스|기름제거제|세정제|클리너|린스/.test(it.name) ? 2 : 1), SUPN = ["", "소모품", "세제"];
-  // 부서: BOH 식자재는 주방, FOH 바 위치·주류는 바/음료, 그 외 FOH는 홀, 소모품·세제는 소모품. side(it.foh)와 보관 위치를 같이 본다.
-  const DEPTN = { kit: "주방", hall: "홀", bar: "바/음료", sup: "소모품" };
-  function deptOf(it) {
-    const v = it.vendor || "", loc = it.xcode ? "" : locOf(it);
-    if (it.sheetHide || loc === "sup" || v === "소모품" || v === "세제" || /소모품|세제/.test(v) || supCls(it) > 0) return "sup";
-    if (it.foh && (loc === "bar" || /롯데칠성|주류/.test(v))) return "bar";
-    if (it.foh) return "hall";
-    return "kit";
+  // 분류는 보관 위치·BOH/FOH와 따로다. 식재료는 어디에 있든 식자재. 주류·음료 업체와 음료 이름만 주류/음료.
+  const CATN = { food: "식자재", bev: "주류/음료", sup: "소모품", det: "세제" };
+  const isDetName = (n) => /세제|에이퐁|락스|기름제거제|세정제|클리너|린스|소독제|핸드솝|살균/.test(n);
+  const isSupName = (n) => /장갑|호일|유니랩|랩\(|봉투|행주|물티슈|냅킨|타올|포션백|유산지|쌀포대|수세미|여과지|테이프|앞치마|각솔|트레이|측정지|필터|후라이/.test(n);
+  const isBevName = (n) => !/레몬주스|라임주스/.test(n) && /사이다|콜라|녹차|커피|쉐이크|에이드|그린티|쥬스|주스|탄산|펠레그리노|테너|시럽|생수/.test(n);
+  function catOf(it) {
+    const n = it.name || "", v = it.vendor || "";
+    if (v === "세제" || (/세제/.test(v) && !/주류|롯데칠성/.test(v)) || isDetName(n)) return "det";
+    if (it.sheetHide || v === "소모품" || /소모품/.test(v) || isSupName(n)) return "sup";
+    if (/주류|롯데칠성/.test(v) || isBevName(n)) return "bev";
+    return "food";
   }
   let deptSel = null;
   const roOf = (it, idx) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ro != null ? c.ro : 1e4 + idx; };
@@ -4586,7 +4587,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       const nk = [...rest.slice(0, ins), ...sup, ...det, ...rest.slice(ins)], nb = new Map(nk.map((k) => [k, byV.get(k)])); byV.clear(); nb.forEach((v, k) => byV.set(k, v)); }
     // 11/20 KM(어사이드 전달) "발주시트도 순서대로 바꾸자": BOH 줄은 업체 안에서 MIS 주문등록 순서(품목명 "-" 빼고 가나다, 발주 탭 발주품목순과 같음). FOH 줄은 master.foh 순서 그대로
     { const ks = [...byV.keys()], co = new Intl.Collator("ko"), nk = (it) => String(it.name).replace(/-/g, ""); order.sort((a, b) => ks.indexOf(vKey(a)) - ks.indexOf(vKey(b)) || (!a.foh && !b.foh ? co.compare(nk(a), nk(b)) : 0)); } // 업체별로 모음
-    { const rank = { kit: 0, hall: 1, bar: 2, sup: 3 }, vi = new Map(); order.forEach((it) => { const v = vKey(it); if (!vi.has(v)) vi.set(v, vi.size); }); order.sort((a, b) => rank[deptOf(a)] - rank[deptOf(b)] || vi.get(vKey(a)) - vi.get(vKey(b))); }
+    { const rank = { food: 0, bev: 1, sup: 2, det: 3 }, vi = new Map(); order.forEach((it) => { const v = vKey(it); if (!vi.has(v)) vi.set(v, vi.size); }); order.sort((a, b) => rank[catOf(a)] - rank[catOf(b)] || vi.get(vKey(a)) - vi.get(vKey(b))); }
     const shortOf = (n) => String(n).replace(/^냉동[_\s]*/, "").replace(/\(.*?\)/g, "").replace(/_.*$/, "").trim() || String(n), cnt = new Map();
     order.forEach((it) => cnt.set(shortOf(it.name), (cnt.get(shortOf(it.name)) || 0) + 1));
     const nameOf = (it) => (cnt.get(shortOf(it.name)) > 1 ? it.name : shortOf(it.name));
@@ -4615,8 +4616,8 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       const h1 = days.map((d) => `<th colspan="2" class="dh${d === TODAY ? " today" : ""}">${md(d)} <span>${DOW[dow(d)]}</span></th>`).join("");
       const fc = days.map((d) => { const f = fcOf(d); return `<td colspan="2" class="fc ds">${f > 0 ? Math.round(f / 1e4).toLocaleString() + "만" : ""}</td>`; }).join("");
       let lastV = null, lastD = null; const VNAME = { "세제": "이콜랩 (세제)" }; // 11/16 KM "세제는 이콜랩", 소모품 = 발주 품목 파일의 한성물산
-      const rows = order.map((it) => { const d = deptOf(it), v = vKey(it), vn = v.split("\u0002")[0];
-        const dhead = d !== lastD ? `<tr class="drow"><th class="nm" colspan="${1 + days.length * 2}">${DEPTN[d]} <small>${order.filter((x) => deptOf(x) === d).length}</small></th></tr>` : "";
+      const rows = order.map((it) => { const d = catOf(it), v = vKey(it), vn = v.split("\u0002")[0];
+        const dhead = d !== lastD ? `<tr class="drow"><th class="nm" colspan="${1 + days.length * 2}">${CATN[d]} <small>${order.filter((x) => catOf(x) === d).length}</small></th></tr>` : "";
         if (d !== lastD) lastV = null;
         const head = v !== lastV ? `<tr class="vrow"><th class="nm" scope="rowgroup">${esc(VNAME[vn] || vn)}${v !== vn || it.foh ? ` <b class="fohtag">FOH</b>` : byV.has(v + "\u0002FOH") ? ` <b class="bohtag">BOH</b>` : ""} <small>${byV.get(v).length}</small></th>${days.map(() => `<td class="sub ds">On Hand</td><td class="sub">Order</td>`).join("")}</tr>` : "";
         lastD = d; lastV = v; return dhead + head + `<tr><th class="nm" scope="row" title="${esc(it.name)}">${esc(nameOf(it))} <small>${esc(it.box ? it.boxLabel : it.pk.stock || "")}</small></th>${days.map((d0) => `<td class="s ds">${stockCell(it, d0)}</td><td class="o">${orderCell(it, d0)}</td>`).join("")}</tr>`; }).join("");
@@ -4644,11 +4645,11 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   let sortSel = "need"; try { sortSel = localStorage.getItem("order-sort") || "need"; } catch {}
   if (!["need", "sheet"].includes(sortSel)) sortSel = "need"; // 11/12 KM: 금액순·가나다순은 뺌
   function renderDepts(M) {
-    const opts = scope === "foh" ? [["hall", "홀"], ["bar", "바/음료"], ["sup", "소모품"]] : [["kit", "주방"], ["sup", "소모품"]];
+    const opts = [["food", "식자재"], ["bev", "주류/음료"], ["sup", "소모품"], ["det", "세제"]];
     if (deptSel && !opts.some(([k]) => k === deptSel)) deptSel = null;
     const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i));
     const el = $("depts"); if (!el) return;
-    el.innerHTML = opts.map(([k, t]) => `<button type="button" data-d="${k}" aria-pressed="${deptSel === k}">${t}<span class="cnt">${pool.filter((i) => deptOf(i) === k).length}</span></button>`).join("");
+    el.innerHTML = opts.map(([k, t]) => `<button type="button" data-d="${k}" aria-pressed="${deptSel === k}">${t}<span class="cnt">${pool.filter((i) => catOf(i) === k).length}</span></button>`).join("");
   }
   function renderLocs(M) {
     const pool = M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i) && (!cat || i.vendor === cat));
@@ -4681,7 +4682,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     const offFold = []; // 오늘 발주일이 아닌 업체 품목 (11/20)
     const folded = []; // 7일마다 세는 품목 중 오늘 셀 날이 아닌 것 → 맨 아래에 접어 둠 (검색할 땐 그대로)
     M.items.filter((i) => !i.ledgerOnly && !i.hidden && inScope(i)).forEach((it) => {
-      const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!deptSel || deptOf(it) === deptSel) && (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
+      const hit = q ? (CHO_Q.test(q) ? choOf(it.name).includes(q.replace(/\s+/g, "")) : it.name.toLowerCase().includes(q) || (!!norm(q) && norm(it.name).includes(norm(q)))) : (!deptSel || catOf(it) === deptSel) && (!cat || it.vendor === cat) && (!locSel || locOf(it) === locSel);
       if (!hit) return;
       // 11/20 KM "온세·새싹 빼고 나머지 업체는 발주 요일만 체크, 발주 아닌 날엔 품목 가리기": 업체 발주 요일(vendorCfg.days)이 아닌 날은 맨 아래 접어 둠 (검색하면 보임)
       if (!q && vcfg(it).days && !isOrderDay(it, preMode ? pDay() : TODAY)) { offFold.push(it); return; }
@@ -5919,7 +5920,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, deptOf };
+  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
 })();
 
 </script>
