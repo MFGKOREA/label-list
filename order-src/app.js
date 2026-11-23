@@ -1401,15 +1401,12 @@
     const g100 = win.gross / 1e6;
     const useA = it.rateA != null ? it.fixedA * win.days + it.rateA * g100 : null;
     const useB = it.rateB != null ? it.rateB * g100 : null;
-    let use, wA = 0.5;
-    if (it.recipeOnly && useB != null) { use = useB; wA = 0; }
-    else if (useA != null && useB != null) {
-      const mse = (arr) => arr.length >= 2 ? arr.slice(-6).reduce((a, e) => a + e * e, 0) / Math.min(arr.length, 6) : null;
-      const ea = mse(it.scoreA.length ? it.scoreA : it.errA), eb = mse(it.scoreB.length ? it.scoreB : it.errB);
-      if (ea != null && eb != null && ea + eb > 0) wA = Math.min(0.85, Math.max(0.15, (1 / Math.max(ea, 1e-4)) / (1 / Math.max(ea, 1e-4) + 1 / Math.max(eb, 1e-4))));
-      if (it.newShare > 0.3) wA = Math.min(wA, 1 - it.newShare); // 메뉴 교체·신메뉴로 바뀐 몫은 A가 모름
-      use = wA * useA + (1 - wA) * useB;
-    } else use = useA ?? useB ?? (it.rateG != null ? it.rateG * g100 : null);
+    const mse = (arr) => arr.length >= 2 ? arr.slice(-6).reduce((a, e) => a + e * e, 0) / Math.min(arr.length, 6) : null;
+    const ea = mse(it.scoreA.length ? it.scoreA : it.errA), eb = mse(it.scoreB.length ? it.scoreB : it.errB);
+    // A·B는 한 함수(분산의 역수)로만 맞춥니다. 화면마다 비중을 다시 적지 않습니다.
+    let blended = OrderPipe.reconcileAB(useA, useB, ea, eb, { recipeOnly: it.recipeOnly, newShare: it.newShare });
+    if (blended.use == null && it.rateG != null) blended = { use: it.rateG * g100, wA: 0, spread: null, conflict: false };
+    let use = blended.use, wA = blended.wA;
     if (use == null) return { none: true };
     use *= it.useK * weMix(it, win);
     const spread = useA != null && useB != null && !it.recipeOnly ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
@@ -1425,12 +1422,9 @@
     if (ba) use = Math.max(0, use + ba.delta);
     // Forecast 오차: 기간의 날별 오차 합(fcVar, 평일·주말 따로) → 상대값. 없으면 예전처럼 하루 오차 ÷ √일수
     const fcRel = win.fcVar != null && win.gross > 0 ? Math.sqrt(win.fcVar) / win.gross : fcErr() / Math.sqrt(nd);
-    const relErr = Math.sqrt(sigma * sigma / nd + fcRel * fcRel); // 기간 사용량의 상대 오차 (사용량 계산 오차는 날마다 상쇄, Forecast 오차는 날별 합). ±범위(sd)용
-    // 안전재고에는 σ 바닥 0.3 (11/13 KM 승인, G t5): 3~6일 창 품절 30.5→25.4%, 남는 양 +0.7단위. 화면 ±범위는 바닥 없이 그대로
-    const relErrSS = Math.sqrt(Math.max(sigma, 0.3) ** 2 / nd + fcRel * fcRel);
-    let ss = Z * Math.sqrt((relErrSS * useAvg) ** 2 + (ba ? ba.varS : 0));
     const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * Math.min(1, win.wkGross / win.gross) : 0;
-    ss += wkPlus;
+    const guard = OrderPipe.safetyStock(useAvg, sigma, nd, fcRel, ba ? ba.varS : 0, wkPlus);
+    const relErr = guard.rel, relErrSS = guard.relSS, ss = guard.ss;
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
     // 한 번에 쓰는 품목(useStep): 교체 시점을 모르니 이 기간에 쓸 양이 조금이라도 있으면 한 번은 통째로 들어갈 수 있음 → 쓸 횟수(올림) × 한 번 양은 있어야 함
@@ -1454,16 +1448,19 @@
       }
     }
     const mult = it.pk.mult || 1;
-    // "10개단위 발주"처럼 묶음 단위면 반올림 (반올림해서 0이어도 여유분 빼고 모자라면 1묶음)
-    // 묶음 단위는 반올림하되, 예상 사용량(안전재고 뺀 것)만큼은 항상 채움
-    let packs = short <= 0 ? 0 : mult > 1 ? Math.max(Math.round(short / mult), Math.ceil(floorQ / mult - 1e-9), 0) : Math.ceil(short - 1e-9);
-    if (packs > 0 && it.min && packs < it.min) packs = it.min;
+    // 묶음 올림은 OrderPipe.roundOrder 한 곳. 예상 사용량만큼은 항상 채움
+    const rounded = OrderPipe.roundOrder(short, floorQ, mult, it.min || 0);
+    let packs = rounded.packs;
     // "10개단위 발주"처럼 단위가 같으면 배수만큼 곱해서 보여줌 (예: 20 EA)
     const orderQty = it.pk.sameUnit ? packs * mult : packs;
     // sd: 이번 기간 사용량의 예상 범위 (± 1 표준편차) = 계산 오차 + Forecast 오차 (하루하루 오차는 기간이 길수록 서로 상쇄)
     // ± 범위(카드·리포트·86 위험)는 평균 사용량 기준 예측 오차만. 프랩 배치가 이번 기간에 드는지 아닌지는 오차가 아니라 덩어리라 여유분(ss)에만 넣음
     const sd = useAvg * relErr;
-    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus, fcRel, sigma, short0, usePre, usePost, ssPost, needPost, preShort, cut };
+    const windowBal = OrderPipe.massBalance(s, inc, use, 0);
+    const flags = [];
+    if (blended.conflict) flags.push("불일치");
+    if (!rounded.covered) flags.push("단위");
+    return { use, useAvg, useA, useB, wA, spread, ss, sd, need, short, packs, orderQty, batch: ba, wkPlus, fcRel, sigma, short0, usePre, usePost, ssPost, needPost, preShort, cut, flags, balance: windowBal };
   }
 
   // ---------- 프랩 배치 계획 ----------
@@ -2344,18 +2341,16 @@
   //  그날 쓸 양을 빼되 0 밑으로 내려가지 않음(바닥나면 못 판 만큼은 사라짐 — 메뉴 86), 입고는 들어오는 날 아침에 더함.
   //  예전엔 (센 값 + 모든 입고 − 모든 사용)으로 한 번에 빼서, 일요일에 모자란 만큼을 월요일 입고에서 깎았음(홀그레인머스타드 토 1 + 월 입고 1 − 토·일 2.18 → 월 0, 실제로는 월 1).
   //  바닥나지 않는 구간은 예전과 똑같음. 날마다 쓸 양 = 전체 사용 × 그날 매출 비중(메뉴 역산으로 지난 몫을 바꿨으면 지난 날들은 그 몫을 나눔)
-  function seqStock(e, use, past) {
+  function seqRun(e, use, past) {
     const W = e.days, tot = W.reduce((t, x) => t + x.w, 0);
     let per;
     if (past && tot > 0) {
       const wP = W.filter((x) => x.d < past.end).reduce((t, x) => t + x.w, 0), wF = tot - wP, fut = Math.max(0, use - past.use);
       per = W.map((x) => (x.d < past.end ? (wP > 0 ? past.use * x.w / wP : 0) : wF > 0 ? fut * x.w / wF : 0));
     } else per = W.map((x) => (tot > 0 ? use * x.w / tot : use / W.length));
-    const by = {}; e.arrs.forEach((a) => { by[a.d] = (by[a.d] || 0) + a.q; });
-    let st = e.s0 + (by[e.x] || 0); // 미트카운트(입고 전에 셈)면 센 날 입고도 처음에 더함
-    W.forEach((x, i) => { st = Math.max(0, st - per[i]) + (by[addDays(x.d, 1)] || 0); });
-    return st;
+    return OrderPipe.projectSeq(e, per, addDays);
   }
+  function seqStock(e, use, past) { return seqRun(e, use, past).end; }
   // 메뉴 역산 (11/14 KM): 날짜별 메뉴 판매(menuDay, PC가 아침마다 전날 것을 받음) × 레시피 = 그날 품목 사용량(로스 전). 메뉴 판매가 없는 날은 null
   const menuUseOn = (key, x) => {
     if (!menuUseMemo.has(x)) {
@@ -2449,8 +2444,8 @@
       //  뜯은 묶음은 안 세니 센 값은 늘 묶음의 배수 → 가장 가까운 배수가 가장 자주 맞음 (예전 칩은 내림: 평균 오차 1.664 · 반 단위 안 48.1%)
       // 11/19 KM "모든 품목이 반올림으로 움직이는 거 해결, 매출 따라 소수점으로 움직이는 애들은 소수점으로": 1EA·0.5 단위 반올림(wholeStep)은 뺌 → 예상 재고가 날마다 소수로 줄어듦.
       //  묶음째로만 세는 품목(countStepOf: 버터라이스 40·시즐링 25·스파게티니 20 등)은 그 묶음 단위 그대로 (센 값이 늘 묶음의 배수라서)
-      const v0 = seqStock(e, use, past), st0 = countStepOf(it);
-      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: e.k, menuW: used, unk: recvUnknown(it, x, d) };
+      const det = seqRun(e, use, past), v0 = det.end, st0 = countStepOf(it);
+      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: e.k, menuW: used, unk: recvUnknown(it, x, d), balUnmet: det.unmet, use, ident: det.ok };
     }
     return null;
   }
@@ -2612,7 +2607,7 @@
     else if (c0.none) tag = '<span class="chip new">데이터 없음</span>';
     else if (c0.useA == null && c0.useB == null) tag = '<span class="chip new">재고로 학습</span>';
     else if (it.isNew) tag = '<span class="chip new">신규 품목</span>';
-    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff" title="A·B 차이 ${Math.round(c0.spread * 100)}% → 보정해서 반영">보정 ${Math.round(c0.spread * 100)}%</span>`;
+    else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff" title="A·B를 분산의 역수로 한 값에 맞췄습니다">${c0.spread > 0.5 ? "불일치" : "보정"} ${Math.round(c0.spread * 100)}%</span>`;
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
     // 품목 오차 칩: 이미 쌓인 재고 채점(scoreF)의 최근 평균. 새 입력 없음. 양수 오차 = 예상이 실제보다 많음(남음), 음수 = 적음(모자람)
@@ -2644,13 +2639,15 @@
     }
     // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
     const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), estGap = !!(e0 && e0.unk);
+    const balGap = !!(e0 && e0.ident === false);
+    const unitGap = !!(c0.flags && c0.flags.includes("단위"));
     const estTxt = !e0 ? "" : estGap ? "확인" : (() => { const st = countStepOf(it), et = st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1)); return `예상 ${et}${it.box ? it.boxLabel : esc(unit)}`; })();
     const yv = (db["input." + addDays(TODAY, -1)] || {})[it.key], sameBtn = v.s === "" && counted(yv) ? `<button type="button" class="samebtn" data-s="${esc(yv.s)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>어제와 같음 <b>${esc(yv.s)}</b></button>` : "";
     // FOH 카드: 이름 아래 한 줄 "지난번 11.16(월) 2BOX · 4주 5번" (11/19 KM "FOH 지난번 줄정렬해서 ㅇㅋ(요일도)") — MIS 주문현황 기준
     const lastLine = (() => { if (!it.foh) return ""; const h = (it.codes || [it.code]).flatMap((c) => fohHist(c)).sort((a, b) => (a.d < b.d ? 1 : -1)); if (!h.length) return ""; const n4 = h.filter((x) => x.d >= addDays(TODAY, -28)).length;
       return `<div class="c-last"><span>지난번</span><b>${mmdd(h[0].d)}(${DOW[dow(h[0].d)]})</b><b>${r1(h[0].q)}${esc(ou)}</b><span>4주 ${n4}번</span></div>`; })();
     d.innerHTML = top + lastLine +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${estGap ? `<span class="boxnote">입고 확인 필요</span>` : ""}${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days && vc.note ? `<span class="boxnote">${esc(vc.note)}</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${estGap ? `<span class="boxnote">입고 확인 필요</span>` : ""}${balGap ? `<span class="boxnote" title="시작재고+입고−사용−로스가 기말−미충족과 맞지 않습니다">수지</span>` : ""}${unitGap ? `<span class="boxnote" title="묶음 올림이 리드타임 사용량과 안전재고를 못 덮습니다">단위</span>` : ""}${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days && vc.note ? `<span class="boxnote">${esc(vc.note)}</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
       // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게") + 그 아래 작은 [어제와 같음 N] (11/19 KM "카드 재고칸 아래로 작게": 오늘 안 셌고 어제 센 값이 있을 때만, 누르면 그 값이 들어가 저장)
       (() => `<div class="stk">${estTxt ? `<span class="estchip${estGap ? " gap" : ""}" title="${estGap ? "이 구간 발주·입고 기록을 몰라 숫자를 두지 않아요" : ""}">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label>${sameBtn}</div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +

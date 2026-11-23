@@ -192,7 +192,7 @@ ok("1.5kg = 1500g", r.qty && r.qty.g === 1500);
 ok("2TB = 30ml", r.qtyTb && r.qtyTb.ml === 30 && r.qtyTb.vol === true);
 ok("1/2컵 = 120ml", r.qtyHalf && r.qtyHalf.ml === 120);
 ok("3 ea = 3", r.qtyEa && r.qtyEa.ea === 3, JSON.stringify(r.qtyEa));
-ok("3개는 지금 인식 못 함(\\b가 한글 뒤에서 안 맞음)", r.qtyKo === null, JSON.stringify(r.qtyKo));
+ok("3개 = 3", r.qtyKo && r.qtyKo.ea === 3, JSON.stringify(r.qtyKo));
 ok("단위 없으면 null", r.qtyBad === null);
 ok("1000g / 500g = 2", r.stock === 2);
 ok("2ea / 4ea = 0.5", r.stockEa === 0.5);
