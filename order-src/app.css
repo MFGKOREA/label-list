@@ -710,7 +710,11 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .chips#cats { margin-bottom: 8px; }
 .locchips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: none; } /* 업체 버튼과 같은 "불 들어옴" */
 /* 업체 줄과 위치 줄을 같은 칸에 맞춤 (11/6 KM: 줄이 안 맞음) — 둘 다 같은 너비 칸으로 */
-.chips#cats, .chips#locs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; overflow: visible; }
+.chips#cats, .chips#locs, .chips#depts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; overflow: visible; }
+.chips#depts { margin-bottom: 8px; }
+.chips#depts button { width: 100%; min-height: 44px; font-weight: 800; }
+.logt .drow th { background: #1a1a1a; color: #fff; font-weight: 800; text-align: left; }
+@media print { .logt .drow th { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 .chips#cats button, .chips#locs button { width: 100%; min-height: 40px; padding: 7px 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chips#locs { margin-bottom: 18px; }
 
