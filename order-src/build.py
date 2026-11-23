@@ -4,7 +4,7 @@ import os
 here = os.path.dirname(os.path.abspath(__file__))
 out = os.path.join(here, "..", "order.html")
 rd = lambda n: open(os.path.join(here, n), encoding="utf-8").read()
-s, css, body = rd("app.js"), rd("app.css"), rd("app-body.html")
+s, css, body = rd("pipeline.js") + "\n" + rd("app.js"), rd("app.css"), rd("app-body.html")
 html = open(out, encoding="utf-8").read()
 a = html.index("<style>") + 8; b = html.index("</style>")
 html = html[:a] + css + "\n" + html[b:]
