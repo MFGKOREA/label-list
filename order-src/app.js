@@ -222,7 +222,9 @@
     if ((m = /([\d./]+)\s*oz\b/i.exec(s))) return { g: frac(m[1]) * 28.35 };
     // 스쿱 번호: #N은 1쿼트(946ml)를 N번 뜨는 크기
     if ((m = /([\d./]+)\s*scoop\s*\(?\s*#\s*(\d+)/i.exec(s))) return { ml: frac(m[1]) * 946 / num(m[2]), vol: true };
-    if ((m = /([\d./]+)\s*(ea|pc|pcs|piece|개|slice|장|pk|portion|포션)\b/i.exec(s))) return { ea: frac(m[1]) };
+    // 한글 단위(개·장·포션) 뒤에는 \b가 참이 되지 않음(영문·숫자 경계만). 한글이 바로 이어지지 않으면 단위로 봄.
+    m = /([\d./]+)\s*(ea|pc|pcs|piece|slice|pk|portion)\b/i.exec(s) || /([\d./]+)\s*(개|장|포션)(?![가-힣])/i.exec(s);
+    if (m) return { ea: frac(m[1]) };
     // 그라나파다노 "3 바퀴" = 강판 3번 ≈ 3 g (레시피에 "3 g | 3 바퀴"로 같이 적힘)
     if ((m = /([\d./]+)\s*바퀴/.exec(s))) return { g: frac(m[1]) };
     return null;
