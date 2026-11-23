@@ -171,6 +171,7 @@ html, body { overflow-x: hidden; }
 .chip.ok { background: var(--ok-bg); color: var(--ok-ink); }
 .chip.new { background: var(--chick); color: var(--chick-ink); }
 .chip.diff { background: var(--rose); color: var(--rose-ink); }
+.chip.err { background: var(--fill-2); color: var(--muted); font-weight: 700; }
 .c-meta .boxnote { color: var(--rose-ink); font-size: 12px; font-weight: 600; line-height: normal; }
 .c-meta .incnote { color: var(--ok-ink); font-size: 12px; font-weight: 700; line-height: normal; }
 .need.done { background: var(--ok-bg); color: var(--ok-ink); box-shadow: inset 0 0 0 1.5px var(--ok); }
@@ -513,6 +514,7 @@ html, body { overflow-x: hidden; }
 /* 발주 예상 재고: 재고칸 위에 작은 상자 (11/15 KM "원래 위치에서 진하게": 회색 글씨 → 진한 글씨) */
 .cell:has(.estchip) .c-bot { margin-top: 24px; }
 .c-bot .estchip { position: absolute; left: 0; right: 0; top: -22px; text-align: center; white-space: nowrap; font-size: 12px; font-weight: 800; line-height: normal; color: var(--fg); background: var(--fill-2); border-radius: 6px; padding: 3px 2px; }
+.c-bot .estchip.gap { color: var(--chick-ink); background: var(--chick); }
 .c-bot .stk { position: relative; display: grid; min-width: 0; }
 /* 프랩 재고 입력칸: 입력하는 칸이 눈에 띄게 (흰 바탕 + 진한 테두리), 예상은 회색 읽기 칸 */
 .p-bot .fld:not(.ro) { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
@@ -1961,10 +1963,12 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   ]);
   const isHoliday = (d) => HOLI.has(d) || (db.holidays || []).includes(d);
   // 데이터 예상 Forecast: 그날 전까지의 실제 Gross Sales로
-  //  평일·주말 = 같은 요일 최근 6번 (최근일수록 비중, 행사처럼 튀는 날(중앙값의 1.25배 넘음)은 뺌)
+  //  평일·주말 = 같은 요일 최근 6번 (최근일수록 비중). 행사로 찍힌 날 중, 행사 없는 같은 요일 중앙보다 15% 넘게 큰 날만 평균에서 뺌.
+  //   조용한 행사일까지 빼면 평균이 올라 오차가 커짐 (8/28~11/22 기준값 하루 오차 39.7% → 행사 전부 제외 40.6%, 큰 날만 제외 39.0%).
   //  공휴일 = 지난 공휴일 실제 매출과 그 요일 평소 매출의 평균 (9~10월 실적으로 맞춰 봄)
   //  트렌드 = 그 주(월~일)에 점장님이 넣은 Forecast(보정 반영) ÷ 같은 날들 데이터 예상의 절반만 반영 (0.7~1.4배로 자름)
   //   9/14~10/20 실적으로 맞춰 보면 하루 오차 30.7% → 28.2%
+  const eventTagged = (d) => { const e = ((db.events || {}).days || {})[d]; return !!(e && num(e.n) > 0); };
   function dataForecastRaw(d) {
     const b = dataBase(d); if (b == null) return null;
     const f = db.forecast || {}, mon = mondayOf(d);
@@ -1977,58 +1981,98 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     const R = z ? 1 + (Math.min(1.4, Math.max(0.7, a / z)) - 1) * (z / all) : 1;
     return b * (1 + 0.5 * (R - 1));
   }
-  function dataBase(d) {
-    if (dataFcMemo.has(d)) return dataFcMemo.get(d);
+  function dataBase(d, keepEvents) {
+    const memoKey = keepEvents ? d + "|all" : d;
+    if (dataFcMemo.has(memoKey)) return dataFcMemo.get(memoKey);
     const f = db.forecast || {};
-    const pick = (ok, max, back) => { const out = []; for (let k = 1; k <= back && out.length < max; k++) { const x = addDays(d, -k), v = num((f[x] || {}).act); if (isFinite(v) && v > 0 && ok(x)) out.push(v); } return out; };
-    const wmean = (vals) => {
-      if (!vals.length) return null;
-      const med = vals.slice().sort((a, b) => a - b)[Math.floor(vals.length / 2)];
-      // 아래쪽(중앙값 0.6배 미만, 휴무·반쪽 영업)만 버림. 위쪽 컷(1.25배)은 행사·단체 날을 버려 늘 적게 잡았음 (9/14~10/21 오차 31.6% → 26.5%, 과소 +12.9% → +1.2%)
-      const keep = vals.map((v, i) => [v, vals.length - i]).filter(([v]) => vals.length < 3 || v >= med * 0.6);
+    const pick = (ok, max, back) => { const out = []; for (let k = 1; k <= back && out.length < max; k++) { const x = addDays(d, -k), v = num((f[x] || {}).act); if (isFinite(v) && v > 0 && ok(x)) out.push({ x, v }); } return out; };
+    // 행사일이 같은 요일 평균을 끌어올리는 것만 뺌. 행사 없는 날의 중앙보다 15% 넘게 큰 행사일.
+    //  표본이 3일 아래로 줄면 빼지 않음. 아래쪽(중앙값 0.6배 미만, 휴무·반쪽 영업)만 추가로 버림.
+    const dropInflate = (rows) => {
+      const plain = rows.filter((r) => !eventTagged(r.x)).map((r) => r.v).sort((a, b) => a - b);
+      if (plain.length < 2) return rows;
+      const med = plain[Math.floor(plain.length / 2)];
+      const kept = rows.filter((r) => !(eventTagged(r.x) && r.v > med * 1.15));
+      return kept.length >= 3 ? kept : rows;
+    };
+    const wmean = (rows) => {
+      const use = (keepEvents ? rows : dropInflate(rows)).slice(0, 6);
+      if (!use.length) return null;
+      const med = use.map((r) => r.v).sort((a, b) => a - b)[Math.floor(use.length / 2)];
+      const keep = use.map((r, i) => [r.v, use.length - i]).filter(([v]) => use.length < 3 || v >= med * 0.6);
+      if (!keep.length) return null;
       return keep.reduce((a, [v, w]) => a + v * w, 0) / keep.reduce((a, [, w]) => a + w, 0);
     };
     const wd = dow(d);
-    let v = wmean(pick((x) => dow(x) === wd && !isHoliday(x), 6, 120));
+    let v = wmean(pick((x) => dow(x) === wd && !isHoliday(x), 10, 140));
     if (isHoliday(d)) {
-      const h = wmean(pick(isHoliday, 6, 400)) ?? wmean(pick((x) => dow(x) === 0 && !isHoliday(x), 6, 120));
+      const h = wmean(pick(isHoliday, 10, 400)) ?? wmean(pick((x) => dow(x) === 0 && !isHoliday(x), 10, 140));
       v = v && h ? Math.max(v, h) : v || h || null; // 공휴일은 같은 요일과 공휴일·일요일 중 큰 쪽 (평균하면 공휴일을 35% 적게 잡음)
     }
-    if (v == null) { const all = pick(() => true, 28, 60); v = all.length ? all.reduce((a, b) => a + b, 0) / all.length : null; }
-    dataFcMemo.set(d, v);
+    if (v == null) { const all = pick(() => true, 28, 60); v = all.length ? all.reduce((a, r) => a + r.v, 0) / all.length : null; }
+    dataFcMemo.set(memoKey, v);
     return v;
   }
   // ---------- 날씨·행사 보정 (11/17 KM 승인 · 시즌2 18) ----------
   //  데이터 예상은 같은 요일 지난 매출만 보므로 그날 비·한파·컨벤션 행사를 모른다. 시트 weather·events 키로 배수를 곱하고 왜 그랬는지 숫자 밑에 한 줄로 보여줌.
   //  비·눈 = ×0.90 · 한파(최고 12도 이하) = ×0.95. 8~11주 실제÷보정 전 데이터 예상에서 비 온 날 11일 중앙값 0.90, 추운 날 7일 0.94.
-  //  행사는 배수를 안 건다(1.0으로 둠): 행사일 30일의 실제÷예상이 0.53~3.16이라 규모(cap 7000)와도 상관없이 중앙값이 1.0. 이름만 사유로 보여줌.
-  //   settings.wxK = {rain: 0.9, cold: 0.95, evHi: 1.0, evMid: 1.0, evLo: 1.0} 로 직접 바꿀 수 있고, settings.wxAdj = "off" 면 보정을 끔.
+  //  행사: 예상 관람(exp)이 있으면 수용 대비 비율로 올리고 1.12에서 자름. 관람 인원을 모르면 +2%(evDef). 1.71배 같은 고정 배수는 쓰지 않음.
+  //   8/28~11/22 하루 오차 24.8→24.3%(행사일 26.9→26.1%). +2%를 빼면 24.6%로, 넣었을 때보다 덜 맞음.
+  //   settings.wxK = {rain, cold, evDef, evAtt, evMax}. settings.wxAdj = "off" 면 날씨·행사 보정을 끔.
   //  되돌려 보기(그날 예보·행사를 그대로 넣고): 10/19~11/16 하루 오차 35.4→33.7%(비 온 날 44.4→37.2%), 9/14~11/16 31.1→30.3%, 편향 +17.8→+14.0%.
   const wxDay = (d) => { const w = db.weather; return (w && w.days && w.days[d]) || null; };
   const isRain = (x) => !!x && (num(x.pop) >= 60 || num(x.rain) >= 1); // 강수확률 60% 이상이거나 그날 비·눈
   const isCold = (x) => !!x && isFinite(num(x.hi)) && num(x.hi) <= 12; // 최고기온 12도 이하
   const evDay = (d) => ((db.events || {}).days || {})[d] || null;
-  const evTier = (e) => { if (!e || !(num(e.n) > 0)) return null; const cap = num(e.cap) || 0; return cap >= 5000 ? "evHi" : cap >= 2000 ? "evMid" : "evLo"; };
   function wxK() {
-    const s = (db.settings || {}).wxK || {}, k = (v, d) => (isFinite(num(v)) ? Math.min(1.3, Math.max(0.6, num(v))) : d);
-    return { rain: k(s.rain, 0.9), cold: k(s.cold, 0.95), evHi: k(s.evHi, 1), evMid: k(s.evMid, 1), evLo: k(s.evLo, 1) };
+    const s = (db.settings || {}).wxK || {}, k = (v, d, lo, hi) => (isFinite(num(v)) ? Math.min(hi == null ? 1.3 : hi, Math.max(lo == null ? 0.6 : lo, num(v))) : d);
+    return { rain: k(s.rain, 0.9), cold: k(s.cold, 0.95), evDef: k(s.evDef, 1.02, 1, 1.08), evAtt: k(s.evAtt, 0.10, 0, 0.2), evMax: k(s.evMax, 1.12, 1, 1.2) };
+  }
+  // 행사 배수. 예상 관람(exp)이 있으면 수용 인원 대비로 올리고, 없으면 evDef(기본 +2%). 상한 evMax(기본 1.12).
+  function evUplift(d) {
+    if ((db.settings || {}).wxAdj === "off") return 1;
+    const e = evDay(d); if (!e || !(num(e.n) > 0)) return 1;
+    const K = wxK(), exp = num(e.exp);
+    if (exp > 0) {
+      const hall = Math.max(num(e.cap) || 0, exp, 1);
+      return Math.min(K.evMax, 1 + K.evAtt * Math.min(1, exp / hall));
+    }
+    return K.evDef;
+  }
+  // 점장 Forecast가 있는 날(근일 발주)의 날씨. 데이터 예상의 비·한파 폭을 40%만 쓰고 0.96~1.00 안에 자름.
+  //  점장 숫자가 이미 같은 요일 기준보다 낮으면 날씨를 한 번 더 깎지 않음.
+  function nearWx(d, p, base) {
+    if ((db.settings || {}).wxAdj === "off") return 1;
+    const x = wxDay(d), K = wxK();
+    let raw = 1;
+    if (isRain(x)) raw *= K.rain;
+    if (isCold(x)) raw *= K.cold;
+    if (!(raw < 0.999)) return 1;
+    const bounded = Math.min(1, Math.max(0.96, 1 + (raw - 1) * 0.4));
+    if (base > 0 && p < base * 0.98) return 1;
+    return bounded;
   }
   // 그날의 보정 배수와 사유: { k, parts: [{ t: 화면 글자, p: %, name: 행사 이름 }] }
   function dfWhy(d) {
     if (whyMemo.has(d)) return whyMemo.get(d);
-    const x = wxDay(d), e = evDay(d), tier = evTier(e), on = (db.settings || {}).wxAdj !== "off", K = wxK(), parts = [];
+    const x = wxDay(d), e = evDay(d), on = (db.settings || {}).wxAdj !== "off", K = wxK(), parts = [];
     let k = 1;
     if (on && isRain(x)) { k *= K.rain; parts.push({ t: "비", p: Math.round((K.rain - 1) * 100) }); }
     if (on && isCold(x)) { k *= K.cold; parts.push({ t: "한파", p: Math.round((K.cold - 1) * 100) }); }
-    if (tier) {
-      const ek = on ? K[tier] : 1; k *= ek;
-      parts.push({ t: "행사", p: Math.round((ek - 1) * 100), name: ((e.names || [])[0] || "").replace(/&#0?38;/g, "·") });
+    if (e && num(e.n) > 0) {
+      const eu = evUplift(d); k *= eu;
+      parts.push({ t: "행사", p: Math.round((eu - 1) * 100), name: ((e.names || [])[0] || "").replace(/&#0?38;/g, "·") });
     }
     return (whyMemo.set(d, { k, parts }), whyMemo.get(d));
   }
   function dataForecast(d) { const b = dataForecastRaw(d); return b == null ? null : b * dfWhy(d).k; }
-  // 숫자 밑에 붙는 사유 한 줄: "주말 비 -10% · 행사 마이펫페어" (1% 안쪽으로 배수가 1이면 그 항목은 안 씀)
-  const dfWhyText = (d) => dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : p.t)).join(" · "); // 11/19 KM "한파 행사 비 글씨 잘려 보여": 행사 이름은 아래 행사 줄에 있으니 "행사"만, 길면 두 줄
+  // 숫자 밑에 붙는 사유 한 줄. 점장 Forecast가 있는 날은 발주에 들어간 날씨(자른 폭)를 "발주 날씨"로 한 칸 더.
+  const nearNote = (d) => {
+    const fc = num(((db.forecast || {})[d] || {}).fc); if (!(fc > 0)) return "";
+    const ev = eventTagged(d), p = fc * fcBias(d).k, a = fcBlendB() > 0 ? dataBase(d, ev) : null, k = nearWx(d, p, a);
+    return k < 0.999 ? `발주 날씨 ${Math.round((k - 1) * 100)}%` : "";
+  };
+  const dfWhyText = (d) => [dfWhy(d).parts.filter((p) => Math.abs(p.p) >= 1 || p.name).map((p) => (Math.abs(p.p) >= 1 ? `${p.t} ${p.p > 0 ? "+" : ""}${p.p}%` : p.t)).join(" · "), nearNote(d)].filter(Boolean).join(" · "); // 11/19 KM "한파 행사 비 글씨 잘려 보여": 행사 이름은 아래 행사 줄에 있으니 "행사"만, 길면 두 줄
   const dfcHTML = (d, de) => {
     const w = dfWhyText(d);
     return `<span class="dfc" title="같은 요일·공휴일 실제 매출로 낸 예상 + 이번 주 Forecast 트렌드 절반 반영${w ? " · " + w : ""}">${de ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}${w ? `<small>${esc(w)}</small>` : ""}</span>`;
@@ -2066,12 +2110,16 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   }
   // 닻 섞기(11/13 KM 승인): 점장 Forecast를 같은 요일 최근 실제(dataBase) 쪽으로 25% 당김 = FC^0.75 × 데이터기본^0.25.
   //  점장 숫자가 평소와 크게 다른 날일수록 실제는 그 사이에 떨어졌음. 되돌려 보기 9/28~11/10(44일): 하루 오차 24.1→20.3%, 3일 합 17.0→12.9%.
-  //  단점: 큰 행사 날은 16~24% 낮게 잡음. settings.fcBlend로 조절(0=끔, 최대 0.5, 기본 0.25).
+  //  단점: 큰 행사 날을 평소 매출 쪽으로 당기면 16~24% 낮아질 수 있음. 행사일은 그 날들을 뺀 기준이 아니라 원래 같은 요일 평균으로 섞음(아래로 더 당겨지지 않게). settings.fcBlend로 조절(0=끔, 최대 0.5, 기본 0.25).
   const fcBlendB = () => { const v = num((db.settings || {}).fcBlend); return isFinite(v) ? Math.min(0.5, Math.max(0, v)) : 0.25; };
   function fcAdj(d) {
     const fc = num(((db.forecast || {})[d] || {}).fc); if (!(fc > 0)) return fc; // 0(휴무)·빈칸은 그대로
-    const p = fc * fcBias(d).k, b = fcBlendB(), a = b > 0 ? dataBase(d) : null;
-    return a > 0 ? p * Math.pow(a / p, b) : p;
+    const p = fc * fcBias(d).k, b = fcBlendB(), ev = eventTagged(d);
+    const a = b > 0 ? dataBase(d, ev) : null; // 행사일은 행사 매출을 남긴 기준으로 섞음
+    let out = a > 0 ? p * Math.pow(a / p, b) : p;
+    out *= evUplift(d);
+    out *= nearWx(d, p, a); // 근일 발주: 점장 Forecast에도 자른 날씨
+    return out;
   }
   // Forecast 하루 오차(상대값, 보정 뒤 남는 오차의 RMS): 평일과 주말을 따로 (최근 28일 기준 평일 0.24, 주말 0.11 — 주말은 점장 Forecast가 훨씬 정확).
   //  4일 미만이면 전체 값으로, 전체도 5일 미만이면 25%
@@ -2951,6 +2999,16 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   const orderKnown = (it, x) => (misOn(x) && (it.codes || []).length) || (db["input." + x] && x >= "2026-10-20" && (ordCnt(x) >= 3 || x === "2026-10-20" || ((db.settings || {}).orderOk || []).includes(x)) && !((db.settings || {}).orderGap || []).includes(x));
   // x일에 센 뒤 d일까지 들어온 입고 중 앱이 모르는 발주일이 있나 (일요일 제외)
   const unknownArr = (it, x, d) => { if (recvCovers(it, x, d)) return false; for (let y = addDays(x, -7); y < d; y = addDays(y, 1)) if (isOrderDay(it, y) && deliveryOf(it, y) > x && deliveryOf(it, y) <= d && !orderKnown(it, y) && dow(y) !== 0) return true; return false; };
+  // 지난 발주인데 앱·MIS에 기록이 없어 입고를 모르는 구간. 오늘 이후 발주(아직 안 넣은 날)는 모름으로 치지 않음.
+  function recvUnknown(it, from, to) {
+    const end = to > TODAY ? TODAY : to;
+    if (!(end > from) || recvCovers(it, from, end)) return false;
+    for (let y = addDays(from, -7); y < end && y < TODAY; y = addDays(y, 1)) {
+      const del = deliveryOf(it, y);
+      if (isOrderDay(it, y) && del > from && del <= end && !orderKnown(it, y) && dow(y) !== 0) return true;
+    }
+    return false;
+  }
   function applyScores(M) {
     const logs = (db.onhand || []).slice().sort((a, b) => (a.t < b.t ? -1 : 1));
     // 같은 날 여러 번 고치면 그날 마지막 값만 (중간에 잘못 친 값으로 채점하지 않게)
@@ -3795,7 +3853,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       // 11/19 KM "모든 품목이 반올림으로 움직이는 거 해결, 매출 따라 소수점으로 움직이는 애들은 소수점으로": 1EA·0.5 단위 반올림(wholeStep)은 뺌 → 예상 재고가 날마다 소수로 줄어듦.
       //  묶음째로만 세는 품목(countStepOf: 버터라이스 40·시즐링 25·스파게티니 20 등)은 그 묶음 단위 그대로 (센 값이 늘 묶음의 배수라서)
       const v0 = seqStock(e, use, past), st0 = countStepOf(it);
-      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: e.k, menuW: used };
+      return { v: st0 ? Math.round(v0 / st0) * st0 : v0, raw: v0, from: x, days: e.k, menuW: used, unk: recvUnknown(it, x, d) };
     }
     return null;
   }
@@ -3862,17 +3920,19 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       const ry = (db["input." + y] || {})[it.key];
       if (ry && num(ry.o) > 0) continue; // 넣은 발주는 입고로 이미 셈
       if (y === TODAY && nowH > ORDER_CUTOFF_H) continue; // 오늘 발주 마감 지남
-      const ey = y === TODAY && counted(v) ? null : estStock(it, y, plan), sy = ey ? ey.v : counted(v) ? availOf(it, v) : NaN;
+      const ey = y === TODAY && counted(v) ? null : estStock(it, y, plan);
+      if (ey && ey.unk) continue; // 입고를 모르는 예상 재고로 미리 발주량을 만들지 않음
+      const sy = ey ? ey.v : counted(v) ? availOf(it, v) : NaN;
       if (!isFinite(sy)) continue;
       const ry2 = calc(it, orderWindowFor(it, y), sy, incP(y));
       if (!ry2.none && ry2.packs > 0) plan.push({ d: deliveryOf(it, y), q: ordToStock(it, ry2.orderQty), y });
     }
-    const e = P === TODAY && counted(v) ? null : estStock(it, P, plan), sv = e ? e.v : counted(v) ? availOf(it, v) : NaN;
+    const e = P === TODAY && counted(v) ? null : estStock(it, P, plan), sv = e && e.unk ? NaN : e ? e.v : counted(v) ? availOf(it, v) : NaN;
     const w = orderWindowFor(it, P), inc = incP(P);
     const r = isFinite(sv) && w.canOrder ? calc(it, w, sv, inc) : null;
     // 보여줄 예상 재고: 이번 발주가 들어오는 날 아침(이번 발주분 빼고). 필요량 = 그날부터 쓸 양 − 이 값
     const own = (db["input." + P] || {})[it.key], ownQ = own && num(own.o) > 0 && deliveryOf(it, P) === w.deliv ? ordToStock(it, num(own.o)) : 0;
-    const eD = estStock(it, w.deliv, plan), sD = eD ? Math.max(0, eD.v - ownQ) : NaN;
+    const eD = estStock(it, w.deliv, plan), sD = eD && !eD.unk ? Math.max(0, eD.v - ownQ) : NaN;
     const out = { e, sv, sD, w, inc, r: r && !r.none ? r : null, plan };
     preMemo.set(mk, out); return out;
   }
@@ -3958,6 +4018,14 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     else if (c0.spread != null) tag = c0.spread < 0.1 ? '<span class="chip ok">일치</span>' : `<span class="chip diff" title="A·B 차이 ${Math.round(c0.spread * 100)}% → 보정해서 반영">보정 ${Math.round(c0.spread * 100)}%</span>`;
     // 예상 범위: 그 품목 단위로 ±0.4PK, ±1.1EA처럼 소수 첫째 자리 (g·ml은 정수). 일치·보정반영 칩 오른쪽에 작게
     const rng = !c0.none && c0.sd > 0 ? `<span class="rng">±${/^(g|ml|cc)$/i.test(unit) ? Math.max(1, Math.round(c0.sd)) : Math.max(0.1, Math.round(c0.sd * 10) / 10).toFixed(1)}${esc(unit)}</span>` : "";
+    // 품목 오차 칩: 이미 쌓인 재고 채점(scoreF)의 최근 평균. 새 입력 없음. 양수 오차 = 예상이 실제보다 많음(남음), 음수 = 적음(모자람)
+    const errTag = (() => {
+      const a = (it.scoreF || []).slice(-6); if (a.length < 3) return "";
+      const mape = a.reduce((s, e) => s + Math.abs(e), 0) / a.length, bias = a.reduce((s, e) => s + e, 0) / a.length, pct = Math.round(mape * 100);
+      const dir = bias <= -0.08 ? " · 모자람" : bias >= 0.08 ? " · 남음" : "";
+      const tip = `최근 ${a.length}번 사용량 오차 평균 ${pct}%. ${bias > 0.02 ? "예상이 실제보다 많음" : bias < -0.02 ? "예상이 실제보다 적음" : "방향은 비슷"}`;
+      return `<span class="chip err" title="${esc(tip)}">오차 ${pct}%${dir}</span>`;
+    })();
     const rk86 = preMode ? null : risk1(it, v), tag86 = rk86 ? `<span class="chip diff">${rk86.est ? "예상 " : ""}${esc(rk86.when)} 부족</span>` : "";
     // 7일마다 세는 품목 (weeklyState): 셀 날 "7일 세기" · 접어 둔 칸 "다음 MM.DD". 모자랄 수 있어 띄운 품목은 칩 없이 예전처럼
     //  (예상 −1단위로 보니 하루 20개 넘게 그렇게 떠서, "확인필요"를 다 붙이면 칩이 소용없어짐)
@@ -3965,28 +4033,29 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     // 품절 기록 (11/15 KM "2주안 기획들 실행해", 3번): 86 위험·검색한 품목·0을 센 품목·이미 기록한 품목에만 [품절 기록] → soldout.날짜 = {품목: "18:12"}.
     //  다시 누르면 지움. 품절 횟수를 재야 86 알림 효과("품절 −50%")를 볼 수 있음. 계산에는 아직 안 씀
     const soldMap = () => db["soldout." + TODAY] || {}, showSold = !preMode && (!!soldMap()[it.key] || !!rk86 || !!($("q") && $("q").value.trim()) || (counted(v) && num(v.s) === 0));
-    const top = `<div class="c-top"><span class="c-name" data-full="${esc(it.name)}" data-short="${esc(cardName(it))}">${esc(cardName(it))}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}${it.nw ? `<span class="nwtag" title="MIS 주문등록에만 있던 품목 (11/20 추가)">NEW</span>` : ""}${vcfg(it).days ? `<span class="odtag" title="${esc(it.vendor || "")} 발주 요일">${vcfg(it).days.map((x) => DOW[x]).join("·")} 발주</span>` : ""}</span>${tag86 || wkTag || tag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${rng}</span>` : ""}</div>`;
+    const top = `<div class="c-top"><span class="c-name" data-full="${esc(it.name)}" data-short="${esc(cardName(it))}">${esc(cardName(it))}${it.star ? `<span class="star" title="${esc(it.star)}" aria-label="${esc(it.star)}">★</span>` : ""}${it.nw ? `<span class="nwtag" title="MIS 주문등록에만 있던 품목 (11/20 추가)">NEW</span>` : ""}${vcfg(it).days ? `<span class="odtag" title="${esc(it.vendor || "")} 발주 요일">${vcfg(it).days.map((x) => DOW[x]).join("·")} 발주</span>` : ""}</span>${tag86 || wkTag || tag || errTag || rng ? `<span class="c-tags">${tag86}${wkTag}${tag}${errTag}${rng}</span>` : ""}</div>`;
     // 사전발주 ON: 예상 재고와 사전발주 필요량 두 칸만
     if (preMode) {
       const d0 = pDay(), pc = preCalc(it, v, d0), w0 = pc.w, inc0 = incomingOf(it, d0); // 입고예정은 실제로 넣은 발주만
-      const e = pc.e, sv = pc.sv, r = c0.none ? null : pc.r;
-      const sShow = isFinite(pc.sD) ? r1(pc.sD / (it.box || 1)) + (it.box ? it.boxLabel : esc(unit)) : "–";
+      const e = pc.e, sv = pc.sv, r = c0.none ? null : pc.r, gap = !!(e && e.unk);
+      const sShow = gap ? "입고 확인" : isFinite(pc.sD) ? r1(pc.sD / (it.box || 1)) + (it.box ? it.boxLabel : esc(unit)) : "–";
       const q = r && !r.none ? r.orderQty : null;
-      d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${inc0 ? incHtml(it, d0, unit) : ""}${!w0.canOrder ? `<span class="boxnote">${DOW[dow(d0)]}요일 발주 없음</span>` : ""}</span>` +
+      d.innerHTML = top + `<div class="c-bot pre"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${gap ? `<span class="boxnote">입고 확인 필요</span>` : ""}${inc0 ? incHtml(it, d0, unit) : ""}${!w0.canOrder ? `<span class="boxnote">${DOW[dow(d0)]}요일 발주 없음</span>` : ""}</span>` +
         `<span class="fld ro${e ? " est" : ""}"><span>${DOW[dow(w0.deliv)]} 예상 재고</span><b>${sShow}</b></span>` +
         `<span class="need prebox${q ? " has" : ""}"><b>${q == null ? "–" : q}${q ? `<small>${esc(ou)}</small>` : ""}</b><span>사전발주 필요량</span></span></div>`;
       return d;
     }
     // 예상 재고: 마지막으로 센 재고(7일 안) + 그 뒤 입고 − 오늘 아침까지 쓸 양. 재고칸은 비워 두고 재고칸 위 작은 상자에
-    const estTxt = (() => { const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), st = countStepOf(it), et = e0 ? (st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1))) : null; return et != null ? `예상 ${et}${it.box ? it.boxLabel : esc(unit)}` : ""; })();
+    const l0 = logOn(it, TODAY), e0 = estStock(it, TODAY, null, l0 ? isMeat(l0.t, it) : it.thaw > 0 && new Date().getHours() < MEAT_H), estGap = !!(e0 && e0.unk);
+    const estTxt = !e0 ? "" : estGap ? "확인" : (() => { const st = countStepOf(it), et = st && e0.v >= st ? e0.v : r1((st ? e0.raw : e0.v) / (it.box || 1)); return `예상 ${et}${it.box ? it.boxLabel : esc(unit)}`; })();
     const yv = (db["input." + addDays(TODAY, -1)] || {})[it.key], sameBtn = v.s === "" && counted(yv) ? `<button type="button" class="samebtn" data-s="${esc(yv.s)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>어제와 같음 <b>${esc(yv.s)}</b></button>` : "";
     // FOH 카드: 이름 아래 한 줄 "지난번 11.16(월) 2BOX · 4주 5번" (11/19 KM "FOH 지난번 줄정렬해서 ㅇㅋ(요일도)") — MIS 주문현황 기준
     const lastLine = (() => { if (!it.foh) return ""; const h = (it.codes || [it.code]).flatMap((c) => fohHist(c)).sort((a, b) => (a.d < b.d ? 1 : -1)); if (!h.length) return ""; const n4 = h.filter((x) => x.d >= addDays(TODAY, -28)).length;
       return `<div class="c-last"><span>지난번</span><b>${mmdd(h[0].d)}(${DOW[dow(h[0].d)]})</b><b>${r1(h[0].q)}${esc(ou)}</b><span>4주 ${n4}번</span></div>`; })();
     d.innerHTML = top + lastLine +
-      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days && vc.note ? `<span class="boxnote">${esc(vc.note)}</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
+      `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${estGap ? `<span class="boxnote">입고 확인 필요</span>` : ""}${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days && vc.note ? `<span class="boxnote">${esc(vc.note)}</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
       // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게") + 그 아래 작은 [어제와 같음 N] (11/19 KM "카드 재고칸 아래로 작게": 오늘 안 셌고 어제 센 값이 있을 때만, 누르면 그 값이 들어가 저장)
-      (() => `<div class="stk">${estTxt ? `<span class="estchip">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label>${sameBtn}</div>`)() +
+      (() => `<div class="stk">${estTxt ? `<span class="estchip${estGap ? " gap" : ""}" title="${estGap ? "이 구간 발주·입고 기록을 몰라 숫자를 두지 않아요" : ""}">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label>${sameBtn}</div>`)() +
       `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
@@ -4143,7 +4212,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   // 오늘 안 센 품목도 86을 봄 (11/15 KM: 일요일엔 재고를 안 세서 86이 하나도 안 떴음 — 버터라이스 토 14시 40개 → 일 점심 바닥)
   //  최근 3일 안 센 재고 → 오늘 아침 예상 재고(estStock: 그 사이 실제 매출·받은 입고)로 같은 계산(문 열 때부터 오늘 영업 전부). 화면엔 "예상"으로
   //  riskOf는 재고칸 단위로 받으니 박스로 세는 품목은 예상(팩)을 박스로 바꿔 넘김 (11/15 고침: 예전엔 팩 수를 박스 수로 읽어 박스 크기 배만큼 많게 봄)
-  const riskEst = (it, v) => { if (counted(v) || (v && v.est)) return null; const e = estStock(it, TODAY); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H); return r ? { ...r, est: true, from: e.from } : null; };
+  const riskEst = (it, v) => { if (counted(v) || (v && v.est)) return null; const e = estStock(it, TODAY); if (!e || e.unk || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H); return r ? { ...r, est: true, from: e.from } : null; };
   // 밤 (11/15 KM "저녁 9시면 영업이 끝난 시간인데 아직 당일 86위험 떠있는건 이해가 안가. 밤에는 다음날 기준"):
   //  영업 끝(CLOSE_H 20:30) 뒤엔 오늘 바닥 시각이 모두 지난 시각(계산이 20:30까지로 자름) → 내일 문 열 때 예상 재고(오늘 센 값 − 오늘 남은 사용 + 내일 아침 입고)로
   //  내일 발주가 들어오기 전까지 봄 = 내일 아침에 열어 본 것과 같은 계산. 시간대별 매출(11/12까지): 21시까지 평일 98.1% · 토 98.7% · 일 99.9%가 끝남. 자정이 지나면 그날이 오늘이 되어 원래대로
@@ -4151,7 +4220,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   const nowH = () => { const n = new Date(); return n.getHours() + n.getMinutes() / 60; };
   const dayPhase = (h = nowH()) => (h < OPEN_H ? "pre" : h < CLOSE_H ? "open" : "night");
   const nightNow = () => dayPhase() === "night";
-  const riskNight = (it) => { const d1 = addDays(TODAY, 1), e = estStock(it, d1); if (!e || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H, d1); return r ? { ...r, est: true, night: true, from: e.from } : null; };
+  const riskNight = (it) => { const d1 = addDays(TODAY, 1), e = estStock(it, d1); if (!e || e.unk || e.from < addDays(TODAY, -3)) return null; const r = riskOf(it, { s: String(e.raw / (it.box || 1)), est: 1 }, OPEN_H, d1); return r ? { ...r, est: true, night: true, from: e.from } : null; };
   // 86 위험 한 건의 모드: counted 오늘 센 값 · est 예상 재고(최근 3일 센 값에서) · night 밤(내일 문 열 때 예상). label = 화면 낱말
   //  "확인필요" = 세어 봐야 아는 것(예상 기준). 밤이라도 오늘 센 값에서 나온 예상이면 "86 위험"
   const riskTag = (k) => (k ? { ...k, mode: k.night ? "night" : k.est ? "est" : "counted", label: k.est && !(k.night && k.from === TODAY) ? "확인필요" : "86 위험" } : null);
@@ -4195,7 +4264,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     else {
       // 재고는 밀봉 팩만 세서(뜯은 팩은 안 셈) 예상 재고가 센 값보다 한 단위쯤 많게 나오기 쉬움 → 접을지는 예상에서 한 단위를 빼고 판단
       const e = estStock(it, TODAY), u = it.box || 1;
-      if (!e || weeklyLow(it, w, Math.max(0, e.v - u), Math.max(0, e.raw - u))) why = "low";
+      if (!e || e.unk || weeklyLow(it, w, Math.max(0, e.v - u), Math.max(0, e.raw - u))) why = "low";
     }
     const out = { ...w, why, fold: !why };
     weeklyStMemo.set(mk, out); return out;
@@ -4304,6 +4373,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       const v = (db["input." + d] || {})[it.key] || {};
       if (counted(v)) return `<b>${f1(num(v.s))}</b>`;
       const e = estStock(it, d, null, false, d), u = it.box || 1;
+      if (e && e.unk) return `<i title="입고 확인 필요">확인</i>`;
       if (e) { const st = countStepOf(it); return `<i>${f1(st && e.v >= st ? e.v : (st ? e.raw : e.v) / u)}</i>`; } // 발주 카드의 "예상" 칩과 같은 값(박스 품목은 BOX)
       return v.est && isFinite(num(v.s)) ? `<i>${f1(num(v.s))}</i>` : "";
     };
@@ -4925,7 +4995,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
         `<input class="fc${!comma(f.fc) && de && d >= TODAY ? " auto" : ""}" inputmode="numeric" enterkeyhint="next" placeholder="${!comma(f.fc) && de && d >= TODAY ? (Math.round(de / 1e4) * 1e4).toLocaleString("ko-KR") : "–"}" value="${comma(f.fc)}" title="${!comma(f.fc) && de ? "Forecast가 비어 있어 데이터 예상으로 계산해요" : ""}" aria-label="${mmdd(d)} Forecast (원)">` + /* 11/19 KM 11번 "포캐스트 없는 경우는 데이터 예상으로 반영": 계산은 원래 그렇게 함(dayGross) → 빈칸에 그 값을 흐리게 보여 줌 */
         `<input class="act" inputmode="numeric" enterkeyhint="next" placeholder="${d <= TODAY ? "입력" : "–"}" value="${comma(f.act)}" aria-label="${mmdd(d)} 실제 Gross Sales (원)">` + diffHTML(f.fc, f.act);
       // 컨벤션센터 행사 (11/15 KM 시안 A 고름 "참가인원·수용인원 있으면 좋을 듯"): 데스크위젯이 매일 보내는 events → 그날 줄 아래에 종류·이름, 숫자가 있으면 수용·예상 관람 한 줄 더
-      //  배수는 안 붙임: 전시회 금요일 1.71배(행사 없는 금요일 대비)를 예상에 곱하면 오히려 덜 맞았음(11/15 되돌려 보기) → 이름·규모만 보여 주고 Forecast는 KM이 정함
+      //  고정 1.71배는 쓰지 않음(11/15에 더 틀렸음). 관람 인원(exp)이 있으면 그 비율, 없으면 +2%. 여기 줄은 이름·규모.
       const ev = ((db.events || {}).days || {})[d];
       if (ev && ev.n) {
         const kind = ev.exh ? "전시회" : ev.conv ? "컨벤션" : "행사", ppl = (v) => Math.round(num(v)).toLocaleString("ko-KR") + "명";
@@ -5590,7 +5660,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth };
+  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth };
 })();
 
 </script>
