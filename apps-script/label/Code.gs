@@ -21,6 +21,7 @@ function doGet(e) {
       if (e.parameter.stats) return json_({ counts: stats_(), online: where_() }); // 매장 선택 화면: 매장별 품목 수·접속 중
       if (e.parameter.photos) return json_(photos_(store_(e.parameter.photos))); // 품목별 사진 (id → 드라이브 파일)
       if (e.parameter.catalog) return json_(catalog_()); // 다른 매장의 '제조일로부터' 설정
+      if (e.parameter.peers) return json_(peers_()); // 다른 매장에 등록된 품목 전체 (앱 '다른 매장 품목')
       if (e.parameter.trace) return json_({ trace: traceList_(store_(e.parameter.trace)) }); // 축산물이력제 기록 (최근 30일)
       if (e.parameter.traceLookup) return json_(traceLookup_(e.parameter.traceLookup)); // 이력번호 하나 조회 (캐시 먼저)
       if (e.parameter.pushstat) return json_(pushStat_()); // 알림 점검: 매장별 등록 폰 수·마지막 오류 (토큰은 안 보여줌)
@@ -484,6 +485,29 @@ function ocr_(blob, t, later) {
     if (later) ocrLater_(fileId); else ocrDrop_(fileId); // 글자 읽기만 할 때는 지우기를 미뤄 기다리는 시간을 줄임
     if (t) { t.make = s1 - s0; t.read = s2 - s1; t.drop = Date.now() - s2; }
   }
+}
+
+// 다른 매장에 등록된 품목 전체. 기본 '목록' 탭은 수원 전용 프로젝트가 따로 있어 빼고, 전용 주소 매장은 그 주소에서 받는다.
+function peers_() {
+  const stores = {};
+  const keep = (list) => (Array.isArray(list) ? list : []).filter((it) => it && it.id && it.id !== '__notice__' && it.mode !== 'note' && it.name);
+  spreadsheet_().getSheets().forEach((sh) => {
+    const name = sh.getName();
+    if (name.indexOf(SHEET_NAME + '_') !== 0) return;
+    const store = name.slice(SHEET_NAME.length + 1);
+    if (!/^[a-z0-9]{1,20}$/.test(store) || EXTERNAL_STORES[store]) return;
+    stores[store] = keep(listItems(store));
+  });
+  Object.keys(EXTERNAL_STORES).forEach((code) => {
+    try {
+      const res = UrlFetchApp.fetch(EXTERNAL_STORES[code] + '?api=1&store=' + code + '&t=' + Date.now(), { muteHttpExceptions: true, followRedirects: true });
+      const d = JSON.parse(res.getContentText() || 'null');
+      const list = Array.isArray(d) ? d : (d && d.items);
+      if (Array.isArray(list)) stores[code] = keep(list);
+      else stores[code] = { error: (d && d.error) || ('HTTP ' + res.getResponseCode()) };
+    } catch (err) { stores[code] = { error: String(err).slice(0, 160) }; }
+  });
+  return { stores: stores };
 }
 
 // 매장들이 '제조일로부터 N' 으로 등록한 품목: { 이름키: { name, combos: { '24m': 매장 수 } } }
