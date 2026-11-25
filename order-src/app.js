@@ -944,7 +944,7 @@
         let q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
         // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
-        if (t && t.kind === "prep" && t.id === recipe.name) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; t = raw ? { kind: "item", id: raw } : null; }
+        if (t && t.kind === "prep" && t.id === recipe.name && prepByName.get(t.id) === recipe) { const raw = ((db.prepCfg || {})[recipe.name] || {}).raw; /* 11/26: 프랩 자신일 때만 (라인 사이드 Mashed Potato·Carrot Rapee는 같은 이름 프랩을 씀 — 전엔 주재료가 0으로 빠졌음) */ t = raw ? { kind: "item", id: raw } : null; }
         if (!t || t.skip || !q) return;
         // 매장에서 잰 1TB 무게 (itemCfg / prepCfg의 tbG): 1 TB = 15ml 기준으로 tsp·cup·스쿱도 같이 환산
         const tbG = (t.kind === "item" ? itemCfg[t.id] : (db.prepCfg || {})[t.id] || {}) || {};
