@@ -497,10 +497,13 @@
         const x = it.transform[4], y = it.transform[5];
         let ln = lines.find((l) => Math.abs(l.y - y) < 3);
         if (!ln) { ln = { y, items: [] }; lines.push(ln); }
-        ln.items.push({ x, str: str.trim() });
+        ln.items.push({ x, str: str.trim(), w: it.width || 0, fs: Math.abs(it.transform[0]) || 10, sp: /^\s|\s$/.test(str) });
       });
       lines.sort((a, b) => b.y - a.y);
-      lines.forEach((l) => { l.items.sort((a, b) => a.x - b.x); l.text = l.items.map((i) => i.str).join(" "); });
+      // 11/25 (MG_LOCAL_TABLE 레시피 PDF): 글자가 몇 자씩 따로 나와("Pi zz a", "안 심") 빈칸이 끼었음 → 앞 조각 끝과 다음 조각 시작이 거의 붙어 있으면(글자 크기의 15% 안) 한 조각으로 합침
+      lines.forEach((l) => { l.items.sort((a, b) => a.x - b.x);
+        const m = []; l.items.forEach((i) => { const q = m[m.length - 1]; if (q && q.w > 0 && !q.sp && !i.sp && i.x - (q.x + q.w) < 0.15 * Math.max(q.fs, i.fs) && i.x - (q.x + q.w) > -0.5 * q.fs) { q.str += i.str; q.w = i.x + i.w - q.x; } else m.push({ ...i }); });
+        l.items = m; l.text = l.items.map((i) => i.str).join(" "); });
       const pageText = lines.map((l) => l.text).join("\n");
       const shelfM = /Shelf\s*Life\s*:\s*([\d.]+)\s*Day/i.exec(pageText);
       // 쪽 아래 "Mad Oil   1-1   2026-10-06" 에서 레시피 번호를 읽음 (프랩 시트의 "1-1 매드 오일"과 연결)
