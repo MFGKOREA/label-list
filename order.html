@@ -2121,12 +2121,15 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     const map = new Map();
     months().forEach((m) => { const f = mget(m)[kind]; if (f && f.recipes) f.recipes.forEach((r) => map.set(r.name, r)); });
     // PDF에 없는 메뉴(시저 샐러드 등)는 매장에서 알려준 레시피로
-    ((db.customRecipes || {})[kind] || []).forEach((r) => { if (!r.months) map.set(r.name, r); });
+    ((db.customRecipes || {})[kind] || []).forEach((r) => { if (!r.months && !r.until) map.set(r.name, r); }); // until(바뀌기 전 레시피)은 지난 날 계산에만
     return [...map.values()];
   }
   // 그 달에만 쓰던 레시피 (customRecipes 항목에 months: ["2026-09"]): 브리오슈 9월 6컷 → 10월 8컷처럼 레시피가 바뀐 달의 계산·로스 비교용
-  const variantOf = (kind, name, m) => (m && ((db.customRecipes || {})[kind] || []).find((r) => r.months && r.name === name && r.months.includes(m))) || null;
-  const hasVariant = (m) => !!m && ["line", "prep"].some((k) => ((db.customRecipes || {})[k] || []).some((r) => r.months && r.months.includes(m)));
+  // 11/25 KM "레시피 변경 11/25부터 반영": 바뀌기 전 레시피는 customRecipes 항목에 until: "2026-11-24"(그날까지 씀). m이 날짜(YYYY-MM-DD)면 그날 기준,
+  //  달(YYYY-MM)이면 그 달 15일 넘게 옛 레시피였을 때(until ≥ 그 달 15일) 옛 레시피로 셈. 앞으로의 예상(m 없음)은 새 레시피
+  const varHit = (r, m) => (r.months && r.months.includes(m.slice(0, 7)) && (m.length === 7 || !r.until)) || (r.until && (m.length > 7 ? m <= r.until && (!r.from || m >= r.from) : r.until >= m + "-15" && (!r.from || r.from <= m + "-15")));
+  const variantOf = (kind, name, m) => (m && ((db.customRecipes || {})[kind] || []).find((r) => (r.months || r.until) && r.name === name && varHit(r, m))) || null;
+  const hasVariant = (m) => !!m && ["line", "prep"].some((k) => ((db.customRecipes || {})[k] || []).some((r) => (r.months || r.until) && varHit(r, m)));
 
   let cache = null;
   let fcBiasMemo = null, dataFcMemo = new Map();
@@ -2496,7 +2499,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     function expand(recipe, factor0, acc, depth, prepAcc, batchAcc, m) {
       recipe.ing.forEach((ing) => {
         // 옵션 비율(ing.share): 안맵게처럼 주문 중 일부만 다른 재료로 나가면 그 비율만큼 (inv면 나머지)
-        const sv = ing.share ? shareOf(ing.share, m) : null, factor = sv == null ? factor0 : factor0 * (ing.inv ? 1 - sv : sv);
+        const sv = ing.share ? shareOf(ing.share, m && m.slice(0, 7)) : null, factor = sv == null ? factor0 : factor0 * (ing.inv ? 1 - sv : sv);
         let q = parseQty(ing.w, ing.v);
         let t = resolveIng(ing.n);
         // 프랩 레시피 재료가 자기 자신으로 적힌 경우(마늘쫑, 루꼴라 등) prepCfg.raw 품목으로
@@ -2835,7 +2838,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
         dayRowsOf("menuDay." + d).forEach((r) => {
           if (COUPON.test(r.c || "") && !(mapCfg.menu || {})[r.m]) return;
           const z = resolveMenu(r.m, r.c); if (!z || z.skip || !z.recipe) return;
-          const q = num(r.q) * (z.mult || 1), pm = perMenu(z.recipe, d.slice(0, 7));
+          const q = num(r.q) * (z.mult || 1), pm = perMenu(z.recipe, d); // 11/25: 그날 레시피 (until 변형)
           pm.acc.forEach((v, k) => { if (v) add(u, k, q * v); });
           cuts.forEach((c) => { const n = (pm.prepAcc.get(c.prep) || 0) + (pm.prepAcc.get(c.prep + "|ea") || 0) * c.portion; if (n) add(need, c.item, q * n); if (z.recipe.name.startsWith(c.from)) add(sup, c.item, q * c.g); });
         });
@@ -3992,7 +3995,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
         dayRowsOf(k).forEach((r) => {
           if (COUPON.test(r.c || "") && !((M.mapCfg || {}).menu || {})[r.m]) return; // 연결 안 한 쿠폰은 B와 같이 뺌
           const z = M.resolveMenu(r.m, r.c); if (!z || z.skip || !z.recipe) return;
-          const q = num(r.q) * (z.mult || 1), pm = M.perMenu(z.recipe, x.slice(0, 7));
+          const q = num(r.q) * (z.mult || 1), pm = M.perMenu(z.recipe, x); // 11/25: 그날 레시피
           pm.acc.forEach((v, kk) => { if (v) u.set(kk, (u.get(kk) || 0) + q * v); });
           // 커팅비프: 플래터·샐러드·파스타·피자가 쓰는 g(필요)과 크리스피 스테이크&립이 내는 자투리 g(공급). 모자란 만큼 부채살 1/2 컷 (menuUseSpan에서 구간으로 묶어 계산)
           cutCfgs().forEach((c) => {
