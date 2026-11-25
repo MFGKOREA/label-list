@@ -1193,7 +1193,7 @@
       const q = new Map(); // 레시피 이름 → { recipe, q, d0 첫 판매일 }
       [...days.keys()].sort().forEach((d) => days.get(d).rows.forEach((r) => {
         if (!(num(r.q) > 0) || (COUPON.test(r.c) && !mapCfg.menu[r.m])) return;
-        const x = resolveMenu(r.m, r.c); if (!x || x.skip || !x.recipe || have.has(x.recipe.name)) return;
+        const x = resolveMenu(r.m, r.c); if (!x || x.skip || !x.recipe || have.has(x.recipe.name)) return; { const sw = (db.menuSwap || {})[x.recipe.name]; if (sw && sw.from && sw.from <= TODAY) return; } // 11/26: 단종된 메뉴(menuSwap)는 신메뉴 초기 판매로 다시 더하지 않음
         const e = q.get(x.recipe.name) || { recipe: x.recipe, q: 0, d0: d, cat: r.c }; e.q += num(r.q) * (x.mult || 1); q.set(x.recipe.name, e);
       }));
       const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
@@ -1316,7 +1316,7 @@
       const lastB = withB[withB.length - 1];
       const tb = lastB && lastB.theo.get(it.key);
       // 지난달 판매에 없는 신메뉴 전용 재료는 신메뉴 초기 판매(blend.launch)로만 B가 생김
-      it.rateB = tb ? blend.theo.get(it.key) || tb / (lastB.gross / 1e6) : blend.theo.get(it.key) || null;
+      { const bt = blend.theo.get(it.key), gone = bt != null && bt <= 1e-9 && blend.swaps.some((w) => !w.to); it.rateB = gone ? 0 : tb ? bt || tb / (lastB.gross / 1e6) : bt || null; } // 11/26: 단종 메뉴로 B가 0이 된 품목은 지난달 값으로 되돌리지 않음 (우유: 떡볶이·브리오슈만)
       // 메뉴 변화 몫: 메뉴 교체·신메뉴로 B가 바뀐 비율 (늘거나 줄거나). A(지난 수불)는 이 변화를 모르니, 이 몫이 크면 B를 더 믿음 (calc)
       { const t1 = blend.theo.get(it.key) || 0, t0 = blend.theo0.get(it.key) || 0; it.newShare = Math.max(t0, t1) > 0 ? Math.min(1, Math.abs(t1 - t0) / Math.max(t0, t1)) : 0; }
       // 반은 최근 28영업일 날짜별 메뉴 판매로 (rollB). 메뉴 교체·신메뉴로 바뀐 몫이 큰 품목(newShare > 0.3)은 달 비율 그대로 (지난 판매가 옛 메뉴라서)
