@@ -160,6 +160,7 @@
   function light(key) {
     if (/^soldout\./.test(key)) return; // 품절 기록(11/15)은 계산에 안 씀
     if (/^(prepOnhand\.|prepLog$)/.test(key)) { if (cache) cache.plan = null; return; }
+    if (/^inv\./.test(key)) return; // 인벤토리(월재고 세기)는 계산에 안 씀
     if (/^(input\.|onhand$)/.test(key) && cache) { applyScores(cache); return; }
     invalidate();
   }
@@ -1355,7 +1356,53 @@
       it.isNew = it.rateA == null && it.rateB != null;
     });
     const shares = shareCfg.map((c) => ({ ...c, now: shareOf(c.id, null), byMonth: allMonths.filter((m) => shareFit.has(c.id + "|" + m)).map((m) => ({ m, v: shareFit.get(c.id + "|" + m) })) }));
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf, salesOf };
+    // 11/26 KM 인벤토리: 프랩 재고(프랩 탭과 같은 단위)를 레시피 역순으로 원재료 품목별 재고단위로. 못 풀면 null (사람이 원자재로 직접 넣음)
+    //  단위 → 프랩 g 또는 X(레시피 1번) → expand(발주 계산과 같은 풀기). 프랩 탭이 원재료 단위로 세는 프랩(브로콜리·핑거립 등)은 그 품목 그대로
+    const prepToRaw = (p, count, unit) => {
+      if (!p || !(count > 0)) return null;
+      const cfg = (db.prepCfg || {})[p.name] || {}, y = String(p.yield || ""), yg = yieldOf(p), u = String(unit || "");
+      if (cfg.split || cfg.shortOf || cfg.rate) return null; // 커팅비프(자투리)·매장 비율로 정한 프랩은 원재료 기준이 없음
+      const ingG = p.ing.reduce((a, i) => { const q = parseQty(i.w, i.v) || {}; return a + (q.g || q.ml || 0); }, 0);
+      const batchG = yg || ingG || null;
+      const yn = (() => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(y); return m ? num(m[1]) : null; })();
+      const eaG = cfg.eaG || prepEaG().get(p.name) || (yg && yn ? yg / yn : null);
+      const portionG = cfg.portionG || (yg && (/\bor\b/i.test(y) || yn === 1) ? yg : null) || (!yg && ingG && (yn || !y.trim()) ? ingG / (yn || 1) : null) || eaG;
+      const itemBy = (k) => items.find((i) => i.key === k);
+      const ings = p.ing.map((i) => resolveIng(i.n)).filter((t) => t && !t.skip && !(t.kind === "prep" && t.id === p.name));
+      const raw1 = (cfg.raw && itemBy(cfg.raw)) || (ings.length === 1 && ings[0].kind === "item" && itemBy(ings[0].id)) || null;
+      const acc = new Map();
+      const direct = (it, q) => { if (!it || !(q > 0)) return null; acc.set(it.key, q); return acc; };
+      let grams = null, x = null;
+      if (u === "X") x = count;
+      else if (u === "kg") grams = count * 1000;
+      else if (cfg.panG && u === cfg.unit) grams = count * cfg.panG;
+      else if (cfg.item && cfg.from === "ledger") { const it = itemBy(cfg.item); if (!it) return null; return direct(it, u === "g" && it.pk.g ? count / it.pk.g : count); }
+      else if (/^(g|cc|ml)$/i.test(u)) grams = count;
+      else if (u === "PK" && cfg.item) { const it = itemBy(cfg.item); if (!it) return null; return direct(it, count); } // 원재료 팩으로 세는 프랩 = 그 팩
+      else if (u === "PK" && eaG) grams = count * eaG;
+      else if (u === "EA" && cfg.unit === "EA") { if (eaG) grams = count * (cfg.per || 1) * eaG; else if (yn) x = (count * (cfg.per || 1)) / yn; }
+      else if (u === "포션") { if (portionG) grams = count * portionG; else if (yn) x = count / yn; else x = count; }
+      else if (u === "오더" && yn) x = count / yn;
+      else if (!cfg.unit && raw1 && u === (raw1.pk.stock || raw1.unit || "EA")) return direct(raw1, count); // 프랩 탭이 원재료 단위로 셈
+      if (x == null && grams != null) { if (batchG) x = grams / batchG; else { passThrough(p, grams, acc, 0, null, null, TODAY); return acc.size ? acc : null; } }
+      if (x == null || !(x > 0)) return null;
+      const pv = variantOf("prep", p.name, TODAY) || p;
+      expand(pv, x, acc, 0, null, null, TODAY);
+      // 못 바꾼 재료(용량 모르는 품목·연결 없는 재료·원재료를 모르는 자기 자신) → 화면에 이름으로 (합계에서 빠짐)
+      const miss = [], missOf = (r, depth) => r.ing.forEach((ing) => {
+        let q = parseQty(ing.w, ing.v), t = resolveIng(ing.n);
+        if (t && t.kind === "prep" && t.id === r.name) { const rw = ((db.prepCfg || {})[r.name] || {}).raw; t = rw ? { kind: "item", id: rw } : null; if (!t) { if (q) miss.push(ing.n); return; } }
+        if (t && t.skip) return;
+        if (!t) { if (q) miss.push(ing.n); return; }
+        if (!q) return;
+        if (t.kind === "item") { const it = itemBy(t.id), tb = (itemCfg[t.id] || {}).tbG || pairTbG().get("item:" + t.id); if (q.vol && tb) q = { g: (q.ml / 15) * tb }; if (!it || toStock(q, it.pk) == null) miss.push(it ? it.name : ing.n); }
+        else if (t.kind === "prep" && depth < 1) { const p2 = variantOf("prep", t.id, TODAY) || prepByName.get(t.id); if (p2) missOf(p2, depth + 1); }
+      });
+      missOf(pv, 0);
+      acc.miss = [...new Set(miss)];
+      return acc.size || acc.miss.length ? acc : null;
+    };
+    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf, salesOf, prepToRaw };
     applyScores(cache);
     return cache;
   }
@@ -1574,7 +1621,7 @@
     const yn = (p) => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(String(p.yield || "")); return m ? num(m[1]) : null; };
     // 프랩 탭 기록(prepLog·prepOnhand)의 id ↔ PDF 레시피: 프랩 탭과 같은 연결
     const pm = db.prepMap || {}, fwd = new Map();
-    M.prepSheet.forEach((x) => { const mp = pm[x.name]; const pdf = (mp && M.prep.find((p) => p.name === mp)) || M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75); if (pdf && !fwd.has(pdf.name)) fwd.set(pdf.name, { id: (x.code ? x.code + " " : "") + x.name, ko: x.name }); });
+    M.prepSheet.forEach((x) => { const mp = pm[x.name]; const pdf = prepPdfOf(M, x); if (pdf && !fwd.has(pdf.name)) fwd.set(pdf.name, { id: (x.code ? x.code + " " : "") + x.name, ko: x.name }); });
     const plan = [];
     M.prep.forEach((p) => {
       const cfg = (db.prepCfg || {})[p.name] || {};
@@ -1847,7 +1894,7 @@
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -1882,6 +1929,7 @@
     if (to === "loc") renderLocEdit();
     if (to === "log") renderStockLog();
     if (to === "veg") renderVeg();
+    if (to === "inv") renderInv();
     if (to === "files") locSumUpdate();
   }
   document.addEventListener("click", (e) => {
@@ -3172,6 +3220,87 @@
         `<td class="nm">${r.last ? `${md2(r.last.d)} ${f1(r.last.q)}` : "4주 안 입고 없음"}</td></tr>`).join("") +
       `</tbody></table></div>`;
   }
+  // ---------- 인벤토리 (11/26 KM): 월재고마감용 재고 세기 ----------
+  //  "원자재·프랩 아이템 재고를 입력 → 프랩은 레시피 역순으로 원자재 환산 → 전체를 MIS 월재고마감에 입력. 종이에 적고 머리로 환산·더하던 일을 줄이기"
+  //  저장 inv.<날짜> = { raw: {품목키: "3"}, prep: {프랩id: "1.5"}, at } — 계산(발주)에는 안 씀. 단위: 원자재 = 앱 재고단위, 프랩 = 프랩 탭과 같은 단위
+  let invTab = "raw", invQ = "";
+  const invDay = () => $("invDate").value || TODAY;
+  const invRec = () => db["inv." + invDay()] || { raw: {}, prep: {} };
+  const invSave = (part, id, v) => { const r = invRec(), o = { raw: { ...(r.raw || {}) }, prep: { ...(r.prep || {}) } }; if (v === "") delete o[part][id]; else o[part][id] = v; setKey("inv." + invDay(), { ...o, at: Date.now() }); };
+  const invF = (v) => { const a = Math.abs(v), f = a >= 10 ? 10 : a >= 0.1 ? 100 : 1000; return String(Math.round(v * f) / f); }; // 작은 값(소금 0.004PK)도 0으로 안 보이게
+  const invVal = (v) => (v === "" || v == null || !isFinite(num(v)) ? null : num(v));
+  function invPreps(M) {
+    const g = dayGross(TODAY, false).v;
+    const list = M.prepSheet.length ? M.prepSheet.map((x) => ({ name: x.name, code: x.code || "" })) : M.prep.map((p) => ({ name: p.short || p.name, code: p.code || "" }));
+    return list.map((x) => {
+      const pdf = prepPdfOf(M, x);
+      const ex = prepExpect(M, x.name, x.code, g, pdf);
+      return { ...x, id: (x.code ? x.code + " " : "") + x.name, pdf, unit: ex ? ex.unit : "", label: ex ? ex.label || ex.unit : "" };
+    });
+  }
+  function invRawItems(M) {
+    const L = LOCS.map((x) => x[0]);
+    return M.items.filter((it) => !it.hidden && it.code).map((it) => ({ it, g: it.ledgerOnly ? "수불현황에만" : it.foh ? "FOH" : (LOCS.find((x) => x[0] === locOf(it)) || LOCS[0])[1], gi: it.ledgerOnly ? 9 : it.foh ? 8 : Math.max(0, L.indexOf(locOf(it))), ro: num(((db.itemCfg || {})[it.key] || {}).ro) || 999 }))
+      .sort((a, b) => a.gi - b.gi || a.ro - b.ro || a.it.name.localeCompare(b.it.name, "ko"));
+  }
+  // 합계: 원자재 + 프랩 환산 (품목 재고단위)
+  function invTotals(M) {
+    const rec = invRec(), raw = new Map(), fromPrep = new Map(), bad = [], part = [];
+    Object.entries(rec.raw || {}).forEach(([k, v]) => { const n = invVal(v); if (n != null) raw.set(k, n); });
+    invPreps(M).forEach((x) => {
+      const n = invVal((rec.prep || {})[x.id]); if (n == null || n <= 0) return;
+      const m = x.pdf && x.unit ? M.prepToRaw(x.pdf, n, x.unit) : null;
+      if (!m) { bad.push(x.name); return; }
+      if (m.miss && m.miss.length) part.push(`${x.name}(${m.miss.join("·")})`);
+      m.forEach((q, k) => fromPrep.set(k, (fromPrep.get(k) || 0) + q));
+    });
+    return { raw, fromPrep, bad, part };
+  }
+  function renderInv() {
+    const M = model();
+    if (!$("invDate").value) $("invDate").value = TODAY;
+    document.querySelectorAll("#invSeg [data-iv]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.iv === invTab)));
+    $("invSearch").hidden = invTab === "sum";
+    const rec = invRec(), box = $("invBody"), q = invQ.trim();
+    const hit = (t) => !q || dice(q, t) > 0.5 || String(t).replace(/\s/g, "").includes(q.replace(/\s/g, ""));
+    const T = invTotals(M);
+    $("invSum").textContent = `원자재 ${T.raw.size} · 프랩 ${Object.values(rec.prep || {}).filter((v) => invVal(v) != null).length} 입력${T.bad.length ? ` · 환산 못 함 ${T.bad.length}` : ""}`;
+    if (invTab === "raw") {
+      let last = "", h = "";
+      invRawItems(M).filter((x) => hit(x.it.name) || hit(x.it.code)).forEach(({ it, g }) => {
+        if (g !== last) { h += `<div class="inv-h">${esc(g)}</div>`; last = g; }
+        const pv = T.fromPrep.get(it.key);
+        h += `<label class="inv-row"><span class="inv-n">${esc(it.name)}<small>${esc(it.code)}${pv ? ` · 프랩 환산 +${invF(pv)}` : ""}</small></span><span class="inv-in"><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="raw" data-id="${esc(it.key)}" value="${esc((rec.raw || {})[it.key] ?? "")}" aria-label="${esc(it.name)} 재고"><em>${esc(it.pk.stock || it.unit || "")}</em></span></label>`;
+      });
+      box.innerHTML = h || '<div class="empty">품목이 없어요</div>';
+    } else if (invTab === "prep") {
+      let h = "";
+      invPreps(M).filter((x) => hit(x.name)).forEach((x) => {
+        const n = invVal((rec.prep || {})[x.id]);
+        const m = n > 0 && x.pdf && x.unit ? M.prepToRaw(x.pdf, n, x.unit) : null;
+        const conv = n > 0 ? (m ? (m.size ? "→ " + [...m].map(([k, v]) => { const it = M.items.find((i) => i.key === k); return `${esc(it ? it.name : k)} ${invF(v)}${esc(it ? it.pk.stock || it.unit || "" : "")}`; }).join(" · ") : "") + (m.miss && m.miss.length ? ` <b class="inv-bad">못 바꾼 재료: ${m.miss.map(esc).join(", ")}</b>` : "") : `<b class="inv-bad">원재료로 못 바꿈 · 원자재 칸에 직접 넣어 주세요</b>`) : !x.unit ? '<span class="inv-bad">단위 모름 (프랩 레시피 연결 필요)</span>' : "";
+        h += `<div class="inv-row prep"><label class="inv-n" for="iv-${esc(x.id)}">${esc(x.name)}<small>${esc(x.code)}</small></label><span class="inv-in"><input id="iv-${esc(x.id)}" type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="prep" data-id="${esc(x.id)}" value="${esc((rec.prep || {})[x.id] ?? "")}" aria-label="${esc(x.name)} 재고"${x.unit ? "" : " disabled"}><em>${esc(x.label)}</em></span>${conv ? `<div class="inv-conv">${conv}</div>` : ""}</div>`;
+      });
+      box.innerHTML = h || '<div class="empty">프랩 목록이 없어요</div>';
+    } else {
+      const rows = invRawItems(M).map(({ it }) => ({ it, a: T.raw.get(it.key) || 0, b: T.fromPrep.get(it.key) || 0 })).filter((r) => r.a + r.b > 0);
+      // 원자재 목록 밖(숨긴 품목 등)으로 환산된 것도 빠뜨리지 않음
+      T.fromPrep.forEach((v, k) => { if (!rows.some((r) => r.it.key === k)) { const it = M.items.find((i) => i.key === k); if (it) rows.push({ it, a: T.raw.get(k) || 0, b: v }); } });
+      let h = `<div class="inv-tools"><button type="button" class="printbtn" id="invCopy">복사 (코드·품목·수량)</button><span>${rows.length}품목 · 단위는 앱 재고단위 (MIS 단위와 다르면 알려 주세요)</span></div>`;
+      if (T.part.length) h += `<div class="inv-warn">일부 재료를 못 바꾼 프랩 ${T.part.length}개: ${T.part.map(esc).join(", ")} — 그 재료는 합계에 안 들어감. 원자재 칸에 직접 더해 주세요.</div>`;
+      if (T.bad.length) h += `<div class="inv-warn">원재료로 못 바꾼 프랩 ${T.bad.length}개: ${T.bad.map(esc).join(", ")} — 합계에 안 들어감. 원자재 칸에 직접 넣어 주세요.</div>`;
+      h += `<table class="inv-t"><thead><tr><th>품목</th><th>원자재</th><th>프랩</th><th>합계</th></tr></thead><tbody>` +
+        rows.map((r) => `<tr><td>${esc(r.it.name)}<small>${esc(r.it.code)}</small></td><td>${r.a ? invF(r.a) : ""}</td><td>${r.b ? invF(r.b) : ""}</td><td><b>${invF(r.a + r.b)}</b><small>${esc(r.it.pk.stock || r.it.unit || "")}</small></td></tr>`).join("") +
+        `</tbody></table>`;
+      box.innerHTML = rows.length ? h : '<div class="empty"><b>아직 넣은 재고가 없어요</b>원자재·프랩 탭에서 센 재고를 넣으면 여기서 합칩니다.</div>';
+      const cp = $("invCopy"); if (cp) cp.onclick = () => { const t = rows.map((r) => [r.it.code, r.it.name, invF(r.a + r.b), r.it.pk.stock || r.it.unit || ""].join("\t")).join("\n"); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("복사했어요 · 엑셀이나 메모에 붙여 넣기"), () => toast("복사가 안 돼요")); };
+    }
+  }
+  $("invSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-iv]"); if (!b) return; invTab = b.dataset.iv; renderInv(); window.scrollTo(0, 0); });
+  $("invDate").addEventListener("change", () => renderInv());
+  $("invQ").addEventListener("input", (e) => { invQ = e.target.value; renderInv(); const i = $("invQ"); i.focus(); });
+  $("invBody").addEventListener("change", (e) => { const i = e.target.closest("input[data-part]"); if (!i) return; invSave(i.dataset.part, i.dataset.id, i.value.trim()); if (i.dataset.part === "prep") { const id = i.id; renderInv(); const n = document.getElementById(id); if (n) n.focus({ preventScroll: true }); } else { const T = invTotals(model()); $("invSum").textContent = $("invSum").textContent.replace(/^원자재 \d+/, `원자재 ${T.raw.size}`); } });
+  $("invBody").addEventListener("keydown", (e) => { if (e.key !== "Enter") return; const i = e.target.closest("input[data-part]"); if (!i) return; e.preventDefault(); const all = [...$("invBody").querySelectorAll("input[data-part]:not([disabled])")], n = all[all.indexOf(i) + 1]; if (n) { n.focus(); n.scrollIntoView({ block: "center", behavior: "smooth" }); } else i.blur(); });
   $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
   $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
   function locSumUpdate() {
@@ -3379,6 +3508,18 @@
   // ---------- 프랩 ----------
   // 프랩 1일 예상: 최근 판매 달의 프랩 사용량 ÷ 그달 Gross × 오늘 Forecast
   // 프랩 1일 예상을 주방에서 세는 단위로: 레시피 1번 분량(1X), 포션, 또는 원재료 PK/EA
+  // 프랩 시트 이름 → Prep 레시피 (11/26: 이름 먼저. 11/25 새 레시피에서 번호(3-1·5-10…)가 바뀌어, 번호로 먼저 찾으면
+  //  '매시드 포테이토' → Cream G.B.G, '소테 새우' → Shrimp Marinade처럼 엉뚱한 레시피가 잡혔음. 이름이 안 맞을 때만 번호)
+  // 이름으로도 못 맞추는 것 (11/26 실제 자료에서 확인): 시트 이름 → Prep 레시피 이름, null = 레시피 없음
+  const PREP_SHEET = { "씨푸드 믹스 포션 또잉": "Seafood mix Portion Thawing", "소테 새우": "Saute Shrimp", "매시드 포테이토": "Mashed Potato", "립 포션": null };
+  function prepPdfOf(M, x) {
+    const pm = (db.prepMap || {})[x.name] || PREP_SHEET[x.name]; if (pm) { const f = M.prep.find((p) => p.name === pm); if (f) return f; }
+    if (PREP_SHEET[x.name] === null) return null; // 레시피 없는 프랩 (립 포션 = 폭립 그대로)
+    let top = null, sc = 0;
+    M.prep.forEach((p) => [toKo(p.name), PREP_KO[p.name.toLowerCase()], p.short].filter(Boolean).forEach((k) => { const v = dice(k, x.name); if (v > sc) { sc = v; top = p; } }));
+    if (sc > 0.75) return top;
+    return (x.code && M.prep.find((p) => p.code === x.code)) || (sc > 0.6 ? top : null);
+  }
   function prepExpect(M, name, code, gToday, pdf) {
     const p = pdf || M.prep.find((x) => (code && x.code === code) || x.name === name || dice(toKo(x.name), name) > 0.7 || dice(x.name, name) > 0.9);
     const r = p && prepExpectFor(M, p, gToday);
@@ -3527,8 +3668,7 @@
     box.innerHTML = "";
     const entries = list.map((x) => {
       // prepMap: 프랩 시트 이름 → Prep 레시피 이름 (자동으로 못 맞춘 것)
-      const pm = (db.prepMap || {})[x.name];
-      const pdf = (pm && M.prep.find((p) => p.name === pm)) || M.prep.find((p) => (x.code && p.code === x.code) || dice(toKo(p.name), x.name) > 0.75);
+      const pdf = prepPdfOf(M, x);
       const ex = prepExpect(M, x.name, x.code, g.v, pdf);
       const shelf = x.shelf || (pdf && pdf.shelf) || (ex && ex.shelf) || null;
       // 한 번에 만드는 소스·오더류는 쉘프라이프 동안 쓸 양으로
@@ -4461,5 +4601,5 @@
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
+  window.__orderCalc = { invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.unit })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
 })();
