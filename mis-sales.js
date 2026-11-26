@@ -925,21 +925,24 @@
       // 11/26 KM: O면 O · △면 왜 △인지 확인(△ 칸을 눌러 상세를 읽음) · X면 한글표시사항 앱(수원)에 "X" 알림
       const norm = (v) => (/^[○◯Oo]$/.test(v) ? "O" : /^[Δ△]$/.test(v) ? "△" : /^[XxＸ×]$/.test(v) ? "X" : "");
       const SEC = /FOH|BOH/i, mine = (r, g) => { const st = g.cs.filter((c) => /매장|점포/.test(title(c))).map((c) => txt(r[c.field])); return !st.length || st.some((v) => /수원|1345090/.test(v)) || !st.some((v) => v); };
-      const status = {}, sum = [];
-      L.grids().forEach((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); (L.raw(g) || []).forEach((r) => { if (!mine(r, { cs })) return; cs.forEach((c) => { const v = norm(txt(r[c.field])); if (!v) return; sum.push(`${title(c) || c.field}=${v}`); if (SEC.test(title(c))) status[title(c)] = v; }); }); });
+      const status = {}, sum = [], fieldOf = {};
+      L.grids().forEach((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); (L.raw(g) || []).forEach((r) => { if (!mine(r, { cs })) return; cs.forEach((c) => { const v = norm(txt(r[c.field])); if (!v) return; const m = /^(FOH|BOH\d*)_(LUNCH|DINNER)$/i.exec(c.field), key = m ? `${m[1].toUpperCase()} ${m[2].toUpperCase() === "LUNCH" ? "런치" : "디너"}` : SEC.test(title(c)) ? title(c) : ""; sum.push(`${key || title(c) || c.field}=${v}`); if (key) { status[key] = v; fieldOf[key] = c.field; } }); }); });
+      // 실제 화면(11/26 첫 조회): 열 = DATE · BOH_LUNCH · BOH_DINNER · FOH_LUNCH · FOH_DINNER · BOH2_LUNCH · BOH2_DINNER (+ 마지막 저장일자·시간), 머리글은 LUNCH/DINNER뿐이라 칸 이름(field)으로 구역을 앎
       // △ 상세: 칸 속 링크를 눌러 열린 표·입력칸을 그대로 모양만 남김(규칙은 첫 실제 화면을 본 뒤 붙임). 저장·확인 단추는 안 누름
       const tri = Object.keys(status).filter((k) => status[k] === "△"), detail = {};
       const mainG = new Set(L.grids());
-      const triLinks = [...d.querySelectorAll("td a, td [onclick]")].filter((el) => /^[Δ△]$/.test((el.textContent || "").trim()));
-      for (const [n, sec] of tri.slice(0, 4).entries()) {
+      const evs = L.grids().map((g) => { const o = $(g).datagrid("options"); return ["onClickCell", "onDblClickCell", "onClickRow", "onDblClickRow", "onSelect"].map((k) => (o[k] && !/^function\s*\(\w*(,\s*\w+)*\)\s*\{\s*\}$/.test(String(o[k])) ? `${k}:${String(o[k]).slice(0, 400)}` : "")).filter(Boolean); });
+      for (const sec of tri.slice(0, 4)) {
         try {
-          const a = triLinks[n];
+          // △ 칸 누르기: 칸 속 링크가 있으면 그것, 없으면 표의 그 칸(td[field]) — easyui 표는 칸 누름(onClickCell)으로 상세를 엶
+          const td = d.querySelector(`.datagrid-body td[field="${fieldOf[sec]}"]`), a = (td && td.querySelector("a, [onclick]")) || (td && (td.querySelector(".datagrid-cell") || td));
           if (!a) { detail[sec] = { err: "△ 링크 없음" }; continue; }
-          const pre = new Set(frames()); press(R, a); await sleep(2500); await L.idle(T.q);
+          const pre = new Set(frames()), opened = []; const hook = (w) => { try { const f = w.open; w.open = function (u) { opened.push(String(u || "").slice(0, 200)); return f.apply(this, arguments); }; return () => { w.open = f; }; } catch (e) { return () => {}; } }; const un = [hook(R), hook(window.top)];
+          press(R, a); await sleep(2500); await L.idle(T.q); un.forEach((f) => f());
           const fs = frames().filter((w) => !pre.has(w)); const W = fs.find((w) => { try { return !!w.jQuery; } catch (e) { return false; } }) || R;
           const $w = W.jQuery, dw = W.document;
           const gs = $w ? [...dw.querySelectorAll("table[id], div[id]")].filter((el) => $w(el).data("datagrid") && !mainG.has(el)) : []; // 목록 표는 빼고 새로 열린 상세 표만
-          detail[sec] = { url: String(W.location.href).slice(0, 160), dlg: [...d.querySelectorAll(".window .panel-title, .dialog .panel-title")].map((x) => x.textContent.trim()).slice(0, 4), grids: gs.map((g) => { const o = $w(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field && !NAME.test(title(c))); const rs = $w(g).datagrid("getRows") || []; return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: rs.length, rows: rs.slice(0, 240).map((r) => Object.fromEntries(cs.map((c) => [c.field, txt(r[c.field])]))) }; }), imgs: dw.querySelectorAll("img").length };
+          detail[sec] = { url: String(W.location.href).slice(0, 160), dlg: [...d.querySelectorAll(".window .panel-title, .dialog .panel-title")].map((x) => x.textContent.trim()).slice(0, 4), grids: gs.map((g) => { const o = $w(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field && !NAME.test(title(c))); const rs = $w(g).datagrid("getRows") || []; return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: rs.length, rows: rs.slice(0, 240).map((r) => Object.fromEntries(cs.map((c) => [c.field, txt(r[c.field])]))) }; }), imgs: dw.querySelectorAll("img").length, opened, newFrames: fs.map((w) => { try { return String(w.location.href).slice(0, 160); } catch (e) { return "?"; } }) };
         } catch (e) { detail[sec] = { err: String(e && e.message || e).slice(0, 120) }; }
       }
       const xs = Object.keys(status).filter((k) => status[k] === "X");
@@ -949,7 +952,7 @@
       if (say && sent !== say && !T.noPush) {
         try { const r = await fetch(LABEL_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "push_notice", store: "suwon", text: say }) }); const j = await r.json(); if (j && j.sent != null) sent = say; } catch (e) {}
       }
-      await set("lineCheckProbe", { at: Date.now(), day, url: R.location.href.slice(0, 160), grids, detail });
+      await set("lineCheckProbe", { at: Date.now(), day, url: R.location.href.slice(0, 160), grids, evs, detail });
       await set("lineCheck." + day, { at: Date.now(), status, marks: sum.slice(0, 40), tri, x: xs, sent });
       const line = Object.keys(status).map((k) => `${k} ${status[k]}`).join(" · ") || "표시 없음";
       return finish(true, `LineCheck현황 ${day.slice(5)} · ${line}${tri.length ? " · △ 상세 읽음(이유 규칙은 다음 판)" : ""}${xs.length ? (sent === say ? " · X 알림 보냄" : " · X 알림 못 보냄") : ""}`, {});

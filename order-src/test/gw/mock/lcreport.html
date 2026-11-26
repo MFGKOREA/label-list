@@ -7,16 +7,19 @@ LineCheck현황
 <script>
 $("input.easyui-datebox").each(function () { $(this).data("datebox", 1); });
 $.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
-var COLS = [[{ field: "DT", title: "점검일" }, { field: "NM_STORE", title: "매장" }, { field: "FOH", title: "FOH", formatter: function (v) { return v; } }, { field: "BOH1", title: "BOH1" }, { field: "BOH2", title: "BOH2" }, { field: "NM_USER", title: "작성자" }]];
-var ROWS = [];
-$.fn.datagrid = function (cmd) { if (cmd === "getRows") return ROWS; if (cmd === "options") return { columns: COLS }; };
+// 실제 화면(11/26 첫 조회) 열 모양: DATE · BOH_LUNCH · BOH_DINNER · …_LAST_UPDATE · FOH_… · BOH2_… (머리글 LUNCH/DINNER). △ 칸을 누르면(onClickCell) 상세 — 상세 모양은 가짜
+var COLS = [[{ field: "DATE", title: "일자" }, { field: "NM_STORE", title: "매장명" }, { field: "BOH_LUNCH", title: "LUNCH" }, { field: "BOH_DINNER", title: "DINNER" }, { field: "BOH_LAST_UPTIME", title: "마지막 저장시간" }, { field: "FOH_LUNCH", title: "LUNCH" }, { field: "FOH_DINNER", title: "DINNER" }, { field: "BOH2_LUNCH", title: "LUNCH" }, { field: "BOH2_DINNER", title: "DINNER" }, { field: "USER_NM", title: "작성자" }]];
+var ROWS = [], OPT = { columns: COLS, onClickCell: function (i, f, v) { if (v === "△") fn_Detail(f); } };
+$.fn.datagrid = function (cmd) { if (cmd === "getRows") return ROWS; if (cmd === "options") return OPT; };
 $("#lGrid").data("datagrid", 1);
 function fn_Search() {
   window.__q = { day: $("#sDate").val(), store: $("#cdStore").val() };
-  $.active = 1; setTimeout(function () { ROWS = [{ DT: window.__q.day, NM_STORE: "MG수원컨벤션센터점", FOH: "○", BOH1: "△", BOH2: "X", NM_USER: "홍길동" }];
-    document.getElementById("lGrid").innerHTML = "<tr><td>○</td><td><a href='#' onclick=\"fn_Detail('B1')\">△</a></td><td>X</td></tr>"; $.active = 0; }, 300);
+  $.active = 1; setTimeout(function () { ROWS = [{ DATE: window.__q.day, NM_STORE: "MG수원컨벤션센터점", BOH_LUNCH: "X", BOH_DINNER: "X", BOH_LAST_UPTIME: "06:58:41", FOH_LUNCH: "○", FOH_DINNER: "○", BOH2_LUNCH: "△", BOH2_DINNER: "△", USER_NM: "홍길동" }];
+    var tb = document.createElement("div"); tb.className = "datagrid-body"; tb.innerHTML = "<table><tr>" + COLS[0].map(function (c) { return "<td field='" + c.field + "'><div class='datagrid-cell'>" + (ROWS[0][c.field] || "") + "</div></td>"; }).join("") + "</tr></table>";
+    tb.addEventListener("click", function (e) { var td = e.target.closest("td"); if (td) OPT.onClickCell(0, td.getAttribute("field"), ROWS[0][td.getAttribute("field")]); });
+    document.body.appendChild(tb); $.active = 0; }, 300);
 }
-function fn_Detail() { if (!window.event) throw new Error("no event"); parent.__lcDetail = (parent.__lcDetail || 0) + 1; $.active = 1; setTimeout(function () {
+function fn_Detail(f) { parent.__lcDetail = (parent.__lcDetail || 0) + 1; if (document.getElementById("dGrid")) return; $.active = 1; setTimeout(function () {
   var t = document.createElement("table"); t.id = "dGrid"; document.body.appendChild(t); var DR = [{ NO: "37", ITEM: "온도", L: "3", D: "" }, { NO: "71", ITEM: "농도", L: "100", D: "" }, { NO: "179", ITEM: "사진", L: "", D: "" }];
   var dg = $.fn.datagrid; $.fn.datagrid = function (cmd) { if (this.attr("id") === "dGrid") { if (cmd === "getRows") return DR; if (cmd === "options") return { columns: [[{ field: "NO", title: "No" }, { field: "ITEM", title: "항목" }, { field: "L", title: "런치입력" }, { field: "D", title: "디너입력" }, { field: "NM_USER", title: "작성자" }]] }; } return dg.apply(this, arguments); };
   $("#dGrid").data("datagrid", 1); $.active = 0; }, 300); }

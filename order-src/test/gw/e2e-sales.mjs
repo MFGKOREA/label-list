@@ -165,10 +165,10 @@ d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html", async (p)
 const lc = d["lineCheck.2026-11-26"] || {};
 ok(d.salesPush.status === "done" && d.salesPush.parts.linecheck.status === "done", "LineCheck현황 읽기 끝남: " + d.salesPush.parts.linecheck.text);
 ok(lcw[0] === 0 && lcw[1] && lcw[1].day === "2026-11-26" && lcw[1].store === "1345090", "당일·이 매장으로 조회 (저장 단추 안 누름)");
-ok(lc.status && lc.status.FOH === "O" && lc.status.BOH1 === "△" && lc.status.BOH2 === "X", "칸 상태 FOH O · BOH1 △ · BOH2 X");
-ok(lcw[2] === 1 && d.lineCheckProbe.detail.BOH1 && d.lineCheckProbe.detail.BOH1.grids.length === 1 && d.lineCheckProbe.detail.BOH1.grids[0].n === 3, "△는 눌러서 상세 표를 읽음");
-ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /X · BOH2/.test(pushes[0].text) && lc.sent === pushes[0].text, "X면 수원 한글표시사항 앱에 알림 한 번");
-ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2, "작성자·매장명 칸은 저장 안 함");
+ok(lc.status && lc.status["FOH 런치"] === "O" && lc.status["BOH 디너"] === "X" && lc.status["BOH2 런치"] === "△" && lc.status["BOH2 디너"] === "△", "칸 상태(실제 열 이름 BOH2_LUNCH 등): FOH O · BOH X · BOH2 △");
+ok(lcw[2] === 2 && d.lineCheckProbe.detail["BOH2 런치"] && d.lineCheckProbe.detail["BOH2 런치"].grids.length === 1 && d.lineCheckProbe.detail["BOH2 런치"].grids[0].n === 3 && d.lineCheckProbe.evs[0].some((e) => /onClickCell/.test(e)), "△ 칸을 눌러 상세 표를 읽음 (칸 누름 onClickCell)");
+ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /X · BOH 런치, BOH 디너/.test(pushes[0].text) && lc.sent === pushes[0].text, "X면 수원 한글표시사항 앱에 알림 한 번");
+ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2 && !JSON.stringify(d.lineCheckProbe).includes("작성자=") , "작성자·매장명 칸은 저장 안 함");
 d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html");
 ok(pushes.length === 1, "같은 날 같은 X는 다시 알리지 않음");
 // 6-2) 매장간재고이동 (11/17 KM "2번 좋다"): 받은 것(+)은 수령일, 보낸 것(−)은 발송일로 misXfer.날짜에. 등록·수신 단추와 다른 화면은 안 누름, 직원 이름·금액은 저장 안 함
