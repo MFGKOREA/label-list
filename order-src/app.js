@@ -1473,6 +1473,24 @@
 
   // ---------- C: 최종 발주량 ----------
   const Z = 1.65;
+  const RR_W = 0.3; // 되돌려 보기(11/10~26 센 날 12일 1,325건): 섞지 않음 1.351·51.3%·덜 316 → 0.3 1.349·51.6%·314(스테이크 3.20 → 3.08), 0.5 1.361·51.7%·313, 0.7 1.348·51.2%·321
+  function recentRate(it) {
+    if (it._rr !== undefined) return it._rr;
+    it._rr = null;
+    try {
+      const cds = []; for (let x = addDays(TODAY, -15); x < TODAY; x = addDays(x, 1)) if (counted((db["input." + x] || {})[it.key])) cds.push(x);
+      if (cds.length < 4) return null;
+      const d0 = cds[0], d1 = cds[cds.length - 1]; if (Math.round((parseISO(d1) - parseISO(d0)) / 864e5) < 6) return null;
+      const l0 = logOn(it, d0), l1 = logOn(it, d1), m0 = !!l0 && isMeat(l0.t, it), m1 = !!l1 && isMeat(l1.t, it);
+      const h0 = l0 ? +l0.t.slice(11, 13) + +l0.t.slice(14, 16) / 60 : 10, h1 = l1 ? +l1.t.slice(11, 13) + +l1.t.slice(14, 16) / 60 : 10;
+      const used = stockOf(it, db["input." + d0][it.key]) + arrBetween(it, d0, m0, d1, m1) - stockOf(it, db["input." + d1][it.key]);
+      const g = leftOf(h0, d0) * dayGross(d0, true).v + sumGross(addDays(d0, 1), d1, true).s + (1 - leftOf(h1, d1)) * dayGross(d1, true).v;
+      const unit = countStepOf(it) || 1;
+      if (!(g > 0) || !(used >= 3 * unit)) return null;
+      it._rr = used / (g / 1e6);
+    } catch (e) { it._rr = null; }
+    return it._rr;
+  }
   function calc(it, win, s, inc) {
     if (it.hidden) return { none: true, hidden: true }; // 발주 품목 설정에서 숨긴 품목은 발주·예상 재고를 내지 않음
     if (plainNow(it)) return { none: true, plain: true }; // FOH 재고·발주만 (11/19)
@@ -1486,6 +1504,10 @@
     if (blended.use == null && it.rateG != null) blended = { use: it.rateG * g100, wA: 0, spread: null, conflict: false };
     let use = blended.use, wA = blended.wA;
     if (use == null) return { none: true };
+    // 11/26 KM "삭제된 메뉴·새 메뉴가 많고 최근 트렌드도 있어 전체 다시": 최근 15일 센 값·입고로 본 실제 100만원당 사용(recentRate)을 30% 섞음.
+    //  레시피로만 계산하기로 정한 품목(recipeOnly)은 빼고, 센 날 4번·6일 넘게·실제로 3단위 넘게 쓴 품목만
+    const rr = RR_W > 0 && !it.recipeOnly ? recentRate(it) : null;
+    if (rr != null && g100 > 0) use = (1 - RR_W) * use + RR_W * rr * g100;
     use *= it.useK * weMix(it, win);
     const spread = useA != null && useB != null && !it.recipeOnly ? Math.abs(useA - useB) / Math.max(useA, useB) : null;
     // F: 안전재고 = 1.65 × 상대오차 × 사용량 ÷ √일수 (하루 오차 표준편차 × √일수와 같음)
