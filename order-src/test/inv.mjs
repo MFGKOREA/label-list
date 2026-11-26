@@ -84,6 +84,27 @@ const fohRows = await p.evaluate(() => { const M = window.__orderCalc.model(); c
 ok(fohIn > 0 && fohRows === 0 && !(await p.$$eval(".inv-h", (a) => a.some((x) => x.textContent === "FOH"))), `FOH 품목은 인벤토리에서 뺌 (FOH ${fohIn}개)`);
 const supRows = await p.evaluate(() => [...document.querySelectorAll(".inv-h")].map((x) => x.textContent).filter((t) => /소모품/.test(t)).length + [...document.querySelectorAll("#invBody .inv-row[data-key]")].filter((r) => /장갑|세제|락스|유니랩|호일|봉투/.test(r.textContent)).length);
 ok(supRows === 0, "소모품·세제는 인벤토리에서 뺌");
+// 최첨단판(11/26): 더하기 셈 · MIS 단위(계란 판=30개) · 예상과 차이 · 안 센 것 거르기 · 점검표 인쇄
+const setRaw = (re, v) => p.evaluate(([re, v]) => { const i = [...document.querySelectorAll("#invBody input[data-part=raw]")].find((x) => new RegExp(re).test(x.getAttribute("aria-label"))); i.value = v; i.dispatchEvent(new Event("change", { bubbles: true })); }, [re, v]);
+await p.click("#invSeg [data-iv=raw]"); await p.waitForTimeout(200);
+await setRaw("계란", "60+30");
+await setRaw("꿀\\(사양벌꿀\\)", "3+2+0.5");
+const honey = await p.evaluate(() => [...document.querySelectorAll("#invBody .inv-row")].find((r) => /꿀\(사양벌꿀\)/.test(r.textContent)).querySelector(".inv-eq").textContent);
+ok(honey === "= 5.5", "더하기 셈 3+2+0.5 = 5.5");
+const rowsAll = await p.evaluate(() => window.__orderCalc.invRows());
+const egg = rowsAll.find((r) => /계란/.test(r.name));
+ok(egg && egg.mis === "판" && Math.abs(egg.f - 1 / 30) < 1e-3, "계란: 앱 EA → MIS 판(30개) 환산 " + JSON.stringify(egg));
+ok(rowsAll.some((r) => r.misOnly) && !rowsAll.some((r) => /와인|Sauvignon|콜라|사이다/.test(r.name)), "MIS에만 있는 품목도 셈 · 주류·음료는 뺌");
+await p.click("#invFilt [data-f=todo]"); await p.waitForTimeout(150);
+const todoHasEgg = await p.evaluate(() => [...document.querySelectorAll("#invBody .inv-row")].some((r) => /계란/.test(r.textContent)));
+ok(!todoHasEgg, "안 센 것: 센 품목(계란)은 안 보임");
+await p.click("#invFilt [data-f=all]");
+await p.click("#invSeg [data-iv=sum]"); await p.waitForTimeout(200);
+const eggSum = await p.evaluate(() => { const r = [...document.querySelectorAll(".inv-t tbody tr")].find((x) => /계란/.test(x.textContent)); return r && [...r.children].map((c) => c.textContent); });
+ok(eggSum && /^3판/.test(eggSum[4]), "합계: 계란 90개 = MIS 3판 " + JSON.stringify(eggSum));
+await p.evaluate(() => { window.print = () => { window.__printed = document.getElementById("invPrint").innerHTML.length; }; });
+await p.click("#invPrintBtn"); await p.waitForTimeout(100);
+ok((await p.evaluate(() => window.__printed)) > 1000, "점검표 인쇄: 위치 순서 원자재 + 프랩 표");
 ok(!errs.length, "화면 오류 없음 " + errs.join(" / "));
 console.log(`인벤토리 시험 통과 ${pass} · 실패 ${fail}`);
 await b.close();
