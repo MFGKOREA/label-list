@@ -345,7 +345,7 @@ KM에게 먼저 묻는다:
 
 ## LineCheck현황 알림 (11/26 KM, 실제 MIS 시험 4번)
 - 길: 경영정보 › 매장운영관리 › 관리메뉴 › LineCheck현황(SRMM_LineChk_S.do), 당일·수원(1345090) 조회. `mis-sales.js` runLineCheck (kind "linecheck").
-- 언제: 당일 되풀이 'now'(15:40·19:40)에 덧붙임, 일요일 빼고(입고 없음). 손으로 시험: 시트 salesPush = {status:"pending", kind:"linecheck", to:오늘} → PC가 1~2분 안에 함.
+- 언제: 20:00(KM 11/26). 당일 되풀이(gw-plan now·setsToday·menuToday)를 12:00·16:00·20:00으로 옮기고 20시 창에만 덧붙임, 일요일 빼고(입고 없음). 손으로 시험: 시트 salesPush = {status:"pending", kind:"linecheck", to:오늘} → PC가 1~2분 안에 함.
 - 목록 표 dataGrid1: DATE · BOH_LUNCH/DINNER · FOH_… · BOH2_… (머리글은 LUNCH/DINNER뿐 → 칸 이름으로 구역). 수원은 BOH(1번) 안 함 → FOH·BOH2만 판정.
 - △ 상세: 칸 누름(onClickCell → fn_LineChk_Pop(index, "BOH2")) → 팝업 PopdataGrid 410줄. VALUE1 런치체크 · VALUE2 디너체크 · VALUE3 런치입력 · VALUE4 디너입력 · VALUE6 프라잉오일 · VALUE7 이미지. 줄 번호 = 화면 순서.
 - 규칙: 37~72 입력(71·72 런치 100) · 67~72·179~180·227~228 사진 · 407~408 사진+런치입력 사유 · 그 밖은 런치·디너 체크 Y · 브런치·사워도우 뺌 · 1~36·409~410은 KM 답 전까지 '확인'(알림 안 함).

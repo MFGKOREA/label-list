@@ -1124,7 +1124,7 @@
   //  1.17.0: today(오늘 중간값)도 종류마다 같이 넘겨야 함. 예전엔 also로 덧붙인 sets의 today:1이 job을 만들 때 빠져서
   //   오늘 중간값이 완결된 하루 기록(setDay.날짜)에 섞였음(매시간 :40 수집). 지금은 req.today → job.today로 그대로 전달
   const queue = [[k0, { from: base.from, to: base.to, force: base.force, today: base.today }]];
-  { const t = new Date(Date.now() + 9 * 3600e3); if (k0 === "now" && base.today && t.getUTCDay() !== 0 && t.getUTCHours() >= 15) queue.push(["linecheck", { to: t.toISOString().slice(0, 10) }]); } // 11/26 KM 라인체크: 당일 되풀이(15:40·19:40)에 덧붙여 조회 (일요일 빼고)
+  { const t = new Date(Date.now() + 9 * 3600e3); if (k0 === "now" && base.today && t.getUTCDay() !== 0 && t.getUTCHours() >= 20) queue.push(["linecheck", { to: t.toISOString().slice(0, 10) }]); } // 11/26 KM 라인체크 "20:00으로": 당일 되풀이 20:00 창에 덧붙여 조회 (일요일 빼고)
   try {
     while (queue.length && !replaced) {
       const [kind, req] = queue.shift();
