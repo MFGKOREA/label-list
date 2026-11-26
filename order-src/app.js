@@ -3367,15 +3367,23 @@
     const M = model();
     if (!$("invDate").value) $("invDate").value = TODAY;
     document.querySelectorAll("#invSeg [data-iv]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.iv === invTab)));
-    document.querySelectorAll("#invFilt [data-f]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === invFilter)));
-    $("invSearch").hidden = $("invFilt").hidden = invTab === "sum";
+
+    $("invSearch").hidden = invTab === "sum";
     const rec = invRec(), box = $("invBody"), q = invQ.trim();
     const hit = (...t) => !q || t.some((x) => x && (String(x).replace(/\s/g, "").toLowerCase().includes(q.replace(/\s/g, "").toLowerCase()) || dice(q, x) > 0.5));
     const T = invTotals(M), EXP = invExpected(M), preps = invPreps(M);
     const pc = preps.filter((x) => invVal((rec.prep || {})[x.id]) != null).length, rc = T.rows.filter((r) => r.counted).length, need = T.rows.filter((r) => !r.stop).length;
     const offN = T.rows.filter((r) => r.it && r.counted && invOff(r.tot, EXP.get(r.key))).length;
     const done = Math.min(1, (rc + pc) / Math.max(1, need + preps.length));
-    $("invSum").innerHTML = `<span>원자재 <b>${rc}</b>/${need} · 프랩 <b>${pc}</b>/${preps.length}${offN ? ` · <em class="inv-chk">확인 ${offN}</em>` : ""}${T.bad.length ? ` · <em class="inv-chk">환산 못 함 ${T.bad.length}</em>` : ""}</span><span class="inv-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(done * 100)}"><i style="width:${(done * 100).toFixed(1)}%"></i></span>`;
+    // 선택지 줄이기(11/26 KM 공유 "선택지를 줄이는 규칙"): 거르기는 해당 품목이 있을 때만, 숫자와 함께. 확인 필요만 색으로
+    const todoN = invTab === "prep" ? preps.filter((x) => x.opts.length && invVal((rec.prep || {})[x.id]) == null).length : need - rc;
+    const chkN = invTab === "prep" ? preps.filter((x) => { const n = invVal((rec.prep || {})[x.id]); if (!(n > 0)) return false; const m = invPrepRaw(M, x, n, (rec.prepU || {})[x.id] || x.def); return !m || (m.miss && m.miss.length); }).length : T.rows.filter((r) => r.counted && ((r.it && invOff(r.tot, EXP.get(r.key))) || !r.fx || (r.fx && r.fx.soft && !r.misOnly))).length;
+    if (invFilter === "chk" && !chkN) invFilter = "all";
+    $("invFilt").innerHTML = (todoN || chkN || invFilter !== "all" ? `<button type="button" data-f="all" aria-pressed="${invFilter === "all"}">전체</button>` : "") +
+      (todoN && todoN < need + preps.length ? `<button type="button" data-f="todo" aria-pressed="${invFilter === "todo"}">안 센 것 ${todoN}</button>` : "") +
+      (chkN ? `<button type="button" class="chk" data-f="chk" aria-pressed="${invFilter === "chk"}">확인 필요 ${chkN}</button>` : "");
+    $("invFilt").hidden = invTab === "sum" || !$("invFilt").innerHTML;
+    $("invSum").innerHTML = `<span>원자재 <b>${rc}</b>/${need} · 프랩 <b>${pc}</b>/${preps.length}</span><span class="inv-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(done * 100)}"><i style="width:${(done * 100).toFixed(1)}%"></i></span>`;
     const fmtRaw = (m) => [...m].map(([k, v]) => { const it = M.items.find((i) => i.key === k); return `${esc(it ? it.name : k)} ${invF(v)}${esc(it ? invUnitName(it) : "")}`; }).join(" · ");
     const plusBtn = (part, id) => `<button type="button" class="inv-plus" data-plus="${part}" data-pid="${esc(id)}" aria-label="더하기" tabindex="-1">+</button>`;
     if (invTab === "raw") {
@@ -3392,7 +3400,7 @@
           const s = invSubG(M, r.it), per = invPer(r.it), own = !(r.it.pk.g || r.it.pk.ml);
           sub = `<div class="inv-sub"><span>소분</span><input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="–" data-part="sub" data-id="${esc(r.key)}" value="${esc((rec.sub || {})[r.key] ?? "")}" aria-label="${esc(r.name)} 소분 포션 수">${plusBtn("sub", r.key)}<span>포션 ×</span><input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="subg" data-id="${esc(r.key)}" value="${s ? esc(String(Math.round(s.g * 10) / 10)) : ""}" placeholder="g" aria-label="${esc(r.name)} 1포션 g"><span>g${s ? ` <small>(${esc(s.src)})</small>` : ""}${per && !own ? ` · 1${esc(r.unit)} = ${won(per)}g` : ` · 1${esc(r.unit)} = <input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="unitg" data-id="${esc(r.key)}" value="${own && per ? esc(String(per)) : ""}" placeholder="?" aria-label="${esc(r.name)} 1${esc(r.unit)} 무게 g">g${per ? "" : ' <b class="inv-bad">무게를 넣어 주세요</b>'}`}${r.s != null ? ` = <b>${invF(r.s)}${esc(r.unit)}</b>` : ""}</span></div>`;
         }
-        const meta = [esc(r.code), e != null ? `예상 ${invF(e)}` : "", r.b ? `프랩 +${invF(r.b)}` : "", r.misOnly ? "MIS 단위" : r.mis ? "" : '<em class="inv-chk">MIS 목록에 없음</em>', r.it ? `<button type="button" class="inv-subbtn" data-subtg="${esc(r.key)}" aria-pressed="${on}">소분${on ? " 닫기" : ""}</button>` : ""].filter(Boolean).join(" · ");
+        const meta = [esc(r.code), e != null ? `예상 ${invF(e)}` : "", r.b ? `프랩 +${invF(r.b)}` : "", r.misOnly ? "MIS 단위" : r.mis ? "" : '<em class="inv-chk">MIS 목록에 없음</em>'].filter(Boolean).join(" · ") + (r.it ? ` <button type="button" class="inv-subbtn" data-subtg="${esc(r.key)}" aria-pressed="${on}">소분${on ? " 닫기" : ""}</button>` : "");
         const sumLine = String(v).includes("+") && invVal(v) != null ? `<span class="inv-eq">= ${invF(invVal(v))}</span>` : "";
         const warn = invBad(v) ? '<div class="inv-note bad">숫자와 + 만 넣어 주세요</div>' : off ? `<div class="inv-note">예상 ${invF(e)}${esc(r.unit)}와 차이가 커요 (합계 ${invF(r.tot)}) · 한 번 더 확인</div>` : "";
         h += `<div class="inv-row${r.counted ? " done" : ""}${off ? " off" : ""}${r.stop ? " stop" : ""}" data-key="${esc(r.key)}"><span class="inv-n">${esc(r.name)}<small>${meta}</small></span><span class="inv-in">${sumLine}<input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="–" data-part="raw" data-id="${esc(r.key)}" value="${esc(v)}" aria-label="${esc(r.name)} 재고">${plusBtn("raw", r.key)}<em>${esc(r.unit)}</em></span>${sub}${warn}</div>`;
@@ -3418,13 +3426,17 @@
       const inMis = cnt.filter((r) => r.mis), notMis = cnt.filter((r) => !r.mis), noFx = inMis.filter((r) => !r.fx), soft = inMis.filter((r) => r.fx && r.fx.soft);
       const todo = T.rows.filter((r) => r.mis && !r.counted && !r.stop);
       const hasMis = misStockList().length > 0;
-      let h = `<div class="inv-tools"><button type="button" class="printbtn" id="invCopy">복사 (코드·품목·MIS 수량)</button><span>${inMis.length}품목 · MIS 재고단위 · MIS 화면 순서</span></div>`;
-      if (!hasMis) h += '<div class="inv-warn">MIS 실사재고 품목을 아직 못 읽었어요 — 앱 단위로만 보여요.</div>';
-      if (noFx.length) h += `<div class="inv-warn">단위를 못 맞춘 품목 ${noFx.length}개: 아래 표에서 "앱 1 = MIS ?" 칸을 넣어 주세요.</div>`;
-      if (T.part.length) h += `<div class="inv-warn">일부 재료를 못 바꾼 프랩 ${T.part.length}개: ${T.part.map(esc).join(", ")} — 그 재료는 합계에 안 들어감. 원자재 칸에 직접 더해 주세요.</div>`;
-      if (T.bad.length) h += `<div class="inv-warn">원재료로 못 바꾼 것 ${T.bad.length}개: ${T.bad.map(esc).join(", ")} — 합계에 안 들어감. 원자재 칸에 직접 넣어 주세요.</div>`;
-      if (T.extra.length) h += `<div class="inv-warn">목록 밖 품목으로 환산된 프랩 재료: ${T.extra.map((x) => `${esc(x.name)} ${invF(x.v)}${esc(x.unit)}`).join(", ")}</div>`;
-      if (todo.length && cnt.length) h += `<details class="inv-todo"><summary>아직 안 센 MIS 품목 ${todo.length}개</summary><p>${todo.map((r) => esc(r.name)).join(" · ")}</p></details>`;
+      // 메인 버튼 하나(MIS 입력용 복사), 경고는 "확인할 것" 하나로 접음 — 단위를 못 맞춘 품목(합계가 틀림)만 펼쳐서
+      const issues = [
+        !hasMis ? "MIS 실사재고 품목을 아직 못 읽었어요 — 앱 단위로만 보여요." : "",
+        noFx.length ? `단위를 못 맞춘 품목 ${noFx.length}개 — 아래 표의 빨간 줄에 "앱 1 = MIS ?"를 넣어 주세요.` : "",
+        T.part.length ? `일부 재료를 못 바꾼 프랩 ${T.part.length}개: ${T.part.map(esc).join(", ")} — 그 재료는 원자재 칸에 직접 더해 주세요.` : "",
+        T.bad.length ? `원재료로 못 바꾼 것 ${T.bad.length}개: ${T.bad.map(esc).join(", ")} — 원자재 칸에 직접 넣어 주세요.` : "",
+        T.extra.length ? `목록 밖 품목으로 환산된 프랩 재료: ${T.extra.map((x) => `${esc(x.name)} ${invF(x.v)}${esc(x.unit)}`).join(", ")}` : "",
+        todo.length ? `아직 안 센 MIS 품목 ${todo.length}개: ${todo.map((r) => esc(r.name)).join(" · ")}` : "",
+      ].filter(Boolean);
+      let h = `<button type="button" class="inv-cta" id="invCopy">MIS 입력용 복사 <small>${inMis.length}품목 · MIS 단위·순서</small></button>`;
+      if (issues.length) h += `<details class="inv-issues"${noFx.length || !hasMis ? " open" : ""}><summary>확인할 것 ${issues.length}</summary><ul>${issues.map((x) => `<li>${x}</li>`).join("")}</ul></details>`;
       const tr = (r) => `<tr${!r.fx ? ' class="nofx"' : ""}><td>${esc(r.name)}<small>${esc(r.code)}${r.fx && r.fx.how ? ` · ${esc(r.fx.how)}` : ""}${!r.fx || (r.fx && r.fx.soft) ? ` · 앱 1${esc(r.unit)} = MIS <input class="inv-fx" type="number" inputmode="decimal" step="any" min="0" data-fx="${esc(r.key)}" value="${r.fx ? esc(String(r.fx.f)) : ""}" aria-label="${esc(r.name)} 앱 1${esc(r.unit)}이 MIS 몇 ${esc(r.mis ? r.mis.unit : "")}"> ${esc(r.mis ? r.mis.unit : "")}` : ""}</small></td><td>${r.a != null ? invF(r.a) : ""}</td><td>${r.s ? invF(r.s) : ""}</td><td>${r.b ? invF(r.b) : ""}</td><td><b>${r.misQ != null ? invF(r.misQ) : "?"}</b><small>${esc(r.mis ? r.mis.unit : r.unit)}</small></td></tr>`;
       h += `<table class="inv-t"><thead><tr><th>품목</th><th>셈</th><th>소분</th><th>프랩</th><th>MIS 재고</th></tr></thead><tbody>${inMis.map(tr).join("")}</tbody></table>`;
       if (notMis.length) h += `<h3 class="inv-h"><span>MIS 실사 목록에 없는 품목 ${notMis.length}개</span><small>MIS에 넣을 칸이 없음</small></h3><table class="inv-t"><tbody>${notMis.map(tr).join("")}</tbody></table>`;
@@ -3465,6 +3477,7 @@
     if (i.value && !/\+$/.test(i.value)) i.value += "+";
     i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch (er) {}
   });
+  $("invBody").addEventListener("pointerdown", (e) => { if (e.target.closest("[data-subtg]")) e.preventDefault(); }); // 칸에서 커서가 빠져 소분 단추가 숨기 전에
   $("invBody").addEventListener("click", (e) => {
     const b = e.target.closest("[data-subtg]"); if (!b) return;
     e.preventDefault();
