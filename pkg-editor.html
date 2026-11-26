@@ -1,0 +1,1285 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>라벨 품목 편집</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: one phone-width column (max 640px) like the 발주앱. Open the .pkg, then one list of items with 품목/Open 탭, then the save card. 크림(KREAM) 스타일: 흰 카드 + 회색 바탕, 검정 강조, 밑줄 탭, 테두리 칩. */
+:root {
+  --page: #ffffff;
+  --bg: #f4f4f4;
+  --surface: #ffffff;
+  --fill: rgba(0, 0, 0, .05);
+  --fill-2: #f4f4f4;
+  --fg: #222222;
+  --muted: #707070;
+  --line: #ebebeb;
+  --accent: #76ac95; /* 매드포갈릭 연두 (발주앱과 같은 색) */
+  --accent-ink: #ffffff;
+  --accent-soft: #e6f1ec;
+  --accent-text: #3f7a62;
+  --ok: #41b979; --ok-bg: #ebf7f0; --ok-ink: #16804a;
+  --chick: #f4f4f4; --chick-line: #d3d3d3; --chick-ink: #555555;
+  --rose: #fdeeec; --rose-line: #f5b8b0; --rose-ink: #d6402f; /* 빨강은 문제에만 */
+  --font: "Microsoft GothicNeo", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
+    --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
+    --accent: #76ac95; --accent-ink: #0c1712; --accent-soft: #17261f; --accent-text: #8fc4ac;
+    --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a;
+    --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd;
+    --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #000000; --bg: #000000; --surface: #141414; --fill: rgba(255, 255, 255, .08); --fill-2: #1f1f1f;
+  --fg: #f2f2f2; --muted: #8b8b8b; --line: #262626;
+  --accent: #76ac95; --accent-ink: #0c1712; --accent-soft: #17261f; --accent-text: #8fc4ac;
+  --ok: #4cc38a; --ok-bg: #10261b; --ok-ink: #4cc38a;
+  --chick: #1f1f1f; --chick-line: #3a3a3a; --chick-ink: #bdbdbd;
+  --rose: #2c1614; --rose-line: #5a2a25; --rose-ink: #ff7b6d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font); font-size: 16px; line-height: normal; letter-spacing: -0.03em;
+  -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 56px;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button, input, select { font: inherit; color: inherit; letter-spacing: -0.03em; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+button, [role="button"], label.sw { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+button:not(:disabled) { transition: transform 100ms cubic-bezier(.2, .8, .2, 1), filter 100ms; }
+button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg { display: block; }
+.ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+[hidden] { display: none !important; }
+h1, h2 { margin: 0; text-wrap: balance; }
+p { margin: 0; text-wrap: pretty; }
+
+.app { max-width: 640px; margin: 0 auto; padding-top: 18px; }
+.hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; margin: 22px 2px 14px; }
+.hdr h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: normal; color: var(--fg); }
+.hdr .sub { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 3px; }
+.datepill { font-size: 16px; font-weight: 800; background: var(--surface); border-radius: 12px; padding: 7px 13px; white-space: nowrap; }
+
+.group { background: var(--surface); border-radius: 20px; padding: 16px; margin-bottom: 14px; }
+.group h2 { font-size: 16px; font-weight: 800; }
+.group .lead { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+/* 1. 열기 */
+.drop { display: grid; justify-items: center; gap: 10px; text-align: center; border: 1.5px dashed var(--chick-line); border-radius: 14px; padding: 26px 14px; margin-top: 14px; transition: background 150ms, border-color 150ms; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop b { font-size: 16px; font-weight: 800; }
+.drop span { font-size: 13px; color: var(--muted); max-width: 40ch; }
+.drop .btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 10px 18px; border-radius: 999px; font-size: 15px; font-weight: 700; background: var(--surface); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; }
+.btn.dark { background: var(--fg); color: var(--bg); box-shadow: none; }
+.btn.green { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.btn.wide { width: 100%; font-size: 16px; min-height: 52px; border-radius: 14px; }
+.btn:disabled { background: var(--fill); color: var(--muted); box-shadow: none; cursor: default; }
+.err { font-size: 14px; font-weight: 600; color: var(--rose-ink); min-height: 0; }
+.err:empty { display: none; }
+
+/* 열린 패키지 */
+.pkgbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13px; color: var(--muted); margin: 0 2px 12px; }
+.pkgbar b { color: var(--fg); font-weight: 700; }
+.pkgbar .count { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--fg); }
+.pkgbar .count em { font-style: normal; font-size: 20px; font-weight: 800; margin-right: 2px; }
+.pkgbar .chg { display: inline-flex; gap: 6px; }
+.pkgbar .chg span { border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; background: var(--accent-soft); color: var(--accent-text); }
+.pkgbar .chg span.del { background: var(--fill-2); color: var(--muted); }
+
+/* 이어서 편집 띠 */
+.draftbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--surface); border-radius: 14px; padding: 10px 10px 10px 14px; margin-bottom: 12px; font-size: 14px; }
+.draftbar b { font-weight: 800; }
+.draftbar span { color: var(--muted); font-size: 13px; }
+.draftbar .sp { flex: 1 1 auto; }
+.draftbar .btn { min-height: 38px; padding: 7px 14px; font-size: 14px; }
+
+/* 탭 (밑줄) */
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+.seg button { position: relative; padding: 12px 0 13px; font-size: 16px; font-weight: 600; color: var(--muted); border-radius: 0; }
+.seg button + button::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: var(--line); }
+.seg button[aria-selected="true"] { color: var(--accent-text); font-weight: 800; }
+.seg button::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 44px; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); translate: -50% 0; scale: 0 1; transition: scale 200ms cubic-bezier(.2, .8, .2, 1); }
+.seg button[aria-selected="true"]::after { scale: 1 1; }
+.seg button small { font-size: 13px; font-weight: 700; margin-left: 4px; color: inherit; opacity: .8; }
+
+/* 검색 · 칩 */
+.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 12px; padding: 0 12px; margin-bottom: 10px; color: var(--muted); }
+.search input { flex: 1 1 auto; min-width: 0; border: 0; background: none; padding: 12px 0; font-size: 16px; color: var(--fg); }
+.search input::placeholder { color: var(--muted); opacity: 1; }
+.search input:focus { outline: none; }
+.search button { color: var(--muted); padding: 6px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 2px 8px; margin: 0 -2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; position: relative; min-height: 36px; padding: 7px 14px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--fg); font-size: 14px; font-weight: 500; white-space: nowrap; }
+.chips button::after { content: ""; position: absolute; inset: -6px 0; }
+.chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: none; font-weight: 700; }
+.chips.sub button { min-height: 32px; padding: 5px 12px; font-size: 13px; }
+
+.toolrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 2px 10px; }
+.toolrow .btn { min-height: 38px; padding: 7px 14px; font-size: 14px; }
+.toolrow .sp { flex: 1 1 auto; }
+.tbtns { display: flex; gap: 8px; margin-left: auto; }
+.lockline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.lockline .ic { color: var(--accent-text); width: 14px; height: 14px; }
+.toolrow .csv { position: relative; }
+.toolrow .csv .menu { position: absolute; right: 0; top: calc(100% + 6px); display: grid; min-width: 180px; background: var(--surface); border-radius: 14px; padding: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, .14), 0 0 0 1px var(--line); z-index: 5; }
+.toolrow .csv .menu button { text-align: left; padding: 10px 12px; border-radius: 9px; font-size: 14px; font-weight: 600; }
+.toolrow .csv .menu button:hover { background: var(--fill); }
+label.sw { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
+label.sw input { appearance: none; -webkit-appearance: none; width: 40px; height: 24px; border-radius: 999px; background: var(--chick-line); position: relative; transition: background 150ms; flex: none; margin: 0; cursor: pointer; }
+label.sw input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: translate 150ms cubic-bezier(.2, .8, .2, 1); box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+label.sw input:checked { background: var(--accent); }
+label.sw input:checked::after { translate: 16px 0; }
+label.sw input:checked + span { color: var(--fg); }
+
+/* 품목 목록 */
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; grid-template-areas: "grip main open" "grip cats ops"; align-items: center; column-gap: 10px; row-gap: 8px; background: var(--surface); border-radius: 14px; padding: 10px 10px 10px 8px; min-width: 0; }
+.item.chg { box-shadow: inset 3px 0 0 var(--accent); }
+.item.drag { opacity: .45; }
+.item.over-before { box-shadow: 0 -3px 0 0 var(--accent); }
+.item.over-after { box-shadow: 0 3px 0 0 var(--accent); }
+.grip { grid-area: grip; display: grid; place-items: center; width: 24px; height: 100%; min-height: 44px; color: var(--chick-line); cursor: grab; border-radius: 8px; }
+.grip:active { cursor: grabbing; }
+.main { grid-area: main; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.main .no { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); min-width: 26px; }
+.main .name { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.main input.name { border: 0; background: var(--fill-2); border-radius: 8px; padding: 6px 8px; font-size: 15px; font-weight: 700; width: 100%; }
+.main input.name:focus { outline: none; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
+.days { flex: none; display: inline-flex; align-items: baseline; gap: 3px; font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.days b { font-size: 15px; font-weight: 800; color: var(--fg); }
+.days input { width: 44px; border: 0; background: var(--fill-2); border-radius: 8px; padding: 5px 6px; font-size: 14px; font-weight: 800; text-align: center; }
+.days input:focus { outline: none; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
+.cats { grid-area: cats; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.cats select { appearance: none; -webkit-appearance: none; max-width: 100%; border: 0; border-radius: 999px; padding: 5px 24px 5px 11px; font-size: 13px; font-weight: 600; background: var(--fill-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23707070' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center; color: var(--fg); cursor: pointer; }
+.cats .owarn { flex-basis: 100%; font-size: 12px; font-weight: 700; color: var(--rose-ink); background: var(--rose); border-radius: 8px; padding: 5px 9px; }
+.pkgbar .chg span.warn { background: var(--rose); color: var(--rose-ink); }
+.cats select.empty { color: var(--rose-ink); box-shadow: inset 0 0 0 1px var(--rose-line); }
+.cats .arrow { color: var(--chick-line); font-size: 12px; }
+.cats input.newcat { border: 0; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 600; width: 120px; }
+.open { grid-area: open; justify-self: end; }
+.open label.sw { min-height: 32px; font-size: 13px; }
+.open label.sw input { width: 36px; height: 22px; }
+.open label.sw input::after { width: 16px; height: 16px; }
+.open label.sw input:checked::after { translate: 14px 0; }
+.ops { grid-area: ops; justify-self: end; display: flex; gap: 2px; }
+.ops button { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: var(--muted); }
+.ops button:hover { background: var(--fill); color: var(--fg); }
+.ops button:disabled { opacity: .3; cursor: default; }
+.ops button.del:hover { color: var(--rose-ink); background: var(--rose); }
+.empty { text-align: center; color: var(--muted); font-size: 14px; padding: 28px 12px; background: var(--surface); border-radius: 14px; }
+.foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin: 10px 4px 0; font-size: 13px; color: var(--muted); }
+.foot b { color: var(--fg); font-weight: 700; }
+@media (min-width: 560px) {
+  .item { grid-template-columns: 24px minmax(0, 1fr) auto auto; grid-template-areas: "grip main open ops" "grip cats open ops"; row-gap: 6px; }
+}
+
+/* 3. 저장 */
+.save .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.save input[type="text"] { flex: 1 1 auto; min-width: 0; border: 0; background: var(--fill-2); border-radius: 12px; padding: 12px 12px; font-size: 14px; font-weight: 600; }
+.save input[type="text"]:focus { outline: none; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
+.save .btn.wide { margin-top: 10px; }
+.fixcard { display: grid; gap: 8px; margin-top: 12px; background: var(--fill-2); border-radius: 14px; padding: 12px 14px; }
+.fixcard label.sw span { color: var(--fg); font-weight: 800; font-size: 15px; }
+.fixcard p { font-size: 13px; color: var(--muted); }
+.fixcard .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.fixcard .rules li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.fixcard .rules b { font-weight: 800; }
+.fixdone { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--accent-text); }
+.fixdone .ic { translate: 0 1px; }
+.status { font-size: 14px; font-weight: 600; margin-top: 10px; min-height: 0; }
+.status.ok { color: var(--ok-ink); }
+.status.bad { color: var(--rose-ink); }
+.status:empty { display: none; }
+.steps { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; counter-reset: s; font-size: 13px; color: var(--muted); }
+.steps li { display: flex; gap: 8px; align-items: baseline; }
+.steps li::before { counter-increment: s; content: counter(s); flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--fill-2); font-size: 12px; font-weight: 800; color: var(--fg); translate: 0 3px; }
+.keep { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin-top: 14px; }
+.keep .ic { color: var(--accent-text); translate: 0 1px; }
+.keep b { color: var(--fg); font-weight: 700; }
+
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; background: var(--fg); color: var(--bg); font-size: 14px; font-weight: 600; padding: 10px 16px; border-radius: 12px; z-index: 50; max-width: calc(100% - 32px); }
+/* 끌어서 옮기기 */
+.grip { touch-action: none; }
+.ghost { position: fixed; z-index: 30; margin: 0; list-style: none; pointer-events: none; opacity: .96; box-shadow: 0 14px 36px rgba(0, 0, 0, .18), 0 0 0 1px var(--line); }
+html.dragging, html.dragging * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+.item.flash { animation: flash 900ms ease-out; }
+@keyframes flash { from { box-shadow: inset 0 0 0 2px var(--accent); } }
+/* Open 순위 번호: 눌러서 바로 이동 */
+.main .no.jump { position: relative; flex: none; min-width: 30px; padding: 3px 7px; border-radius: 7px; background: var(--fill-2); color: var(--fg); font-size: 12px; font-weight: 800; text-align: center; }
+.main .no.jump::after { content: ""; position: absolute; inset: -8px -4px; }
+.main .jumpin { flex: none; width: 60px; border: 0; border-radius: 7px; padding: 3px 6px; font-size: 13px; font-weight: 800; text-align: center; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
+.main .jumpin:focus { outline: none; }
+/* 품목 추가 시트 */
+.sheet { position: fixed; inset: 0; z-index: 40; display: grid; align-items: end; justify-items: center; }
+.sheet-bg { position: absolute; inset: 0; background: rgba(0, 0, 0, .42); }
+.sheet-card { position: relative; width: min(640px, 100%); max-height: min(82vh, 760px); display: flex; flex-direction: column; gap: 10px; background: var(--bg); border-radius: 20px 20px 0 0; padding: 16px max(16px, env(safe-area-inset-left, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+.sheet-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.sheet-hd b { display: block; font-size: 18px; font-weight: 800; }
+.sheet-hd span { font-size: 13px; color: var(--muted); }
+.sheet-hd .x { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--surface); color: var(--muted); flex: none; }
+.sheet .search { margin: 0; }
+.picks { list-style: none; margin: 0; padding: 0; overflow: auto; display: grid; gap: 6px; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+.picks button { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; text-align: left; background: var(--surface); border-radius: 12px; padding: 11px 12px; }
+.picks b { font-size: 15px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.picks .pd { font-size: 13px; font-weight: 800; color: var(--fg); white-space: nowrap; }
+.picks .pc { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--muted); }
+.picks .none { text-align: center; color: var(--muted); font-size: 14px; padding: 20px 8px; }
+.sheet-note { font-size: 12px; color: var(--muted); }
+html.sheet-open, html.sheet-open body { overflow: hidden; }
+@media (min-width: 700px) { .sheet { align-items: center; } .sheet-card { border-radius: 20px; } }
+/* 빠른 Open 세팅 */
+.quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 2px 10px; }
+.quick .btn { min-height: 38px; padding: 7px 14px; font-size: 14px; }
+.quick .btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); box-shadow: none; }
+.list.selmode .grip { cursor: pointer; }
+.list.selmode .grip svg { display: none; }
+.list.selmode .grip::before { content: ""; width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--chick-line); }
+.list.selmode .item { cursor: pointer; }
+.list.selmode .item.picked { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.list.selmode .item.picked .grip::before { box-shadow: none; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 14px no-repeat; }
+.selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: var(--surface); box-shadow: 0 -6px 24px rgba(0, 0, 0, .12), 0 -1px 0 var(--line); }
+.selbar-in { max-width: 640px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.selbar-in #selCount { flex: 1 1 100%; font-size: 14px; font-weight: 800; }
+.selbar .btn { min-height: 38px; padding: 7px 12px; font-size: 14px; }
+html.selmode-on body { padding-bottom: 150px; }
+html.selmode-on .toast { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+.toast .undo { margin-left: 12px; font-weight: 800; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.impbody { display: grid; gap: 10px; overflow: auto; min-height: 0; flex: 1 1 auto; }
+.impsec { background: var(--surface); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.impsec b { font-weight: 800; }
+.impsec ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: grid; gap: 2px; }
+.impsec.warn { background: var(--rose); color: var(--rose-ink); }
+.impsec.warn ul { color: var(--rose-ink); }
+.improw { display: flex; justify-content: flex-end; gap: 8px; }
+@media (pointer: coarse) { input, select { font-size: 16px !important; } .days input { width: 50px; } }
+@media (prefers-reduced-motion: reduce) { .seg button::after, label.sw input, label.sw input::after, button { transition: none; } }
+
+/* 받기 링크: 원래 화면을 해치지 않게 맨 아래에 작게 */
+.dlfoot { max-width: 640px; margin: 10px auto 0; padding: 0 2px; text-align: center; }
+.dlfoot a { display: inline-block; padding: 7px 13px; border: 1px solid var(--chick-line); border-radius: 999px; background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; }
+.dlfoot a:hover { color: var(--fg); border-color: var(--muted); }
+.dlhint { max-width: 640px; margin: 6px auto 0; text-align: center; font-size: 12px; color: var(--muted); }
+</style>
+<svg hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+</svg>
+
+<div class="app">
+  <section class="group" id="v-open">
+    <h2>라벨 패키지 열기</h2>
+    <p class="lead">프린터에 설치했던 .pkg 파일을 그대로 넣습니다. 파일은 이 화면 안에서만 처리되고 어디에도 보내지 않습니다.</p>
+    <div class="drop" id="drop">
+      <b>.pkg 파일을 끌어다 놓거나 선택</b>
+      <span>MFG_KOREA_LIST_날짜.pkg</span>
+      <div class="btns">
+        <button class="btn dark" type="button" id="pickBtn">파일 선택</button>
+        <button class="btn" type="button" id="reopenBtn" hidden>마지막 파일 다시 열기</button>
+      </div>
+      <input type="file" id="fileInput" accept=".pkg,application/octet-stream" hidden>
+      <p class="err" id="openErr"></p>
+    </div>
+  </section>
+
+  <section id="v-edit" hidden>
+    <div class="pkgbar" id="pkgbar"></div>
+    <div class="draftbar" id="draftbar" hidden>
+      <div><b>저장하지 않은 수정이 있습니다</b><br><span id="draftWhen"></span></div>
+      <span class="sp"></span>
+      <button class="btn dark" type="button" id="draftKeep">이어서 편집</button>
+      <button class="btn" type="button" id="draftDrop">버리기</button>
+    </div>
+
+    <div class="seg" role="tablist">
+      <button type="button" role="tab" id="tabAll" aria-selected="true">품목 목록<small id="nAll"></small></button>
+      <button type="button" role="tab" id="tabOpen" aria-selected="false">Open 출력<small id="nOpen"></small></button>
+    </div>
+
+    <div class="search">
+      <svg class="ic"><use href="#i-search"/></svg>
+      <input type="search" id="q" placeholder="품목명 검색" aria-label="품목명 검색" autocomplete="off">
+      <button type="button" id="qClear" aria-label="검색 지우기" hidden><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="chips" id="chips1" role="group" aria-label="카테고리 1"></div>
+    <div class="chips sub" id="chips2" role="group" aria-label="카테고리 2" hidden></div>
+
+    <div class="toolrow">
+      <button class="btn dark" type="button" id="addBtn"><svg class="ic"><use href="#i-plus"/></svg>품목 추가</button>
+      <span class="lockline"><svg class="ic"><use href="#i-shield"/></svg>품목명·일수는 바꿀 수 없습니다</span>
+      <div class="tbtns">
+        <button class="btn" type="button" id="csvOut">CSV 내보내기</button>
+        <button class="btn" type="button" id="resetBtn">변경 취소</button>
+      </div>
+    </div>
+
+    <div class="quick">
+      <button class="btn" type="button" id="importOpenBtn"><svg class="ic"><use href="#i-copy"/></svg>지난 파일에서 Open 가져오기</button>
+      <button class="btn" type="button" id="selBtn" aria-pressed="false">여러 개 선택</button>
+      <button class="btn" type="button" id="sortCatBtn" hidden>카테고리 순서로 정렬</button>
+      <input type="file" id="importInput" accept=".pkg,application/octet-stream" hidden>
+    </div>
+
+    <ul class="list" id="list"></ul>
+    <div class="foot"><span id="countInfo"></span><span id="hint"></span></div>
+  </section>
+
+  <div class="sheet" id="addSheet" hidden role="dialog" aria-modal="true" aria-labelledby="addTitle">
+    <div class="sheet-bg" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-hd">
+        <div><b id="addTitle">품목 추가</b><span id="addWhere"></span></div>
+        <button type="button" class="x" data-close aria-label="닫기"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="search"><svg class="ic"><use href="#i-search"/></svg><input type="search" id="addQ" placeholder="원래 목록에서 품목 찾기" aria-label="원래 목록에서 품목 찾기" autocomplete="off"></div>
+      <ul class="picks" id="addList"></ul>
+      <p class="sheet-note">원래 목록에 있는 품목만 추가됩니다. 이름과 일수는 원본 그대로 들어갑니다.</p>
+    </div>
+  </div>
+
+  <div class="selbar" id="selbar" hidden>
+    <div class="selbar-in">
+      <span id="selCount"></span>
+      <button type="button" class="btn" id="selAll">보이는 것 모두</button>
+      <button type="button" class="btn green" id="selOn">Open 켜기</button>
+      <button type="button" class="btn" id="selOff">Open 끄기</button>
+      <button type="button" class="btn" id="selTop">맨 위로</button>
+      <button type="button" class="btn" id="selBottom">맨 아래로</button>
+      <button type="button" class="btn dark" id="selDone">완료</button>
+    </div>
+  </div>
+
+  <div class="sheet" id="impSheet" hidden role="dialog" aria-modal="true" aria-labelledby="impTitle">
+    <div class="sheet-bg" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-hd">
+        <div><b id="impTitle">Open 가져오기</b><span id="impFrom"></span></div>
+        <button type="button" class="x" data-close aria-label="닫기"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="impbody" id="impBody"></div>
+      <p class="sheet-note">품목명·일수는 지금 파일 것을 씁니다. 가져온 뒤에도 "되돌리기"로 취소할 수 있습니다.</p>
+      <div class="improw"><button type="button" class="btn" data-close>취소</button><button type="button" class="btn green" id="impApply">가져오기</button></div>
+    </div>
+  </div>
+
+  <section class="group save" id="v-save" hidden>
+    <h2>새 패키지 저장</h2>
+    <p class="lead">카테고리, Open, 순서만 바꿔 넣은 .pkg를 만듭니다.</p>
+    <div class="row"><input type="text" id="outName" aria-label="저장 파일 이름"></div>
+    <div class="fixcard" id="fixCard" hidden>
+      <label class="sw"><input type="checkbox" id="fixOn"><span>Open 라벨 날짜 규칙 고치기</span></label>
+      <p>Open 버튼으로 뽑아도 카테고리 화면 라벨과 같은 날짜가 찍히게 Open 라벨과 Open 출력 스크립트를 함께 고칩니다. 한 번 고친 패키지는 다음부터 고칠 필요가 없습니다.</p>
+      <ul class="rules" id="fixRules"></ul>
+    </div>
+    <p class="fixdone" id="fixDone" hidden><svg class="ic"><use href="#i-shield"/></svg>Open 라벨 날짜 규칙이 들어 있는 패키지입니다. Open으로 뽑아도 일수·시간대로 찍힙니다.</p>
+    <button class="btn green wide" type="button" id="saveBtn">PKG 저장</button>
+    <p class="status" id="saveStatus"></p>
+    <ol class="steps">
+      <li>프린터의 기존 .pkg와 설정을 백업해 둡니다.</li>
+      <li>새 .pkg를 USB 메모리에 넣어 프린터에서 설치하거나 SATO All-In-One Tool로 보냅니다.</li>
+      <li>바뀐 품목 한두 개를 시험 출력합니다. Open 라벨 날짜 규칙을 처음 넣었다면 0일, 1일, 2일, 시간 품목을 Open에 하나씩 넣고 날짜가 맞는지 확인합니다.</li>
+    </ol>
+    <p class="keep"><svg class="ic"><use href="#i-shield"/></svg><span id="keepText"><b>그대로 두는 것</b> 품목명, 보관 일수·시간, 화면, 라벨 디자인, 폰트, 로고, 스크립트. 바뀌는 것은 카테고리, Open, 순서뿐입니다.</span></p>
+  </section>
+</div>
+
+
+<div class="dlfoot">
+  <a id="dlHtml" href="pkg-editor.html" download="라벨_품목_편집.html">HTML 파일 저장</a>
+</div>
+<p class="dlhint" id="dlHint">이 화면을 파일로 받아 두거나 카톡으로 보낼 수 있습니다.</p>
+<script>
+/* ----- 이 화면을 HTML 파일로 받기 (추가 기능, 편집 기능과 무관) ----- */
+(function () {
+  var a = document.getElementById('dlHtml'), hint = document.getElementById('dlHint');
+  if (!a) return;
+  if (location.protocol === 'file:') {
+    a.hidden = true;
+    if (hint) hint.textContent = '이 파일을 그대로 두고 쓰시면 됩니다.';
+    return;
+  }
+  a.href = location.pathname + (location.search || '');
+})();
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script>
+/* ===== PKG core (SATO AEP Works 3 package) =====
+   Layout: "PKG " 00 01 00 00 | count | 0 | table[count] of (flags, recordOffset) | records | data (contiguous, entry order).
+   Record (compressed, flags 0x80000003): 12 u32 BE: dataOff(rel. to record), compSize, adler32(comp), 1, 0x18, 0x2710,
+     dataOff-24, rawSize, adler32(path + "\0" + raw), 0x18, mode, nameLen+19 ; then "path\0user\0".
+   Record (stored, flags 0x3): 6 u32: dataOff, size, adler32(path+"\0"+raw), 0x18, mode, nameLen+19 ; then name bytes.
+   Record (script, flags 0x80000004): 9 u32, no name. Scripts are kept verbatim. */
+const PKG = (() => {
+  const te = new TextEncoder(), td = new TextDecoder();
+  function adler32(bytes, seed = 1) {
+    let a = seed & 0xffff, b = (seed >>> 16) & 0xffff;
+    for (let i = 0; i < bytes.length;) {
+      const end = Math.min(i + 3800, bytes.length);
+      for (; i < end; i++) { a += bytes[i]; b += a; }
+      a %= 65521; b %= 65521;
+    }
+    return ((b << 16) | a) >>> 0;
+  }
+  function concat(parts) {
+    let n = 0; for (const p of parts) n += p.length;
+    const out = new Uint8Array(n); let o = 0;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  }
+  function entryChecksum(nameBytes, raw) {
+    const z = nameBytes.indexOf(0);
+    const path = z >= 0 ? nameBytes.subarray(0, z) : nameBytes;
+    return adler32(concat([path, new Uint8Array([0]), raw]));
+  }
+  function parse(buf) {
+    const d = new Uint8Array(buf), dv = new DataView(buf);
+    if (td.decode(d.subarray(0, 4)) !== 'PKG ') throw new Error('PKG 서명이 없는 파일입니다. SATO 라벨 패키지(.pkg)가 맞는지 확인해 주세요.');
+    const n = dv.getUint32(8);
+    const tbl = []; for (let i = 0; i < n; i++) tbl.push({ fl: dv.getUint32(0x10 + 8 * i), off: dv.getUint32(0x14 + 8 * i) });
+    const entries = [];
+    for (let i = 0; i < n; i++) {
+      const { fl, off } = tbl[i]; const u = k => dv.getUint32(off + 4 * k);
+      if ((fl & 0xff) === 4) {
+        const blob = d.slice(off + u(0), off + u(0) + u(1));
+        entries.push({ kind: 't4', fl, blob, raw: pako.inflate(blob) });
+      } else if (fl & 0x80000000) {
+        const blob = d.slice(off + u(0), off + u(0) + u(1));
+        entries.push({ kind: 'c', fl, blob, raw: pako.inflate(blob), mode: u(10), nameStart: off + 48, nameLen: u(11) - 19 });
+      } else {
+        const raw = d.slice(off + u(0), off + u(0) + u(1));
+        entries.push({ kind: 'r', fl, blob: raw, raw, mode: u(4), nameStart: off + 24, nameLen: u(5) - 19 });
+      }
+    }
+    for (const e of entries) {
+      if (e.kind === 't4') continue;
+      e.nameBytes = d.slice(e.nameStart, e.nameStart + e.nameLen);
+      const z = e.nameBytes.indexOf(0);
+      e.path = td.decode(e.nameBytes.subarray(0, z >= 0 ? z : e.nameBytes.length));
+      delete e.nameStart; delete e.nameLen;
+    }
+    return entries;
+  }
+  function build(entries) {
+    const items = entries.map(e => {
+      if (e.kind === 't4') return { ...e, blob: e.dirty ? pako.deflate(e.raw, { level: 9, memLevel: 8, strategy: 0 }) : e.blob, rec: 36 };
+      if (e.kind === 'c') return { ...e, blob: e.dirty ? pako.deflate(e.raw, { level: 9, memLevel: 8, strategy: 0 }) : e.blob, rec: 48 + e.nameBytes.length };
+      return { ...e, blob: e.raw, rec: 24 + e.nameBytes.length };
+    });
+    const dirStart = 0x10 + 8 * items.length;
+    let p = dirStart; const recOff = items.map(it => { const o = p; p += it.rec; return o; });
+    const dataStart = p;
+    const dataParts = []; let dataLen = 0; const seen = new Map();
+    for (const it of items) {
+      const key = (it.kind === 'r' ? 'r:' : 'c:') + it.blob.length + ':' + adler32(it.blob);
+      const hit = seen.get(key);
+      if (hit !== undefined && sameBytes(hit.blob, it.blob)) { it.pos = hit.pos; continue; }
+      it.pos = dataStart + dataLen; seen.set(key, { pos: it.pos, blob: it.blob }); dataParts.push(it.blob); dataLen += it.blob.length;
+    }
+    const head = new Uint8Array(dataStart); const hv = new DataView(head.buffer);
+    head.set(te.encode('PKG '), 0); head.set([0, 1, 0, 0], 4); hv.setUint32(8, items.length); hv.setUint32(12, 0);
+    items.forEach((it, i) => { hv.setUint32(0x10 + 8 * i, it.fl); hv.setUint32(0x14 + 8 * i, recOff[i]); });
+    items.forEach((it, i) => {
+      const ro = recOff[i], doff = it.pos - ro; let w = ro; const put = v => { hv.setUint32(w, v >>> 0); w += 4; };
+      if (it.kind === 't4') { [doff, it.blob.length, adler32(it.blob), 1, 0x18, 0x2710, doff - 24, it.raw.length, adler32(it.raw)].forEach(put); }
+      else if (it.kind === 'c') { [doff, it.blob.length, adler32(it.blob), 1, 0x18, 0x2710, doff - 24, it.raw.length, entryChecksum(it.nameBytes, it.raw), 0x18, it.mode, it.nameBytes.length + 19].forEach(put); head.set(it.nameBytes, w); }
+      else { [doff, it.blob.length, entryChecksum(it.nameBytes, it.raw), 0x18, it.mode, it.nameBytes.length + 19].forEach(put); head.set(it.nameBytes, w); }
+    });
+    return concat([head, ...dataParts]);
+  }
+  function sameBytes(a, b) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+
+  /* ----- product table (tables/*.xml): fixed-width rows, LF line ends, tombstoned <Row> lines kept as-is ----- */
+  const unesc = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function parseTable(raw) {
+    const text = td.decode(raw);
+    const lines = text.split('\n');
+    const first = lines.findIndex(l => l.startsWith('<row '));
+    const headText = (first < 0 ? lines.filter(l => !l.startsWith('</table>')) : lines.slice(0, first)).join('\n') + '\n';
+    const cols = [...headText.matchAll(/<column[^>]*name="([^"]+)"/g)].map(m => unesc(m[1]));
+    const limits = /limits="\[(\d+),(\d+)\]"/.exec(headText);
+    const width = limits ? +limits[2] : 127;
+    const rows = [];
+    for (const l of lines) {
+      if (!l.startsWith('<row ')) continue;
+      const cells = []; const re = /<c>(.*?)<\/c>|<c\/>/g; let m;
+      while ((m = re.exec(l))) cells.push(m[1] === undefined ? '' : unesc(m[1]));
+      while (cells.length < cols.length) cells.push('');
+      rows.push(cells.slice(0, cols.length));
+    }
+    return { headText, cols, rows, width };
+  }
+  function buildTable(t, rows) {
+    const out = [t.headText];
+    const pad = t.width - 1;              // content padded to (limit-1) bytes, then LF; rows at or past (limit-2) are left as-is
+    rows.forEach((cells, i) => {
+      const id = i + 1;
+      const c = cells.slice(); if (!(c[0] || '').trim()) c[0] = String(id);
+      let line = `<row id="${id}">` + c.map(v => v === '' ? '<c/>' : `<c>${esc(v)}</c>`).join('') + '</row>';
+      const len = te.encode(line).length;
+      if (len < pad - 1) line += ' '.repeat(pad - len);
+      out.push(line + '\n');
+    });
+    out.push('</table>\n');
+    return te.encode(out.join(''));
+  }
+  return { parse, build, parseTable, buildTable, adler32 };
+})();
+
+/* ===== Open 라벨 날짜 규칙 (프린터 Open 출력을 카테고리 라벨과 같게) =====
+   0일: 시작 오늘, 종료일 없음 · N일: 종료 = 오늘 + N - 1 (T = 1일) · 시간 품목: 종료 = 출력 시각 + 시간
+   바꾸는 것: Open 라벨(AllPrint.json), Open 출력 스크립트(functions/*), AEP Works 함수 목록(scriptsMetaData.json) */
+const OpenFix = (() => {
+  const te = new TextEncoder(), td = new TextDecoder();
+  const MARK = 'OpenEndDays';
+  const esc = s => JSON.stringify(s).replace(/[\u0080-￿]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
+  function ser(v, ind) { // AEP Works와 같은 모양으로 저장 (키 정렬, 한 칸 들여쓰기, 한글은 \uXXXX)
+    if (Array.isArray(v)) return v.length ? '[' + v.map(x => ser(x, ind)).join(',') + ']' : '[]';
+    if (v && typeof v === 'object') { const ks = Object.keys(v).sort(); return ks.length ? '{\n' + ks.map(k => ' '.repeat(ind + 1) + esc(k) + ':' + ser(v[k], ind + 1)).join(',\n') + '\n' + ' '.repeat(ind) + '}' : '{}'; }
+    if (typeof v === 'string') return esc(v);
+    return JSON.stringify(v);
+  }
+  const toJSON = o => te.encode(ser(o, 0) + '\n');
+  const LUA = `
+
+-- Open 라벨(AllPrint)도 카테고리 라벨과 같은 날짜 규칙: 0일 종료일 없음, N일 종료 = 오늘+N-1 (T = 1일), 시간 품목 종료 = 출력 시각+시간
+function OpenEndDays()
+	if resolver then return 0 end
+	local d = day or ""
+	if d=="T" or d=="t" then return 0 end
+	local n = tonumber(d) or 0
+	if n >= 1 then return n-1 end
+	return 0
+end
+function OpenShelf(value)
+	if resolver then return value end
+	if (hour or "") ~= "" then return hour end
+	return daysforPrintAll(day or "")
+end
+function OpenUnit()
+	if resolver then return "days" end
+	if (hour or "") ~= "" then return "Hours" end
+	return "days"
+end
+function OpenDateVisible(kind, value)
+	if resolver then return value end
+	local flag = sday or ""
+	if kind=="end" then flag = eday or "" end
+	local show = (hour or "")=="" and flag~="x" and flag~="X"
+	if kind=="end" and (day or "")=="0" then show = false end
+	if show then Field.visible="true" else Field.visible="false" end
+	return value
+end
+function OpenTimeVisible(kind, value)
+	if resolver then return value end
+	local flag = sday or ""
+	if kind=="end" then flag = eday or "" end
+	local show = (hour or "")~="" and flag~="x" and flag~="X"
+	if show then Field.visible="true" else Field.visible="false" end
+	return value
+end
+function OpenEndTime(value)
+	if resolver then return value end
+	return addhours(0, hour, 0, value)
+end
+`;
+  const META = [['OpenEndDays', []], ['OpenShelf', ['value']], ['OpenUnit', []], ['OpenDateVisible', ['kind', 'value']], ['OpenTimeVisible', ['kind', 'value']], ['OpenEndTime', ['value']]];
+  const find = (entries, re) => entries.find(e => e.kind === 'c' && re.test(e.path));
+  function status(entries) {
+    const ap = find(entries, /\/AllPrint\.json$/), fn = entries.find(e => e.kind === 'c' && /\/functions\/[0-9A-F]{40}$/i.test(e.path));
+    if (!ap || !fn) return 'na';
+    return td.decode(ap.raw).includes(MARK) ? 'done' : 'needed';
+  }
+  function apply(entries) {
+    const ap = find(entries, /\/AllPrint\.json$/), l1 = find(entries, /\/Label1\.json$/), meta = find(entries, /\/aepw\/scriptsMetaData\.json$/);
+    const fn = entries.find(e => e.kind === 'c' && /\/functions\/[0-9A-F]{40}$/i.test(e.path));
+    if (!ap || !fn) throw new Error('이 패키지에는 Open 라벨이나 출력 스크립트가 없어 고칠 수 없습니다.');
+    // 1) Open 출력 스크립트: 시간·시작일·종료일 칸도 라벨로 넘기고, 날짜 규칙 함수를 더한다
+    const nested = PKG.parse(fn.raw.slice().buffer);
+    const sc = nested.find(e => e.kind === 't4' && td.decode(e.raw).includes('function PrintScript'));
+    if (!sc) throw new Error('Open 출력 스크립트를 찾지 못했습니다.');
+    let lua = td.decode(sc.raw);
+    const need = (s, n) => { const k = lua.split(s).length - 1; if (k !== n) throw new Error('Open 출력 스크립트 모양이 예상과 달라 고치지 않았습니다.'); };
+    need('day=v[5]', 1); need(']=],"@functions/LabelScript.lua")()', 1);
+    lua = lua.replace('day=v[5]', 'day=v[5] hour=v[6] sday=v[7] eday=v[8]');
+    lua = lua.replace(']=],"@functions/LabelScript.lua")()', LUA + ']=],"@functions/LabelScript.lua")()');
+    const nestedOut = PKG.build(nested.map(e => e === sc ? { ...e, raw: te.encode(lua), dirty: true } : e));
+    // 2) Open 라벨: 일수 대신 규칙 함수로 날짜를 계산하고, 시간 품목은 날짜+시각 칸을 쓴다
+    const lab = JSON.parse(td.decode(ap.raw)), fs = lab.fields, F = n => fs.find(f => f.name === n);
+    const pd = F('PrintDay'), t5 = F('Text5'), ct = F('CurrentTime(1)'), t9 = F('Text9');
+    if (!pd || !t5 || !ct || !t9) throw new Error('Open 라벨 모양이 예상과 달라 고치지 않았습니다.');
+    pd.prescript = 'return OpenShelf(Value)';
+    t5.source = 'script'; t5.lua = 'return OpenUnit()'; delete t5.value;
+    ct.postscript = 'return OpenDateVisible("start", Data)';
+    t9.prescript = 'return addhours(OpenEndDays(), 0, 0, Value)'; t9.postscript = 'return OpenDateVisible("end", Data)';
+    let tpl = null; try { tpl = JSON.parse(td.decode(l1.raw)).fields.find(f => f.name === 'Text2_1'); } catch (_) { }
+    tpl = tpl ? JSON.parse(JSON.stringify(tpl)) : { ...JSON.parse(JSON.stringify(ct)), size: 11 };
+    const timeField = (name, id, at, pre, post) => ({ ...JSON.parse(JSON.stringify(tpl)), name, id, hPos: at.hPos, vPos: at.vPos, source: 'time', formatter: 'datetime', dateformat: '%m월%d일 %I:%M %p', dateadd: 0, prescript: pre, postscript: post, visible: true });
+    fs.splice(fs.indexOf(ct) + 1, 0, timeField('OpenStart_T', 'OpnSt7a', ct, '', 'return OpenTimeVisible("start", Data)'));
+    fs.splice(fs.indexOf(t9) + 1, 0, timeField('OpenEnd_T', 'OpnEn7a', t9, 'return OpenEndTime(Value)', 'return OpenTimeVisible("end", Data)'));
+    // 3) AEP Works 함수 목록
+    let metaRaw = null;
+    if (meta) { try { const m = JSON.parse(td.decode(meta.raw)); META.forEach(([name, args]) => { if (!m.some(x => x.name === name)) m.push({ args, name }); }); metaRaw = toJSON(m); } catch (_) { } }
+    return entries.map(e => e === ap ? { ...e, raw: toJSON(lab), dirty: true } : e === fn ? { ...e, raw: nestedOut, dirty: true } : (meta && e === meta && metaRaw) ? { ...e, raw: metaRaw, dirty: true } : e);
+  }
+  return { status, apply, ser, LUA };
+})();
+
+/* ===== CSV helpers ===== */
+function toCSV(cols, rows) {
+  const q = v => /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  return '﻿' + [cols, ...rows].map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
+}
+function parseCSV(text) {
+  text = text.replace(/^﻿/, ''); const rows = []; let row = [], cell = '', i = 0, inq = false;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inq) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i += 2; continue; } inq = false; i++; continue; } cell += ch; i++; continue; }
+    if (ch === '"') { inq = true; i++; continue; }
+    if (ch === ',') { row.push(cell); cell = ''; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; i++; continue; }
+    cell += ch; i++;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+
+/* ===== minimal ZIP (stored) for hosts that refuse .pkg downloads ===== */
+const CRC_T = (() => { const t = new Int32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c; } return t; })();
+function crc32(b) { let c = -1; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ -1) >>> 0; }
+function makeZip(name, data) {
+  const nb = new TextEncoder().encode(name), crc = crc32(data), d = new Date();
+  const dosT = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dosD = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const lh = new Uint8Array(30 + nb.length), lv = new DataView(lh.buffer);
+  lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x800, true); lv.setUint16(8, 0, true); lv.setUint16(10, dosT, true); lv.setUint16(12, dosD, true);
+  lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true); lh.set(nb, 30);
+  const cd = new Uint8Array(46 + nb.length), cv = new DataView(cd.buffer);
+  cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x800, true); cv.setUint16(10, 0, true); cv.setUint16(12, dosT, true); cv.setUint16(14, dosD, true);
+  cv.setUint32(16, crc, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, nb.length, true); cv.setUint32(42, 0, true); cd.set(nb, 46);
+  const eo = new Uint8Array(22), ev = new DataView(eo.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, 1, true); ev.setUint16(10, 1, true); ev.setUint32(12, cd.length, true); ev.setUint32(16, lh.length + data.length, true);
+  const out = new Uint8Array(lh.length + data.length + cd.length + eo.length);
+  out.set(lh, 0); out.set(data, lh.length); out.set(cd, lh.length + data.length); out.set(eo, lh.length + data.length + cd.length);
+  return out;
+}
+
+/* ===== App ===== */
+const $ = id => document.getElementById(id);
+const state = { entries: null, tableEntry: null, table: null, rows: [], origRows: [], fileName: '', info: null, tab: 'all', f1: '', f2: '', q: '', draftKey: '', openFix: 'na', fixOn: false, selMode: false, sel: new Set() };
+const LS_LAST = 'mfg-label-pkg-last';
+const C = { NO: 0, C1: 1, C2: 2, ITEM: 3, DAYS: 4, HOURS: 5, OPEN: 8 };
+/* 바꿀 수 있는 칸은 카테고리 1·2와 OPEN뿐. 품목명·일수·시간·시작일·종료일은 저장할 때 원본 그대로 다시 써 넣는다 */
+const EDITABLE = new Set([C.C1, C.C2, C.OPEN]);
+let toastTimer = null, draftTimer = null;
+function toastUndo(msg, snap) {
+  toast(msg); const el = document.querySelector('.toast'); if (!el) return;
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'undo'; b.textContent = '되돌리기';
+  b.addEventListener('click', () => { state.rows = snap; state.sel.clear(); renumberSeq(); render(); el.remove(); toast('되돌렸습니다'); });
+  el.appendChild(b); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 6000);
+}
+const snapRows = () => state.rows.map(r => ({ ...r, cells: r.cells.slice() }));
+function toast(msg) { let t = document.querySelector('.toast'); if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); } t.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 2400); }
+function b64enc(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function b64dec(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; }
+const todayYMD = () => { const d = new Date(); return String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); };
+function suggestName(name) {
+  const base = name.replace(/\.pkg$/i, '').replace(/^[0-9a-f]{8}-/i, '');
+  const m = /^(.*?)_(\d{6})(.*)$/.exec(base);
+  return (m ? `${m[1]}_${todayYMD()}${m[3]}` : `${base}_${todayYMD()}`) + '.pkg';
+}
+
+/* ----- open ----- */
+function openBuffer(buf, name) {
+  $('openErr').textContent = '';
+  let entries;
+  try { entries = PKG.parse(buf); } catch (e) { $('openErr').textContent = e.message || String(e); return; }
+  const tableEntry = entries.find(e => e.kind === 'c' && /\/tables\/[^/]+\.xml$/.test(e.path));
+  if (!tableEntry) { $('openErr').textContent = '이 패키지에는 품목 테이블(tables/*.xml)이 없습니다.'; return; }
+  const table = PKG.parseTable(tableEntry.raw);
+  let info = {};
+  const infoEntry = entries.find(e => e.kind === 'c' && /\/meta\/info\.json$/.test(e.path));
+  if (infoEntry) { try { info = JSON.parse(new TextDecoder().decode(infoEntry.raw)); } catch (_) { } }
+  const clean = name.replace(/^[0-9a-f]{8}-/i, '');
+  Object.assign(state, { entries, tableEntry, table, fileName: clean, info, tab: 'all', f1: '', f2: '', q: '', draftKey: 'mfg-label-draft-v3:' + clean + ':' + table.rows.length, openFix: OpenFix.status(entries) });
+  state.fixOn = state.openFix === 'needed'; renderFix();
+  state.origRows = table.rows.map(r => r.slice());
+  state.rows = table.rows.map((r, i) => ({ cells: r.slice(), orig: i, src: i, seq: null }));
+  seqFromNO(state.rows); state.origSeq = state.rows.map(r => r.seq);
+  try { localStorage.setItem(LS_LAST, JSON.stringify({ name: clean, date: Date.now(), b64: b64enc(new Uint8Array(buf)) })); } catch (_) { }
+  $('q').value = '';
+  $('v-edit').hidden = false; $('v-save').hidden = false;
+  $('outName').value = suggestName(clean);
+  $('saveStatus').textContent = ''; $('saveStatus').className = 'status';
+  checkDraft();
+  render();
+  $('v-edit').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function checkDraft() {
+  let d = null; try { d = JSON.parse(localStorage.getItem(state.draftKey) || 'null'); } catch (_) { }
+  const bar = $('draftbar');
+  if (!d || !Array.isArray(d.rows)) { bar.hidden = true; return; }
+  const same = d.rows.length === state.rows.length && d.rows.every((r, i) => r.orig === state.rows[i].orig && (r.seq ?? null) === (state.rows[i].seq ?? null) && r.cells.join('\u0001') === state.rows[i].cells.join('\u0001'));
+  if (same) { bar.hidden = true; return; }
+  const when = new Date(d.at); $('draftWhen').textContent = `${when.getMonth() + 1}월 ${when.getDate()}일 ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}에 편집하던 내용`;
+  bar.hidden = false; bar._draft = d;
+}
+$('draftKeep').addEventListener('click', () => { const d = $('draftbar')._draft; if (d) { state.rows = d.rows.filter(r => r.src != null && state.origRows[r.src]).map(r => { const cells = state.origRows[r.src].slice(); EDITABLE.forEach(k => { cells[k] = r.cells[k] ?? ''; }); return { cells, orig: r.orig, src: r.src, seq: r.seq ?? null }; }); renumberSeq(); } $('draftbar').hidden = true; render(); toast('이어서 편집합니다'); });
+$('draftDrop').addEventListener('click', () => { try { localStorage.removeItem(state.draftKey); } catch (_) { } $('draftbar').hidden = true; });
+function isDirty() { // 원래 파일과 하나라도 다르면 (Open 순서만 바꾼 경우 포함) 임시 저장
+  if (state.rows.length !== state.origRows.length) return true;
+  return state.rows.some((r, i) => r.orig !== i || (r.seq ?? null) !== (state.origSeq[i] ?? null) || r.cells.some((v, k) => t(v) !== t(state.origRows[i][k])));
+}
+function writeDraft() { try { if (!state.draftKey) return; if (isDirty()) localStorage.setItem(state.draftKey, JSON.stringify({ at: Date.now(), rows: state.rows })); else localStorage.removeItem(state.draftKey); } catch (_) { } }
+function saveDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(writeDraft, 300); }
+window.addEventListener('pagehide', () => { clearTimeout(draftTimer); writeDraft(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(draftTimer); writeDraft(); } });
+
+/* ----- Open 출력 순서: 줄 순서(카테고리 화면)와 따로, NO 번호로 저장 ----- */
+const t = v => (v || '').trim();
+const isOpen = r => !!t(r.cells[C.OPEN]);
+/* Open 버튼 라벨은 일수 칸이 T인 품목만 맞게 찍는다 (T = 하루, 종료 오늘). 그 밖의 품목은 날짜가 틀리게 나온다 */
+function openFixed() { return state.openFix === 'done' || (state.openFix === 'needed' && state.fixOn); }
+function openRisk(r) {
+  if (openFixed()) return ''; // Open 라벨 날짜 규칙이 들어간 패키지는 모든 품목이 맞게 찍힘
+  const d = t(r.cells[C.DAYS]), h = t(r.cells[C.HOURS]);
+  if (/^t$/i.test(d)) return '';
+  if (!d && h) return 'Open으로 뽑으면 시간이 빠지고 날짜만 찍힙니다';
+  if (d === '0') return 'Open으로 뽑으면 종료일이 숨겨지지 않습니다';
+  if (d) return 'Open으로 뽑으면 종료일이 하루 늦게 찍힙니다';
+  return 'Open으로 뽑으면 일수가 비어 날짜가 틀리게 찍힙니다';
+}
+function seqFromNO(rows) { // 프린터는 OPEN 품목을 NO 순서로 출력 → NO에서 순서를 읽어 온다
+  const open = rows.filter(isOpen).map((r, i) => ({ r, n: r.cells[C.NO] || '', i })).sort((x, y) => cmpNO(x.n, y.n) || x.i - y.i);
+  rows.forEach(r => { r.seq = null; }); open.forEach((o, k) => { o.r.seq = k + 1; });
+}
+function cmpNO(x, y) { // 프린터는 Open 라벨을 번호(숫자) 순서로 출력
+  const a = parseInt(x, 10), b = parseInt(y, 10), na = isNaN(a), nb = isNaN(b);
+  if (na || nb) return na === nb ? 0 : na ? 1 : -1;
+  return a - b;
+}
+function openOrder() { return state.rows.map((r, i) => ({ r, i })).filter(x => isOpen(x.r)).sort((x, y) => (x.r.seq ?? 1e9) - (y.r.seq ?? 1e9) || x.i - y.i); }
+function renumberSeq() { openOrder().forEach((o, k) => { o.r.seq = k + 1; }); }
+function assignNO(rows) {
+  // 1) Open 순서를 안 바꿨으면 원래 NO를 그대로 둔다
+  const want = openOrder().map(o => o.i);
+  const keep = rows.map(r => r.orig !== null ? state.origRows[r.orig][C.NO] : '');
+  const uniq = keep.every(v => v !== '') && new Set(keep).size === keep.length;
+  if (uniq) { const got = want.slice().sort((x, y) => cmpNO(keep[x], keep[y]) || x - y); if (got.every((v, k) => v === want[k])) return keep; }
+  // 2) 바꿨으면 줄 순서대로 번호를 매기되, Open 품목끼리만 번호를 바꿔 Open 순서를 맞춘다
+  const no = rows.map((r, i) => String(i + 1));
+  const slots = want.slice().sort((x, y) => x - y).map(i => no[i]);
+  want.forEach((i, k) => { no[i] = slots[k]; });
+  return no;
+}
+function lockedRows() { // 저장할 줄: 원본 줄을 바탕으로 카테고리·OPEN만 반영
+  const no = assignNO(state.rows);
+  return state.rows.map((r, i) => {
+    const src = state.origRows[r.src]; if (!src) throw new Error('원본에 없는 품목이 있어 저장할 수 없습니다. "모든 변경 취소" 후 다시 해 주세요.');
+    const c = src.slice();
+    EDITABLE.forEach(k => { const v = t(r.cells[k]); if (v !== t(src[k])) c[k] = v; });
+    for (let k = 0; k < c.length; k++) if (k !== C.NO && !EDITABLE.has(k) && c[k] !== src[k]) throw new Error('품목명·일수는 바꿀 수 없습니다.');
+    c[C.NO] = no[i];
+    return c;
+  });
+}
+function openOrderChanged() {
+  const origSeq = state.origRows.map((o, i) => ({ i, open: !!t(o[C.OPEN]), n: o[C.NO] || '' })).filter(x => x.open).sort((x, y) => cmpNO(x.n, y.n) || x.i - y.i).map(x => x.i);
+  const cur = openOrder().map(o => o.r.orig).filter(v => v !== null && t(state.origRows[v][C.OPEN]));
+  const o2 = origSeq.filter(i => cur.includes(i));
+  return cur.length !== o2.length || cur.some((v, k) => v !== o2[k]);
+}
+function rowStatus(r) {
+  if (r.orig === null) return 'new';
+  const o = state.origRows[r.orig];
+  for (let k = 1; k < o.length; k++) if (t(r.cells[k]) !== t(o[k])) return 'mod';
+  return '';
+}
+function changeSummary() {
+  let added = 0, mod = 0, moved = 0, last = -1; const present = new Set();
+  for (const r of state.rows) {
+    const s = rowStatus(r); if (s === 'new') added++; else if (s === 'mod') mod++;
+    if (r.orig !== null) { present.add(r.orig); if (r.orig < last) moved++; else last = r.orig; }
+  }
+  return { added, mod, del: state.origRows.length - present.size, moved, openMoved: openOrderChanged() };
+}
+function distinct(k) { const seen = new Set(), out = []; for (const r of state.rows) { const v = t(r.cells[k]); if (v && !seen.has(v)) { seen.add(v); out.push(v); } } return out; }
+function distinct2(c1) { const seen = new Set(), out = []; for (const r of state.rows) { if (c1 && t(r.cells[C.C1]) !== c1) continue; const v = t(r.cells[C.C2]); if (v && !seen.has(v)) { seen.add(v); out.push(v); } } return out; }
+
+/* ----- render ----- */
+function visible() {
+  const q = state.q.toLowerCase(); const out = [];
+  const pass = r => (!state.f1 || t(r.cells[C.C1]) === state.f1) && (!state.f2 || t(r.cells[C.C2]) === state.f2) && (!q || r.cells[C.ITEM].toLowerCase().includes(q));
+  if (state.tab === 'open') { openOrder().forEach(o => { if (pass(o.r)) out.push(o.i); }); return out; }
+  state.rows.forEach((r, i) => { if (pass(r)) out.push(i); });
+  return out;
+}
+function render() {
+  renderBar(); renderChips(); renderList(); saveDraft();
+}
+function renderBar() {
+  const i = state.info || {}, { added, mod, del, moved, openMoved } = changeSummary();
+  const bar = $('pkgbar'); bar.innerHTML = '';
+  const add = (html) => { const s = document.createElement('span'); s.innerHTML = html; bar.appendChild(s); return s; };
+  add('<b></b>').querySelector('b').textContent = state.fileName;
+  if (i.name) add('<span></span>').querySelector('span').textContent = `${i.name} v${i.version || ''} · ${i.target || ''}`;
+  const chg = document.createElement('span'); chg.className = 'chg';
+  if (added) chg.insertAdjacentHTML('beforeend', `<span>추가 ${added}</span>`);
+  if (mod) chg.insertAdjacentHTML('beforeend', `<span>수정 ${mod}</span>`);
+  if (moved) chg.insertAdjacentHTML('beforeend', `<span>이동 ${moved}</span>`);
+  if (openMoved) chg.insertAdjacentHTML('beforeend', `<span>Open 순서</span>`);
+  const nRisk = state.rows.filter(r => isOpen(r) && openRisk(r)).length;
+  if (nRisk) chg.insertAdjacentHTML('beforeend', `<span class="warn">Open 날짜 주의 ${nRisk}</span>`);
+  if (del) chg.insertAdjacentHTML('beforeend', `<span class="del">삭제 ${del}</span>`);
+  if (chg.childElementCount) bar.appendChild(chg);
+  add(`<span class="count"><em>${state.rows.length}</em>품목</span>`);
+  const nOpen = state.rows.filter(r => t(r.cells[C.OPEN])).length;
+  $('nAll').textContent = state.rows.length; $('nOpen').textContent = nOpen;
+}
+function chipRow(el, values, cur, allLabel, onPick) {
+  el.innerHTML = '';
+  const mk = (label, v) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.setAttribute('aria-pressed', String(cur === v)); b.addEventListener('click', () => onPick(cur === v ? '' : v)); el.appendChild(b); };
+  mk(allLabel, ''); values.forEach(v => mk(v, v));
+}
+function renderChips() {
+  chipRow($('chips1'), distinct(C.C1), state.f1, '전체', v => { state.f1 = v; state.f2 = ''; renderChips(); renderList(); });
+  const c2 = state.f1 ? distinct2(state.f1) : [];
+  $('chips2').hidden = !state.f1 || c2.length < 2;
+  if (!$('chips2').hidden) chipRow($('chips2'), c2, state.f2, state.f1 + ' 전체', v => { state.f2 = v; renderChips(); renderList(); });
+}
+function renderList() {
+  const list = $('list'); list.innerHTML = '';
+  list.classList.toggle('selmode', state.selMode);
+  const vis = visible();
+  const cat1 = distinct(C.C1);
+  const frag = document.createDocumentFragment();
+  vis.forEach((idx, vi) => {
+    const r = state.rows[idx], c = r.cells, st = rowStatus(r);
+    const li = document.createElement('li'); li.className = 'item' + (st ? ' chg' : '') + (state.selMode && state.sel.has(r) ? ' picked' : ''); li.dataset.idx = idx;
+    li.innerHTML = `
+      <button type="button" class="grip" aria-label="끌어서 순서 바꾸기" tabindex="-1"><svg class="ic"><use href="#i-grip"/></svg></button>
+      <div class="main">${state.tab === 'open' ? `<button type="button" class="no jump" aria-label="${r.seq}번째. 눌러서 몇 번째로 옮길지 입력">${r.seq || ''}</button>` : `<span class="no">${idx + 1}</span>`}<span class="name"></span><span class="days"></span></div>
+      <div class="cats"><select data-k="1" aria-label="카테고리 1"></select><span class="arrow">›</span><select data-k="2" aria-label="카테고리 2"></select></div>
+      <div class="open"><label class="sw"><input type="checkbox" data-k="8" aria-label="Open 출력"><span>Open</span></label></div>
+      <div class="ops">
+        <button type="button" data-act="up" aria-label="위로" ${vi === 0 ? 'disabled' : ''}><svg class="ic"><use href="#i-up"/></svg></button>
+        <button type="button" data-act="down" aria-label="아래로" ${vi === vis.length - 1 ? 'disabled' : ''}><svg class="ic"><use href="#i-down"/></svg></button>
+        <button type="button" data-act="dup" aria-label="복사 (한 장 더)" title="복사 (한 장 더)"><svg class="ic"><use href="#i-copy"/></svg></button>
+        <button type="button" data-act="del" class="del" aria-label="삭제"><svg class="ic"><use href="#i-trash"/></svg></button>
+      </div>`;
+    li.querySelector('.name').textContent = c[C.ITEM] || '(이름 없음)';
+    const days = li.querySelector('.days'), d = t(c[C.DAYS]), h = t(c[C.HOURS]);
+    if (/^t$/i.test(d)) days.innerHTML = '<b>1</b>일 (T)'; else if (d) { days.innerHTML = '<b></b>일'; days.querySelector('b').textContent = d; } else if (h) { days.innerHTML = '<b></b>시간'; days.querySelector('b').textContent = h; }
+    fillSelect(li.querySelector('[data-k="1"]'), cat1, t(c[C.C1]));
+    fillSelect(li.querySelector('[data-k="2"]'), distinct2(t(c[C.C1])), t(c[C.C2]));
+    li.querySelector('[data-k="8"]').checked = !!t(c[C.OPEN]);
+    const risk = isOpen(r) ? openRisk(r) : '';
+    if (risk) { const w = document.createElement('span'); w.className = 'owarn'; w.textContent = risk; li.querySelector('.cats').appendChild(w); }
+    frag.appendChild(li);
+  });
+  list.appendChild(frag);
+  if (!vis.length) { const e = document.createElement('li'); e.className = 'empty'; e.textContent = state.tab === 'open' ? 'Open 출력 품목이 없습니다. 품목 목록에서 Open 스위치를 켜면 여기에 들어옵니다.' : '해당하는 품목이 없습니다.'; list.appendChild(e); }
+  $('countInfo').innerHTML = vis.length === state.rows.length ? `<b>${state.rows.length}</b>개` : `<b>${vis.length}</b>개 표시 · 전체 ${state.rows.length}개`;
+  $('hint').textContent = state.tab === 'open' ? 'Open을 누르면 이 순서대로 출력됩니다. 번호를 누르면 몇 번째로 옮길지 바로 입력할 수 있습니다. 여기서 옮겨도 카테고리 화면 순서는 안 바뀝니다.' : (state.f1 ? '프린터 화면에도 이 순서로 나옵니다. 손잡이를 끌거나 화살표로 옮기세요.' : '카테고리를 고르면 프린터 화면과 같은 순서로 보입니다.');
+  $('qClear').hidden = !state.q;
+  $('sortCatBtn').hidden = state.tab !== 'open';
+  renderSelBar();
+}
+function fillSelect(sel, values, cur) {
+  sel.innerHTML = '';
+  const opt = (v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; sel.appendChild(o); };
+  opt('', '— 없음');
+  values.forEach(v => opt(v, v));
+  if (cur && !values.includes(cur)) opt(cur, cur);
+  opt('__new__', '새 이름 입력…');
+  sel.value = cur; sel.classList.toggle('empty', !cur);
+}
+
+/* ----- list events ----- */
+const list = $('list');
+list.addEventListener('change', e => {
+  const el = e.target, k = el.dataset.k; if (k === undefined) return;
+  const li = el.closest('li'), idx = +li.dataset.idx, r = state.rows[idx];
+  if (el.type === 'checkbox') {
+    const risk = el.checked ? openRisk(r) : '';
+    if (risk) { el.checked = false; toast(`${risk}. Open에는 일수가 T인 품목만 넣을 수 있습니다. 이 품목은 카테고리 화면에서 뽑으세요`); return; }
+    r.cells[C.OPEN] = el.checked ? 'Y' : ''; r.seq = el.checked ? openOrder().length : null; renumberSeq(); saveDraft();
+    const y = li.getBoundingClientRect().top; render();
+    const n = list.querySelector(`li[data-idx="${idx}"]`); if (n) window.scrollBy(0, n.getBoundingClientRect().top - y);
+    return;
+  }
+  if (el.tagName === 'SELECT') {
+    if (el.value === '__new__') {
+      const inp = document.createElement('input'); inp.className = 'newcat'; inp.placeholder = k === '1' ? '새 카테고리 1' : '새 카테고리 2'; inp.dataset.k = k; inp.dataset.newcat = '1';
+      el.replaceWith(inp); inp.focus();
+      const done = () => { const v = inp.value.trim(); r.cells[+k] = v || t(r.cells[+k]); if (k === '1' && v) { } render(); };
+      inp.addEventListener('blur', done, { once: true }); inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); } });
+      return;
+    }
+    r.cells[+k] = el.value; if (k === '1') { const c2 = distinct2(el.value); if (!c2.includes(t(r.cells[C.C2]))) r.cells[C.C2] = c2.length === 1 ? c2[0] : ''; }
+    render(); return;
+  }
+});
+list.addEventListener('click', e => {
+  if (state.selMode) { // 여러 개 선택: 줄을 누르면 선택/해제 (카테고리·Open 칸은 그대로 동작)
+    const li = e.target.closest('li.item');
+    if (li && !e.target.closest('select, input, label, .ops, .jump, .jumpin')) { const r = state.rows[+li.dataset.idx]; if (state.sel.has(r)) state.sel.delete(r); else state.sel.add(r); li.classList.toggle('picked', state.sel.has(r)); renderSelBar(); return; }
+  }
+  const j = e.target.closest('button.jump');
+  if (j) {
+    const idx = +j.closest('li').dataset.idx, n = openOrder().length, cur = state.rows[idx].seq;
+    const inp = document.createElement('input'); inp.type = 'number'; inp.inputMode = 'numeric'; inp.min = 1; inp.max = n; inp.value = cur; inp.className = 'jumpin'; inp.setAttribute('aria-label', `몇 번째로 옮길지 (1~${n})`);
+    j.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const finish = ok => { if (done) return; done = true; const v = parseInt(inp.value, 10); if (ok && v >= 1 && v !== cur) moveOpenTo(idx, Math.min(n, v)); else renderList(); };
+    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); finish(true); } else if (ev.key === 'Escape') finish(false); });
+    inp.addEventListener('blur', () => finish(true));
+    return;
+  }
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const li = b.closest('li'), idx = +li.dataset.idx, r = state.rows[idx], vis = visible(), vi = vis.indexOf(idx);
+  if (b.dataset.act === 'del') { state.rows.splice(idx, 1); toast(`삭제: ${r.cells[C.ITEM] || '(이름 없음)'}`); render(); return; }
+  if (b.dataset.act === 'dup') { state.rows.splice(idx + 1, 0, { cells: r.cells.slice(), orig: null, src: r.src, seq: r.seq ? r.seq + 0.5 : null }); renumberSeq(); render(); const n = list.querySelector(`li[data-idx="${idx + 1}"]`); if (n) { n.scrollIntoView({ block: 'nearest' }); } toast(state.tab === 'open' ? '복사했습니다. Open에서 한 장 더 출력됩니다' : '복사했습니다. 카테고리를 바꿔 다른 화면에도 넣을 수 있습니다'); return; }
+  if (b.dataset.act === 'up' && vi > 0) move(idx, vis[vi - 1], true);
+  if (b.dataset.act === 'down' && vi < vis.length - 1) move(idx, vis[vi + 1], false);
+});
+function moveOpenTo(from, pos) {
+  const ord = openOrder().map(o => o.i).filter(i => i !== from); ord.splice(pos - 1, 0, from); ord.forEach((i, k) => { state.rows[i].seq = k + 1; });
+  render(); const li = list.querySelector(`li[data-idx="${from}"]`); if (li) { li.scrollIntoView({ block: 'center' }); flash(li); }
+  toast(`${pos}번째로 옮겼습니다`);
+}
+function flash(li) { li.classList.add('flash'); setTimeout(() => li.classList.remove('flash'), 900); }
+function move(from, target, before) {
+  if (from === target) return;
+  if (state.tab === 'open') { // Open 출력 순서만 바꾼다 (줄 순서 유지)
+    const ord = openOrder().map(o => o.i).filter(i => i !== from); let at = ord.indexOf(target); if (!before) at++;
+    ord.splice(at, 0, from); ord.forEach((i, k) => { state.rows[i].seq = k + 1; });
+    render(); const li = list.querySelector(`li[data-idx="${from}"]`); if (li) li.scrollIntoView({ block: 'nearest' }); return;
+  }
+  let to = before ? target : target + 1; if (from < to) to--;
+  const [r] = state.rows.splice(from, 1); state.rows.splice(to, 0, r);
+  render();
+  const li = list.querySelector(`li[data-idx="${to}"]`); if (li) li.scrollIntoView({ block: 'nearest' });
+}
+/* 끌어서 옮기기: 손잡이를 잡고 끌면 화면 위·아래 끝에서 저절로 스크롤 (오래 대고 있을수록 빨라짐) */
+let drag = null;
+list.addEventListener('pointerdown', e => {
+  const g = e.target.closest('.grip'); if (!g || e.button > 0 || state.selMode) return;
+  const li = g.closest('li.item'); if (!li) return; e.preventDefault();
+  const rect = li.getBoundingClientRect();
+  const ghost = li.cloneNode(true); ghost.classList.add('ghost'); ghost.classList.remove('chg');
+  Object.assign(ghost.style, { width: rect.width + 'px', left: rect.left + 'px', top: rect.top + 'px' });
+  document.body.appendChild(ghost); li.classList.add('drag'); document.documentElement.classList.add('dragging');
+  drag = { idx: +li.dataset.idx, li, ghost, dy: e.clientY - rect.top, y: e.clientY, id: e.pointerId, target: null, before: true, edgeT: 0, raf: 0,
+    items: [...list.querySelectorAll('li.item')].filter(x => x !== li) };
+  try { g.setPointerCapture(e.pointerId); } catch (_) { }
+  drag.raf = requestAnimationFrame(dragTick);
+});
+function dragMove(e) { if (!drag || e.pointerId !== drag.id) return; drag.y = e.clientY; drag.ghost.style.top = (drag.y - drag.dy) + 'px'; findTarget(); }
+function dragEnd(e, cancel) {
+  if (!drag || (e && e.pointerId !== drag.id)) return;
+  const d = drag; drag = null; cancelAnimationFrame(d.raf);
+  d.ghost.remove(); document.documentElement.classList.remove('dragging');
+  list.querySelectorAll('.drag,.over-before,.over-after').forEach(x => x.classList.remove('drag', 'over-before', 'over-after'));
+  if (!cancel && d.target !== null) move(d.idx, d.target, d.before);
+}
+window.addEventListener('pointermove', dragMove);
+window.addEventListener('pointerup', e => dragEnd(e, false));
+window.addEventListener('pointercancel', e => dragEnd(e, true));
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && drag) dragEnd(null, true); });
+function findTarget() {
+  const items = drag.items; if (!items.length) return;
+  let lo = 0, hi = items.length; // 끄는 위치보다 가운데가 아래에 있는 첫 품목 (이분 탐색)
+  while (lo < hi) { const m = (lo + hi) >> 1, r = items[m].getBoundingClientRect(); if (r.top + r.height / 2 > drag.y) hi = m; else lo = m + 1; }
+  const before = lo < items.length, el = before ? items[lo] : items[items.length - 1];
+  const tgt = +el.dataset.idx;
+  if (tgt === drag.target && before === drag.before) return;
+  list.querySelectorAll('.over-before,.over-after').forEach(x => x.classList.remove('over-before', 'over-after'));
+  el.classList.add(before ? 'over-before' : 'over-after'); drag.target = tgt; drag.before = before;
+}
+function dragTick(now) {
+  if (!drag) return;
+  const H = window.innerHeight, zone = Math.min(140, H * 0.2); let v = 0;
+  if (drag.y < zone) v = -Math.min(1, (zone - drag.y) / zone); else if (drag.y > H - zone) v = Math.min(1, (drag.y - (H - zone)) / zone);
+  const lr = list.getBoundingClientRect(); // 목록 끝을 지나서까지 스크롤하지 않음 (첫·마지막 품목이 스크롤 구역 밖에 오도록)
+  if (v < 0 && lr.top >= zone + 8) v = 0;
+  if (v > 0 && lr.bottom <= H - zone - 8) v = 0;
+  if (v) {
+    if (!drag.edgeT) drag.edgeT = now;
+    const acc = Math.min(4, 1 + (now - drag.edgeT) / 600);
+    window.scrollBy(0, Math.sign(v) * Math.max(3, Math.abs(v) * 20 * acc)); findTarget();
+  } else drag.edgeT = 0;
+  drag.raf = requestAnimationFrame(dragTick);
+}
+
+/* ----- tabs, search, tools ----- */
+function setTab(tab) { state.tab = tab; state.sel.clear(); $('tabAll').setAttribute('aria-selected', String(tab === 'all')); $('tabOpen').setAttribute('aria-selected', String(tab === 'open')); renderList(); }
+$('tabAll').addEventListener('click', () => setTab('all')); $('tabOpen').addEventListener('click', () => setTab('open'));
+$('q').addEventListener('input', () => { state.q = $('q').value.trim(); renderList(); });
+$('qClear').addEventListener('click', () => { $('q').value = ''; state.q = ''; renderList(); $('q').focus(); });
+$('resetBtn').addEventListener('click', () => {
+  const { added, mod, del, moved } = changeSummary(); if (!added && !mod && !del && !moved) { toast('되돌릴 변경이 없습니다'); return; }
+  state.rows = state.origRows.map((r, i) => ({ cells: r.slice(), orig: i, src: i, seq: null })); seqFromNO(state.rows); render(); toast('원래 목록으로 되돌렸습니다');
+});
+$('csvOut').addEventListener('click', async () => {
+  let rows; try { rows = lockedRows(); } catch (e) { toast(e.message); return; }
+  const name = $('outName').value.replace(/\.pkg$/i, '') + '.csv';
+  try { const r = await deliver(name, new TextEncoder().encode(toCSV(state.table.cols, rows)), 'csv'); toast(r.sure ? 'CSV를 저장했습니다' : 'CSV를 저장했습니다. 다운로드 폴더를 확인해 주세요'); } catch (e) { toast(e.message || String(e)); }
+});
+
+/* ----- 여러 개 선택 ----- */
+function renderSelBar() {
+  const bar = $('selbar'); bar.hidden = !state.selMode; document.documentElement.classList.toggle('selmode-on', state.selMode);
+  $('selBtn').setAttribute('aria-pressed', String(state.selMode)); $('selBtn').textContent = state.selMode ? '선택 끝내기' : '여러 개 선택';
+  if (!state.selMode) return;
+  const n = [...state.sel].filter(r => state.rows.includes(r)).length;
+  $('selCount').textContent = n ? `${n}개 선택` : '줄을 눌러 고르세요';
+  const open = state.tab === 'open';
+  $('selOn').hidden = open; $('selOff').textContent = open ? 'Open에서 빼기' : 'Open 끄기';
+  ['selOn', 'selOff', 'selTop', 'selBottom'].forEach(id => { $(id).disabled = !n; });
+}
+function selected() { return state.rows.filter(r => state.sel.has(r)); }
+$('selBtn').addEventListener('click', () => { state.selMode = !state.selMode; state.sel.clear(); renderList(); });
+$('selDone').addEventListener('click', () => { state.selMode = false; state.sel.clear(); renderList(); });
+$('selAll').addEventListener('click', () => { const vis = visible().map(i => state.rows[i]); const all = vis.every(r => state.sel.has(r)); vis.forEach(r => all ? state.sel.delete(r) : state.sel.add(r)); renderList(); });
+$('selOn').addEventListener('click', () => {
+  const pick = selected().filter(r => !isOpen(r)); if (!pick.length) { toast('고른 품목은 이미 모두 Open에 있습니다'); return; }
+  const bad = openFixed() ? [] : pick.filter(r => openRisk(r));
+  const ok = pick.filter(r => !bad.includes(r)); if (!ok.length) { toast('일수가 T인 품목만 Open에 넣을 수 있습니다. 저장 칸의 Open 라벨 날짜 규칙을 켜세요'); return; }
+  const snap = snapRows(); let n = openOrder().length;
+  ok.forEach(r => { r.cells[C.OPEN] = 'Y'; r.seq = ++n; }); renumberSeq(); state.sel.clear(); render();
+  toastUndo(`${ok.length}개를 Open 맨 끝에 넣었습니다` + (bad.length ? ` (${bad.length}개는 날짜 규칙이 꺼져 있어 뺐습니다)` : ''), snap);
+});
+$('selOff').addEventListener('click', () => {
+  const pick = selected().filter(isOpen); if (!pick.length) { toast('고른 품목 중 Open에 있는 것이 없습니다'); return; }
+  const snap = snapRows(); pick.forEach(r => { r.cells[C.OPEN] = ''; r.seq = null; }); renumberSeq(); state.sel.clear(); render();
+  toastUndo(`${pick.length}개를 Open에서 뺐습니다`, snap);
+});
+function moveSelected(toTop) {
+  const pick = selected(); if (!pick.length) return; const snap = snapRows();
+  if (state.tab === 'open') {
+    const ord = openOrder().map(o => o.r), sel = ord.filter(r => state.sel.has(r)), rest = ord.filter(r => !state.sel.has(r));
+    (toTop ? [...sel, ...rest] : [...rest, ...sel]).forEach((r, k) => { r.seq = k + 1; });
+  } else { // 보이는 목록(고른 카테고리)의 맨 위·맨 아래로
+    const vis = visible().map(i => state.rows[i]).filter(r => !state.sel.has(r));
+    const rest = state.rows.filter(r => !state.sel.has(r));
+    let at = vis.length ? rest.indexOf(toTop ? vis[0] : vis[vis.length - 1]) + (toTop ? 0 : 1) : (toTop ? 0 : rest.length);
+    rest.splice(at, 0, ...pick); state.rows = rest;
+  }
+  const n = pick.length; state.sel.clear(); render(); window.scrollTo({ top: toTop ? $('list').getBoundingClientRect().top + window.scrollY - 120 : document.body.scrollHeight, behavior: 'smooth' });
+  toastUndo(`${n}개를 맨 ${toTop ? '위' : '아래'}로 옮겼습니다`, snap);
+}
+$('selTop').addEventListener('click', () => moveSelected(true));
+$('selBottom').addEventListener('click', () => moveSelected(false));
+
+/* ----- Open 순서를 카테고리 화면 순서로 ----- */
+$('sortCatBtn').addEventListener('click', () => {
+  const snap = snapRows(); state.rows.forEach((r, i) => { if (isOpen(r)) r.seq = i; }); renumberSeq(); render();
+  toastUndo('Open 순서를 카테고리 화면 순서로 맞췄습니다', snap);
+});
+
+/* ----- 지난 파일에서 Open 가져오기: 그 파일의 Open 목록과 순서를 그대로 (교체) ----- */
+const normName = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+function similar(a, b) { // 0~1, 글자 편집 거리 기준
+  if (a === b) return 1; const m = a.length, n = b.length; if (!m || !n) return 0;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+  return 1 - prev[n] / Math.max(m, n);
+}
+function planImport(oldOpen) {
+  const rows = state.rows.map(r => ({ ...r, cells: r.cells.slice(), _open: false }));
+  const cat = c => t(c[C.C1]) + '|' + t(c[C.C2]);
+  const life = c => [t(c[C.DAYS]), t(c[C.HOURS]), t(c[6]), t(c[7])].join('|');
+  const full = c => cat(c) + '|' + t(c[C.ITEM]) + '|' + life(c);
+  const used = new Set(), extra = [], rep = { exact: 0, renamed: [], copied: [], missing: [] };
+  const best = (c, pool) => { let bi = -1, bs = 0; pool.forEach(i => { const s = similar(normName(rows[i].cells[C.ITEM]), normName(c[C.ITEM])); if (s > bs) { bs = s; bi = i; } }); return bs >= 0.85 ? bi : -1; };
+  const idxs = rows.map((r, i) => i);
+  oldOpen.forEach((c, k) => {
+    const seq = k + 1, take = i => { used.add(i); rows[i]._open = true; rows[i].seq = seq; };
+    let i = idxs.find(i => !used.has(i) && full(rows[i].cells) === full(c)); if (i !== undefined) { take(i); rep.exact++; return; }
+    i = best(c, idxs.filter(i => !used.has(i) && cat(rows[i].cells) === cat(c) && life(rows[i].cells) === life(c)));
+    if (i >= 0) { take(i); rep.renamed.push([c, rows[i].cells]); return; }
+    let base = best(c, idxs.filter(i => cat(rows[i].cells) === cat(c) && life(rows[i].cells) === life(c)));
+    if (base < 0) base = best(c, idxs.filter(i => life(rows[i].cells) === life(c)));
+    if (base >= 0) { const cells = rows[base].cells.slice(); cells[C.C1] = c[C.C1]; cells[C.C2] = c[C.C2]; extra.push({ base, row: { cells, orig: null, src: rows[base].src, seq, _open: true } }); rep.copied.push([c, cells]); return; }
+    rep.missing.push(c);
+  });
+  const out = []; rows.forEach((r, i) => { out.push(r); extra.filter(x => x.base === i).forEach(x => out.push(x.row)); });
+  let off = 0;
+  out.forEach(r => { if (r._open) { if (!t(r.cells[C.OPEN])) r.cells[C.OPEN] = 'Y'; } else { if (t(r.cells[C.OPEN])) off++; r.cells[C.OPEN] = ''; r.seq = null; } delete r._open; });
+  rep.off = off; rep.total = oldOpen.length;
+  return { rows: out, rep };
+}
+let pendingImport = null;
+const impSheet = $('impSheet');
+$('importOpenBtn').addEventListener('click', () => $('importInput').click());
+$('importInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let E; try { E = PKG.parse(await f.arrayBuffer()); } catch (err) { toast(err.message || String(err)); return; }
+  const te = E.find(x => x.kind === 'c' && /\/tables\/[^/]+\.xml$/.test(x.path)); if (!te) { toast('이 파일에는 품목 테이블이 없습니다'); return; }
+  const T = PKG.parseTable(te.raw);
+  if (T.cols.join('|') !== state.table.cols.join('|')) { toast('품목 테이블의 열 구성이 달라 가져올 수 없습니다'); return; }
+  const oldOpen = T.rows.map((c, i) => ({ c, i })).filter(x => t(x.c[C.OPEN])).sort((x, y) => cmpNO(x.c[C.NO], y.c[C.NO]) || x.i - y.i).map(x => x.c);
+  if (!oldOpen.length) { toast('그 파일에는 Open 품목이 없습니다'); return; }
+  pendingImport = planImport(oldOpen);
+  const r = pendingImport.rep, fname = f.name.replace(/^[0-9a-f]{8}-/i, '');
+  $('impFrom').textContent = fname;
+  const line = c => `${t(c[C.C1])} › ${t(c[C.C2])} · ${t(c[C.ITEM])}`;
+  const box = $('impBody'); box.innerHTML = '';
+  const add = (cls, title, items) => { const sec = document.createElement('div'); sec.className = 'impsec ' + cls; const h = document.createElement('b'); h.textContent = title; sec.appendChild(h); if (items && items.length) { const ul = document.createElement('ul'); items.forEach(s => { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); }); sec.appendChild(ul); } box.appendChild(sec); };
+  add('', `Open ${r.total}개를 그 파일 순서 그대로 가져옵니다`, null);
+  add('', `그대로 맞는 품목 ${r.exact}개`, null);
+  if (r.renamed.length) add('', `이름이 바뀐 품목 ${r.renamed.length}개는 지금 파일 이름으로 넣습니다`, r.renamed.map(([o, n]) => `${t(o[C.ITEM])} → ${t(n[C.ITEM])}`));
+  if (r.copied.length) add('', `한 장 더 뽑거나 다른 카테고리에 있던 ${r.copied.length}개는 복사해서 넣습니다`, r.copied.map(([o]) => line(o)));
+  if (r.missing.length) add('warn', `지금 파일에 없는 품목 ${r.missing.length}개는 넣지 않습니다`, r.missing.map(line));
+  if (r.off) add('', `지금 Open에 켜져 있던 것 중 ${r.off}개는 꺼집니다`, null);
+  impSheet.hidden = false; document.documentElement.classList.add('sheet-open');
+});
+function closeImp() { impSheet.hidden = true; document.documentElement.classList.remove('sheet-open'); pendingImport = null; }
+impSheet.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeImp(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !impSheet.hidden) closeImp(); });
+$('impApply').addEventListener('click', () => {
+  if (!pendingImport) return; const snap = snapRows(), r = pendingImport.rep;
+  state.rows = pendingImport.rows; renumberSeq(); closeImp(); state.sel.clear(); setTab('open'); render();
+  toastUndo(`Open ${r.total - r.missing.length}개를 가져왔습니다` + (r.missing.length ? ` (${r.missing.length}개는 지금 파일에 없어 뺐습니다)` : ''), snap);
+});
+
+/* ----- 품목 추가: 원래 목록에서 골라 복사 (이름·일수는 원본 그대로) ----- */
+const sheet = $('addSheet');
+function srcList() { const seen = new Set(), out = []; state.origRows.forEach((o, i) => { const key = [o[C.ITEM], o[C.DAYS], o[C.HOURS], o[6], o[7]].join('\u0001'); if (!seen.has(key)) { seen.add(key); out.push(i); } }); return out; }
+function addWhere() { return state.tab === 'open' ? (openFixed() ? 'Open 출력 맨 끝에 들어갑니다' : 'Open 출력 맨 끝에 들어갑니다. 일수가 T인 품목만 보입니다') : state.f1 ? `${state.f1}${state.f2 ? ' › ' + state.f2 : ''} 맨 끝에 들어갑니다` : '원래 카테고리 맨 끝에 들어갑니다'; }
+function renderPicks() {
+  const q = $('addQ').value.trim().toLowerCase(), ul = $('addList'); ul.innerHTML = '';
+  const frag = document.createDocumentFragment(); let n = 0;
+  for (const i of srcList()) {
+    const o = state.origRows[i]; if (q && !o[C.ITEM].toLowerCase().includes(q)) continue;
+    if (state.tab === 'open' && !openFixed() && !/^t$/i.test(t(o[C.DAYS]))) continue; // 고치기 전 Open 라벨은 T 품목만 맞게 찍힘
+    const li = document.createElement('li'), b = document.createElement('button'); b.type = 'button'; b.dataset.src = i;
+    const d = t(o[C.DAYS]), h = t(o[C.HOURS]);
+    b.innerHTML = '<b></b><span class="pd"></span><span class="pc"></span>';
+    b.querySelector('b').textContent = o[C.ITEM]; b.querySelector('.pd').textContent = /^t$/i.test(d) ? '1일 (T)' : d ? d + '일' : h ? h + '시간' : '';
+    b.querySelector('.pc').textContent = [t(o[C.C1]), t(o[C.C2])].filter(Boolean).join(' › ');
+    li.appendChild(b); frag.appendChild(li); if (++n >= 200) break;
+  }
+  ul.appendChild(frag);
+  if (!n) ul.innerHTML = state.tab === 'open' ? '<li class="none">일수가 T인 품목 중에는 없습니다. 다른 품목은 카테고리 화면에서 뽑아야 날짜가 맞게 찍힙니다.</li>' : '<li class="none">원래 목록에 없는 품목입니다.</li>';
+}
+function openSheet() { $('addWhere').textContent = addWhere(); $('addQ').value = state.q; renderPicks(); sheet.hidden = false; document.documentElement.classList.add('sheet-open'); setTimeout(() => $('addQ').focus(), 30); }
+function closeSheet() { sheet.hidden = true; document.documentElement.classList.remove('sheet-open'); }
+$('addBtn').addEventListener('click', openSheet);
+sheet.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
+$('addQ').addEventListener('input', renderPicks);
+$('addList').addEventListener('click', e => {
+  const b = e.target.closest('button[data-src]'); if (!b) return;
+  const i = +b.dataset.src, o = state.origRows[i], cells = o.slice(); let at, seq = null;
+  if (state.tab === 'open') {
+    cells[C.OPEN] = 'Y'; seq = openOrder().length + 1;
+    let last = -1; state.rows.forEach((r, k) => { if (r.src === i) last = k; }); at = last >= 0 ? last + 1 : state.rows.length;
+  } else {
+    cells[C.OPEN] = '';
+    if (state.f1) { if (t(cells[C.C1]) !== state.f1) cells[C.C2] = ''; cells[C.C1] = state.f1; }
+    if (state.f2) cells[C.C2] = state.f2;
+    const vis = visible(); at = vis.length ? vis[vis.length - 1] + 1 : state.rows.length;
+  }
+  state.rows.splice(at, 0, { cells, orig: null, src: i, seq }); renumberSeq(); closeSheet();
+  if (state.q && !o[C.ITEM].toLowerCase().includes(state.q.toLowerCase())) { state.q = ''; $('q').value = ''; }
+  render();
+  const li = list.querySelector(`li[data-idx="${at}"]`); if (li) { li.scrollIntoView({ block: 'center' }); flash(li); }
+  toast(`추가: ${o[C.ITEM]}`);
+});
+
+/* ----- save ----- */
+async function deliver(filename, bytes, ext) {
+  // 1) Claude 화면에서 저장 기능이 있으면 그것으로 저장 (.pkg는 허용 확장자가 아니라 ZIP에 담아 줌)
+  let dl = null;
+  if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (_) { dl = null; } }
+  if (dl) {
+    let name = filename, data = bytes;
+    if (ext === 'pkg') { name = filename.replace(/\.pkg$/i, '') + '.zip'; data = makeZip(filename, bytes); }
+    try { await dl.save({ filename: name, data: new Blob([data]) }); return { name, sure: true }; }
+    catch (err) {
+      if (err && err.code === 'declined') throw new Error('저장을 취소했습니다.');
+      if (!(err && /unavailable|not_granted|capability_disabled|capability_removed/.test(err.code || ''))) throw new Error('저장에 실패했습니다: ' + (err && err.message ? err.message : err));
+    }
+  }
+  // 2) 저장 기능이 없는 화면(링크를 바로 연 페이지, PC에 받은 html 파일)은 브라우저 다운로드로 .pkg 그대로 저장
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' })); a.download = filename; a.rel = 'noopener'; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  let framed = true; try { framed = window.self !== window.top; } catch (_) { framed = true; }
+  return { name: filename, sure: !framed };
+}
+$('saveBtn').addEventListener('click', async () => {
+  const st = $('saveStatus'); st.className = 'status'; st.textContent = '패키지를 만드는 중…';
+  try {
+    const rows = lockedRows();
+    const xml = PKG.buildTable(state.table, rows);
+    if (PKG.parseTable(xml).rows.length !== rows.length) throw new Error('테이블 생성 확인에 실패했습니다.');
+    let ents = state.entries.map(e => e === state.tableEntry ? { ...e, raw: xml, dirty: true } : e);
+    const fixing = state.openFix === 'needed' && state.fixOn;
+    if (fixing) ents = OpenFix.apply(ents);
+    const out = PKG.build(ents);
+    PKG.parse(out.buffer.slice(0));
+    let name = $('outName').value.trim() || suggestName(state.fileName); if (!/\.pkg$/i.test(name)) name += '.pkg';
+    const res = await deliver(name, out, 'pkg'), saved = res.name;
+    const { added, mod, del, moved, openMoved } = changeSummary(), noCat = rows.filter(r => !r[C.C1] || !r[C.C2]).length;
+    st.className = 'status ok';
+    st.textContent = `${saved} 저장 · 품목 ${rows.length}개 (추가 ${added} · 수정 ${mod} · 이동 ${moved} · 삭제 ${del}${openMoved ? ' · Open 순서 변경' : ''}${fixing ? ' · Open 라벨 날짜 규칙 적용' : ''})` + (saved.endsWith('.zip') ? ' · ZIP 안의 .pkg를 꺼내 쓰세요.' : res.sure ? ' · 다운로드 폴더에 저장했습니다.' : ' · 다운로드가 시작되지 않았다면 이 페이지를 Chrome이나 Edge 새 탭에서 열거나, 받은 PC용 파일(label-pkg-editor.html)로 다시 저장해 주세요.') + (noCat ? ` · 카테고리가 빈 품목 ${noCat}개는 전체보기에서만 나옵니다.` : '') + (state.rows.some(r => isOpen(r) && openRisk(r)) ? ` · Open에 날짜가 틀리게 찍힐 품목 ${state.rows.filter(r => isOpen(r) && openRisk(r)).length}개가 있습니다.` : '');
+    try { localStorage.removeItem(state.draftKey); } catch (_) { }
+  } catch (e) { st.className = 'status bad'; st.textContent = e.message || String(e); }
+});
+
+/* ----- Open 라벨 날짜 규칙 ----- */
+function renderFix() {
+  const card = $('fixCard'), done = $('fixDone'), keep = $('keepText');
+  card.hidden = state.openFix !== 'needed'; done.hidden = state.openFix !== 'done';
+  $('fixOn').checked = state.fixOn;
+  const d0 = new Date(), dd = n => { const x = new Date(d0); x.setDate(x.getDate() + n); return x.getDate() + '일'; };
+  $('fixRules').innerHTML = '';
+  [['0일', `${dd(0)}, 종료일 없음`], ['1일 · ⓢ · T', `${dd(0)} ~ ${dd(0)}`], ['2일', `${dd(0)} ~ ${dd(1)}`], ['3일', `${dd(0)} ~ ${dd(2)}`], ['4시간', '출력 시각부터 4시간']].forEach(([k, v]) => {
+    const li = document.createElement('li'); li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = k; li.querySelector('span').textContent = v; $('fixRules').appendChild(li);
+  });
+  keep.innerHTML = openFixed() && state.openFix === 'needed'
+    ? '<b>그대로 두는 것</b> 품목명, 보관 일수·시간, 화면, 카테고리 라벨, 폰트, 로고. Open 라벨의 날짜 칸과 Open 출력 스크립트만 함께 고칩니다.'
+    : '<b>그대로 두는 것</b> 품목명, 보관 일수·시간, 화면, 라벨 디자인, 폰트, 로고, 스크립트. 바뀌는 것은 카테고리, Open, 순서뿐입니다.';
+}
+$('fixOn').addEventListener('change', () => { state.fixOn = $('fixOn').checked; renderFix(); render(); });
+
+/* ----- open handlers ----- */
+$('pickBtn').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (f) openBuffer(await f.arrayBuffer(), f.name); });
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', async e => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) openBuffer(await f.arrayBuffer(), f.name); });
+(function initReopen() {
+  let saved = null; try { saved = JSON.parse(localStorage.getItem(LS_LAST) || 'null'); } catch (_) { }
+  if (!saved || !saved.b64) return;
+  const b = $('reopenBtn'); b.hidden = false; const d = new Date(saved.date); b.textContent = `다시 열기: ${saved.name} (${d.getMonth() + 1}/${d.getDate()})`;
+  b.addEventListener('click', () => openBuffer(b64dec(saved.b64), saved.name));
+})();
+</script>
+
+</body></html>
