@@ -4923,9 +4923,10 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   const INV_SUB = /감자튀김|고르곤졸라|마늘쫑/; // KM이 짚은 소분 품목은 처음부터 소분 칸을 펼침
   const invSubOn = (it) => { const c = (db.itemCfg || {})[it.key] || {}; return c.sub === 1 || (c.sub !== 0 && (num(c.subG) > 0 || INV_SUB.test(it.name))); };
   const invSubQty = (M, it, n) => { const s = invSubG(M, it), per = it.pk.g || it.pk.ml; return s && per && n > 0 ? (n * s.g) / per : null; };
+  const invSup = (it) => supCls(it) > 0 || /소모품|세제/.test(it.vendor || ""); // 11/26 KM "소모품 세제는 제외"
   function invRawItems(M) {
     const L = LOCS.map((x) => x[0]);
-    return M.items.filter((it) => !it.hidden && it.code && !it.foh).map((it) => ({ it, g: it.ledgerOnly ? "수불현황에만" : (LOCS.find((x) => x[0] === locOf(it)) || LOCS[0])[1], gi: it.ledgerOnly ? 9 : it.foh ? 8 : Math.max(0, L.indexOf(locOf(it))), ro: num(((db.itemCfg || {})[it.key] || {}).ro) || 999 }))
+    return M.items.filter((it) => !it.hidden && it.code && !it.foh && !invSup(it)).map((it) => ({ it, g: it.ledgerOnly ? "수불현황에만" : (LOCS.find((x) => x[0] === locOf(it)) || LOCS[0])[1], gi: it.ledgerOnly ? 9 : it.foh ? 8 : Math.max(0, L.indexOf(locOf(it))), ro: num(((db.itemCfg || {})[it.key] || {}).ro) || 999 }))
       .sort((a, b) => a.gi - b.gi || a.ro - b.ro || a.it.name.localeCompare(b.it.name, "ko"));
   }
   // 합계: 원자재(통) + 소분(포션 → 재고단위) + 프랩 환산
@@ -4979,7 +4980,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     } else {
       const keys = new Set([...T.raw.keys(), ...T.sub.keys(), ...T.fromPrep.keys()]);
       const order = invRawItems(M).map((x) => x.it);
-      M.items.forEach((it) => { if (keys.has(it.key) && !it.foh && !order.includes(it)) order.push(it); }); // 숨긴 품목으로 환산된 것도 빠뜨리지 않음 (FOH 품목은 빼기: 11/26 KM)
+      M.items.forEach((it) => { if (keys.has(it.key) && !it.foh && !invSup(it) && !order.includes(it)) order.push(it); }); // 숨긴 품목으로 환산된 것도 빠뜨리지 않음 (FOH 품목은 빼기: 11/26 KM)
       const rows = order.filter((it) => keys.has(it.key)).map((it) => ({ it, a: T.raw.get(it.key) || 0, s: T.sub.get(it.key) || 0, b: T.fromPrep.get(it.key) || 0 })).filter((r) => r.a + r.s + r.b > 0);
       let h = `<div class="inv-tools"><button type="button" class="printbtn" id="invCopy">복사 (코드·품목·수량)</button><span>${rows.length}품목 · 단위는 앱 재고단위 (MIS 단위와 다르면 알려 주세요)</span></div>`;
       if (T.part.length) h += `<div class="inv-warn">일부 재료를 못 바꾼 프랩 ${T.part.length}개: ${T.part.map(esc).join(", ")} — 그 재료는 합계에 안 들어감. 원자재 칸에 직접 더해 주세요.</div>`;

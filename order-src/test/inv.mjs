@@ -82,6 +82,8 @@ const fohIn = await p.evaluate(() => { const M = window.__orderCalc.model(); con
 await p.click("#invSeg [data-iv=raw]"); await p.waitForTimeout(200);
 const fohRows = await p.evaluate(() => { const M = window.__orderCalc.model(); const foh = new Set(M.items.filter((i) => i.foh).map((i) => i.key)); return [...document.querySelectorAll("#invBody .inv-row[data-key]")].filter((r) => foh.has(r.dataset.key)).length; });
 ok(fohIn > 0 && fohRows === 0 && !(await p.$$eval(".inv-h", (a) => a.some((x) => x.textContent === "FOH"))), `FOH 품목은 인벤토리에서 뺌 (FOH ${fohIn}개)`);
+const supRows = await p.evaluate(() => [...document.querySelectorAll(".inv-h")].map((x) => x.textContent).filter((t) => /소모품/.test(t)).length + [...document.querySelectorAll("#invBody .inv-row[data-key]")].filter((r) => /장갑|세제|락스|유니랩|호일|봉투/.test(r.textContent)).length);
+ok(supRows === 0, "소모품·세제는 인벤토리에서 뺌");
 ok(!errs.length, "화면 오류 없음 " + errs.join(" / "));
 console.log(`인벤토리 시험 통과 ${pass} · 실패 ${fail}`);
 await b.close();
