@@ -37,6 +37,7 @@
   // 합계 대조를 "다르면 저장 안 함"으로 (11/15 KM "먼저 할 4가지 바로 진행" 6번 데이터 지킴이).
   //  실제 MIS 화면의 합계 줄이 맞게 읽히는지 첫 결과(11/16 아침)를 본 뒤 true로 바꿈. 그 전엔 알리기만(⚠).
   //  시험은 window.__sumBlock으로 켜고 끔
+  const LABEL_API = (typeof window !== "undefined" && window.__labelApi) || "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec"; // 한글표시사항 앱(수원) — 라인체크 X 알림 (11/26 KM)
   const SUM_BLOCK = typeof window !== "undefined" && typeof window.__sumBlock === "boolean" ? window.__sumBlock : false;
   // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
   const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
@@ -869,6 +870,94 @@
     }
   }
 
+  // ---------- LineCheck현황 (11/26 KM: 경영정보 › 매장운영관리 › 관리메뉴 › LineCheck현황, 당일 조회 → FOH·BOH2 ○/△/X, X면 한글표시사항 앱 알림) ----------
+  //  1단계(지금): 화면을 조회만 해서 표 모양과 칸 값을 시트 lineCheckProbe·lineCheck.날짜에 남김(알림은 아직 안 보냄 — 화면 모양을 본 뒤 규칙을 붙임)
+  //  사람 이름처럼 보이는 칸(이름·성명·작성자·사원·담당·ID·전화)은 저장하지 않음. 조회 말고는 아무것도 누르지 않음
+  async function runLineCheck() {
+    try {
+      step = "LineCheck현황 메뉴";
+      const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+      const dateInputs = (w) => { try { const $w = w.jQuery; return $w ? [...w.document.querySelectorAll("input")].filter((i) => $w(i).data("datebox")) : []; } catch (e) { return []; } };
+      const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+      const LC_RE = /^Line\s*Check\s*현황$/i;
+      const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+      const expandAll = async () => { for (let round = 0; round < 6 && !byText(LC_RE, ".tree-title"); round++) { let did = 0; for (const w of trees()) { let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")]; } catch (e) {} for (const h of hits) { try { h.click(); did++; } catch (e) {} } } if (!did) break; await sleep(400); } };
+      const before = new Set(frames());
+      const bodyHas = (w) => { try { return /Line\s*Check/i.test(w.document.title + " " + (w.document.body ? w.document.body.innerText.slice(0, 2000) : "")); } catch (e) { return false; } };
+      const isReport = () => { const fs = frames().filter((w) => w !== window.top && !isMenu(w)); return fs.find((w) => bodyHas(w) && dateInputs(w).length) || fs.find((w) => !before.has(w) && dateInputs(w).length); };
+      let R = null;
+      for (let t = 0; t < 3 && !R; t++) {
+        if (!byText(LC_RE, ".tree-title")) await expandAll();
+        const hit = byText(LC_RE, ".tree-title"); if (!hit) break;
+        hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        R = await waitFor(isReport, 8000);
+      }
+      if (!R) return finish(false, "LineCheck현황 메뉴를 못 열었어요");
+      for (let k = 0; k < 60 && !(R.jQuery && dateInputs(R).length); k++) { await sleep(250); R = isReport() || R; }
+      const $ = R.jQuery, d = R.document;
+      if (!$) return finish(false, "LineCheck현황 화면에 jQuery가 없어요");
+      step = "조회일";
+      const day = job.to || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+      const fmt = (iso, like) => (/^\d{8}$/.test(like) ? iso.replace(/-/g, "") : /^\d{4}\.\d\d\.\d\d$/.test(like) ? iso.replace(/-/g, ".") : /^\d{4}\/\d\d\/\d\d$/.test(like) ? iso.replace(/-/g, "/") : iso);
+      const dbs = dateInputs(R);
+      dbs.forEach((i) => { const like = $(i).datebox("getValue") || ""; $(i).datebox("setValue", fmt(day, like)); });
+      const all = [...d.querySelectorAll("input")];
+      if (!all.some((i) => String(i.value).includes(STORE))) { const code = all.find((i) => /store|stor|shop|cd_?str|cd_?shop|매장/i.test(i.id + i.name) && !/nm|name/i.test(i.id + i.name)); if (code) { if ($(code).data("textbox")) $(code).textbox("setValue", STORE); else code.value = STORE; } }
+      step = "조회";
+      const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+      if (!btn) return finish(false, "LineCheck현황 조회 버튼을 못 찾았어요");
+      const L = loader($, d);
+      await L.idle(T.q);
+      let hit = null;
+      for (let t = 0; t < 2 && !(hit && hit.rows.length); t++) { const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); hit = await L.awaitLoad(prev, T.q); if (!hit) await L.idle(T.q); }
+      step = "읽기";
+      const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+      const NAME = /이름|성명|작성자|사원|담당|아이디|\bID\b|전화|연락|사번|매장|점포/i; // 사람 이름·매장명 칸은 저장 안 함(매장명은 이 매장 줄 고르기에만)
+      const txt = (v) => String(v ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+      const grids = L.grids().map((g) => {
+        const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field), keep = cs.filter((c) => !NAME.test(title(c)));
+        const rs = (L.raw(g) || []).slice(0, 60).map((r) => Object.fromEntries(keep.map((c) => [c.field, txt(r[c.field])])));
+        // △·X 칸을 누르면 무엇이 열리는지 보려고: 칸 서식(formatter) 이름과 화면에 그려진 칸 속 링크·onclick 앞부분만
+        const fm = keep.filter((c) => c.formatter).map((c) => `${c.field}:${String(c.formatter).slice(0, 160)}`).slice(0, 8);
+        const links = [...((g.closest && g.closest(".datagrid-wrap, .datagrid")) || d).querySelectorAll("td [onclick], td a")].slice(0, 12).map((a) => (a.getAttribute("onclick") || a.getAttribute("href") || "").slice(0, 160));
+        return { id: g.id || "", cols: keep.map((c) => `${c.field}=${title(c)}`), drop: cs.length - keep.length, n: (L.raw(g) || []).length, rows: rs, fm, links };
+      });
+      // 11/26 KM: O면 O · △면 왜 △인지 확인(△ 칸을 눌러 상세를 읽음) · X면 한글표시사항 앱(수원)에 "X" 알림
+      const norm = (v) => (/^[○◯Oo]$/.test(v) ? "O" : /^[Δ△]$/.test(v) ? "△" : /^[XxＸ×]$/.test(v) ? "X" : "");
+      const SEC = /FOH|BOH/i, mine = (r, g) => { const st = g.cs.filter((c) => /매장|점포/.test(title(c))).map((c) => txt(r[c.field])); return !st.length || st.some((v) => /수원|1345090/.test(v)) || !st.some((v) => v); };
+      const status = {}, sum = [];
+      L.grids().forEach((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); (L.raw(g) || []).forEach((r) => { if (!mine(r, { cs })) return; cs.forEach((c) => { const v = norm(txt(r[c.field])); if (!v) return; sum.push(`${title(c) || c.field}=${v}`); if (SEC.test(title(c))) status[title(c)] = v; }); }); });
+      // △ 상세: 칸 속 링크를 눌러 열린 표·입력칸을 그대로 모양만 남김(규칙은 첫 실제 화면을 본 뒤 붙임). 저장·확인 단추는 안 누름
+      const tri = Object.keys(status).filter((k) => status[k] === "△"), detail = {};
+      const mainG = new Set(L.grids());
+      const triLinks = [...d.querySelectorAll("td a, td [onclick]")].filter((el) => /^[Δ△]$/.test((el.textContent || "").trim()));
+      for (const [n, sec] of tri.slice(0, 4).entries()) {
+        try {
+          const a = triLinks[n];
+          if (!a) { detail[sec] = { err: "△ 링크 없음" }; continue; }
+          const pre = new Set(frames()); press(R, a); await sleep(2500); await L.idle(T.q);
+          const fs = frames().filter((w) => !pre.has(w)); const W = fs.find((w) => { try { return !!w.jQuery; } catch (e) { return false; } }) || R;
+          const $w = W.jQuery, dw = W.document;
+          const gs = $w ? [...dw.querySelectorAll("table[id], div[id]")].filter((el) => $w(el).data("datagrid") && !mainG.has(el)) : []; // 목록 표는 빼고 새로 열린 상세 표만
+          detail[sec] = { url: String(W.location.href).slice(0, 160), dlg: [...d.querySelectorAll(".window .panel-title, .dialog .panel-title")].map((x) => x.textContent.trim()).slice(0, 4), grids: gs.map((g) => { const o = $w(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field && !NAME.test(title(c))); const rs = $w(g).datagrid("getRows") || []; return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: rs.length, rows: rs.slice(0, 240).map((r) => Object.fromEntries(cs.map((c) => [c.field, txt(r[c.field])]))) }; }), imgs: dw.querySelectorAll("img").length };
+        } catch (e) { detail[sec] = { err: String(e && e.message || e).slice(0, 120) }; }
+      }
+      const xs = Object.keys(status).filter((k) => status[k] === "X");
+      const prev = (await get().catch(() => ({})))["lineCheck." + day] || {};
+      let sent = prev.sent || "";
+      const say = xs.length ? `라인체크 X · ${xs.join(", ")} (${day.slice(5).replace("-", "/")}) — 체크 안 됨` : "";
+      if (say && sent !== say && !T.noPush) {
+        try { const r = await fetch(LABEL_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "push_notice", store: "suwon", text: say }) }); const j = await r.json(); if (j && j.sent != null) sent = say; } catch (e) {}
+      }
+      await set("lineCheckProbe", { at: Date.now(), day, url: R.location.href.slice(0, 160), grids, detail });
+      await set("lineCheck." + day, { at: Date.now(), status, marks: sum.slice(0, 40), tri, x: xs, sent });
+      const line = Object.keys(status).map((k) => `${k} ${status[k]}`).join(" · ") || "표시 없음";
+      return finish(true, `LineCheck현황 ${day.slice(5)} · ${line}${tri.length ? " · △ 상세 읽음(이유 규칙은 다음 판)" : ""}${xs.length ? (sent === say ? " · X 알림 보냄" : " · X 알림 못 보냄") : ""}`, {});
+    } catch (e) {
+      return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
+    }
+  }
+
   // ---------- Set판매현황 (11/15 KM 승인 "그래 읽고 너도 분석해봐", kind "sets") ----------
   //  실제 화면(11/15 첫 조회): 매장마다 한 줄, 세트 종류마다 수량·금액·% 칸이 옆으로 늘어선 표(treegrid "tg").
   //   칸: 매장코드·매장명·Gross/Total/RESTAURANT/DELIVERY Sales·매장고객수(CUST_CNT)·PPA, 세트 합계(TOT_CNT), 세트별 *_CNT
@@ -1000,13 +1089,14 @@
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황", xfer: "매장간재고이동" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황", xfer: "매장간재고이동", linecheck: "LineCheck현황" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer(), linecheck: () => runLineCheck() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
   //  1.17.0: today(오늘 중간값)도 종류마다 같이 넘겨야 함. 예전엔 also로 덧붙인 sets의 today:1이 job을 만들 때 빠져서
   //   오늘 중간값이 완결된 하루 기록(setDay.날짜)에 섞였음(매시간 :40 수집). 지금은 req.today → job.today로 그대로 전달
   const queue = [[k0, { from: base.from, to: base.to, force: base.force, today: base.today }]];
+  { const t = new Date(Date.now() + 9 * 3600e3); if (k0 === "now" && base.today && t.getUTCDay() !== 0 && t.getUTCHours() >= 15) queue.push(["linecheck", { to: t.toISOString().slice(0, 10) }]); } // 11/26 KM 라인체크: 당일 되풀이(15:40·19:40)에 덧붙여 조회 (일요일 빼고)
   try {
     while (queue.length && !replaced) {
       const [kind, req] = queue.shift();

@@ -18,6 +18,8 @@ await ctx.route("https://script.google.com/**", async (r) => {
   const body = q.method() === "GET" ? gas.get(Object.fromEntries(new URL(q.url()).searchParams)) : gas.post(JSON.parse(q.postData()));
   r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 });
+const pushes = []; // 한글표시사항 앱(수원) 알림 (11/26 라인체크 X)
+await ctx.route("https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec**", (r) => { pushes.push(JSON.parse(r.request().postData() || "{}")); r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sent: 1 }) }); });
 const swap = {}; // 시험마다 가짜 화면 바꿔 끼우기 (11/18 새 POS 메뉴 칸)
 await ctx.route("https://mis.test/**", (r) => { const n = new URL(r.request().url()).pathname.slice(1); r.fulfill({ path: HERE + "/mock/" + (swap[n] || n) }); });
 await ctx.route("https://mfgkorea.github.io/label-list/mis-sales.js*", (r) => r.fulfill({ path: REPO + "/mis-sales.js", contentType: "text/javascript" }));
@@ -157,6 +159,18 @@ ok(((d["misRecv.2026-11-12"] || {}).rows || []).length === 2 && d["misRecv.2026-
 ok(!JSON.stringify(d).includes("홍길동") && d.recvProbe && d.recvProbe.grids[0].cols.some((c) => /입고수량/.test(c)) && !d.recvProbe.grids[0].rows, "직원 이름은 어디에도 없음 · 열 이름만 기록");
 ok(Array.isArray((d["misRecv.2026-11-10"] || {}).rows) && d["misRecv.2026-11-10"].rows.length === 0 && d.misRecvScan.empty === 10 && d.misRecvScan.days === 2 && d.misRecvScan.all === 1 && !d["misRecv.2026-10-01"], "받은 게 없는 날은 빈 기록(10일) · 기간 밖(10/1)은 안 씀");
 ok(!Object.keys(d).some((k) => /^input\./.test(k)), "입고현황 읽기도 KM 입력(input.날짜)은 안 건드림");
+// 6-3) LineCheck현황 (11/26 KM: O면 O · △면 왜 △인지(상세 읽기) · X면 수원 한글표시사항 앱에 알림). 작성자·매장명 칸 저장 안 함, 저장 단추 안 누름
+let lcw = null;
+d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html", async (p) => { lcw = await p.evaluate(() => [window.__lcWrite || 0, (() => { const f = [...document.querySelectorAll("iframe")].pop(); return f.contentWindow.__q; })(), window.__lcDetail || 0]); });
+const lc = d["lineCheck.2026-11-26"] || {};
+ok(d.salesPush.status === "done" && d.salesPush.parts.linecheck.status === "done", "LineCheck현황 읽기 끝남: " + d.salesPush.parts.linecheck.text);
+ok(lcw[0] === 0 && lcw[1] && lcw[1].day === "2026-11-26" && lcw[1].store === "1345090", "당일·이 매장으로 조회 (저장 단추 안 누름)");
+ok(lc.status && lc.status.FOH === "O" && lc.status.BOH1 === "△" && lc.status.BOH2 === "X", "칸 상태 FOH O · BOH1 △ · BOH2 X");
+ok(lcw[2] === 1 && d.lineCheckProbe.detail.BOH1 && d.lineCheckProbe.detail.BOH1.grids.length === 1 && d.lineCheckProbe.detail.BOH1.grids[0].n === 3, "△는 눌러서 상세 표를 읽음");
+ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /X · BOH2/.test(pushes[0].text) && lc.sent === pushes[0].text, "X면 수원 한글표시사항 앱에 알림 한 번");
+ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2, "작성자·매장명 칸은 저장 안 함");
+d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html");
+ok(pushes.length === 1, "같은 날 같은 X는 다시 알리지 않음");
 // 6-2) 매장간재고이동 (11/17 KM "2번 좋다"): 받은 것(+)은 수령일, 보낸 것(−)은 발송일로 misXfer.날짜에. 등록·수신 단추와 다른 화면은 안 누름, 직원 이름·금액은 저장 안 함
 let opened5 = null, xw = 0;
 d = await run({ kind: "xfer", from: "2026-11-01", to: "2026-11-16" }, "xfer-main.html", async (p) => { opened5 = await p.evaluate(() => window.__opened); xw = await p.evaluate(() => (window.__xferWrite || 0) + (window.__recvEntryOpened || 0)); });
