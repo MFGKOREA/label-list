@@ -19,7 +19,7 @@ await ctx.route("https://script.google.com/**", async (r) => {
   r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 });
 const pushes = []; // 한글표시사항 앱(수원) 알림 (11/26 라인체크 X)
-await ctx.route("https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec**", (r) => { pushes.push(JSON.parse(r.request().postData() || "{}")); r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sent: 1 }) }); });
+await ctx.route("https://script.google.com/macros/s/AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw/exec**", (r) => { pushes.push(JSON.parse(r.request().postData() || "{}")); r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sent: 1 }) }); });
 const swap = {}; // 시험마다 가짜 화면 바꿔 끼우기 (11/18 새 POS 메뉴 칸)
 await ctx.route("https://mis.test/**", (r) => { const n = new URL(r.request().url()).pathname.slice(1); r.fulfill({ path: HERE + "/mock/" + (swap[n] || n) }); });
 await ctx.route("https://mfgkorea.github.io/label-list/mis-sales.js*", (r) => r.fulfill({ path: REPO + "/mis-sales.js", contentType: "text/javascript" }));
@@ -166,7 +166,7 @@ const lc = d["lineCheck.2026-11-26"] || {};
 ok(d.salesPush.status === "done" && d.salesPush.parts.linecheck.status === "done", "LineCheck현황 읽기 끝남: " + d.salesPush.parts.linecheck.text);
 ok(lcw[0] === 0 && lcw[1] && lcw[1].day === "2026-11-26" && lcw[1].store === "1345090", "당일·이 매장으로 조회 (저장 단추 안 누름)");
 ok(lc.status && lc.status["FOH 런치"] === "O" && lc.status["BOH 디너"] === "X" && lc.status["BOH2 런치"] === "△" && lc.status["BOH2 디너"] === "△", "칸 상태(실제 열 이름 BOH2_LUNCH 등): FOH O · BOH X · BOH2 △");
-ok(lcw[2] === 2 && d.lineCheckProbe.detail["BOH2 런치"] && d.lineCheckProbe.detail["BOH2 런치"].grids.length === 1 && d.lineCheckProbe.detail["BOH2 런치"].grids[0].n === 3 && d.lineCheckProbe.evs[0].some((e) => /onClickCell/.test(e)), "△ 칸을 눌러 상세 표를 읽음 (칸 누름 onClickCell)");
+ok(lcw[2] === 1 && d.lineCheckProbe.detail.BOH2 && d.lineCheckProbe.detail.BOH2.grids.length === 1 && d.lineCheckProbe.detail.BOH2.grids[0].n === 3 && d.lineCheckProbe.detail.BOH2.grids[0].rows[1][2] === "100" && d.lineCheckProbe.evs[0].some((e) => /onClickCell/.test(e)), "△ 칸을 눌러 상세 표를 읽음 (칸 누름 onClickCell)");
 ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /X · BOH 런치, BOH 디너/.test(pushes[0].text) && lc.sent === pushes[0].text, "X면 수원 한글표시사항 앱에 알림 한 번");
 ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2 && !JSON.stringify(d.lineCheckProbe).includes("작성자=") , "작성자·매장명 칸은 저장 안 함");
 d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html");

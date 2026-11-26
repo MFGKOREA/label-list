@@ -37,7 +37,7 @@
   // 합계 대조를 "다르면 저장 안 함"으로 (11/15 KM "먼저 할 4가지 바로 진행" 6번 데이터 지킴이).
   //  실제 MIS 화면의 합계 줄이 맞게 읽히는지 첫 결과(11/16 아침)를 본 뒤 true로 바꿈. 그 전엔 알리기만(⚠).
   //  시험은 window.__sumBlock으로 켜고 끔
-  const LABEL_API = (typeof window !== "undefined" && window.__labelApi) || "https://script.google.com/macros/s/AKfycbyPJbVBORKgT-X7ZzyROdnLtK1zRMxPhNPBEqo_UNX2usdGy6YavPyWAduqwdNsaFo/exec"; // 한글표시사항 앱(수원) — 라인체크 X 알림 (11/26 KM)
+  const LABEL_API = (typeof window !== "undefined" && window.__labelApi) || "https://script.google.com/macros/s/AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw/exec"; // 한글표시사항 앱 매장모음(HUB) — 알림은 앱처럼 여기로 store:"suwon" (가게별 주소는 push_notice가 없음, 11/26 첫 시험) — 라인체크 X 알림 (11/26 KM)
   const SUM_BLOCK = typeof window !== "undefined" && typeof window.__sumBlock === "boolean" ? window.__sumBlock : false;
   // 가게 키: 확장이 넣어 줄 땐 주소의 k=, 북마크로 켤 땐 이 MIS 브라우저에 저장해 둔 값 (시트가 잠겨 있으면 필요)
   const KEY = (() => { let k = ""; try { k = new URL(document.currentScript.src).searchParams.get("k") || ""; } catch (e) {} try { if (k) localStorage.setItem("orderAppKey", k); else k = localStorage.getItem("orderAppKey") || ""; } catch (e) {} return k; })();
@@ -932,17 +932,18 @@
       const tri = Object.keys(status).filter((k) => status[k] === "△"), detail = {};
       const mainG = new Set(L.grids());
       const evs = L.grids().map((g) => { const o = $(g).datagrid("options"); return ["onClickCell", "onDblClickCell", "onClickRow", "onDblClickRow", "onSelect"].map((k) => (o[k] && !/^function\s*\(\w*(,\s*\w+)*\)\s*\{\s*\}$/.test(String(o[k])) ? `${k}:${String(o[k]).slice(0, 400)}` : "")).filter(Boolean); });
-      for (const sec of tri.slice(0, 4)) {
+      const triSec = [...new Set(tri.map((k) => k.split(" ")[0]))]; // 런치·디너는 같은 팝업(fn_LineChk_Pop(index, "BOH2")) → 구역마다 한 번
+      for (const sec of triSec.slice(0, 3)) {
         try {
           // △ 칸 누르기: 칸 속 링크가 있으면 그것, 없으면 표의 그 칸(td[field]) — easyui 표는 칸 누름(onClickCell)으로 상세를 엶
-          const td = d.querySelector(`.datagrid-body td[field="${fieldOf[sec]}"]`), a = (td && td.querySelector("a, [onclick]")) || (td && (td.querySelector(".datagrid-cell") || td));
+          const td = d.querySelector(`.datagrid-body td[field="${fieldOf[sec + " 런치"] || fieldOf[sec + " 디너"] || fieldOf[sec]}"]`), a = (td && td.querySelector("a, [onclick]")) || (td && (td.querySelector(".datagrid-cell") || td));
           if (!a) { detail[sec] = { err: "△ 링크 없음" }; continue; }
           const pre = new Set(frames()), opened = []; const hook = (w) => { try { const f = w.open; w.open = function (u) { opened.push(String(u || "").slice(0, 200)); return f.apply(this, arguments); }; return () => { w.open = f; }; } catch (e) { return () => {}; } }; const un = [hook(R), hook(window.top)];
           press(R, a); await sleep(2500); await L.idle(T.q); un.forEach((f) => f());
           const fs = frames().filter((w) => !pre.has(w)); const W = fs.find((w) => { try { return !!w.jQuery; } catch (e) { return false; } }) || R;
           const $w = W.jQuery, dw = W.document;
           const gs = $w ? [...dw.querySelectorAll("table[id], div[id]")].filter((el) => $w(el).data("datagrid") && !mainG.has(el)) : []; // 목록 표는 빼고 새로 열린 상세 표만
-          detail[sec] = { url: String(W.location.href).slice(0, 160), dlg: [...d.querySelectorAll(".window .panel-title, .dialog .panel-title")].map((x) => x.textContent.trim()).slice(0, 4), grids: gs.map((g) => { const o = $w(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field && !NAME.test(title(c))); const rs = $w(g).datagrid("getRows") || []; return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: rs.length, rows: rs.slice(0, 240).map((r) => Object.fromEntries(cs.map((c) => [c.field, txt(r[c.field])]))) }; }), imgs: dw.querySelectorAll("img").length, opened, newFrames: fs.map((w) => { try { return String(w.location.href).slice(0, 160); } catch (e) { return "?"; } }) };
+          detail[sec] = { url: String(W.location.href).slice(0, 160), dlg: [...d.querySelectorAll(".window .panel-title, .dialog .panel-title")].map((x) => x.textContent.trim()).slice(0, 4), grids: gs.map((g) => { const o = $w(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field && !NAME.test(title(c))); const rs = $w(g).datagrid("getRows") || []; return { id: g.id || "", cols: cs.map((c) => `${c.field}=${title(c)}`), n: rs.length, rows: rs.slice(0, 450).map((r) => cs.map((c) => txt(r[c.field]).slice(0, 24))) }; }), imgs: dw.querySelectorAll("img").length, opened, newFrames: fs.map((w) => { try { return String(w.location.href).slice(0, 160); } catch (e) { return "?"; } }) };
         } catch (e) { detail[sec] = { err: String(e && e.message || e).slice(0, 120) }; }
       }
       const xs = Object.keys(status).filter((k) => status[k] === "X");
