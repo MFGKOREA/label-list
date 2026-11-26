@@ -5004,16 +5004,28 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   // 소분(원자재를 포션으로 나눠 둔 것)의 1포션 g: 매장 설정 → 라인 레시피에서 그 품목을 가장 많이 쓰는 g → 자기 자신을 원재료로 하는 포션 프랩
   function invSubG(M, it) {
     const c = num(((db.itemCfg || {})[it.key] || {}).subG); if (c > 0) return { g: c, src: "설정" };
-    const cnt = new Map();
-    M.line.forEach((r) => r.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, i.v); if (t && t.kind === "item" && t.id === it.key && q && q.g) cnt.set(q.g, (cnt.get(q.g) || 0) + 1); }));
-    M.prep.forEach((p) => { const cf = (db.prepCfg || {})[p.name] || {}; if (cf.raw !== it.key) return; const u = invRecipeUnits(M, p).find((o) => o.u === "포션"); if (u) cnt.set(Math.round(u.g), (cnt.get(Math.round(u.g)) || 0) + 3); });
-    const top = [...cnt].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
+    const cnt = new Map(), ea = new Map(), bump = (m, k, w) => m.set(k, (m.get(k) || 0) + w);
+    // 1) 라인 레시피가 그 품목을 바로 쓰는 양 (감자튀김 200g, 판도우 1ea)
+    M.line.forEach((r) => r.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, i.v); if (!t || t.kind !== "item" || t.id !== it.key || !q) return; if (q.g) bump(cnt, q.g, 1); else if (q.ea) bump(ea, q.ea, 1); }));
+    // 2) 원재료 하나를 나눠 담는 포션 프랩(고르곤졸라 포션·핑거립 포션·마늘쫑 포션)을 라인 레시피가 쓰는 양 = 그 원재료 1포션 (고르곤졸라 45g·23g)
+    M.prep.forEach((p) => {
+      const cf = (db.prepCfg || {})[p.name] || {}, ts = p.ing.map((i) => M.resolveIng(i.n)).filter((t) => t && !t.skip);
+      const raw = cf.raw || (ts.length === 1 && ts[0].kind === "item" ? ts[0].id : null); if (raw !== it.key) return;
+      M.line.forEach((r) => r.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, ""); if (t && t.kind === "prep" && t.id === p.name && q && q.g) bump(cnt, q.g, 1); }));
+      const u = invRecipeUnits(M, p).find((o) => o.u === "포션"); if (u && u.g) bump(cnt, Math.round(u.g), 2);
+    });
+    const top = [...cnt].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0], topEa = [...ea].sort((a, b) => b[1] - a[1])[0];
+    // 낱개로 쓰는 품목(판도우·새우·통감자·잠봉 등)은 개수로 셈: 1개 = 재고단위의 1/(한 단위에 든 개수)
+    if ((!top || (topEa && topEa[1] > top[1])) && it.pk.ea > 1) return { ea: 1, src: "낱개" };
     return top ? { g: top[0], src: "레시피" } : null;
   }
-  const INV_SUB = /감자튀김|고르곤졸라|마늘쫑/; // KM이 짚은 소분 품목은 처음부터 소분 칸을 펼침
+  // 처음부터 소분 칸을 펼치는 품목 (11/26 KM이 짚은 감자튀김·고르곤졸라·마늘쫑 + 레시피에서 찾은 "원자재를 포션·낱개로 나눠 쓰는" 품목). 매장이 닫으면 itemCfg.sub = 0
+  //  무게 포션: 감자튀김 200g · 고르곤졸라 45/23g · 마늘쫑 40g · 핑거립 200g · 모짜렐라 슈레드 100g · 그릴마크 옥수수 30/60g · 숙성체다 60g · 리코타 50g · 냉동 블루베리 40g
+  //  낱개: 판도우 · 홀새우 20미 · 베이크드 통감자 · 스마일감자 · 미니잠봉 · 하몽 · 감말랭이 · 미니부라타 · 유린기 · 떡갈비 · 구운 통마늘 · 수란 · 자숙홍합
+  const INV_SUB = /감자튀김|고르곤졸라|마늘쫑|핑거립|모짜렐라슈레드|그릴마크절단옥수수|숙성체다|리코타치즈|냉동블루베리|판도우|홀새우|베이크드통감자|스마일감자|미니잠봉|하몽|감말랭이|미니부라타|유린기|떡갈비|구운통마늘|수란|자숙홍합/;
   const invSubOn = (it) => { const c = (db.itemCfg || {})[it.key] || {}; return c.sub === 1 || (c.sub !== 0 && (num(c.subG) > 0 || INV_SUB.test(it.name))); };
   const invPer = (it) => it.pk.g || it.pk.ml || num(((db.itemCfg || {})[it.key] || {}).unitG) || null; // 재고단위 1개 g (앱에 없으면 매장이 넣은 itemCfg.unitG)
-  const invSubQty = (M, it, n) => { const s = invSubG(M, it), per = invPer(it); return s && per && n > 0 ? (n * s.g) / per : null; };
+  const invSubQty = (M, it, n) => { const s = invSubG(M, it); if (!s || !(n > 0)) return null; if (s.ea) return it.pk.ea > 1 ? n / it.pk.ea : null; const per = invPer(it); return per ? (n * s.g) / per : null; };
   // 앱 예상 재고(발주 계산과 같은 estStock): 센 값이 예상과 크게 다르면 "확인"(44↔4 같은 오타·단위 착오 잡기). 오늘 세는 것만
   const invExpMemo = new WeakMap();
   function invExpected(M) {
@@ -5079,7 +5091,8 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
         let sub = "";
         if (on) {
           const s = invSubG(M, r.it), per = invPer(r.it), own = !(r.it.pk.g || r.it.pk.ml);
-          sub = `<div class="inv-sub"><span>소분</span><input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="–" data-part="sub" data-id="${esc(r.key)}" value="${esc((rec.sub || {})[r.key] ?? "")}" aria-label="${esc(r.name)} 소분 포션 수">${plusBtn("sub", r.key)}<span>포션 ×</span><input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="subg" data-id="${esc(r.key)}" value="${s ? esc(String(Math.round(s.g * 10) / 10)) : ""}" placeholder="g" aria-label="${esc(r.name)} 1포션 g"><span>g${s ? ` <small>(${esc(s.src)})</small>` : ""}${per && !own ? ` · 1${esc(r.unit)} = ${won(per)}g` : ` · 1${esc(r.unit)} = <input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="unitg" data-id="${esc(r.key)}" value="${own && per ? esc(String(per)) : ""}" placeholder="?" aria-label="${esc(r.name)} 1${esc(r.unit)} 무게 g">g${per ? "" : ' <b class="inv-bad">무게를 넣어 주세요</b>'}`}${r.s != null ? ` = <b>${invF(r.s)}${esc(r.unit)}</b>` : ""}</span></div>`;
+          if (s && s.ea) sub = `<div class="inv-sub"><span>낱개</span><input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="–" data-part="sub" data-id="${esc(r.key)}" value="${esc((rec.sub || {})[r.key] ?? "")}" aria-label="${esc(r.name)} 낱개 수">${plusBtn("sub", r.key)}<span>개 · 1${esc(r.unit)} = ${r.it.pk.ea}개${r.s != null ? ` = <b>${invF(r.s)}${esc(r.unit)}</b>` : ""}</span></div>`;
+          else sub = `<div class="inv-sub"><span>소분</span><input type="text" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="–" data-part="sub" data-id="${esc(r.key)}" value="${esc((rec.sub || {})[r.key] ?? "")}" aria-label="${esc(r.name)} 소분 포션 수">${plusBtn("sub", r.key)}<span>포션 ×</span><input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="subg" data-id="${esc(r.key)}" value="${s ? esc(String(Math.round(s.g * 10) / 10)) : ""}" placeholder="g" aria-label="${esc(r.name)} 1포션 g"><span>g${s ? ` <small>(${esc(s.src)})</small>` : ""}${per && !own ? ` · 1${esc(r.unit)} = ${won(per)}g` : ` · 1${esc(r.unit)} = <input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="unitg" data-id="${esc(r.key)}" value="${own && per ? esc(String(per)) : ""}" placeholder="?" aria-label="${esc(r.name)} 1${esc(r.unit)} 무게 g">g${per ? "" : ' <b class="inv-bad">무게를 넣어 주세요</b>'}`}${r.s != null ? ` = <b>${invF(r.s)}${esc(r.unit)}</b>` : ""}</span></div>`;
         }
         const meta = [esc(r.code), e != null ? `예상 ${invF(e)}` : "", r.b ? `프랩 +${invF(r.b)}` : "", r.misOnly ? "MIS 단위" : r.mis ? "" : '<em class="inv-chk">MIS 목록에 없음</em>'].filter(Boolean).join(" · ") + (r.it ? ` <button type="button" class="inv-subbtn" data-subtg="${esc(r.key)}" aria-pressed="${on}">소분${on ? " 닫기" : ""}</button>` : "");
         const sumLine = String(v).includes("+") && invVal(v) != null ? `<span class="inv-eq">= ${invF(invVal(v))}</span>` : "";
@@ -6493,7 +6506,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { invRows: () => invTotals(model()).rows.map((r) => ({ key: r.key, code: r.code, name: r.name, unit: r.unit, mis: r.mis ? r.mis.unit : null, f: r.fx ? r.fx.f : null, soft: !!(r.fx && r.fx.soft), how: r.fx ? r.fx.how : null, misOnly: !!r.misOnly, g: r.g })), invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.def, opts: x.opts.map((o) => o.u + (o.g ? "=" + Math.round(o.g) + "g" : "")) })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
+  window.__orderCalc = { invRows: () => invTotals(model()).rows.map((r) => ({ key: r.key, code: r.code, name: r.name, unit: r.unit, mis: r.mis ? r.mis.unit : null, f: r.fx ? r.fx.f : null, soft: !!(r.fx && r.fx.soft), how: r.fx ? r.fx.how : null, misOnly: !!r.misOnly, g: r.g, sub: r.it && invSubOn(r.it) ? invSubG(model(), r.it) || "?" : null, pkEa: r.it ? r.it.pk.ea : null, pkG: r.it ? r.it.pk.g : null })), invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.def, opts: x.opts.map((o) => o.u + (o.g ? "=" + Math.round(o.g) + "g" : "")) })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
 })();
 
 </script>
