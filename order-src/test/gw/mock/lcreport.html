@@ -19,8 +19,17 @@ function fn_Search() {
     tb.addEventListener("click", function (e) { var td = e.target.closest("td"); if (td) OPT.onClickCell(0, td.getAttribute("field"), ROWS[0][td.getAttribute("field")]); });
     document.body.appendChild(tb); $.active = 0; }, 300);
 }
-function fn_Detail(f) { parent.__lcDetail = (parent.__lcDetail || 0) + 1; if (document.getElementById("dGrid")) return; $.active = 1; setTimeout(function () {
-  var t = document.createElement("table"); t.id = "dGrid"; document.body.appendChild(t); var DR = [{ NO: "37", ITEM: "온도", L: "3", D: "" }, { NO: "71", ITEM: "농도", L: "100", D: "" }, { NO: "179", ITEM: "사진", L: "", D: "" }];
-  var dg = $.fn.datagrid; $.fn.datagrid = function (cmd) { if (this.attr("id") === "dGrid") { if (cmd === "getRows") return DR; if (cmd === "options") return { columns: [[{ field: "NO", title: "No" }, { field: "ITEM", title: "항목" }, { field: "L", title: "런치입력" }, { field: "D", title: "디너입력" }, { field: "NM_USER", title: "작성자" }]] }; } return dg.apply(this, arguments); };
-  $("#dGrid").data("datagrid", 1); $.active = 0; }, 300); }
+function fn_Detail(f) { parent.__lcDetail = (parent.__lcDetail || 0) + 1; if (document.getElementById("PopdataGrid")) return; $.active = 1; setTimeout(function () {
+  // 실제 상세 팝업(PopdataGrid) 열 모양, 줄은 가짜 410줄: 1~36 체크 N, 37~72 입력, 67~72 사진, 145 사워도우 N, 179 사진 빠짐(→ 빠짐 1), 395~406 브런치 N, 407~408 사유+사진, 409~410 N
+  var t = document.createElement("table"); t.id = "PopdataGrid"; document.body.appendChild(t); var DR = [];
+  for (var n = 1; n <= 410; n++) { var r = { KINDNAME: "STOVE", CATEGORYNAME: "Quality Standard", ITEMNAME: "항목" + n, VALUE1: "Y", VALUE2: "Y", VALUE3: "", VALUE4: "", VALUE6: "", VALUE7: "", USER_NM: "홍길동" };
+    if (n <= 36 || n >= 409) { r.KINDNAME = n <= 36 ? "Quality Page" : "Tachometer"; r.VALUE1 = r.VALUE2 = "N"; }
+    if (n >= 37 && n <= 72) { r.VALUE1 = r.VALUE2 = "N"; r.VALUE3 = "1"; r.VALUE4 = n >= 71 ? "" : "2"; if (n >= 71) r.VALUE3 = "100"; if (n >= 67) r.VALUE7 = "http://file/x.jpg"; if (n >= 67 && n <= 70) r.VALUE6 = "Y"; }
+    if (n === 145) { r.ITEMNAME = "해동중 Bread Cut (사워도우 브레드"; r.VALUE1 = r.VALUE2 = "N"; }
+    if (n === 180 || n === 227 || n === 228) r.VALUE7 = "http://file/x.jpg";
+    if (n >= 395 && n <= 406) { r.KINDNAME = "BRUNCH"; r.VALUE1 = r.VALUE2 = "N"; }
+    if (n === 407 || n === 408) { r.KINDNAME = "Tachometer"; r.VALUE1 = r.VALUE2 = "N"; r.VALUE3 = "검수완료"; r.VALUE7 = "http://file/x.jpg"; }
+    DR.push(r); }
+  var dg = $.fn.datagrid; $.fn.datagrid = function (cmd) { if (this.attr("id") === "PopdataGrid") { if (cmd === "getRows") return DR; if (cmd === "options") return { columns: [[{ field: "KINDNAME", title: "대분류" }, { field: "CATEGORYNAME", title: "중분류" }, { field: "ITEMNAME", title: "체크항목" }, { field: "VALUE1", title: "런치체크" }, { field: "VALUE2", title: "디너체크" }, { field: "VALUE3", title: "런치입력" }, { field: "VALUE4", title: "디너입력" }, { field: "VALUE6", title: "프라잉오일 F" }, { field: "VALUE7", title: "이미지" }, { field: "USER_NM", title: "작성자" }]] }; } return dg.apply(this, arguments); };
+  $("#PopdataGrid").data("datagrid", 1); $.active = 0; }, 300); }
 </script></body></html>

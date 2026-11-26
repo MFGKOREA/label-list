@@ -165,9 +165,10 @@ d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html", async (p)
 const lc = d["lineCheck.2026-11-26"] || {};
 ok(d.salesPush.status === "done" && d.salesPush.parts.linecheck.status === "done", "LineCheck현황 읽기 끝남: " + d.salesPush.parts.linecheck.text);
 ok(lcw[0] === 0 && lcw[1] && lcw[1].day === "2026-11-26" && lcw[1].store === "1345090", "당일·이 매장으로 조회 (저장 단추 안 누름)");
-ok(lc.status && lc.status["FOH 런치"] === "O" && lc.status["BOH 디너"] === "X" && lc.status["BOH2 런치"] === "△" && lc.status["BOH2 디너"] === "△", "칸 상태(실제 열 이름 BOH2_LUNCH 등): FOH O · BOH X · BOH2 △");
-ok(lcw[2] === 1 && d.lineCheckProbe.detail.BOH2 && d.lineCheckProbe.detail.BOH2.grids.length === 1 && d.lineCheckProbe.detail.BOH2.grids[0].n === 3 && d.lineCheckProbe.detail.BOH2.grids[0].rows[1][2] === "100" && d.lineCheckProbe.evs[0].some((e) => /onClickCell/.test(e)), "△ 칸을 눌러 상세 표를 읽음 (칸 누름 onClickCell)");
-ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /X · BOH 런치, BOH 디너/.test(pushes[0].text) && lc.sent === pushes[0].text, "X면 수원 한글표시사항 앱에 알림 한 번");
+ok(lc.status && lc.status["FOH 런치"] === "O" && !("BOH 디너" in lc.status) && lc.status["BOH2 런치"] === "△" && lc.status["BOH2 디너"] === "△", "칸 상태(실제 열 이름 BOH2_LUNCH 등): FOH O · BOH2 △ · BOH(1번)는 안 봄 (KM: 수원은 BOH 안 함)");
+ok(lcw[2] === 1 && d.lineCheckProbe.detail.BOH2 && d.lineCheckProbe.detail.BOH2.grids[0].n === 410 && d.lineCheckProbe.evs[0].some((e) => /onClickCell/.test(e)), "△ 칸을 눌러 상세 410줄을 읽음 (칸 누름 onClickCell)");
+ok(lc.why && lc.why.BOH2 && lc.why.BOH2.miss.length === 1 && /^179 .*사진$/.test(lc.why.BOH2.miss[0]) && lc.why.BOH2.ask === 38, "△ 이유: 179 사진 빠짐만 (37~72 입력·71·72 런치 100·407~408 사유+사진은 됨, 브런치·사워도우 뺌, 1~36·409~410은 확인으로만)");
+ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /BOH2 △ 빠짐 1: 항목179 사진/.test(pushes[0].text) && !/BOH 런치|BOH 디너/.test(pushes[0].text) && lc.sent === pushes[0].text, "△ 빠짐이 있으면 수원 앱(store suwon)에만 알림 한 번: " + (pushes[0] || {}).text);
 ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2 && !JSON.stringify(d.lineCheckProbe).includes("작성자=") , "작성자·매장명 칸은 저장 안 함");
 d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html");
 ok(pushes.length === 1, "같은 날 같은 X는 다시 알리지 않음");
