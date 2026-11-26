@@ -830,6 +830,8 @@
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
       it.noLoss = !!(c && c.noLoss); // 수불 로스를 안 곱함 (11/15 KM "레시피 계산으로": 리가토니는 10월 수불 51팩인데 센 값·입고로는 레시피와 같음)
+      it.ssCap = c && num(c.ssCap) > 0 ? num(c.ssCap) : null; // 11/26 KM "샐러드 30팩 심하다": 여유분 상한(사용량 대비 비율). 유통 짧은 잎채소 등
+      if (c && num(c.shelf) > 0) it.shelf = num(c.shelf); // 11/26 KM "샐러드 30팩 심하다": 유통 짧은 품목은 품목 설정(itemCfg.shelf, 일)으로도 — 발주가 하루 사용 × 그 일수를 넘지 않음
       it.useK = (c && num(c.useK) > 0 && num(c.useK)) || 1; // KM이 정한 사용량 반영률 (라구소스 1.2 = 계산보다 20% 더)
       it.countStep = (c && num(c.countStep) > 0 && num(c.countStep)) || 0; // 재고를 박스째로만 세는 품목의 셈 단위 (없으면 최근 기록으로 짐작)
       // 한 번에 쓰는 양 (11/16 KM "대두유가 0.1씩 사용하는 품목이 아니야, 프라이어에 1.5통씩 들어가서"): 조금씩 줄지 않고 쓸 때 통째로 나감
@@ -1500,7 +1502,7 @@
     const fcRel = win.fcVar != null && win.gross > 0 ? Math.sqrt(win.fcVar) / win.gross : fcErr() / Math.sqrt(nd);
     const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * Math.min(1, win.wkGross / win.gross) : 0;
     const guard = OrderPipe.safetyStock(useAvg, sigma, nd, fcRel, ba ? ba.varS : 0, wkPlus);
-    const relErr = guard.rel, relErrSS = guard.relSS, ss = guard.ss;
+    const relErr = guard.rel, relErrSS = guard.relSS, ss = it.ssCap != null ? Math.min(guard.ss, it.ssCap * useAvg) : guard.ss;
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
     // 한 번에 쓰는 품목(useStep): 교체 시점을 모르니 이 기간에 쓸 양이 조금이라도 있으면 한 번은 통째로 들어갈 수 있음 → 쓸 횟수(올림) × 한 번 양은 있어야 함
@@ -1517,7 +1519,7 @@
       // 입고 전에 잡힌 프랩 배치는 자르지 않음: 재료가 모자라면 배치가 입고 뒤로 밀릴 뿐 수요가 없어지지 않음 (11/12 검증 E)
       const batchPre = ba && ba.notes.some((n) => n.d && n.d < wp.today);
       if (!cp.none && !batchPre) {
-        usePost = cp.use; ssPost = Math.min(cp.ss, 0.5 * cp.use); needPost = Math.max(Math.min(cp.need, cp.use + ssPost), lumpOf(cp.use)); usePre = Math.max(0, use - cp.use); // 여유분 상한(11/13 KM 승인, C1): 입고 뒤 여유 ≤ 사용의 절반. 새송이 20→16 등
+        usePost = cp.use; ssPost = Math.min(cp.ss, (it.ssCap != null ? Math.min(0.5, it.ssCap) : 0.5) * cp.use); needPost = Math.max(Math.min(cp.need, cp.use + ssPost), lumpOf(cp.use)); usePre = Math.max(0, use - cp.use); // 여유분 상한(11/13 KM 승인, C1): 입고 뒤 여유 ≤ 사용의 절반. 새송이 20→16 등
         preShort = Math.max(0, usePre - s - inc);
         if (short0 > needPost) { short = needPost; cut = short0 - needPost; }
         floorQ = Math.min(floorQ, usePost);
