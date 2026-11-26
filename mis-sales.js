@@ -957,7 +957,7 @@
         const miss = [], ask = [];
         D.forEach((r, i) => {
           const n = i + 1, it = txt(r.ITEMNAME || r.CATEGORYNAME || r.KINDNAME).slice(0, 18), has = (v) => txt(v) !== "";
-          if (/BRUNCH/i.test(r.KINDNAME) || /사워도우/.test(r.ITEMNAME)) return;
+          if (/BRUNCH/i.test(r.KINDNAME) || /사워도우|sourdough/i.test(r.ITEMNAME)) return;
           const need = [];
           if (n >= 37 && n <= 72) { if (n >= 71) { if (txt(r.VALUE3) !== "100") need.push("런치 100"); } else { if (!has(r.VALUE3)) need.push("런치입력"); if (!has(r.VALUE4)) need.push("디너입력"); } }
           else if (n >= 407 && n <= 408) { if (!has(r.VALUE3)) need.push("런치입력 사유"); }
@@ -972,7 +972,7 @@
       const prev = (await get().catch(() => ({})))["lineCheck." + day] || {};
       let sent = prev.sent || "";
       const md = day.slice(5).replace("-", "/"), missSec = Object.keys(why).filter((k) => why[k].miss.length);
-      const parts = [xs.length ? `X · ${xs.join(", ")} 체크 안 됨` : "", ...missSec.map((k) => `${k} △ 빠짐 ${why[k].miss.length}: ${why[k].miss.slice(0, 3).map((m) => m.replace(/^\d+ /, "")).join(", ")}${why[k].miss.length > 3 ? " 외" : ""}`)].filter(Boolean);
+      const parts = [xs.length ? `X · ${xs.join(", ")} 체크 안 됨` : "", ...missSec.map((k) => `${k} △ 빠짐: ${(() => { const u = [...new Set(why[k].miss.map((m) => m.replace(/^\d+ /, "")))]; return u.slice(0, 3).join(", ") + (u.length > 3 ? " 외" : ""); })()}`)].filter(Boolean);
       const say = parts.length ? `라인체크 ${md} · ${parts.join(" / ")}`.slice(0, 200) : "";
       if (say && sent !== say && !T.noPush) {
         try { const r = await fetch(LABEL_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "push_notice", store: "suwon", text: say }) }); const j = await r.json(); if (j && j.sent != null) sent = say; } catch (e) {}
