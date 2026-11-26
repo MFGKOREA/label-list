@@ -78,6 +78,10 @@ ok(cream && cream[1] === "3" && cream[3] === "0.72" && /^3\.72/.test(cream[4]), 
 const fr = sum.find((r) => /냉동감자튀김/.test(r[0]));
 ok(fr && fr[2] === "1" && /^1PK/.test(fr[4]), "합계: 감자튀김 소분 1PK " + JSON.stringify(fr));
 ok(posts.some((x) => /"key":"inv\./.test(x || "")), "넣은 값은 시트 inv.날짜에 저장");
+const fohIn = await p.evaluate(() => { const M = window.__orderCalc.model(); const foh = new Set(M.items.filter((i) => i.foh).map((i) => i.key)); return [...document.querySelectorAll("#invBody .inv-t tbody tr, #invBody .inv-row")].length >= 0 && foh.size; });
+await p.click("#invSeg [data-iv=raw]"); await p.waitForTimeout(200);
+const fohRows = await p.evaluate(() => { const M = window.__orderCalc.model(); const foh = new Set(M.items.filter((i) => i.foh).map((i) => i.key)); return [...document.querySelectorAll("#invBody .inv-row[data-key]")].filter((r) => foh.has(r.dataset.key)).length; });
+ok(fohIn > 0 && fohRows === 0 && !(await p.$$eval(".inv-h", (a) => a.some((x) => x.textContent === "FOH"))), `FOH 품목은 인벤토리에서 뺌 (FOH ${fohIn}개)`);
 ok(!errs.length, "화면 오류 없음 " + errs.join(" / "));
 console.log(`인벤토리 시험 통과 ${pass} · 실패 ${fail}`);
 await b.close();
