@@ -107,6 +107,14 @@
   </section>
 
   <!-- BOH 수원컨벤션점 발주시트 (11/16 KM: 과거 2주치 재고·발주량 조회·인쇄, 점검용 → 주차별·Forecast·발주품목순, 설명 문구 없이) -->
+  <section class="view" id="v-veg" aria-label="야채 입고일" hidden>
+    <div class="nav">
+      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <h2 class="logtitle">야채 입고일</h2>
+      <span class="right"><button type="button" class="printbtn" id="vegPrint">인쇄</button></span>
+    </div>
+    <div class="vegwrap" id="vegTable"></div>
+  </section>
   <section class="view" id="v-log" aria-label="수원컨벤션점 발주시트" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
@@ -150,6 +158,7 @@
     <div class="catpane" data-cat="order">
     <button type="button" class="locentry" data-go="loc"><span><b>발주 품목 설정</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
     <button type="button" class="locentry" data-go="log"><span><b>수원컨벤션점 발주시트</b></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="veg"><span><b>야채 입고일</b><small>새싹농산 · 남은 재고의 입고일과 사용기한</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>발주 설정</span></div>
     <div class="group">

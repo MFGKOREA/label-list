@@ -1120,6 +1120,24 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 /* 예상이 섞인 안내 줄(.banner.soft)은 바탕이 화면색과 같아(#f4f4f4) 글자만 떠 보였음 → 다른 카드처럼 흰 카드 + 얇은 테두리, 글자색만 옅게 */
 .banner.soft { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
 
+/* 야채 입고일 (11/26) */
+.vegwrap { padding: 0 16px 24px; }
+.vegnote { margin: 4px 0 10px; font-size: 13px; color: var(--muted); }
+.vegt td, .vegt th { vertical-align: top; }
+.vegt td small { display: block; font-size: 11px; color: var(--muted); }
+.vegt tr.v-over td, .vegt tr.v-over th { color: #d62d2d; }
+.vegt tr.v-soon td b, .vegt tr.v-soon th { color: #c46a00; }
+.vegt input.vegd { width: 44px; font-size: 16px; text-align: right; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; background: var(--surface); color: var(--fg); }
+@media print {
+  body.veg-print, body.veg-print .app, body.veg-print main { background: #fff !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  body.veg-print .view:not(#v-veg), body.veg-print #dock, body.veg-print .toast, body.veg-print #v-veg .back, body.veg-print #v-veg .printbtn { display: none !important; }
+  body.veg-print #v-veg { display: block !important; padding: 0 !important; }
+  body.veg-print .vegt { font-size: 10px; width: 100%; color: #000; }
+  body.veg-print .vegt th, body.veg-print .vegt td { color: #000 !important; background: #fff !important; border-bottom: .4pt solid #999; position: static !important; }
+  body.veg-print .vegt input.vegd { border: 0; width: 24px; font-size: 10px; }
+  body.veg-print .logscroll { overflow: visible !important; max-height: none !important; }
+}
+
 </style>
 </head>
 <body>
@@ -1232,6 +1250,14 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
   </section>
 
   <!-- BOH 수원컨벤션점 발주시트 (11/16 KM: 과거 2주치 재고·발주량 조회·인쇄, 점검용 → 주차별·Forecast·발주품목순, 설명 문구 없이) -->
+  <section class="view" id="v-veg" aria-label="야채 입고일" hidden>
+    <div class="nav">
+      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <h2 class="logtitle">야채 입고일</h2>
+      <span class="right"><button type="button" class="printbtn" id="vegPrint">인쇄</button></span>
+    </div>
+    <div class="vegwrap" id="vegTable"></div>
+  </section>
   <section class="view" id="v-log" aria-label="수원컨벤션점 발주시트" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
@@ -1275,6 +1301,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
     <div class="catpane" data-cat="order">
     <button type="button" class="locentry" data-go="loc"><span><b>발주 품목 설정</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
     <button type="button" class="locentry" data-go="log"><span><b>수원컨벤션점 발주시트</b></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    <button type="button" class="locentry" data-go="veg"><span><b>야채 입고일</b><small>새싹농산 · 남은 재고의 입고일과 사용기한</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
 
     <div class="sect"><span>발주 설정</span></div>
     <div class="group">
@@ -3406,7 +3433,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -3440,6 +3467,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     if (to === "report") renderReport();
     if (to === "loc") renderLocEdit();
     if (to === "log") renderStockLog();
+    if (to === "veg") renderVeg();
     if (to === "files") locSumUpdate();
   }
   document.addEventListener("click", (e) => {
@@ -4701,6 +4729,37 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     window.print(); setTimeout(() => { document.body.classList.remove("log-print"); document.title = t0; }, 800);
   });
   window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
+  // 야채 입고일 (11/26 KM "야채 입고일 시트를 만들고 싶은데" → 입고일·유통기한 표, 새싹농산 BOH 전체)
+  //  지금 재고(오늘 센 값, 없으면 예상 재고)를 최근 입고부터 거꾸로 채워(먼저 들어온 것부터 씀) 남은 재고가 어느 날 입고분인지 → 며칠째 · 사용기한(입고일 + 보관일)
+  //  입고 = MIS 입고현황(misRecv) + 손으로 적은 입고(recvAdd). 보관일은 품목마다 바꿀 수 있음(itemCfg.vegDays), 안 정하면 기본값(VEG_DAYS)
+  const VEG_DAYS = [[/루꼴라|애플민트/, 3], [/쪽파|무채|당근채|바나나|느타리|깐대파/, 4], [/가지|방울토마토/, 5], [/간마늘|새송이|미니양배추|로즈마리|파프리카/, 7], [/깐마늘/, 10], [/어니언/, 14]];
+  const vegDaysOf = (it) => { const c = num(((db.itemCfg || {})[it.key] || {}).vegDays); if (c > 0) return { d: c, set: true }; const m = VEG_DAYS.find(([re]) => re.test(it.name)); return m ? { d: m[1], set: false } : null; };
+  function renderVeg() {
+    const M = model(), list = M.items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden && /새싹/.test(i.vendor || "") && !/소금/.test(i.name));
+    const rows = list.map((it) => {
+      const v = (db["input." + TODAY] || {})[it.key], cnt = counted(v), e = cnt ? null : estStock(it, TODAY), stock = cnt ? stockOf(it, v) : e ? Math.max(0, e.v) : null;
+      const rec = []; for (let k = 0; k <= 35; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if (a.d <= TODAY && a.d >= addDays(TODAY, -28)) rec.push({ d: a.d, q: a.q, ord: !a.recv }); }); // 입고현황이 아직 없는 날(어제·오늘)은 발주(주문현황 입고일)로
+      rec.sort((a, b) => (a.d < b.d ? 1 : -1));
+      let left = stock || 0; const lots = []; for (const r of rec) { if (left <= 1e-9) break; if (r.q <= 0) continue; const t = Math.min(r.q, left); lots.push({ d: r.d, q: t, ord: r.ord }); left -= t; }
+      const old = left > 1e-9, oldest = lots.length ? lots[lots.length - 1].d : null, vd = vegDaysOf(it);
+      const until = oldest && vd ? addDays(oldest, vd.d) : null, ageD = oldest ? Math.round((parseISO(TODAY) - parseISO(oldest)) / 864e5) : null;
+      const st = until ? (until < TODAY ? "over" : until <= addDays(TODAY, 1) ? "soon" : "ok") : old ? "soon" : "ok";
+      return { it, stock, cnt, lots, old, oldest, ageD, until, vd, st, last: rec[0] || null };
+    }).sort((a, b) => ({ over: 0, soon: 1, ok: 2 }[a.st] - { over: 0, soon: 1, ok: 2 }[b.st]) || (a.until || "9") .localeCompare(b.until || "9"));
+    const md2 = (d) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}(${DOW[dow(d)]})`, f1 = (x) => String(Math.round(x * 10) / 10);
+    $("vegTable").innerHTML = `<p class="vegnote">${md2(TODAY)} 기준 · 입고현황은 ${(Object.keys(db).filter((k) => /^misRecv\.\d{4}-\d\d-\d\d$/.test(k)).sort().pop() || "—").slice(13).replace("-", "/")}까지(그 뒤는 발주 입고일로) · 남은 재고 = 최근 입고분부터(먼저 온 것부터 씀) · 보관일을 바꾸면 저장</p>` +
+      `<div class="logscroll"><table class="logt vegt"><thead><tr><th class="nm">품목</th><th>재고</th><th>남은 것 입고일</th><th>사용기한</th><th>며칠째</th><th>보관일</th><th class="nm">최근 입고</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr class="v-${r.st}"><th class="nm" scope="row">${esc(cardName(r.it))}</th>` +
+        `<td>${r.stock == null ? "—" : f1(r.stock) + esc(r.it.pk.stock || "")}${r.cnt ? "" : "<small>예상</small>"}</td>` +
+        `<td>${r.lots.length ? r.lots.map((l) => `${md2(l.d)} ${f1(l.q)}${l.ord ? "<small>발주 기준</small>" : ""}`).join("<br>") : "—"}${r.old ? "<br><small>그 전 입고분 있음</small>" : ""}</td>` +
+        `<td><b>${r.until ? md2(r.until) : "—"}</b>${r.st === "over" ? "<small>지남</small>" : r.st === "soon" ? "<small>곧</small>" : ""}</td>` +
+        `<td>${r.ageD == null ? "—" : r.ageD + "일"}</td>` +
+        `<td><input class="vegd" type="number" inputmode="numeric" min="1" max="60" data-key="${esc(r.it.key)}" value="${r.vd ? r.vd.d : ""}" aria-label="${esc(r.it.name)} 보관일"${r.vd && !r.vd.set ? ' title="기본값 — 매장 기준으로 바꿔 주세요"' : ""}>${r.vd && !r.vd.set ? "<small>기본</small>" : ""}</td>` +
+        `<td class="nm">${r.last ? `${md2(r.last.d)} ${f1(r.last.q)}` : "4주 안 입고 없음"}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  }
+  $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
+  $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
   function locSumUpdate() {
     const all = model().items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden);
     const hid = model().items.filter((i) => !i.ledgerOnly && i.hidden).length;

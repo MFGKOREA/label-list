@@ -1099,3 +1099,21 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 .chips#sorts button { min-height: 40px; } /* 업체·위치 칩과 같은 높이 */
 /* 예상이 섞인 안내 줄(.banner.soft)은 바탕이 화면색과 같아(#f4f4f4) 글자만 떠 보였음 → 다른 카드처럼 흰 카드 + 얇은 테두리, 글자색만 옅게 */
 .banner.soft { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* 야채 입고일 (11/26) */
+.vegwrap { padding: 0 16px 24px; }
+.vegnote { margin: 4px 0 10px; font-size: 13px; color: var(--muted); }
+.vegt td, .vegt th { vertical-align: top; }
+.vegt td small { display: block; font-size: 11px; color: var(--muted); }
+.vegt tr.v-over td, .vegt tr.v-over th { color: #d62d2d; }
+.vegt tr.v-soon td b, .vegt tr.v-soon th { color: #c46a00; }
+.vegt input.vegd { width: 44px; font-size: 16px; text-align: right; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; background: var(--surface); color: var(--fg); }
+@media print {
+  body.veg-print, body.veg-print .app, body.veg-print main { background: #fff !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  body.veg-print .view:not(#v-veg), body.veg-print #dock, body.veg-print .toast, body.veg-print #v-veg .back, body.veg-print #v-veg .printbtn { display: none !important; }
+  body.veg-print #v-veg { display: block !important; padding: 0 !important; }
+  body.veg-print .vegt { font-size: 10px; width: 100%; color: #000; }
+  body.veg-print .vegt th, body.veg-print .vegt td { color: #000 !important; background: #fff !important; border-bottom: .4pt solid #999; position: static !important; }
+  body.veg-print .vegt input.vegd { border: 0; width: 24px; font-size: 10px; }
+  body.veg-print .logscroll { overflow: visible !important; max-height: none !important; }
+}

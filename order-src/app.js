@@ -1847,7 +1847,7 @@
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -1881,6 +1881,7 @@
     if (to === "report") renderReport();
     if (to === "loc") renderLocEdit();
     if (to === "log") renderStockLog();
+    if (to === "veg") renderVeg();
     if (to === "files") locSumUpdate();
   }
   document.addEventListener("click", (e) => {
@@ -3142,6 +3143,37 @@
     window.print(); setTimeout(() => { document.body.classList.remove("log-print"); document.title = t0; }, 800);
   });
   window.addEventListener("afterprint", () => document.body.classList.remove("log-print"));
+  // 야채 입고일 (11/26 KM "야채 입고일 시트를 만들고 싶은데" → 입고일·유통기한 표, 새싹농산 BOH 전체)
+  //  지금 재고(오늘 센 값, 없으면 예상 재고)를 최근 입고부터 거꾸로 채워(먼저 들어온 것부터 씀) 남은 재고가 어느 날 입고분인지 → 며칠째 · 사용기한(입고일 + 보관일)
+  //  입고 = MIS 입고현황(misRecv) + 손으로 적은 입고(recvAdd). 보관일은 품목마다 바꿀 수 있음(itemCfg.vegDays), 안 정하면 기본값(VEG_DAYS)
+  const VEG_DAYS = [[/루꼴라|애플민트/, 3], [/쪽파|무채|당근채|바나나|느타리|깐대파/, 4], [/가지|방울토마토/, 5], [/간마늘|새송이|미니양배추|로즈마리|파프리카/, 7], [/깐마늘/, 10], [/어니언/, 14]];
+  const vegDaysOf = (it) => { const c = num(((db.itemCfg || {})[it.key] || {}).vegDays); if (c > 0) return { d: c, set: true }; const m = VEG_DAYS.find(([re]) => re.test(it.name)); return m ? { d: m[1], set: false } : null; };
+  function renderVeg() {
+    const M = model(), list = M.items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden && /새싹/.test(i.vendor || "") && !/소금/.test(i.name));
+    const rows = list.map((it) => {
+      const v = (db["input." + TODAY] || {})[it.key], cnt = counted(v), e = cnt ? null : estStock(it, TODAY), stock = cnt ? stockOf(it, v) : e ? Math.max(0, e.v) : null;
+      const rec = []; for (let k = 0; k <= 35; k++) arrivalsOf(it, addDays(TODAY, -k)).forEach((a) => { if (a.d <= TODAY && a.d >= addDays(TODAY, -28)) rec.push({ d: a.d, q: a.q, ord: !a.recv }); }); // 입고현황이 아직 없는 날(어제·오늘)은 발주(주문현황 입고일)로
+      rec.sort((a, b) => (a.d < b.d ? 1 : -1));
+      let left = stock || 0; const lots = []; for (const r of rec) { if (left <= 1e-9) break; if (r.q <= 0) continue; const t = Math.min(r.q, left); lots.push({ d: r.d, q: t, ord: r.ord }); left -= t; }
+      const old = left > 1e-9, oldest = lots.length ? lots[lots.length - 1].d : null, vd = vegDaysOf(it);
+      const until = oldest && vd ? addDays(oldest, vd.d) : null, ageD = oldest ? Math.round((parseISO(TODAY) - parseISO(oldest)) / 864e5) : null;
+      const st = until ? (until < TODAY ? "over" : until <= addDays(TODAY, 1) ? "soon" : "ok") : old ? "soon" : "ok";
+      return { it, stock, cnt, lots, old, oldest, ageD, until, vd, st, last: rec[0] || null };
+    }).sort((a, b) => ({ over: 0, soon: 1, ok: 2 }[a.st] - { over: 0, soon: 1, ok: 2 }[b.st]) || (a.until || "9") .localeCompare(b.until || "9"));
+    const md2 = (d) => `${+d.slice(5, 7)}/${+d.slice(8, 10)}(${DOW[dow(d)]})`, f1 = (x) => String(Math.round(x * 10) / 10);
+    $("vegTable").innerHTML = `<p class="vegnote">${md2(TODAY)} 기준 · 입고현황은 ${(Object.keys(db).filter((k) => /^misRecv\.\d{4}-\d\d-\d\d$/.test(k)).sort().pop() || "—").slice(13).replace("-", "/")}까지(그 뒤는 발주 입고일로) · 남은 재고 = 최근 입고분부터(먼저 온 것부터 씀) · 보관일을 바꾸면 저장</p>` +
+      `<div class="logscroll"><table class="logt vegt"><thead><tr><th class="nm">품목</th><th>재고</th><th>남은 것 입고일</th><th>사용기한</th><th>며칠째</th><th>보관일</th><th class="nm">최근 입고</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr class="v-${r.st}"><th class="nm" scope="row">${esc(cardName(r.it))}</th>` +
+        `<td>${r.stock == null ? "—" : f1(r.stock) + esc(r.it.pk.stock || "")}${r.cnt ? "" : "<small>예상</small>"}</td>` +
+        `<td>${r.lots.length ? r.lots.map((l) => `${md2(l.d)} ${f1(l.q)}${l.ord ? "<small>발주 기준</small>" : ""}`).join("<br>") : "—"}${r.old ? "<br><small>그 전 입고분 있음</small>" : ""}</td>` +
+        `<td><b>${r.until ? md2(r.until) : "—"}</b>${r.st === "over" ? "<small>지남</small>" : r.st === "soon" ? "<small>곧</small>" : ""}</td>` +
+        `<td>${r.ageD == null ? "—" : r.ageD + "일"}</td>` +
+        `<td><input class="vegd" type="number" inputmode="numeric" min="1" max="60" data-key="${esc(r.it.key)}" value="${r.vd ? r.vd.d : ""}" aria-label="${esc(r.it.name)} 보관일"${r.vd && !r.vd.set ? ' title="기본값 — 매장 기준으로 바꿔 주세요"' : ""}>${r.vd && !r.vd.set ? "<small>기본</small>" : ""}</td>` +
+        `<td class="nm">${r.last ? `${md2(r.last.d)} ${f1(r.last.q)}` : "4주 안 입고 없음"}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  }
+  $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
+  $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
   function locSumUpdate() {
     const all = model().items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden);
     const hid = model().items.filter((i) => !i.ledgerOnly && i.hidden).length;
