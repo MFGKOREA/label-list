@@ -2389,7 +2389,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
       it.noLoss = !!(c && c.noLoss); // 수불 로스를 안 곱함 (11/15 KM "레시피 계산으로": 리가토니는 10월 수불 51팩인데 센 값·입고로는 레시피와 같음)
-      it.ssCap = c && num(c.ssCap) > 0 ? num(c.ssCap) : null; // 11/26 KM "샐러드 30팩 심하다": 여유분 상한(사용량 대비 비율). 유통 짧은 잎채소 등
+      it.ssCap = c && c.ssCap !== "" && c.ssCap != null && num(c.ssCap) >= 0 ? num(c.ssCap) : null; /* 0 = 여유분 없음 (11/26 KM "샐러드는 여유분 제외") */ // 11/26 KM "샐러드 30팩 심하다": 여유분 상한(사용량 대비 비율). 유통 짧은 잎채소 등
       if (c && num(c.shelf) > 0) it.shelf = num(c.shelf); // 11/26 KM "샐러드 30팩 심하다": 유통 짧은 품목은 품목 설정(itemCfg.shelf, 일)으로도 — 발주가 하루 사용 × 그 일수를 넘지 않음
       it.useK = (c && num(c.useK) > 0 && num(c.useK)) || 1; // KM이 정한 사용량 반영률 (라구소스 1.2 = 계산보다 20% 더)
       it.countStep = (c && num(c.countStep) > 0 && num(c.countStep)) || 0; // 재고를 박스째로만 세는 품목의 셈 단위 (없으면 최근 기록으로 짐작)
