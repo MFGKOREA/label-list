@@ -102,6 +102,14 @@ await p.click("#invFilt [data-f=all]");
 await p.click("#invSeg [data-iv=sum]"); await p.waitForTimeout(200);
 const eggSum = await p.evaluate(() => { const r = [...document.querySelectorAll(".inv-t tbody tr")].find((x) => /계란/.test(x.textContent)); return r && [...r.children].map((c) => c.textContent); });
 ok(eggSum && /^3판/.test(eggSum[4]), "합계: 계란 90개 = MIS 3판 " + JSON.stringify(eggSum));
+// 엔터 = 저장하고 다음 품목 셈 칸으로 (11/26 KM)
+await p.click("#invSeg [data-iv=raw]"); await p.waitForTimeout(200);
+const ids0 = await p.$$eval("#invBody input[data-part=raw]", (a) => a.slice(5, 7).map((x) => x.dataset.id));
+await p.focus(`#invBody input[data-part=raw][data-id="${ids0[0]}"]`);
+await p.keyboard.type("7"); await p.keyboard.press("Enter"); await p.waitForTimeout(150);
+await p.keyboard.type("2+1"); await p.keyboard.press("Enter"); await p.waitForTimeout(150);
+const enterRes = await p.evaluate((ids) => ({ v0: document.querySelector(`#invBody input[data-part=raw][data-id="${CSS.escape(ids[0])}"]`).value, v1: document.querySelector(`#invBody input[data-part=raw][data-id="${CSS.escape(ids[1])}"]`).value, act: document.activeElement && document.activeElement.dataset.part }), ids0);
+ok(enterRes.v0 === "7" && enterRes.v1 === "2+1" && enterRes.act === "raw", "엔터: 저장하고 바로 다음 품목 칸으로 " + JSON.stringify(enterRes));
 ok(!(await p.$("#invPrintBtn")) && !(await p.$("#invPrint")), "종이 점검표는 없음 (11/26 KM 삭제)");
 ok(!errs.length, "화면 오류 없음 " + errs.join(" / "));
 console.log(`인벤토리 시험 통과 ${pass} · 실패 ${fail}`);

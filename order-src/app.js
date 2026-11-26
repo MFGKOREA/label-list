@@ -3445,10 +3445,17 @@
     }
   }
   // 다시 그려도 화면 위치와 지금 커서가 있는 칸을 그대로 (엔터로 다음 칸에 간 뒤 앞 칸의 change가 와도 다음 칸에 머묾)
+  //  다른 칸을 눌러 커서가 옮겨 가는 중에 오는 change는 새 칸이 정해진 뒤(다음 틱)에 다시 그림 → 누른 칸에 커서가 남음
+  let invKeepT = 0;
   const invKeep = (sel) => {
-    const a = document.activeElement, cur = a && a.dataset && a.dataset.part ? `[data-part=${a.dataset.part}][data-id="${CSS.escape(a.dataset.id)}"]` : null;
-    const y = window.scrollY; renderInv(); window.scrollTo(0, y);
-    const n = (cur && document.querySelector("#invBody " + cur)) || (sel && document.querySelector(sel)); if (n) n.focus({ preventScroll: true });
+    clearTimeout(invKeepT);
+    invKeepT = setTimeout(() => {
+      const a = document.activeElement, cur = a && a.dataset && a.dataset.part ? `[data-part=${a.dataset.part}][data-id="${CSS.escape(a.dataset.id)}"]` : null;
+      const pos = a && typeof a.selectionStart === "number" ? a.selectionStart : null;
+      const y = window.scrollY; renderInv(); window.scrollTo(0, y);
+      const n = (cur && document.querySelector("#invBody " + cur)) || (sel && document.querySelector(sel));
+      if (n) { n.focus({ preventScroll: true }); try { if (pos != null) n.setSelectionRange(pos, pos); } catch (e) {} }
+    }, 0);
   };
   const cfgSet = (k, id, patch) => { db[k] = { ...(db[k] || {}) }; const c = { ...(db[k][id] || {}), ...patch }; Object.keys(patch).forEach((f) => { if (patch[f] === undefined) delete c[f]; }); db[k][id] = c; setKey(k, db[k]); };
   $("invSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-iv]"); if (!b) return; invTab = b.dataset.iv; renderInv(); window.scrollTo(0, 0); });
@@ -3471,22 +3478,40 @@
     cfgSet("itemCfg", it.key, { sub: invSubOn(it) ? 0 : 1 });
     invKeep(invSubOn(it) ? `input[data-part=sub][data-id="${CSS.escape(it.key)}"]` : null);
   });
+  // 칸 값 저장 (change·엔터 둘 다). 이미 같은 값이면 아무것도 안 함 → 엔터로 저장한 뒤 커서가 빠지며 오는 change가 두 번 저장하지 않음
+  function invCommit(i) {
+    const part = i.dataset.part, id = i.dataset.id, v = i.value.trim().replace(/\+$/, "");
+    if (part === "subg") { cfgSet("itemCfg", id, { subG: num(v) > 0 ? num(v) : undefined }); return; }
+    if (part === "unitg") { cfgSet("itemCfg", id, { unitG: num(v) > 0 ? num(v) : undefined }); return; }
+    if (part === "pu") { const x = invPreps(model()).find((p) => p.id === id); if (x && x.pdf) cfgSet("prepCfg", x.pdf.name, { invU: v }); invSave("prepU", id, v); return; }
+    if (String((invRec()[part] || {})[id] ?? "") === v) return;
+    invSave(part, id, v);
+    if (part === "prep") { const x = invPreps(model()).find((p) => p.id === id); if (x && !(invRec().prepU || {})[id]) invSave("prepU", id, x.def); }
+  }
   $("invBody").addEventListener("change", (e) => {
     const fx = e.target.closest("[data-fx]");
     if (fx) { cfgSet("itemCfg", fx.dataset.fx, { misF: num(fx.value) > 0 ? num(fx.value) : undefined }); invKeep(); return; }
-    const i = e.target.closest("[data-part]"); if (!i) return;
-    const part = i.dataset.part, id = i.dataset.id, v = i.value.trim().replace(/\+$/, "");
-    if (part === "subg") { cfgSet("itemCfg", id, { subG: num(v) > 0 ? num(v) : undefined }); invKeep(); return; }
-    if (part === "unitg") { cfgSet("itemCfg", id, { unitG: num(v) > 0 ? num(v) : undefined }); invKeep(); return; }
-    if (part === "pu") {
-      const x = invPreps(model()).find((p) => p.id === id); if (x && x.pdf) cfgSet("prepCfg", x.pdf.name, { invU: v });
-      invSave("prepU", id, v); invKeep(); return;
-    }
-    invSave(part, id, v);
-    if (part === "prep") { const x = invPreps(model()).find((p) => p.id === id); if (x && !(invRec().prepU || {})[id]) invSave("prepU", id, x.def); }
-    invKeep();
+    const i = e.target.closest("[data-part]"); if (!i || !i.isConnected) return;
+    const before = JSON.stringify(invRec());
+    invCommit(i);
+    if (/^(subg|unitg|pu)$/.test(i.dataset.part) || JSON.stringify(invRec()) !== before) invKeep();
   });
-  $("invBody").addEventListener("keydown", (e) => { if (e.key !== "Enter") return; const i = e.target.closest("input[data-part]"); if (!i) return; e.preventDefault(); const all = [...$("invBody").querySelectorAll("input[data-part=raw], input[data-part=sub], input[data-part=prep]:not([disabled])")], n = all[all.indexOf(i) + 1]; if (n) { n.focus(); n.scrollIntoView({ block: "center", behavior: "smooth" }); } else i.blur(); });
+  // 엔터 = 지금 칸을 바로 저장하고 다음 품목 칸으로 (11/26 KM "쓰고 엔터 누르면 바로 다음 품목으로").
+  //  예전엔 다음 칸으로 커서를 옮긴 뒤 앞 칸의 change(커서가 빠질 때)로 다시 그려서, 그 사이 커서가 사라지곤 했음 → 엔터에서 직접 저장하고 다음 칸을 정해 다시 그림.
+  //  다음 = 같은 탭의 다음 품목 셈 칸(소분·g 칸은 건너뜀). 끝이면 키보드를 닫음
+  $("invBody").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    const i = e.target.closest("input[data-part]"); if (!i) return;
+    e.preventDefault();
+    const rowsSel = "input[data-part=raw], input[data-part=prep]:not([disabled])";
+    const all = [...$("invBody").querySelectorAll(rowsSel)], row = i.closest(".inv-row");
+    const here = row ? row.querySelector(rowsSel) : i, n = all[all.indexOf(here) + 1];
+    const nextSel = n ? `#invBody input[data-part=${n.dataset.part}][data-id="${CSS.escape(n.dataset.id)}"]` : null;
+    invCommit(i); clearTimeout(invKeepT);
+    const y = window.scrollY; renderInv(); window.scrollTo(0, y);
+    const nn = nextSel && document.querySelector(nextSel);
+    if (nn) { nn.focus({ preventScroll: true }); nn.scrollIntoView({ block: "center", behavior: calm() ? "auto" : "smooth" }); } else if (document.activeElement) document.activeElement.blur();
+  });
   $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
   $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
   function locSumUpdate() {
