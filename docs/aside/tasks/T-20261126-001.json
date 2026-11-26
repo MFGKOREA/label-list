@@ -1,0 +1,15 @@
+{
+  "task_id": "T-20261126-001",
+  "intent": "MIS 경영정보에서 월재고마감(재고실사) 화면을 찾아 조회만 하고, 메뉴 경로·조회 조건·표의 열 이름·단위 칸·입력 방식(칸 직접 입력/엑셀 올리기)·버튼 이름을 표로 보고한다. 끝 기준: 표 6칸이 다 차고 스크린샷 3장을 KM에게 넘김",
+  "assigned_to": "aside",
+  "verify_by": "claude-code",
+  "sla_sec": 600,
+  "retry_count": 0,
+  "max_retries": 3,
+  "status": "queued",
+  "evidence": [],
+  "created_at": "2026-11-26T22:30:00+09:00",
+  "fallback": ["km"],
+  "source": "11/26 KM: 발주앱 인벤토리 탭 합계를 MIS 월재고마감에 넣기 위해 화면 구조 확인",
+  "result_path": "docs/aside/reports/report-20261126-mis-month-stock.md"
+}
