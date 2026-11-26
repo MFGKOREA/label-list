@@ -1170,19 +1170,6 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 .inv-todo { margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: var(--fill); font-size: 13px; }
 .inv-todo summary { font-weight: 700; cursor: pointer; }
 .inv-todo p { margin: 8px 0 0; color: var(--muted); text-wrap: pretty; }
-.inv-print-area { display: none; }
-@media print {
-  body.inv-print .view, body.inv-print #dock, body.inv-print .toast, body.inv-print .totop, body.inv-print .totop-pos { display: none !important; }
-  body.inv-print #v-inv { display: block !important; }
-  body.inv-print #v-inv > :not(#invPrint) { display: none !important; }
-  body.inv-print #invPrint { display: block; color: #000; }
-  #invPrint h1 { font-size: 15px; margin: 0 0 6px; }
-  #invPrint h1.pb { break-before: page; }
-  #invPrint table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-  #invPrint th, #invPrint td { border: 1px solid #999; padding: 3px 4px; text-align: left; }
-  #invPrint td.box { width: 56px; }
-  #invPrint tr.g td { background: #eee; font-weight: 700; }
-}
 /* 선택지 줄이기 (11/26 KM 공유): 줄마다 붙던 + · 소분은 그 줄을 누를 때만, 단위 고르기는 글자처럼, 메인 버튼 하나 */
 .inv-row .inv-plus { display: none; }
 .inv-row:focus-within .inv-plus { display: inline-block; }
@@ -1199,7 +1186,5 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 .inv-issues summary { font-weight: 800; color: var(--c-fc); cursor: pointer; }
 .inv-issues ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
 .inv-issues li { margin: 4px 0; text-wrap: pretty; }
-.inv-foot { display: flex; justify-content: center; padding: 8px 0 100px; }
-.inv-body { padding-bottom: 8px; }
-.inv-link { border: 0; background: none; font: inherit; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; padding: 10px; }
+.inv-body { padding-bottom: 100px; }
 .inv-date { border-color: transparent; background: none; color: var(--muted); }

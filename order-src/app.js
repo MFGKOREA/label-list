@@ -3444,19 +3444,6 @@
       const cp = $("invCopy"); if (cp) cp.onclick = () => { const t = inMis.map((r) => [r.code, r.name, r.misQ != null ? invF(r.misQ) : "", r.mis.unit].join("\t")).join("\n"); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(`${inMis.length}품목 복사 · 엑셀이나 메모에 붙여 넣기`), () => toast("복사가 안 돼요")); };
     }
   }
-  // 종이 점검표 (인쇄): 위치 순서 원자재 + 프랩. 센 값이 있으면 같이, 없으면 빈 칸 — 폰 없이 돌며 적을 때
-  function printInv() {
-    const M = model(), rec = invRec(), T = invTotals(M), EXP = invExpected(M), preps = invPreps(M);
-    let h = `<h1>인벤토리 점검표 · ${esc(invDay())}</h1>`, last = "";
-    h += `<table><thead><tr><th>품목</th><th>코드</th><th>단위</th><th>예상</th><th>셈</th><th>소분(포션)</th></tr></thead><tbody>`;
-    T.rows.filter((r) => !r.stop).forEach((r) => { if (r.g !== last) { h += `<tr class="g"><td colspan="6">${esc(r.g)}</td></tr>`; last = r.g; } const e = r.it ? EXP.get(r.key) : null; h += `<tr><td>${esc(r.name)}</td><td>${esc(r.code)}</td><td>${esc(r.unit)}</td><td>${e != null ? invF(e) : ""}</td><td class="box">${esc((rec.raw || {})[r.key] ?? "")}</td><td class="box">${r.it && invSubOn(r.it) ? esc((rec.sub || {})[r.key] ?? "") : ""}</td></tr>`; });
-    h += `</tbody></table><h1 class="pb">프랩</h1><table><thead><tr><th>프랩</th><th>단위</th><th>환산 기준</th><th>셈</th></tr></thead><tbody>`;
-    preps.forEach((x) => { const u = (rec.prepU || {})[x.id] || x.def, o = x.opts.find((k) => k.u === u) || {}; h += `<tr><td>${esc(x.name)}</td><td>${esc(o.label || u || "")}</td><td>${esc(o.t || (x.opts.length ? "" : "레시피 없음 · 원자재로"))}</td><td class="box">${esc((rec.prep || {})[x.id] ?? "")}</td></tr>`; });
-    h += "</tbody></table>";
-    $("invPrint").innerHTML = h;
-    const t0 = document.title; document.body.classList.add("inv-print"); document.title = `인벤토리 ${invDay()}`; window.print();
-    setTimeout(() => { document.body.classList.remove("inv-print"); document.title = t0; }, 500);
-  }
   // 다시 그려도 화면 위치와 지금 커서가 있는 칸을 그대로 (엔터로 다음 칸에 간 뒤 앞 칸의 change가 와도 다음 칸에 머묾)
   const invKeep = (sel) => {
     const a = document.activeElement, cur = a && a.dataset && a.dataset.part ? `[data-part=${a.dataset.part}][data-id="${CSS.escape(a.dataset.id)}"]` : null;
@@ -3467,7 +3454,6 @@
   $("invSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-iv]"); if (!b) return; invTab = b.dataset.iv; renderInv(); window.scrollTo(0, 0); });
   $("invFilt").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; invFilter = b.dataset.f; renderInv(); });
   $("invDate").addEventListener("change", () => renderInv());
-  $("invPrintBtn").addEventListener("click", () => printInv());
   $("invQ").addEventListener("input", (e) => { invQ = e.target.value; renderInv(); });
   // + 단추: 누를 때 칸에서 커서가 빠지지 않게(pointerdown에서 막음) 칸 끝에 "+"를 붙임 → 다음 숫자를 바로 이어서
   $("invBody").addEventListener("pointerdown", (e) => {
