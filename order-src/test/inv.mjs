@@ -48,8 +48,24 @@ await p.waitForTimeout(200);
 const conv = await p.evaluate(() => [...document.querySelectorAll("#invBody .inv-row.prep")].find((r) => /매시드 포테이토/.test(r.textContent)).querySelector(".inv-conv").textContent);
 ok(/매쉬포테이토\S* 2PK/.test(conv) && /매드크림소스\S* 0\.72EA/.test(conv), "매시드 포테이토 2X → 원재료: " + conv);
 
+// 11/26 KM "레시피 상 일드·환산량으로": 마늘쫑 포션 1포션 = 냉동 마늘종 40g → 25포션 = 1kg = 냉동마늘쫑 1EA
+await p.evaluate(() => {
+  const i = [...document.querySelectorAll("#invBody input[data-part=prep]")].find((x) => x.getAttribute("aria-label") === "마늘쫑 포션 또잉 재고");
+  i.value = "25"; i.dispatchEvent(new Event("change", { bubbles: true }));
+});
+await p.waitForTimeout(200);
+const scape = await p.evaluate(() => [...document.querySelectorAll("#invBody .inv-row.prep")].find((r) => /마늘쫑 포션/.test(r.textContent)).querySelector(".inv-conv").textContent);
+ok(/1포션 = 40g/.test(scape) && /냉동마늘쫑\S* 1EA/.test(scape), "마늘쫑 포션 25 → 냉동마늘쫑 1EA (1포션 40g): " + scape);
+
+// 소분(KM: 감자튀김 등): 원자재 줄에 포션 칸이 처음부터 열림, 1포션 g = 레시피(감자튀김 200g) → 10포션 = 2kg = 1PK
 await p.click("#invSeg [data-iv=raw]");
 await p.waitForTimeout(200);
+const fries = await p.evaluate(() => { const r = [...document.querySelectorAll("#invBody .inv-row")].find((x) => /냉동감자튀김/.test(x.textContent)); return r && r.querySelector("input[data-part=subg]") ? r.querySelector("input[data-part=subg]").value : null; });
+ok(fries === "200", "감자튀김 소분 칸 · 1포션 200g (레시피)");
+await p.evaluate(() => { const i = [...document.querySelectorAll("#invBody input[data-part=sub]")].find((x) => /냉동감자튀김/.test(x.getAttribute("aria-label"))); i.value = "10"; i.dispatchEvent(new Event("change", { bubbles: true })); });
+await p.waitForTimeout(200);
+const fsub = await p.evaluate(() => [...document.querySelectorAll("#invBody .inv-row")].find((x) => /냉동감자튀김/.test(x.textContent)).querySelector(".inv-sub").textContent);
+ok(/= 1PK/.test(fsub), "감자튀김 소분 10포션 = 1PK: " + fsub.replace(/\s+/g, " "));
 await p.evaluate(() => {
   const i = [...document.querySelectorAll("#invBody input[data-part=raw]")].find((x) => /매드크림소스/.test(x.getAttribute("aria-label")));
   i.value = "3"; i.dispatchEvent(new Event("change", { bubbles: true }));
@@ -58,7 +74,9 @@ await p.click("#invSeg [data-iv=sum]");
 await p.waitForTimeout(200);
 const sum = await p.evaluate(() => [...document.querySelectorAll(".inv-t tbody tr")].map((r) => [...r.children].map((c) => c.textContent)));
 const cream = sum.find((r) => /매드크림소스/.test(r[0]));
-ok(cream && cream[1] === "3" && cream[2] === "0.72" && /^3\.72/.test(cream[3]), "합계: 원자재 3 + 프랩 0.72 = 3.72 " + JSON.stringify(cream));
+ok(cream && cream[1] === "3" && cream[3] === "0.72" && /^3\.72/.test(cream[4]), "합계: 원자재 3 + 프랩 0.72 = 3.72 " + JSON.stringify(cream));
+const fr = sum.find((r) => /냉동감자튀김/.test(r[0]));
+ok(fr && fr[2] === "1" && /^1PK/.test(fr[4]), "합계: 감자튀김 소분 1PK " + JSON.stringify(fr));
 ok(posts.some((x) => /"key":"inv\./.test(x || "")), "넣은 값은 시트 inv.날짜에 저장");
 ok(!errs.length, "화면 오류 없음 " + errs.join(" / "));
 console.log(`인벤토리 시험 통과 ${pass} · 실패 ${fail}`);

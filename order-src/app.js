@@ -3222,39 +3222,87 @@
   }
   // ---------- 인벤토리 (11/26 KM): 월재고마감용 재고 세기 ----------
   //  "원자재·프랩 아이템 재고를 입력 → 프랩은 레시피 역순으로 원자재 환산 → 전체를 MIS 월재고마감에 입력. 종이에 적고 머리로 환산·더하던 일을 줄이기"
-  //  저장 inv.<날짜> = { raw: {품목키: "3"}, prep: {프랩id: "1.5"}, at } — 계산(발주)에는 안 씀. 단위: 원자재 = 앱 재고단위, 프랩 = 프랩 탭과 같은 단위
+  //  "프랩 아이템은 레시피 상 일드, 환산량에 의거하여 계산 · 원자재를 소분한 경우도 있음(마늘쫑, 감자튀김, 고르곤졸라 등)"
+  //  저장 inv.<날짜> = { raw: {품목키: "3"}, sub: {품목키: 포션 수}, prep: {프랩id: "1.5"}, prepU: {프랩id: 단위}, at } — 발주 계산에는 안 씀
+  //  1포션 g(소분)은 itemCfg[품목].subG, 프랩을 세는 단위는 prepCfg[프랩].invU (매장 설정이라 날짜와 상관없이 남음)
   let invTab = "raw", invQ = "";
   const invDay = () => $("invDate").value || TODAY;
-  const invRec = () => db["inv." + invDay()] || { raw: {}, prep: {} };
-  const invSave = (part, id, v) => { const r = invRec(), o = { raw: { ...(r.raw || {}) }, prep: { ...(r.prep || {}) } }; if (v === "") delete o[part][id]; else o[part][id] = v; setKey("inv." + invDay(), { ...o, at: Date.now() }); };
+  const invRec = () => db["inv." + invDay()] || {};
+  const invSave = (part, id, v) => {
+    const r = invRec(), o = { raw: { ...(r.raw || {}) }, sub: { ...(r.sub || {}) }, prep: { ...(r.prep || {}) }, prepU: { ...(r.prepU || {}) } };
+    if (v === "" || v == null) delete o[part][id]; else o[part][id] = v;
+    setKey("inv." + invDay(), { ...o, at: Date.now() });
+  };
   const invF = (v) => { const a = Math.abs(v), f = a >= 10 ? 10 : a >= 0.1 ? 100 : 1000; return String(Math.round(v * f) / f); }; // 작은 값(소금 0.004PK)도 0으로 안 보이게
   const invVal = (v) => (v === "" || v == null || !isFinite(num(v)) ? null : num(v));
+  const invUnitName = (it) => it.pk.stock || it.unit || "";
+  // 레시피 Yield로 정해지는 단위: X(레시피 1번 = Yield g), 포션(Yield ÷ 포션 수, 개수만 적힌 포션은 재료 무게 합), g
+  function invRecipeUnits(M, p) {
+    const y = String(p.yield || ""), yg = M.yieldOf(p);
+    const ingG = p.ing.reduce((a, i) => { const q = parseQty(i.w, i.v) || {}; return a + (q.g || q.ml || 0); }, 0);
+    const yn = (() => { const m = /([\d.]+)\s*(portion|order|ea|개|인분)/i.exec(y); return m ? num(m[1]) : null; })();
+    // 재료 일부가 개수(새우 1Pk 등)로만 적혀 있으면 재료 무게 합은 1번 분량이 아님 → X는 "레시피 1번"으로만
+    const allG = p.ing.every((i) => { const q = parseQty(i.w, i.v), t = M.resolveIng(i.n); return !q || (t && t.skip) || q.g || q.ml; });
+    const out = [], batch = yg || (allG ? ingG : 0) || null;
+    if (batch) out.push({ u: "X", g: batch, t: `1X = ${won(batch)}g ${yg ? "(Yield)" : "(재료 합)"}` });
+    else if (ingG) out.push({ u: "X", g: null, t: "1X = 레시피 1번" });
+    const pg = yn ? (yg || ingG) / yn : /portion/i.test(p.name) && !yg && ingG ? ingG : null;
+    if (pg) out.push({ u: "포션", g: pg, t: `1포션 = ${won(pg)}g ${yn ? (yg ? `(Yield ${won(yg)}g ÷ ${yn})` : `(재료 ${won(ingG)}g ÷ ${yn})`) : "(재료 합)"}` });
+    if (batch || pg) out.push({ u: "g", g: 1, t: "" });
+    if (!batch && !pg && out.length) return out;
+    return out;
+  }
   function invPreps(M) {
     const g = dayGross(TODAY, false).v;
     const list = M.prepSheet.length ? M.prepSheet.map((x) => ({ name: x.name, code: x.code || "" })) : M.prep.map((p) => ({ name: p.short || p.name, code: p.code || "" }));
     return list.map((x) => {
       const pdf = prepPdfOf(M, x);
-      const ex = prepExpect(M, x.name, x.code, g, pdf);
-      return { ...x, id: (x.code ? x.code + " " : "") + x.name, pdf, unit: ex ? ex.unit : "", label: ex ? ex.label || ex.unit : "" };
+      const opts = pdf ? invRecipeUnits(M, pdf) : [];
+      // 레시피로 단위를 못 정하면(As needed 등) 프랩 탭 단위 그대로
+      const ex = opts.length ? null : prepExpect(M, x.name, x.code, g, pdf);
+      if (!opts.length && ex) opts.push({ u: ex.unit, g: null, t: `프랩 탭 단위${ex.label && ex.label !== ex.unit ? ` (${ex.label})` : ""}`, label: ex.label || ex.unit });
+      const want = pdf && ((db.prepCfg || {})[pdf.name] || {}).invU;
+      const def = (opts.find((o) => o.u === want) || (pdf && /portion/i.test(pdf.name) && opts.find((o) => o.u === "포션")) || opts[0] || {}).u || "";
+      return { ...x, id: (x.code ? x.code + " " : "") + x.name, pdf, opts, def };
     });
   }
+  // 프랩 수량(그 단위) → 원재료
+  function invPrepRaw(M, x, n, u) {
+    if (!x.pdf || !(n > 0)) return null;
+    const o = x.opts.find((k) => k.u === u);
+    if (o && o.g != null) return u === "X" ? M.prepToRaw(x.pdf, n, "X") : M.prepToRaw(x.pdf, n * o.g, "g");
+    return M.prepToRaw(x.pdf, n, u);
+  }
+  // 소분(원자재를 포션으로 나눠 둔 것)의 1포션 g: 매장 설정 → 라인 레시피에서 그 품목을 가장 많이 쓰는 g → 자기 자신을 원재료로 하는 포션 프랩
+  function invSubG(M, it) {
+    const c = num(((db.itemCfg || {})[it.key] || {}).subG); if (c > 0) return { g: c, src: "설정" };
+    const cnt = new Map();
+    M.line.forEach((r) => r.ing.forEach((i) => { const t = M.resolveIng(i.n), q = parseQty(i.w, i.v); if (t && t.kind === "item" && t.id === it.key && q && q.g) cnt.set(q.g, (cnt.get(q.g) || 0) + 1); }));
+    M.prep.forEach((p) => { const cf = (db.prepCfg || {})[p.name] || {}; if (cf.raw !== it.key) return; const u = invRecipeUnits(M, p).find((o) => o.u === "포션"); if (u) cnt.set(Math.round(u.g), (cnt.get(Math.round(u.g)) || 0) + 3); });
+    const top = [...cnt].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
+    return top ? { g: top[0], src: "레시피" } : null;
+  }
+  const INV_SUB = /감자튀김|고르곤졸라|마늘쫑/; // KM이 짚은 소분 품목은 처음부터 소분 칸을 펼침
+  const invSubOn = (it) => { const c = (db.itemCfg || {})[it.key] || {}; return c.sub === 1 || (c.sub !== 0 && (num(c.subG) > 0 || INV_SUB.test(it.name))); };
+  const invSubQty = (M, it, n) => { const s = invSubG(M, it), per = it.pk.g || it.pk.ml; return s && per && n > 0 ? (n * s.g) / per : null; };
   function invRawItems(M) {
     const L = LOCS.map((x) => x[0]);
     return M.items.filter((it) => !it.hidden && it.code).map((it) => ({ it, g: it.ledgerOnly ? "수불현황에만" : it.foh ? "FOH" : (LOCS.find((x) => x[0] === locOf(it)) || LOCS[0])[1], gi: it.ledgerOnly ? 9 : it.foh ? 8 : Math.max(0, L.indexOf(locOf(it))), ro: num(((db.itemCfg || {})[it.key] || {}).ro) || 999 }))
       .sort((a, b) => a.gi - b.gi || a.ro - b.ro || a.it.name.localeCompare(b.it.name, "ko"));
   }
-  // 합계: 원자재 + 프랩 환산 (품목 재고단위)
+  // 합계: 원자재(통) + 소분(포션 → 재고단위) + 프랩 환산
   function invTotals(M) {
-    const rec = invRec(), raw = new Map(), fromPrep = new Map(), bad = [], part = [];
+    const rec = invRec(), raw = new Map(), sub = new Map(), fromPrep = new Map(), bad = [], part = [];
     Object.entries(rec.raw || {}).forEach(([k, v]) => { const n = invVal(v); if (n != null) raw.set(k, n); });
+    Object.entries(rec.sub || {}).forEach(([k, v]) => { const n = invVal(v), it = M.items.find((i) => i.key === k); const q = it && invSubQty(M, it, n); if (q != null) sub.set(k, q); else if (n > 0) bad.push((it ? it.name : k) + " 소분(1포션 g 모름)"); });
     invPreps(M).forEach((x) => {
       const n = invVal((rec.prep || {})[x.id]); if (n == null || n <= 0) return;
-      const m = x.pdf && x.unit ? M.prepToRaw(x.pdf, n, x.unit) : null;
+      const m = invPrepRaw(M, x, n, (rec.prepU || {})[x.id] || x.def);
       if (!m) { bad.push(x.name); return; }
       if (m.miss && m.miss.length) part.push(`${x.name}(${m.miss.join("·")})`);
       m.forEach((q, k) => fromPrep.set(k, (fromPrep.get(k) || 0) + q));
     });
-    return { raw, fromPrep, bad, part };
+    return { raw, sub, fromPrep, bad, part };
   }
   function renderInv() {
     const M = model();
@@ -3264,43 +3312,77 @@
     const rec = invRec(), box = $("invBody"), q = invQ.trim();
     const hit = (t) => !q || dice(q, t) > 0.5 || String(t).replace(/\s/g, "").includes(q.replace(/\s/g, ""));
     const T = invTotals(M);
-    $("invSum").textContent = `원자재 ${T.raw.size} · 프랩 ${Object.values(rec.prep || {}).filter((v) => invVal(v) != null).length} 입력${T.bad.length ? ` · 환산 못 함 ${T.bad.length}` : ""}`;
+    $("invSum").textContent = `원자재 ${T.raw.size}${T.sub.size ? ` · 소분 ${T.sub.size}` : ""} · 프랩 ${Object.values(rec.prep || {}).filter((v) => invVal(v) != null).length} 입력${T.bad.length ? ` · 환산 못 함 ${T.bad.length}` : ""}`;
+    const fmtRaw = (m) => [...m].map(([k, v]) => { const it = M.items.find((i) => i.key === k); return `${esc(it ? it.name : k)} ${invF(v)}${esc(it ? invUnitName(it) : "")}`; }).join(" · ");
     if (invTab === "raw") {
       let last = "", h = "";
       invRawItems(M).filter((x) => hit(x.it.name) || hit(x.it.code)).forEach(({ it, g }) => {
         if (g !== last) { h += `<div class="inv-h">${esc(g)}</div>`; last = g; }
-        const pv = T.fromPrep.get(it.key);
-        h += `<label class="inv-row"><span class="inv-n">${esc(it.name)}<small>${esc(it.code)}${pv ? ` · 프랩 환산 +${invF(pv)}` : ""}</small></span><span class="inv-in"><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="raw" data-id="${esc(it.key)}" value="${esc((rec.raw || {})[it.key] ?? "")}" aria-label="${esc(it.name)} 재고"><em>${esc(it.pk.stock || it.unit || "")}</em></span></label>`;
+        const pv = T.fromPrep.get(it.key), on = invSubOn(it), u = invUnitName(it);
+        let sub = "";
+        if (on) {
+          const s = invSubG(M, it), n = invVal((rec.sub || {})[it.key]), qv = invSubQty(M, it, n), per = it.pk.g || it.pk.ml;
+          sub = `<div class="inv-sub"><span>소분</span><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="sub" data-id="${esc(it.key)}" value="${esc((rec.sub || {})[it.key] ?? "")}" aria-label="${esc(it.name)} 소분 포션 수"><span>포션 ×</span><input class="g" type="number" inputmode="decimal" step="any" min="0" data-part="subg" data-id="${esc(it.key)}" value="${s ? esc(String(Math.round(s.g * 10) / 10)) : ""}" placeholder="g" aria-label="${esc(it.name)} 1포션 g"><span>g${s ? ` <small>(${esc(s.src)})</small>` : ""}${per ? ` · 1${esc(u)} = ${won(per)}g` : ` · <b class="inv-bad">1${esc(u)} 무게 모름</b>`}${qv != null ? ` = <b>${invF(qv)}${esc(u)}</b>` : ""}</span></div>`;
+        }
+        h += `<div class="inv-row" data-key="${esc(it.key)}"><span class="inv-n">${esc(it.name)}<small>${esc(it.code)}${pv ? ` · 프랩 환산 +${invF(pv)}` : ""} · <button type="button" class="inv-subbtn" data-subtg="${esc(it.key)}" aria-pressed="${on}">소분${on ? " 닫기" : ""}</button></small></span><span class="inv-in"><input type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="raw" data-id="${esc(it.key)}" value="${esc((rec.raw || {})[it.key] ?? "")}" aria-label="${esc(it.name)} 재고"><em>${esc(u)}</em></span>${sub}</div>`;
       });
       box.innerHTML = h || '<div class="empty">품목이 없어요</div>';
     } else if (invTab === "prep") {
       let h = "";
       invPreps(M).filter((x) => hit(x.name)).forEach((x) => {
-        const n = invVal((rec.prep || {})[x.id]);
-        const m = n > 0 && x.pdf && x.unit ? M.prepToRaw(x.pdf, n, x.unit) : null;
-        const conv = n > 0 ? (m ? (m.size ? "→ " + [...m].map(([k, v]) => { const it = M.items.find((i) => i.key === k); return `${esc(it ? it.name : k)} ${invF(v)}${esc(it ? it.pk.stock || it.unit || "" : "")}`; }).join(" · ") : "") + (m.miss && m.miss.length ? ` <b class="inv-bad">못 바꾼 재료: ${m.miss.map(esc).join(", ")}</b>` : "") : `<b class="inv-bad">원재료로 못 바꿈 · 원자재 칸에 직접 넣어 주세요</b>`) : !x.unit ? '<span class="inv-bad">단위 모름 (프랩 레시피 연결 필요)</span>' : "";
-        h += `<div class="inv-row prep"><label class="inv-n" for="iv-${esc(x.id)}">${esc(x.name)}<small>${esc(x.code)}</small></label><span class="inv-in"><input id="iv-${esc(x.id)}" type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="prep" data-id="${esc(x.id)}" value="${esc((rec.prep || {})[x.id] ?? "")}" aria-label="${esc(x.name)} 재고"${x.unit ? "" : " disabled"}><em>${esc(x.label)}</em></span>${conv ? `<div class="inv-conv">${conv}</div>` : ""}</div>`;
+        const n = invVal((rec.prep || {})[x.id]), u = (rec.prepU || {})[x.id] || x.def, o = x.opts.find((k) => k.u === u) || {};
+        const m = n > 0 ? invPrepRaw(M, x, n, u) : null;
+        const basis = [x.pdf ? esc(x.pdf.name) : "", o.t ? esc(o.t) : ""].filter(Boolean).join(" · ");
+        const conv = n > 0 ? (m ? (m.size ? "→ " + fmtRaw(m) : "") + (m.miss && m.miss.length ? ` <b class="inv-bad">못 바꾼 재료: ${m.miss.map(esc).join(", ")}</b>` : "") : `<b class="inv-bad">원재료로 못 바꿈 · 원자재 칸에 직접 넣어 주세요</b>`) : "";
+        const sel = x.opts.length > 1 ? `<select data-part="pu" data-id="${esc(x.id)}" aria-label="${esc(x.name)} 단위">${x.opts.map((k) => `<option value="${esc(k.u)}"${k.u === u ? " selected" : ""}>${esc(k.label || k.u)}</option>`).join("")}</select>` : `<em>${esc((x.opts[0] || {}).label || u)}</em>`;
+        h += `<div class="inv-row prep"><span class="inv-n">${esc(x.name)}<small>${esc(x.code)}</small></span><span class="inv-in"><input id="iv-${esc(x.id)}" type="number" inputmode="decimal" step="any" min="0" enterkeyhint="next" placeholder="–" data-part="prep" data-id="${esc(x.id)}" value="${esc((rec.prep || {})[x.id] ?? "")}" aria-label="${esc(x.name)} 재고"${x.opts.length ? "" : " disabled"}>${x.opts.length ? sel : ""}</span><div class="inv-conv">${x.opts.length ? (basis ? `<span class="inv-basis">${basis}</span>` : "") : '<span class="inv-bad">레시피 없음 · 원자재 칸에 직접</span>'}${conv ? `<br>${conv}` : ""}</div></div>`;
       });
       box.innerHTML = h || '<div class="empty">프랩 목록이 없어요</div>';
     } else {
-      const rows = invRawItems(M).map(({ it }) => ({ it, a: T.raw.get(it.key) || 0, b: T.fromPrep.get(it.key) || 0 })).filter((r) => r.a + r.b > 0);
-      // 원자재 목록 밖(숨긴 품목 등)으로 환산된 것도 빠뜨리지 않음
-      T.fromPrep.forEach((v, k) => { if (!rows.some((r) => r.it.key === k)) { const it = M.items.find((i) => i.key === k); if (it) rows.push({ it, a: T.raw.get(k) || 0, b: v }); } });
+      const keys = new Set([...T.raw.keys(), ...T.sub.keys(), ...T.fromPrep.keys()]);
+      const order = invRawItems(M).map((x) => x.it);
+      M.items.forEach((it) => { if (keys.has(it.key) && !order.includes(it)) order.push(it); }); // 숨긴 품목으로 환산된 것도 빠뜨리지 않음
+      const rows = order.filter((it) => keys.has(it.key)).map((it) => ({ it, a: T.raw.get(it.key) || 0, s: T.sub.get(it.key) || 0, b: T.fromPrep.get(it.key) || 0 })).filter((r) => r.a + r.s + r.b > 0);
       let h = `<div class="inv-tools"><button type="button" class="printbtn" id="invCopy">복사 (코드·품목·수량)</button><span>${rows.length}품목 · 단위는 앱 재고단위 (MIS 단위와 다르면 알려 주세요)</span></div>`;
       if (T.part.length) h += `<div class="inv-warn">일부 재료를 못 바꾼 프랩 ${T.part.length}개: ${T.part.map(esc).join(", ")} — 그 재료는 합계에 안 들어감. 원자재 칸에 직접 더해 주세요.</div>`;
-      if (T.bad.length) h += `<div class="inv-warn">원재료로 못 바꾼 프랩 ${T.bad.length}개: ${T.bad.map(esc).join(", ")} — 합계에 안 들어감. 원자재 칸에 직접 넣어 주세요.</div>`;
-      h += `<table class="inv-t"><thead><tr><th>품목</th><th>원자재</th><th>프랩</th><th>합계</th></tr></thead><tbody>` +
-        rows.map((r) => `<tr><td>${esc(r.it.name)}<small>${esc(r.it.code)}</small></td><td>${r.a ? invF(r.a) : ""}</td><td>${r.b ? invF(r.b) : ""}</td><td><b>${invF(r.a + r.b)}</b><small>${esc(r.it.pk.stock || r.it.unit || "")}</small></td></tr>`).join("") +
+      if (T.bad.length) h += `<div class="inv-warn">원재료로 못 바꾼 것 ${T.bad.length}개: ${T.bad.map(esc).join(", ")} — 합계에 안 들어감. 원자재 칸에 직접 넣어 주세요.</div>`;
+      h += `<table class="inv-t"><thead><tr><th>품목</th><th>원자재</th><th>소분</th><th>프랩</th><th>합계</th></tr></thead><tbody>` +
+        rows.map((r) => `<tr><td>${esc(r.it.name)}<small>${esc(r.it.code)}</small></td><td>${r.a ? invF(r.a) : ""}</td><td>${r.s ? invF(r.s) : ""}</td><td>${r.b ? invF(r.b) : ""}</td><td><b>${invF(r.a + r.s + r.b)}</b><small>${esc(invUnitName(r.it))}</small></td></tr>`).join("") +
         `</tbody></table>`;
       box.innerHTML = rows.length ? h : '<div class="empty"><b>아직 넣은 재고가 없어요</b>원자재·프랩 탭에서 센 재고를 넣으면 여기서 합칩니다.</div>';
-      const cp = $("invCopy"); if (cp) cp.onclick = () => { const t = rows.map((r) => [r.it.code, r.it.name, invF(r.a + r.b), r.it.pk.stock || r.it.unit || ""].join("\t")).join("\n"); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("복사했어요 · 엑셀이나 메모에 붙여 넣기"), () => toast("복사가 안 돼요")); };
+      const cp = $("invCopy"); if (cp) cp.onclick = () => { const t = rows.map((r) => [r.it.code, r.it.name, invF(r.a + r.s + r.b), invUnitName(r.it)].join("\t")).join("\n"); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast("복사했어요 · 엑셀이나 메모에 붙여 넣기"), () => toast("복사가 안 돼요")); };
     }
   }
+  // 다시 그려도 화면 위치와 지금 커서가 있는 칸을 그대로 (엔터로 다음 칸에 간 뒤 앞 칸의 change가 와도 다음 칸에 머묾)
+  const invKeep = (sel) => {
+    const a = document.activeElement, cur = a && a.dataset && a.dataset.part ? `[data-part=${a.dataset.part}][data-id="${CSS.escape(a.dataset.id)}"]` : null;
+    const y = window.scrollY; renderInv(); window.scrollTo(0, y);
+    const n = (cur && document.querySelector("#invBody " + cur)) || (sel && document.querySelector(sel)); if (n && (cur || sel)) n.focus({ preventScroll: true });
+  };
+  const cfgSet = (k, id, patch) => { db[k] = { ...(db[k] || {}) }; const c = { ...(db[k][id] || {}), ...patch }; Object.keys(patch).forEach((f) => { if (patch[f] === undefined) delete c[f]; }); db[k][id] = c; setKey(k, db[k]); };
   $("invSeg").addEventListener("click", (e) => { const b = e.target.closest("[data-iv]"); if (!b) return; invTab = b.dataset.iv; renderInv(); window.scrollTo(0, 0); });
   $("invDate").addEventListener("change", () => renderInv());
-  $("invQ").addEventListener("input", (e) => { invQ = e.target.value; renderInv(); const i = $("invQ"); i.focus(); });
-  $("invBody").addEventListener("change", (e) => { const i = e.target.closest("input[data-part]"); if (!i) return; invSave(i.dataset.part, i.dataset.id, i.value.trim()); if (i.dataset.part === "prep") { const id = i.id; renderInv(); const n = document.getElementById(id); if (n) n.focus({ preventScroll: true }); } else { const T = invTotals(model()); $("invSum").textContent = $("invSum").textContent.replace(/^원자재 \d+/, `원자재 ${T.raw.size}`); } });
-  $("invBody").addEventListener("keydown", (e) => { if (e.key !== "Enter") return; const i = e.target.closest("input[data-part]"); if (!i) return; e.preventDefault(); const all = [...$("invBody").querySelectorAll("input[data-part]:not([disabled])")], n = all[all.indexOf(i) + 1]; if (n) { n.focus(); n.scrollIntoView({ block: "center", behavior: "smooth" }); } else i.blur(); });
+  $("invQ").addEventListener("input", (e) => { invQ = e.target.value; renderInv(); });
+  $("invBody").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-subtg]"); if (!b) return;
+    e.preventDefault();
+    const it = model().items.find((i) => i.key === b.dataset.subtg); if (!it) return;
+    cfgSet("itemCfg", it.key, { sub: invSubOn(it) ? 0 : 1 });
+    invKeep(invSubOn(it) ? `input[data-part=sub][data-id="${CSS.escape(it.key)}"]` : null);
+  });
+  $("invBody").addEventListener("change", (e) => {
+    const i = e.target.closest("[data-part]"); if (!i) return;
+    const part = i.dataset.part, id = i.dataset.id, v = i.value.trim();
+    if (part === "subg") { cfgSet("itemCfg", id, { subG: num(v) > 0 ? num(v) : undefined }); invKeep(); return; }
+    if (part === "pu") {
+      const x = invPreps(model()).find((p) => p.id === id); if (x && x.pdf) cfgSet("prepCfg", x.pdf.name, { invU: v });
+      invSave("prepU", id, v); invKeep(); return;
+    }
+    invSave(part, id, v);
+    if (part === "prep") { const x = invPreps(model()).find((p) => p.id === id); if (x && !(invRec().prepU || {})[id]) invSave("prepU", id, x.def); }
+    invKeep();
+  });
+  $("invBody").addEventListener("keydown", (e) => { if (e.key !== "Enter") return; const i = e.target.closest("input[data-part]"); if (!i) return; e.preventDefault(); const all = [...$("invBody").querySelectorAll("input[data-part=raw], input[data-part=sub], input[data-part=prep]:not([disabled])")], n = all[all.indexOf(i) + 1]; if (n) { n.focus(); n.scrollIntoView({ block: "center", behavior: "smooth" }); } else i.blur(); });
   $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
   $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
   function locSumUpdate() {
@@ -4601,5 +4683,5 @@
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.unit })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
+  window.__orderCalc = { invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.def, opts: x.opts.map((o) => o.u + (o.g ? "=" + Math.round(o.g) + "g" : "")) })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
 })();

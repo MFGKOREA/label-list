@@ -1129,7 +1129,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 .inv-in { display: inline-flex; align-items: center; gap: 6px; }
 .inv-in input { width: 84px; font-size: 16px; padding: 8px 10px; text-align: right; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font-variant-numeric: tabular-nums; }
 .inv-in input:disabled { opacity: .45; }
-.inv-in em { min-width: 34px; font-style: normal; font-size: 12px; color: var(--muted); }
+.inv-in em { width: 64px; font-style: normal; font-size: 12px; color: var(--muted); }
 .inv-conv { grid-column: 1 / -1; margin-top: -2px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; text-wrap: pretty; }
 .inv-bad { color: var(--rose-ink); font-weight: 700; }
 .inv-warn { margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: var(--rose); border: 1px solid var(--rose-line); font-size: 13px; }
@@ -1143,3 +1143,10 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 /* 독 7칸 (11/26 인벤토리 추가): 390px 폭에 한 줄로 — 글자·아이콘 여백을 조금 줄임 */
 .dock button { font-size: 11px; }
 .dock button svg { padding: 3px 9px; }
+.inv-row .inv-in select { width: 64px; font: inherit; font-size: 14px; padding: 7px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; }
+.inv-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 12px; background: var(--fill); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.inv-sub input { width: 64px; font-size: 16px; padding: 6px 8px; text-align: right; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: inherit; }
+.inv-sub input.g { width: 64px; }
+.inv-sub b { color: var(--fg); }
+.inv-subbtn { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 12px; font-weight: 700; color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.inv-basis { color: var(--muted); }
