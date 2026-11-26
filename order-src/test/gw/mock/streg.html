@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>실사재고</title><script src="jquery.js"></script></head><body>
+실사재고 화면 (가짜)
+<table><tr><td>기준년월</td><td><input id="sMonth" class="easyui-datebox" value="2026-11"></td><td>창고</td><td><input id="cbWh" value="BOH"></td></tr></table>
+<a href="#" class="easyui-linkbutton" onclick="fn_Search()"><span class="l-btn-text">조회</span></a>
+<a href="#" class="easyui-linkbutton" onclick="parent.__stWrite=(parent.__stWrite||0)+1"><span class="l-btn-text">저장</span></a>
+<a href="#" class="easyui-linkbutton" onclick="parent.__stWrite=(parent.__stWrite||0)+1"><span class="l-btn-text">엑셀업로드</span></a>
+<table id="sGrid"></table>
+<script>
+$("#sMonth").data("datebox", 1);
+$.fn.datebox = function (cmd, v) { if (cmd === "getValue") return this.val(); if (cmd === "setValue") { this.val(v); return this; } };
+var COLS = [[{ field: "CD_ITEM", title: "품목코드" }, { field: "NM_ITEM", title: "품목명" }, { field: "SPEC", title: "규격" }, { field: "UNIT", title: "재고단위" }, { field: "QT_BOOK", title: "전산재고" }, { field: "QT_REAL", title: "실사수량", editor: "numberbox" }, { field: "AM", title: "금액" }, { field: "NM_USER", title: "등록자" }]];
+var ROWS = [];
+$.fn.datagrid = function (cmd) { if (cmd === "getRows") return ROWS; if (cmd === "options") return { columns: COLS, onClickCell: function (i, f) { if (f === "QT_REAL") this.beginEdit(i); } }; };
+$("#sGrid").data("datagrid", 1);
+function fn_Search() { $.active = 1; setTimeout(function () { ROWS = [{ CD_ITEM: "340001864", NM_ITEM: "냉동감자튀김(스노우벨리)", SPEC: "2kg", UNIT: "PK", QT_BOOK: 37, QT_REAL: 35.5, AM: 123456, NM_USER: "홍길동" }, { CD_ITEM: "340000065", NM_ITEM: "고르곤졸라돌체큐브", SPEC: "1kg", UNIT: "KG", QT_BOOK: 4, QT_REAL: 3.25, AM: 54321, NM_USER: "홍길동" }]; $.active = 0; }, 300); }
+</script></body></html>

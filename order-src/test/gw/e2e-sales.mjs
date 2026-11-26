@@ -172,6 +172,13 @@ ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store 
 ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2 && !JSON.stringify(d.lineCheckProbe).includes("작성자=") , "작성자·매장명 칸은 저장 안 함");
 d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html");
 ok(pushes.length === 1, "같은 날 같은 X는 다시 알리지 않음");
+// 6-4) 재고마감관리 살펴보기 (11/26 KM 인벤토리 → MIS 월재고): 1.실사재고등록·8.실사재고조회만 열어 [조회]만, 2.재고마감은 안 엶, 수량·금액·이름 저장 안 함
+let stw = null;
+d = await run({ kind: "stockscout" }, "st-main.html", async (p) => { stw = await p.evaluate(() => [window.__stWrite || 0, window.__closeOpened || 0]); });
+const sp = d.stockProbe || {}, sc0 = (sp.screens || [])[0] || {};
+ok(d.salesPush.status === "done" && (sp.screens || []).length === 2 && sc0.grids && sc0.grids[0].cols.some((c) => /QT_REAL=실사수량 \[입력:numberbox\]/.test(c)), "재고마감관리: 두 화면 구조 · 입력 칸(실사수량) 표시: " + d.salesPush.parts.stockscout.text);
+ok(stw[0] === 0 && stw[1] === 0 && sc0.pressed === "조회", "조회만 (저장·엑셀업로드 안 누름, 2.재고마감 안 엶)");
+ok(sc0.grids[0].units.join(",") === "PK,KG" && sc0.grids[0].sample[0].CD_ITEM === "340001864" && !("QT_REAL" in sc0.grids[0].sample[0]) && !JSON.stringify(sp).includes("123456") && !JSON.stringify(sp).includes("35.5") && !JSON.stringify(sp).includes("홍길동"), "단위 값·품목 코드만 · 수량·금액·이름은 저장 안 함");
 // 6-2) 매장간재고이동 (11/17 KM "2번 좋다"): 받은 것(+)은 수령일, 보낸 것(−)은 발송일로 misXfer.날짜에. 등록·수신 단추와 다른 화면은 안 누름, 직원 이름·금액은 저장 안 함
 let opened5 = null, xw = 0;
 d = await run({ kind: "xfer", from: "2026-11-01", to: "2026-11-16" }, "xfer-main.html", async (p) => { opened5 = await p.evaluate(() => window.__opened); xw = await p.evaluate(() => (window.__xferWrite || 0) + (window.__recvEntryOpened || 0)); });

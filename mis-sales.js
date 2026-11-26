@@ -870,6 +870,60 @@
     }
   }
 
+  // ---------- 재고마감관리 화면 구조 살펴보기 (11/26 KM: 발주앱 인벤토리 합계를 MIS 월재고마감에 넣기 위한 준비) ----------
+  //  경영정보 › 재고마감관리 › 1.실사재고등록 · 8.실사재고조회 를 열어 [조회]만 하고, 조회 조건·버튼·표 열(입력 칸 여부)·단위 값·품목 몇 줄(코드·이름·규격·단위만)을 stockProbe에 남김
+  //  ⚠ 2.재고마감은 열지 않음. 저장·마감·확정·업로드는 누르지 않음. 재고 수량·금액 칸은 저장하지 않음
+  async function runStockScout() {
+    const out = { at: Date.now(), screens: [] };
+    const NUMCOL = /수량|재고|금액|단가|원가|차이|합계|qty|amt|cnt|price/i, KEEP = /코드|품목|명|규격|단위|분류|구분|창고|code|nm|name|unit|spec/i, NAME = /작성자|사원|담당|등록자|수정자|이름|성명|USER/i;
+    const isMenu = (w) => { try { return !!w.document.querySelector(".tree-title") || /LeftFrame/i.test(w.location.href); } catch (e) { return true; } };
+    const waitFor = async (fn, ms) => { for (let k = 0; k < ms / 200; k++) { const r = fn(); if (r) return r; await sleep(200); } return null; };
+    const trees = () => frames().filter((w) => { try { return !!w.document.querySelector(".tree-title"); } catch (e) { return false; } });
+    const title = (c) => String(c.title || "").replace(/<[^>]+>/g, "").trim();
+    const txt = (v) => String(v ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+    for (const [label, RE] of [["실사재고등록", /^1\.\s*실사재고등록$/], ["실사재고조회", /^8\.\s*실사재고조회$/]]) {
+      const S = { label };
+      try {
+        step = label + " 메뉴";
+        for (let round = 0; round < 6 && !byText(RE, ".tree-title"); round++) { let did = 0; for (const w of trees()) { let hits = []; try { hits = [...w.document.querySelectorAll(".tree-hit.tree-collapsed")]; } catch (e) {} for (const h of hits) { try { h.click(); did++; } catch (e) {} } } if (!did) break; await sleep(400); }
+        const hit = byText(RE, ".tree-title"); if (!hit) { S.err = "메뉴 못 찾음"; out.screens.push(S); continue; }
+        const before = new Set(frames());
+        hit.el.click(); hit.el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        const R = await waitFor(() => frames().filter((w) => w !== window.top && !isMenu(w) && !before.has(w)).find((w) => { try { return !!w.jQuery && w.document.body && w.document.body.innerText.length > 20; } catch (e) { return false; } }), 10000);
+        if (!R) { S.err = "화면이 안 열림"; out.screens.push(S); continue; }
+        await sleep(1500);
+        const $ = R.jQuery, d = R.document;
+        S.url = String(R.location.href).replace(/\?.*$/, "").slice(0, 160);
+        // 조회 조건: 입력칸 이름·종류·지금 값(날짜·코드만), 고르는 칸의 보기
+        S.inputs = [...d.querySelectorAll("input, select")].filter((i) => i.type !== "password" && i.type !== "hidden" && i.offsetParent !== null).slice(0, 30).map((i) => {
+          const lab = (() => { const td = i.closest("td"); const prev = td && td.previousElementSibling; return txt((prev && prev.textContent) || (i.closest("label") || {}).textContent || ""); })();
+          const kind = $ && $(i).data("datebox") ? "date" : $ && $(i).data("combobox") ? "combo" : i.tagName.toLowerCase() + ":" + (i.type || "");
+          let opts = []; try { if ($ && $(i).data("combobox")) opts = ($(i).combobox("getData") || []).slice(0, 15).map((o) => txt(o.text || o.NM || o.name || JSON.stringify(o)).slice(0, 20)); } catch (e) {}
+          const v = String(i.value || ""); return { id: i.id || i.name || "", lab, kind, v: /^[\d.\-\/]{4,10}$/.test(v) || /^\d{6,8}$/.test(v) ? v : v ? "(값 있음)" : "", opts };
+        });
+        S.buttons = [...d.querySelectorAll("a.l-btn, a.easyui-linkbutton, button, input[type=button]")].map((b) => (b.textContent || b.value || "").trim()).filter((t) => t && t.length < 20).slice(0, 30);
+        // [조회]만 (이번 달 그대로 — 화면 기본값)
+        step = label + " 조회";
+        const btn = [...d.querySelectorAll("a, button, input[type=button], span.l-btn-text")].find((b) => /^조\s*회$/.test((b.textContent || b.value || "").trim()));
+        if (btn && $) { const L = loader($, d); await L.idle(T.q); const prev = L.refs(); press(R, btn.closest("a, button, input") || btn); await L.awaitLoad(prev, T.q); await L.idle(T.q); S.pressed = "조회"; }
+        step = label + " 읽기";
+        S.grids = (!$ ? [] : [...d.querySelectorAll("table[id], div[id]")].filter((el) => $(el).data("datagrid"))).map((g) => {
+          const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field);
+          const rows = (() => { try { return $(g).datagrid("getRows") || []; } catch (e) { return []; } })();
+          const keep = cs.filter((c) => !NAME.test(title(c) + c.field) && KEEP.test(title(c) + " " + c.field) && !NUMCOL.test(title(c)));
+          const units = new Set(); const uc = cs.find((c) => /단위|unit/i.test(title(c) + c.field)); if (uc) rows.forEach((r) => units.add(txt(r[uc.field])));
+          return { id: g.id || "", n: rows.length, cols: cs.map((c) => `${c.field}=${title(c)}${c.editor ? " [입력:" + (typeof c.editor === "string" ? c.editor : c.editor.type || "?") + "]" : ""}${c.hidden ? " (숨김)" : ""}`),
+            units: [...units].slice(0, 20), sample: rows.slice(0, 12).map((r) => Object.fromEntries(keep.map((c) => [c.field, txt(r[c.field])]))),
+            ev: ["onClickCell", "onDblClickCell", "onClickRow", "onAfterEdit", "onBeginEdit"].filter((k) => o[k] && !/^function\s*\(\w*(,\s*\w+)*\)\s*\{\s*\}$/.test(String(o[k]))).map((k) => `${k}:${String(o[k]).slice(0, 300)}`) };
+        });
+        S.uploads = [...d.querySelectorAll("input[type=file]")].length;
+      } catch (e) { S.err = `${step}: ${String(e && e.message || e).slice(0, 120)}`; }
+      out.screens.push(S);
+    }
+    await set("stockProbe", out);
+    return finish(true, `재고마감관리 살펴보기 · ${out.screens.map((x) => `${x.label} ${x.err ? "✗ " + x.err : `표 ${(x.grids || []).length}개 · 열 ${((x.grids || [])[0] || { cols: [] }).cols.length} · 줄 ${((x.grids || [])[0] || {}).n ?? 0}`}`).join(" / ")} (조회만, 수량 저장 안 함)`, {});
+  }
+
   // ---------- LineCheck현황 (11/26 KM: 경영정보 › 매장운영관리 › 관리메뉴 › LineCheck현황, 당일 조회 → FOH·BOH2 ○/△/X, X면 한글표시사항 앱 알림) ----------
   //  1단계(지금): 화면을 조회만 해서 표 모양과 칸 값을 시트 lineCheckProbe·lineCheck.날짜에 남김(알림은 아직 안 보냄 — 화면 모양을 본 뒤 규칙을 붙임)
   //  사람 이름처럼 보이는 칸(이름·성명·작성자·사원·담당·ID·전화)은 저장하지 않음. 조회 말고는 아무것도 누르지 않음
@@ -1117,9 +1171,9 @@
   //  salesPush = { id, at, status, kind, from, to, also: { menu|gross: { from, to } }, parts: { gross|menu|now: { status, text, doneAt, … } }, cur, prog }
   //  예전엔 두 버튼이 한 칸(salesPush)을 서로 덮어써서, 하나가 도는 중에 다른 걸 누르면 둘 다 꼬였음
   const base = job, k0 = base.kind || "gross", done = {};
-  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황", xfer: "매장간재고이동", linecheck: "LineCheck현황" };
+  const labelOf = { gross: "Gross", menu: "메뉴 판매", now: "지금 Gross", scout: "MIS 메뉴 살펴보기", hour: "시간대별 매출", orders: "주문현황", recv: "입고현황", sets: "Set판매현황", xfer: "매장간재고이동", linecheck: "LineCheck현황", stockscout: "재고마감관리 살펴보기" };
   // 종류별 할 일 (11/13): 새 종류는 여기에 더하면 확장을 다시 깔지 않아도 됨. 모르는 종류는 하지 않고 그렇게 적음
-  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer(), linecheck: () => runLineCheck() };
+  const RUN = { gross: () => runGross(), now: () => runGross(), menu: () => runMenu(), scout: () => runScout(), hour: () => runHour(), orders: () => runOrders(), recv: () => runRecv(), sets: () => runSets(), xfer: () => runXfer(), linecheck: () => runLineCheck(), stockscout: () => runStockScout() };
   const needRange = (k) => /^(gross|menu)$/.test(k);
   //  1.17.0: today(오늘 중간값)도 종류마다 같이 넘겨야 함. 예전엔 also로 덧붙인 sets의 today:1이 job을 만들 때 빠져서
   //   오늘 중간값이 완결된 하루 기록(setDay.날짜)에 섞였음(매시간 :40 수집). 지금은 req.today → job.today로 그대로 전달

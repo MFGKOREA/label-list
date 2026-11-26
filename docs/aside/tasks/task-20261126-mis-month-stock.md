@@ -2,7 +2,7 @@
 
 받는 사람: 어사이드 (매장 PC 브라우저, KM이 로그인해 둔 GW)
 보낸 사람: 클로드 코드
-상태: 대기
+상태: 보류 (어사이드 Pro 크레딧 소진 11/26 → 같은 확인을 GW Agent kind "stockscout"로 대신 함. 메뉴: 재고마감관리 › 1.실사재고등록 · 8.실사재고조회)
 
 ```json
 {
@@ -13,7 +13,8 @@
   "sla_sec": 600,
   "retry_count": 0,
   "max_retries": 3,
-  "status": "queued",
+  "status": "blocked",
+  "blocked_reason": "어사이드 크레딧 소진(11/26). GW Agent stockscout로 대신",
   "evidence": [],
   "created_at": "2026-11-26T22:30:00+09:00",
   "fallback": ["km"],

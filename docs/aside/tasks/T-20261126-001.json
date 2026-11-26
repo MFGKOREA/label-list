@@ -6,10 +6,13 @@
   "sla_sec": 600,
   "retry_count": 0,
   "max_retries": 3,
-  "status": "queued",
+  "status": "blocked",
   "evidence": [],
   "created_at": "2026-11-26T22:30:00+09:00",
-  "fallback": ["km"],
+  "fallback": [
+    "km"
+  ],
   "source": "11/26 KM: 발주앱 인벤토리 탭 합계를 MIS 월재고마감에 넣기 위해 화면 구조 확인",
-  "result_path": "docs/aside/reports/report-20261126-mis-month-stock.md"
+  "result_path": "docs/aside/reports/report-20261126-mis-month-stock.md",
+  "blocked_reason": "어사이드 크레딧 소진(11/26). GW Agent stockscout로 대신"
 }
