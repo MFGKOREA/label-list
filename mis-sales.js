@@ -914,6 +914,8 @@
           const units = new Set(); const uc = cs.find((c) => /단위|unit/i.test(title(c) + c.field)); if (uc) rows.forEach((r) => units.add(txt(r[uc.field])));
           return { id: g.id || "", n: rows.length, cols: cs.map((c) => `${c.field}=${title(c)}${c.editor ? " [입력:" + (typeof c.editor === "string" ? c.editor : c.editor.type || "?") + "]" : ""}${c.hidden ? " (숨김)" : ""}`),
             units: [...units].slice(0, 20), sample: rows.slice(0, 12).map((r) => Object.fromEntries(keep.map((c) => [c.field, txt(r[c.field])]))),
+            // 품목 전체: [코드, 이름, 규격, 재고단위, 중분류] (수량 없음) — 앱 재고단위와 맞춰 보기용
+            all: uc ? rows.slice(0, 600).map((r) => [txt(r.CD_ITEM), txt(r.NM_ITEM).slice(0, 30), txt(r.TX_SPEC).slice(0, 24), txt(r[uc.field]), txt(r.NM_MCODE)]) : [],
             ev: ["onClickCell", "onDblClickCell", "onClickRow", "onAfterEdit", "onBeginEdit"].filter((k) => o[k] && !/^function\s*\(\w*(,\s*\w+)*\)\s*\{\s*\}$/.test(String(o[k]))).map((k) => `${k}:${String(o[k]).slice(0, 300)}`) };
         });
         S.uploads = [...d.querySelectorAll("input[type=file]")].length;
