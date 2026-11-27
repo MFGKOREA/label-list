@@ -1342,7 +1342,7 @@
       //  예상 재고(est.mjs) 평균 오차 1.587→1.599 · 덜 시킬 위험 517→509. 100% 반영은 1.592·501, 1/3은 1.586·513 (README "추세 반영")
       { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t0 = r.theo && r.theo.get(it.key), t = t0 == null ? null : r.theoKeep ? Math.min(t0, r.theoKeep.get(it.key) || 0) : t0; /* 11/28: 추세는 삭제 메뉴를 뺀 것끼리 비교(삭제 메뉴 몫은 goneShare로 따로 뺌) */ if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } });
         const tA = tg > 0 ? tq / tg : 0, r28 = rollB ? rollB.get(it.key) || 0 : 0;
-        it.trendTau = tA > 0 && r28 > 0 ? Math.min(2, Math.max(0.5, r28 / tA)) : 1; it.trendA = 1 + TREND_W * (it.trendTau - 1); }
+        it.trendTau = tA > 0 && r28 > 0 ? Math.min(2, Math.max(0.5, r28 / tA)) : 1; it.trendA = 1 + TREND_W * (it.trendTau - 1); it.theoA = tA; /* A가 쓴 달들의 레시피 사용(100만원당) */ }
       let trendAOld = it.trendA; /* 삭제 메뉴를 빼기 전 방식의 추세 (판정용) */
       if (it.goneShare > 0 || it.goneFrom) { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t = r.theo && r.theo.get(it.key); if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } }); const tA = tg > 0 ? tq / tg : 0, r28 = rollBFull ? rollBFull.get(it.key) || 0 : 0; trendAOld = 1 + TREND_W * ((tA > 0 && r28 > 0 ? Math.min(2, Math.max(0.5, r28 / tA)) : 1) - 1); }
       // D: 3개월 이상이면 고정량 + 비례량 (최소제곱, 둘 다 0 이상일 때만)
@@ -1387,6 +1387,10 @@
       // 11/28: 삭제 메뉴 몫을 빼면서 3배 검사의 경계에 걸려 B가 켜지거나 꺼지는 품목이 생김(레드어니언 A 0.056 → 0.049로 B가 꺼져 사용량 −58%, 홀그레인머스타드 +188%)
       //  → A·B 중 무엇을 쓸지는 빼기 전 값으로 본 판정을 그대로 따르고, 값만 삭제 메뉴를 뺀 것으로
       if (it.goneShare > 0 || it.goneFrom) { const bOld = bOf(rollBFull, aOld); if ((bOld == null) !== (it.rateB == null)) it.rateB = bOld == null ? null : bOf(rollB); }
+      // 11/28 KM "사용량 검증 및 재정립": A와 3배 넘게 달라 B가 꺼졌는데, 그 차이가 '수불 달에는 레시피상 거의 안 쓰던 품목'이라서 생긴 것이면 A가 낡은 것 → B를 쓰고 A는 안 씀
+      //  (치키린훈연파프리카: 9·10월 레시피 사용 ≈ 0 → A 0.0003, 11월 스모키 메뉴로 레시피 3.4EA ≈ 실제 3.0EA인데 앱은 A만 써서 실제의 2%)
+      //  조건: A < B ÷ 3 이고, A가 쓴 달들의 레시피 사용(× 로스)도 지금 B의 1/3 미만. 단위 문제(그 달에도 레시피는 많았는데 실제가 적음)는 그대로 A
+      if (it.rateB == null && it.rateA != null && !it.ledgerOnly) { const bc = bOf(rollB); if (bc != null && bc > 0 && it.rateA / bc < 1 / 3 && (it.theoA || 0) * it.loss < bc / 3) { it.rateB = bc; it.rateAStale = it.rateA; it.rateA = null; it.fixedA = 0; } }
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       it.ledgerScores = [];
