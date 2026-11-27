@@ -154,7 +154,7 @@ for (const [log, want, label] of [
   });
   const mon = new Date(day + "T00:00:00Z"); mon.setUTCDate(mon.getUTCDate() - ((mon.getUTCDay() + 6) % 7) - 14);
   const want0 = `${mon.getUTCMonth() + 1}/${mon.getUTCDate()}`;
-  ok(lv.title === "BOH 수원컨벤션점 발주시트" && /^\d+주차/.test(lv.h3) && lv.chips === 3, `제목 "${lv.title}" · "${lv.h3}" · 고른 주 ${lv.chips}개`);
+  ok(/^(BOH )?수원컨벤션점 발주시트$/.test(lv.title) && /^\d+주차/.test(lv.h3) && lv.chips === 3, `제목 "${lv.title}" · "${lv.h3}" · 고른 주 ${lv.chips}개`);
   ok(lv.first.startsWith(want0) && /월$/.test(lv.first) && lv.n === 7 && lv.fc, `첫 주 ${lv.first} ~ 7일 · Forecast 줄`);
   // 11/16~19: 발주시트에 업체 머리줄(vrow)·소모품 줄(xcode)·FOH 품목 묶음이 들어감 → 품목 줄(앱 품목과 이름이 같은 줄)이 앱 품목 수와 같고 한 번씩만 나오는지로 봄
   ok(lv.itemRows === lv.items && lv.dupRows === 0 && lv.groupRows === 0 && !lv.legend, `품목 줄 ${lv.itemRows}/${lv.items}(중복 ${lv.dupRows}) · 업체 머리줄 ${lv.vrows} · 위치 나눔 없음 · 설명 문구 없음`);

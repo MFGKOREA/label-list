@@ -15,7 +15,7 @@ await p.click('#dock [data-dock="foh"]'); await p.waitForTimeout(700);
 ok((await cur()) === "FOH 발주" && (await p.textContent("#mainTitle")) === "FOH 발주", "FOH 탭: 독·제목");
 await p.click('#dock [data-dock="forecast"]'); await p.waitForTimeout(500);
 await p.evaluate(() => document.querySelector('.view:not([hidden]) .back').click()); await p.waitForTimeout(500);
-ok((await cur()) === "FOH 발주" && (await p.textContent("#mainTitle")) === "FOH 발주" && (await p.locator("#orderList .cell").count()) > 40, "Forecast 갔다 뒤로: 독·제목·목록이 FOH 그대로 · 독=" + (await cur()));
+ok((await cur()) === "FOH 발주" && (await p.textContent("#mainTitle")) === "FOH 발주" && (await p.evaluate(() => document.querySelectorAll("#orderList .cell").length + [...document.querySelectorAll("#orderList details.offday summary small")].reduce((a, x) => a + (+x.textContent || 0), 0))) > 40, "Forecast 갔다 뒤로: 독·제목·목록이 FOH 그대로(보이는 것 + 발주일 아닌 업체 '숨김') · 독=" + (await cur()));
 await p.fill("#q", "테너"); await p.waitForTimeout(500);
 const names = await p.locator("#orderList .cell .c-name").allTextContents();
 ok(names.length === 2 && names.every((n) => /테너/.test(n)), "FOH 검색 '테너' → " + names.join(", "));
@@ -30,13 +30,15 @@ const need = await p.locator('#orderList .cell', { hasText: "테너베이스레�
 ok(/buy|enough|offday/.test(need || ""), "재고 넣으면 필요량 상태가 바뀜: " + need);
 // 재고·발주만 카드(롯데칠성)
 await p.click('#cats button:nth-child(3)'); await p.waitForTimeout(500);
+// 오늘이 그 업체 발주 요일이 아니면 품목이 '숨김'에 접혀 있음(11/20 업체 발주 요일) → 펼쳐서 봄 (요일에 따라 시험이 멈추던 것, 11/28)
+if (!(await p.locator("#orderList .cell").count())) { const od = p.locator("#orderList details.offday > summary"); if (await od.count()) { await od.first().click(); await p.waitForTimeout(400); } }
 const c2 = p.locator("#orderList .cell").first(), n2 = await c2.locator(".c-name").textContent(); const in2 = c2.locator("input");
 await in2.nth(1).fill("2"); await in2.nth(1).blur(); await p.waitForTimeout(900);
 const c2b = p.locator('#orderList .cell', { hasText: n2 }).first();
 ok((await c2b.getAttribute("data-need")) === "done" && /발주완료/.test(await c2b.textContent()), `재고·발주만 카드(${n2}) 발주 2 → 발주완료`);
 ok(/GW 전송 1/.test(await p.textContent("#misBar")), "GW 전송 개수에 FOH 발주 포함: " + (await p.textContent("#misBar")).replace(/\s+/g, " ").slice(0, 40));
 await p.click('#dock [data-dock="order"]'); await p.waitForTimeout(600);
-ok((await p.textContent("#mainTitle")) === "발주량 계산" && (await p.locator("#cats button").count()) === 4 && !(await p.locator("#orderList .cell", { hasText: "테너베이스" }).count()), "발주 탭으로: BOH 목록만 · 업체 4칩");
+ok((await p.textContent("#mainTitle")) === "발주량 계산" && (await p.locator("#cats button").count()) >= 2 && (await p.locator("#cats button", { hasText: "온세물류" }).count()) === 1 && !(await p.locator("#cats button", { hasText: /롯데칠성|주류|한성/ }).count()) && !(await p.locator("#orderList .cell", { hasText: "테너베이스" }).count()), "발주 탭으로: BOH 목록만 · BOH 업체 칩만(온세물류 있음, FOH 업체 없음)");
 await p.click('#dock [data-dock="prep"]'); await p.waitForTimeout(500); await p.click('#dock [data-dock="foh"]'); await p.waitForTimeout(600);
 ok((await p.textContent("#mainTitle")) === "FOH 발주" && !(await p.isHidden("#pOrder")), "프랩 → FOH 발주: 제목·목록");
 ok(errs.length === 0, "화면 오류 0 " + errs.join(" | "));

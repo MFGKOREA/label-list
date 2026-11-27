@@ -245,7 +245,16 @@ async function watch(job, now, L) {
   const bump = (fn) => mutJob((j) => { fn(j); });
   if (job.stage === "gw") {
     const g = await probe(job.gwTab);
-    if (g.gone) return fail(job, "GW 탭이 닫힘");
+    if (g.gone) {
+      // 1.17.10 (11/27 매장 PC에서 하루 3번): GW 탭이 사라져도 MIS 탭이 이미 열려 있으면 그걸 넘겨받아 이어서 함. 예전엔 여기서 바로 "GW 탭이 닫힘"으로 창을 닫아,
+      //  막 열린 MIS 탭의 mis-sales.js가 요청을 running으로 적은 뒤 창이 닫혀 요청이 15분쯤 "받는 중"으로 남았음. MIS 탭이 없으면 4초만 더 보고 실패
+      for (const id of [...job.tabs, ...job.extra]) { if (id === job.gwTab) continue; const t = await chrome.tabs.get(id).catch(() => null); if (t && isMis(t.url || t.pendingUrl)) { await log("GW 탭이 닫혔지만 MIS 탭이 열려 있어 이어서 함", { quiet: true }); return seeUrl(id, t.url || t.pendingUrl); } }
+      const lost = (await chrome.tabs.query({}).catch(() => [])).find((t) => isMis(t.url || t.pendingUrl) && !(job.before || []).includes(t.id) && !job.tabs.includes(t.id) && !job.extra.includes(t.id));
+      if (lost) { await mutJob((j) => { j.extra.push(lost.id); }); await own(lost.id); await tidy(lost.id); await log("GW 탭이 닫혔지만 MIS 새 탭이 있어 넘겨받음", { quiet: true }); return seeUrl(lost.id, lost.url || lost.pendingUrl); }
+      if (!n.goneAt) { await bump((j) => { j.n.goneAt = now; }); return; }
+      if (now - n.goneAt < 4e3) return;
+      return fail(job, "GW 탭이 닫힘");
+    }
     if (g.at === "MIS") return seeUrl(job.gwTab, g.url);
     let w;
     if (g.err === "errpage") {

@@ -390,3 +390,13 @@ KM에게 먼저 묻는다:
 - (11/27 KM "명란 이제 삭제, 명란 스프레드로 변경") itemCfg 백명란젓(분란).hide = true. master.order에 백명란버터스프레드(삼양사) 340002228 EA "800g*12ea/box"(MIS 실사재고 품목에서 읽음) 추가(사본 master.order.backup-1127), itemCfg loc walk,
   map.ing "명란 버터 스프레드 (OEM 완제)" → 그 품목. 갈릭 명란 파스타 1접시: 11/26 백명란젓 0.038PK·버터 0.030EA → 11/28 스프레드 0.066EA(스쿱 #24+#70 = 53ml ÷ 800g). rateB 0.149/100만원, rateA는 판매·입고가 쌓이면.
 - (11/27) 매장 PC 확장 자동 수집이 꺼져 있음(misAgent auto 0) → 12·16·20시 당일 수집·20시 라인체크가 안 돎(nowSales 11/25가 마지막). KM이 확장에서 켜야 함. 오늘 라인체크는 손으로 요청: BOH2 △ 빠짐 10(프라이어·멀티크로 사진 6, Sweet Garlic 체크 2, 407~408 사유·사진 2) → 알림 보냄.
+
+## 전체 점검 (11/28 새벽, KM "전체 점검 및 검증")
+- 저장소: main이 갈라져 있었음 — 피클이 11/27 08:28 pkg-editor.html을 main에 올린 뒤 내 기록 커밋 2개(AGENT.md만)가 main에 못 올라감. 푸시 오류를 2>/dev/null로 가려서 몰랐음 → 합쳐서 올림. **푸시는 결과 줄을 꼭 봄(가리지 않음), 거절되면 fetch·merge.**
+- 배포본 = 저장소: order.html · mis-sales.js · gw-plan.json · index.html · sw.js · mis.js · pkg-editor.html 해시 같음.
+- 시험(실제 시트 자료, 쓰기 막음): calc-unit 64 · pipe 21 · parseqty 6 · itemset 19 · lump · estfloor · inv 21 · smoke · health · states · ux-flow · periodic 48 · diag 22 · auto 29 · autost 8 · hrsend 25 · e2e-sales 85 · e2e-order 9 · e2e-auto 10 · e2e-hrsend 37 · e2e-key 7 · e2e-loading · e2e-bookmark · 라벨 도구 7개 · ci-checks 모두 통과. hrsend-apply는 jsdom이 없어 건너뜀, e2e-extension은 원래 멈춰 둔 시험.
+  낡은 시험 기준 3개 고침: ux-flow(발주 요일 아닌 업체가 '숨김'에 접힘 → 펼쳐서 봄, FOH 줄 수 = 보이는 것 + 숨김, BOH 업체 칩 수 고정 4 → 온세물류 있고 FOH 업체 없음), health(발주시트 제목 "BOH " 없어도 됨).
+- 시트 설정: 품목코드 중복 0 · map.menu 끊긴 연결 0 · 단종 설정 이상 0 · customRecipes 겹침 0 · 라인 레시피(판매 중) 연결 안 된 재료 0 · 계산 오류(NaN·음수) 0/117품목. 끊긴 연결 8개(map.ing 4 · prepCfg.raw 4)와 프랩 재료 7개는 모두 11/25 단종 메뉴용으로 숨긴 품목(db.hide)이라 영향 없음.
+- 계산 ÷ 최근 15일 실제 사용률(80품목): 가운데값 1.01, 71개가 0.67~1.5 안. 밖: 많음 4(꿀 1.9 · 당근채 1.65 · 하몽 1.64 · 감말랭이 1.58), 적음 5(마늘쫑 0.50 · 매드마요 0.51 · 매드레몬 0.58 · 자숙피바지락 0.64 · 허니갈릭소스 0.66 — 최근 실제에 11/25 전 단종 메뉴 사용이 섞임).
+- 운영: 매장 PC 확장 자동 수집 꺼짐(auto 0) → 11/26·27 실제 매출·메뉴·Set 판매 없음. 11/28 10:40 자기 확인으로 다시 요청 예정(send_later). 라벨 앱 알림: 수원 3대 등록, 마지막 오류 없음.
+- GW Agent 1.17.10(zip 만듦, 매장 PC 설치는 KM): "GW 탭이 닫힘" 뒤 요청이 15분쯤 '받는 중'으로 남던 것(11/27 3번) — GW 탭이 사라져도 MIS 탭이 열려 있으면 넘겨받아 이어서 하고, 없으면 4초 더 보고 실패. 기존 시험(auto·autost·diag·periodic·e2e-auto) 통과, 이 경로를 직접 재현한 시험은 없음(원인 추정).
