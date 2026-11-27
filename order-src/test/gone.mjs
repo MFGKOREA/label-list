@@ -54,6 +54,11 @@ ok(same.every((x) => Math.abs(x.b - x.a) <= Math.max(1e-6, x.a * 0.02)), `삭제
 await P.evaluate(() => window.__go("files:recipe")); await P.waitForTimeout(700);
 const mp = await P.evaluate(() => ({ count: document.querySelector("#mapCount").textContent, txt: document.querySelector("#mapList").innerText, opts: [...new Set([...document.querySelectorAll("#mapList select option")].map((o) => o.value))] }));
 ok(!/치아바타 브레드|보코치니 치즈/.test(mp.txt) && !S.gone.some((n) => mp.opts.includes(n)), `레시피 연결 확인: 삭제 메뉴 재료·삭제 메뉴 이름이 없음 (${mp.count})`);
+// 레시피 파일 올리기 지킴이(11/28): 그 달 레시피를 새 파일로 바꾸면 사라질 레시피를 찾아 줌
+const lr = await P.evaluate(() => { const C = window.__orderCalc, db = typeof C.db === "function" ? C.db() : C.db; const ms = Object.keys(db).filter((k) => /^month\./.test(k) && db[k].line && db[k].line.recipes).sort(), m = ms[ms.length - 1].slice(6), cur = db["month." + m].line.recipes;
+  const only = cur.filter((r) => !ms.slice(0, -1).some((k) => db[k].line.recipes.some((x) => x.name === r.name)) && !((db.customRecipes || {}).line || []).some((x) => x.name === r.name && !x.months && !x.until));
+  const half = cur.filter((r, i) => i % 2 === 0); return { m, n: cur.length, only: only.map((r) => r.name), same: C.lostRecipes(m, "line", cur).length, lostHalf: C.lostRecipes(m, "line", half).map((r) => r.name), halfMissing: cur.filter((r, i) => i % 2 === 1).map((r) => r.name) }; });
+ok(lr.same === 0 && lr.lostHalf.every((n) => lr.halfMissing.includes(n) && lr.only.includes(n)) && lr.halfMissing.filter((n) => lr.only.includes(n)).every((n) => lr.lostHalf.includes(n)), `레시피 파일 지킴이: 같은 파일이면 사라질 것 0 · 절반만 든 파일이면 그 달에만 있는 레시피 ${lr.lostHalf.length}개를 '그대로 둘 것'으로 찾음 (${lr.m} 라인 ${lr.n}개 중 이 달에만 있는 것 ${lr.only.length}개)`);
 ok(!P.errs.length && !P0.errs.length, "화면 오류 없음 " + P.errs.concat(P0.errs).join(" / "));
 console.log(`삭제 메뉴 시험 통과 ${pass} · 실패 ${fail}`);
 await b.close();

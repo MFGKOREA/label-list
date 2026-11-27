@@ -2373,6 +2373,13 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   const dayRowsOf = (k) => { const rows = (db[k] || {}).rows; if (!Array.isArray(rows)) return []; const multi = new Set(rows.filter((r) => r.c && r.m !== r.c).map((r) => r.c)); return rows.filter((r) => !(r.c && r.c === r.m && multi.has(r.c))); };
   function mset(m, patch) { setKey("month." + m, { ...mget(m), ...patch }); }
   // 최신 레시피 (가장 늦은 달에 올린 것, 같은 이름은 나중 파일이 덮음)
+  // 새 파일(newRecipes)로 그 달 레시피를 바꾸면 사라질 레시피: 지금 그 달에 있고, 새 파일에도 다른 달 파일에도 매장 레시피(customRecipes)에도 없는 것
+  function lostRecipes(m, kind, newRecipes) {
+    const cur = ((mget(m)[kind] || {}).recipes) || [], has = new Set(newRecipes.map((r) => r.name));
+    months().forEach((x) => { if (x === m) return; const f = mget(x)[kind]; if (f && f.recipes) f.recipes.forEach((r) => has.add(r.name)); });
+    ((db.customRecipes || {})[kind] || []).forEach((r) => { if (!r.months && !r.until) has.add(r.name); });
+    return cur.filter((r) => !has.has(r.name));
+  }
   function latestRecipes(kind) {
     const map = new Map();
     months().forEach((m) => { const f = mget(m)[kind]; if (f && f.recipes) f.recipes.forEach((r) => map.set(r.name, r)); });
@@ -6388,8 +6395,18 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       busy(true);
       const v = await K.parse(f);
       if ((v.recipes && !v.recipes.length) || (v.rows && !v.rows.length)) throw new Error("내용을 찾지 못했어요");
+      // 11/28: 레시피 파일을 올리면 그 달 레시피가 통째로 바뀜 → 우리 매장(LOCAL TABLE) 레시피가 있는 달에 정규판을 올리자 우리 메뉴 19개 레시피가 사라졌음(키즈 파스타·씨푸드 라구 등이 '연결 없음'으로).
+      //  새 파일에 없고 다른 달 파일에도 없는 레시피는 물어보고 그대로 둠(같은 이름만 새 내용으로). 취소하면 올리지 않음
+      let keptNote = "";
+      if (v.recipes) {
+        const lost = lostRecipes(selMonth, K.k, v.recipes);
+        if (lost.length) {
+          if (!confirm(`이 파일에는 지금 쓰는 레시피 ${lost.length}개가 없어요.\n(${lost.slice(0, 4).map((r) => r.name).join(", ")}${lost.length > 4 ? ` 외 ${lost.length - 4}개` : ""})\n\n[확인] 그 레시피는 그대로 두고, 같은 이름 레시피만 새 파일 내용으로 바꿔요.\n[취소] 올리지 않아요.`)) { toast("올리지 않았어요"); return; }
+          v.recipes = v.recipes.concat(lost); v.kept = lost.map((r) => r.name); keptNote = ` · 없던 ${lost.length}개는 그대로 둠`;
+        }
+      }
       mset(selMonth, { [K.k]: { file: f.name, at: TODAY, ...v } });
-      toast(`${K.t}: ${K.info(v)} 읽었어요`);
+      toast(`${K.t}: ${K.info(v)} 읽었어요${keptNote}`);
     } catch (err) { toast("읽지 못했어요: " + err.message); } finally { busy(false); renderFiles(); }
   });
   function busy(on) { $("v-files").classList.toggle("busy", on); if (on) toast("파일을 읽는 중이에요…"); }
@@ -6898,7 +6915,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       health: { bad: hl.filter((x) => x.s === "bad").map((x) => x.k), warn: hl.filter((x) => x.s === "warn").map((x) => x.k) },
     };
   }
-  window.__orderCalc = { invRows: () => invTotals(model()).rows.map((r) => ({ key: r.key, code: r.code, name: r.name, unit: r.unit, mis: r.mis ? r.mis.unit : null, f: r.fx ? r.fx.f : null, soft: !!(r.fx && r.fx.soft), how: r.fx ? r.fx.how : null, misOnly: !!r.misOnly, g: r.g, sub: r.it && invSubOn(r.it) ? invSubG(model(), r.it) || "?" : null, pkEa: r.it ? r.it.pk.ea : null, pkG: r.it ? r.it.pk.g : null })), invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.def, opts: x.opts.map((o) => o.u + (o.g ? "=" + Math.round(o.g) + "g" : "")) })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
+  window.__orderCalc = { lostRecipes, invRows: () => invTotals(model()).rows.map((r) => ({ key: r.key, code: r.code, name: r.name, unit: r.unit, mis: r.mis ? r.mis.unit : null, f: r.fx ? r.fx.f : null, soft: !!(r.fx && r.fx.soft), how: r.fx ? r.fx.how : null, misOnly: !!r.misOnly, g: r.g, sub: r.it && invSubOn(r.it) ? invSubG(model(), r.it) || "?" : null, pkEa: r.it ? r.it.pk.ea : null, pkG: r.it ? r.it.pk.g : null })), invPreps: () => invPreps(model()).map((x) => ({ name: x.name, pdf: x.pdf ? x.pdf.name : null, unit: x.def, opts: x.opts.map((o) => o.u + (o.g ? "=" + Math.round(o.g) + "g" : "")) })), appState, misState, salesState, cellState, dayPhase, pcAlive, wipOf, availOf, model, orderWindow, orderWindowFor, estStock, incomingOf, ordToStock, calc, dataForecast, dataBase, fcAdj, dayGross, evUplift, recvUnknown, prepPlan: () => prepPlan(model()), batchAdj, db: () => db, TODAY, fcBias, fcErr, fcVar, weeklyOf, weeklyState, weeklyLow, jumpOf, riskOf, risk1, nightNow, OPEN_H, CLOSE_H, gwHealth, catOf };
 })();
 
 </script>
