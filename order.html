@@ -2964,7 +2964,16 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     if (withB.length) {
       const recent = withB.slice(-3), wOf = (i) => i + 1 + (3 - recent.length);
       const add = (map, k, v) => map.set(k, (map.get(k) || 0) + v);
+      // 11/28 달 중간에 새로 나온 메뉴: 그달 판매 파일에 며칠치만 들어 있어 달 전체 Gross로 나누면 묽어짐
+      //  (11/25에 시작한 새 메뉴가 11월 1~25일 Gross로 나뉘어 담백한델리소시지·파마산블렌드가 실제의 3% 안팎으로 잡힘)
+      //  → 지난달까지 판매 파일에 없고, 날짜별 판매에서 처음 팔린 날이 그달 첫 자료보다 3일 넘게 뒤이며 최근 28일 안이면 여기서 빼고 아래 '신메뉴 초기 판매'(처음 팔린 날부터의 Gross로 나눔)로 계산
+      const freshRec = new Set();
+      { const lastRow = recent[recent.length - 1], firstSold = new Map(); let d00 = "";
+        Object.keys(db).filter((k) => /^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(8, 15) === lastRow.m && k.slice(8) < TODAY).sort().forEach((k) => { const d = k.slice(8); if (!d00) d00 = d; dayRowsOf(k).forEach((r) => { if (!(num(r.q) > 0)) return; const x = resolveMenu(r.m, r.c); if (x && !x.skip && x.recipe && !firstSold.has(x.recipe.name)) firstSold.set(x.recipe.name, d); }); });
+        if (d00) lastRow.recQ.forEach((v, name) => { const d0 = firstSold.get(name); if (!d0 || d0 <= addDays(d00, 3) || d0 < addDays(TODAY, -28)) return; if (monthRows.some((r) => r.m < lastRow.m && r.recQ && r.recQ.has(name))) return; freshRec.add(name); }); }
+      blend.fresh = [...freshRec];
       recent[recent.length - 1].recQ.forEach(({ recipe }, name) => {
+        if (freshRec.has(name)) return;
         let wq = 0, wg = 0;
         recent.forEach((r, i) => { const x = r.recQ.get(name); if (x) { wq += wOf(i) * x.q; wg += wOf(i) * r.gross / 1e6; } });
         if (!wg) return;

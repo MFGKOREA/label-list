@@ -54,6 +54,9 @@ ok(same.every((x) => Math.abs(x.b - x.a) <= Math.max(1e-6, x.a * 0.02)), `삭제
 await P.evaluate(() => window.__go("files:recipe")); await P.waitForTimeout(700);
 const mp = await P.evaluate(() => ({ count: document.querySelector("#mapCount").textContent, txt: document.querySelector("#mapList").innerText, opts: [...new Set([...document.querySelectorAll("#mapList select option")].map((o) => o.value))] }));
 ok(!/치아바타 브레드|보코치니 치즈/.test(mp.txt) && !S.gone.some((n) => mp.opts.includes(n)), `레시피 연결 확인: 삭제 메뉴 재료·삭제 메뉴 이름이 없음 (${mp.count})`);
+// 달 중간에 새로 나온 메뉴(11/28): 그달 전체 Gross로 나누지 않고 처음 팔린 날부터의 Gross로 (신메뉴 초기 판매)
+const fr = await P.evaluate(() => { const M = window.__orderCalc.model(), B = M.blend; const lm = M.withB[M.withB.length - 1]; return { fresh: B.fresh || [], inMonthly: (B.fresh || []).filter((n) => B.recipeRate.some((x) => !x.launch && !x.swap && x.recipe.name === n)), launch: (B.launch || []).map((l) => l.name), diluted: (B.fresh || []).map((n) => { const q = lm.recQ.get(n), l = (B.launch || []).find((x) => x.name === n); return q && l ? { n, month: q.q / (lm.gross / 1e6), launch: l.rate } : null; }).filter(Boolean) }; });
+ok(fr.inMonthly.length === 0 && fr.diluted.every((x) => x.launch >= x.month), `달 중간에 나온 메뉴 ${fr.fresh.length}개는 달 비율에서 빼고 처음 팔린 날부터로 계산 (묽어진 값보다 작아지지 않음: ${fr.diluted.slice(0, 3).map((x) => `${x.n} ${x.month.toFixed(3)} → ${x.launch.toFixed(2)}`).join(", ")})`);
 // 레시피 파일 올리기 지킴이(11/28): 그 달 레시피를 새 파일로 바꾸면 사라질 레시피를 찾아 줌
 const lr = await P.evaluate(() => { const C = window.__orderCalc, db = typeof C.db === "function" ? C.db() : C.db; const ms = Object.keys(db).filter((k) => /^month\./.test(k) && db[k].line && db[k].line.recipes).sort(), m = ms[ms.length - 1].slice(6), cur = db["month." + m].line.recipes;
   const only = cur.filter((r) => !ms.slice(0, -1).some((k) => db[k].line.recipes.some((x) => x.name === r.name)) && !((db.customRecipes || {}).line || []).some((x) => x.name === r.name && !x.months && !x.until));
