@@ -8,7 +8,7 @@ const { chromium } = await req("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url));
 const html = path.resolve(here, "../../order.html");
 if (!process.argv[2]) { console.log("사용: node settings.mjs <kv.json>"); process.exit(2); }
-const kv = fs.readFileSync(process.argv[2], "utf8");
+const kv = (() => { const j = JSON.parse(fs.readFileSync(process.argv[2], "utf8")); delete j.data.salesPush; return JSON.stringify(j); })(); // 시트에 대기 중인 요청이 있으면 [지금 확인]이 덮지 않으므로(정상) 시험에서는 비워 둠
 let pass = 0, fail = 0;
 const ok = (c, m) => { console.log((c ? "통과 " : "실패 ") + m); if (c) pass++; else fail++; };
 const b = await chromium.launch({ executablePath: fs.existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined });

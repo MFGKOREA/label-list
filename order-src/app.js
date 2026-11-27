@@ -1081,6 +1081,12 @@
     perMenuCache.clear();
 
     // 월별 A(실사), B(레시피) 사용량
+    // 11/28 KM "삭제 식자재 및 메뉴 전체 삭제 · 계산 방식에서도 삭제": 삭제 메뉴 = menuSwap에서 이어받는 메뉴 없이(to 없음) 끝난 레시피(지금 19개 중 17개, 11/25부).
+    //  B(달 비율)는 11/26부터 빼고 있었지만, A(지난 수불) · 최근 28영업일 날짜별 판매(rollB) · 최근 15일 실제(recentRate)에는 삭제 메뉴가 쓴 양이 그대로 남아 있었음 → 셋 다 뺌
+    //  goneRec: 레시피 이름 → 삭제일. goneFrom: 품목 key → 그 품목을 쓰던 삭제 메뉴의 가장 늦은 삭제일. nowUse: 지금 파는 라인 레시피가 쓰는 품목
+    const goneRec = new Map(); Object.entries(db.menuSwap || {}).forEach(([n, w]) => { if (w && !w.to && (!w.from || w.from <= TODAY)) goneRec.set(n, w.from || ""); });
+    const goneFrom = new Map(), nowUse = new Set(), GONE_CAT_MAX = 2;
+    line.forEach((r) => { const f = goneRec.get(r.name); let pm; try { pm = perMenu(r, f ? addDays(f, -1) : undefined); } catch (e) { return; } pm.acc.forEach((v, k) => { if (!(v > 0)) return; if (f != null) { if ((goneFrom.get(k) || "") <= f) goneFrom.set(k, f); } else nowUse.add(k); }); });
     const monthRows = allMonths.map((m) => {
       const d = mget(m);
       const gross = num(d.gross) || grossFromForecast(m);
@@ -1089,7 +1095,7 @@
       const asOf = (r) => { const c = itemCfg[r.name]; const to = c && c.as && items.find((i) => i.key === c.as); if (!to) return null; const gOf = (n) => { const m = /([\d.]+)\s*(kg|g)\b/i.exec(n); return m ? num(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1) : 0; }; const f = gOf(r.name) && (to.pk.g || gOf(to.name)) ? gOf(r.name) / (to.pk.g || gOf(to.name)) : 1; return { it: to, f }; };
       if (d.ledger) d.ledger.rows.forEach((r) => { const a = asOf(r); const it = a ? a.it : ledgerItem(r); if (it && r.usage > 0) actual.set(it.key, (actual.get(it.key) || 0) + r.usage * (a ? a.f : 1)); });
       let theo = null, prepUse = null, menuQty = 0, menuMapped = 0;
-      const recQ = new Map(), extra = new Map();
+      const recQ = new Map(), extra = new Map(), keepRows = [], catAll = new Map(), catRem = new Map(); let theoKeep = null;
       const sl = salesOf(m);
       if (sl && line.length) {
         theo = new Map(); prepUse = new Map();
@@ -1100,6 +1106,7 @@
           menuMapped += s.qty;
           const pm = perMenu(r.recipe, m), q = s.qty * (r.mult || 1);
           pm.acc.forEach((v, k) => theo.set(k, (theo.get(k) || 0) + v * q));
+          { const gone = goneRec.has(r.recipe.name), c = s.cat || ""; catAll.set(c, (catAll.get(c) || 0) + q); if (!gone) { catRem.set(c, (catRem.get(c) || 0) + q); keepRows.push({ pm, q, c }); } }
           pm.prepAcc.forEach((v, k) => prepUse.set(k, (prepUse.get(k) || 0) + v * q));
           const rq = recQ.get(r.recipe.name); recQ.set(r.recipe.name, { recipe: r.recipe, q: (rq ? rq.q : 0) + q });
         });
@@ -1112,8 +1119,10 @@
           const halves = Math.max(0, need - n * sp.g) / (sp.portion || 110);
           if (halves) { theo.set(it.key, (theo.get(it.key) || 0) + halves / (c.per || 2)); extra.set(it.key, (extra.get(it.key) || 0) + halves / (c.per || 2)); }
         });
+        // 11/28 삭제 메뉴를 뺀 레시피 사용: 삭제 메뉴 손님은 같은 중분류의 남은 메뉴로 간다고 봄(판매 수 비율대로, 최대 2배). 중분류가 통째로 없어졌으면 그 몫은 사라짐
+        if (goneRec.size) { theoKeep = new Map(); keepRows.forEach(({ pm, q, c }) => { const sc = Math.min(GONE_CAT_MAX, (catAll.get(c) || 0) / (catRem.get(c) || 1)); pm.acc.forEach((v, k) => theoKeep.set(k, (theoKeep.get(k) || 0) + v * q * sc)); }); extra.forEach((v, k) => theoKeep.set(k, (theoKeep.get(k) || 0) + v)); }
       }
-      return { m, gross, days: daysInMonth(m), actual: d.ledger ? actual : null, theo, prepUse, menuQty, menuMapped, recQ, extra };
+      return { m, gross, days: daysInMonth(m), actual: d.ledger ? actual : null, theo, theoKeep, prepUse, menuQty, menuMapped, recQ, extra };
     });
     // 영업일이 14일 안 되는 달(개점한 8월 4일치)은 첫 재고를 채운 양이 섞여서 사용량·로스 계산에서 뺌 (지금 진행 중인 달은 씀). 채점에는 그대로 씀
     const lastM = monthRows.length ? monthRows[monthRows.length - 1].m : "";
@@ -1271,7 +1280,7 @@
     //  되돌려 보기(10/1~11/13, 날짜마다 그날 전 자료만, 실제 Gross를 안다고 놓고 레시피 사용량만): 앞으로 3일 오차 월별 23.0% → 반반 21.2%, 7일 19.8% → 17.8% (68품목 중 55개 나아짐).
     //  최근 28일만 쓰면 평균은 비슷(21.2% · 17.7%)하지만 나아지는 품목이 49개로 적어 반반. 커팅비프 부족분(부채살)도 28일을 묶어서
     const TREND_W = 0.5; // 추세(28일) 반영 몫: A의 반은 지난 수불 그대로, 반은 최근 메뉴 추세로 고친 값 (아래 it.trendA)
-    const rollB = (() => {
+    const rollOf = (skipGone) => {
       const fc = db.forecast || {};
       const ds = Object.keys(db).filter((k) => /^menuDay\.\d{4}-\d\d-\d\d$/.test(k) && k.slice(8) < TODAY && Array.isArray((db[k] || {}).rows) && num((fc[k.slice(8)] || {}).act) > 0).map((k) => k.slice(8)).sort().slice(-28);
       if (ds.length < 14) return null;
@@ -1279,17 +1288,25 @@
       let G = 0;
       ds.forEach((d) => {
         G += num(fc[d].act);
+        const rows = [], cAll = new Map(), cRem = new Map();
         dayRowsOf("menuDay." + d).forEach((r) => {
           if (COUPON.test(r.c || "") && !(mapCfg.menu || {})[r.m]) return;
           const z = resolveMenu(r.m, r.c); if (!z || z.skip || !z.recipe) return;
-          const q = num(r.q) * (z.mult || 1), pm = perMenu(z.recipe, d); // 11/25: 그날 레시피 (until 변형)
+          const q = num(r.q) * (z.mult || 1), gone = skipGone && goneRec.has(z.recipe.name), c = r.c || "";
+          cAll.set(c, (cAll.get(c) || 0) + q); if (gone) return; /* 11/28: 삭제 메뉴가 팔리던 날의 판매는 앞으로의 사용량이 아님 */
+          cRem.set(c, (cRem.get(c) || 0) + q); rows.push({ z, q, c });
+        });
+        rows.forEach(({ z, q: q0, c }) => {
+          const q = q0 * (skipGone ? Math.min(GONE_CAT_MAX, (cAll.get(c) || 0) / (cRem.get(c) || 1)) : 1), pm = perMenu(z.recipe, d); // 11/25: 그날 레시피 (until 변형) · 11/28: 그날 같은 분류의 삭제 메뉴 손님을 이어받음
           pm.acc.forEach((v, k) => { if (v) add(u, k, q * v); });
           cuts.forEach((c) => { const n = (pm.prepAcc.get(c.prep) || 0) + (pm.prepAcc.get(c.prep + "|ea") || 0) * c.portion; if (n) add(need, c.item, q * n); if (z.recipe.name.startsWith(c.from)) add(sup, c.item, q * c.g); });
         });
       });
       cuts.forEach((c) => { const h = Math.max(0, (need.get(c.item) || 0) - (sup.get(c.item) || 0)) / c.portion / c.per; if (h) add(u, c.item, h); });
       const out = new Map(); u.forEach((v, k) => out.set(k, v / (G / 1e6))); out.days = ds.length; return out;
-    })();
+    };
+    const rollBFull = rollOf(false), rollB = goneRec.size ? rollOf(true) : rollBFull; /* rollBFull = 삭제 메뉴 판매까지 넣은 예전 값 (A·B 중 무엇을 쓸지 판정 + 위쪽 한도) */
+    if (rollB && rollBFull && rollB !== rollBFull) rollB.forEach((v, k) => { const f = rollBFull.get(k); if (f != null && v > f) rollB.set(k, f); }); /* 삭제 때문에 늘어나는 품목은 만들지 않음(새 메뉴도 그 손님을 나눠 가짐) */
 
     // 품목별 계산 재료
     items.forEach((it) => {
@@ -1298,13 +1315,20 @@
       let wu = 0, wg = 0;
       recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length); const u = r.actual.get(it.key); if (u != null) { wu += w * u; wg += w * r.gross / 1e6; } });
       it.rateA = wg > 0 && wu > 0 ? wu / wg : null;
+      // 11/28 삭제 메뉴 몫(goneShare): A가 쓴 달들(같은 3:2:1)의 메뉴 × 레시피 사용이, 삭제 메뉴를 빼고 같은 분류의 남은 메뉴가 그 손님을 이어받으면 얼마나 줄어드는지(0~1). A·고정량에 (1 − 몫)을 곱함
+      //  삭제 메뉴에만 쓰던 품목은 몫 1 → A 0. 여러 파스타가 같이 쓰는 면처럼 남은 메뉴도 쓰는 품목은 거의 안 줄어듦. 삭제 때문에 늘어나는 품목은 만들지 않음(0에서 자름)
+      //  레시피에 안 잡히는 사용(튀김기름·직원식 등)도 같은 비율로 줄어든다고 봄
+      { let tq = 0, kq = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t = r.theo && r.theo.get(it.key); if (t > 0) { tq += w * t; kq += w * (r.theoKeep ? r.theoKeep.get(it.key) || 0 : t); } });
+        it.goneShare = tq > 0 ? Math.min(1, Math.max(0, 1 - kq / tq)) : 0; it.goneFrom = goneFrom.get(it.key) || ""; it.goneOnly = goneFrom.has(it.key) && !nowUse.has(it.key); }
       // 추세 (11/15 KM "28일 기준 좋다 · 100% 반영이 아닌 계산식 중 하나"): A(지난 수불)는 메뉴 판매가 바뀐 걸 모름.
       //  τ = 최근 28영업일 메뉴×레시피(100만원당, rollB) ÷ A가 쓴 달들(같은 3:2:1)의 메뉴×레시피(100만원당). A × τ를 A와 반반 섞음 → A × (1 + 0.5(τ−1)), τ는 0.5~2로 자름
       //  되돌려 보기(그 전 자료로만 배움): 11/1 뒤 140구간 사용 오차 30.5→29.8% · 크게 모자람 37.1→35.0%, 11/5 뒤 31.6→30.9% · 35.6% 그대로, 11/8 뒤(55구간) 36.6→36.8% · 29.1→30.9%(1구간).
       //  예상 재고(est.mjs) 평균 오차 1.587→1.599 · 덜 시킬 위험 517→509. 100% 반영은 1.592·501, 1/3은 1.586·513 (README "추세 반영")
-      { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t = r.theo && r.theo.get(it.key); if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } });
+      { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t0 = r.theo && r.theo.get(it.key), t = t0 == null ? null : r.theoKeep ? Math.min(t0, r.theoKeep.get(it.key) || 0) : t0; /* 11/28: 추세는 삭제 메뉴를 뺀 것끼리 비교(삭제 메뉴 몫은 goneShare로 따로 뺌) */ if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } });
         const tA = tg > 0 ? tq / tg : 0, r28 = rollB ? rollB.get(it.key) || 0 : 0;
         it.trendTau = tA > 0 && r28 > 0 ? Math.min(2, Math.max(0.5, r28 / tA)) : 1; it.trendA = 1 + TREND_W * (it.trendTau - 1); }
+      let trendAOld = it.trendA; /* 삭제 메뉴를 빼기 전 방식의 추세 (판정용) */
+      if (it.goneShare > 0 || it.goneFrom) { let tq = 0, tg = 0; recent.forEach((r, i) => { const w = i + 1 + (3 - recent.length), t = r.theo && r.theo.get(it.key); if (t != null && r.gross > 0) { tq += w * t; tg += w * r.gross / 1e6; } }); const tA = tg > 0 ? tq / tg : 0, r28 = rollBFull ? rollBFull.get(it.key) || 0 : 0; trendAOld = 1 + TREND_W * ((tA > 0 && r28 > 0 ? Math.min(2, Math.max(0.5, r28 / tA)) : 1) - 1); }
       // D: 3개월 이상이면 고정량 + 비례량 (최소제곱, 둘 다 0 이상일 때만)
       it.fixedA = 0;
       const pts = withA.slice(-6).map((r) => ({ d: r.days, g: r.gross / 1e6, u: r.actual.get(it.key) || 0 })).filter((p) => p.u > 0);
@@ -1314,29 +1338,39 @@
         const det = a * c - b * b;
         if (Math.abs(det) > 1e-9) { const fx = (e * c - b * f) / det, rt = (a * f - b * e) / det; if (fx >= 0 && rt > 0) { it.fixedA = fx; it.rateA = rt; } }
       }
+      const aOld = it.rateA != null ? it.rateA * trendAOld : null; /* 예전 방식의 A (판정용) */
+      if (it.rateA != null && it.goneShare > 0) { it.rateAFull = it.rateA; it.rateA *= 1 - it.goneShare; it.fixedA *= 1 - it.goneShare; } // 11/28: 삭제 메뉴 몫을 뺌 (rateAFull = 빼기 전, 확인용)
       if (it.rateA != null && it.trendA !== 1) { it.rateA0 = it.rateA; it.rateA *= it.trendA; it.fixedA *= it.trendA; } // rateA0 = 추세 섞기 전 (확인용)
       // B: 가장 최근 판매 달의 메뉴 비율 × 레시피, 이전 달들의 실제÷이론으로 로스 계수 (반은 최근 28영업일 날짜별 판매 rollB, 아래)
       const lastB = withB[withB.length - 1];
       const tb = lastB && lastB.theo.get(it.key);
       // 지난달 판매에 없는 신메뉴 전용 재료는 신메뉴 초기 판매(blend.launch)로만 B가 생김
-      { const bt = blend.theo.get(it.key), gone = bt != null && bt <= 1e-9 && blend.swaps.some((w) => !w.to); it.rateB = gone ? 0 : tb ? bt || tb / (lastB.gross / 1e6) : bt || null; } // 11/26: 단종 메뉴로 B가 0이 된 품목은 지난달 값으로 되돌리지 않음 (우유: 떡볶이·브리오슈만)
+      const bt = blend.theo.get(it.key), goneB = bt != null && bt <= 1e-9 && blend.swaps.some((w) => !w.to); // 11/26: 단종 메뉴로 B가 0이 된 품목은 지난달 값으로 되돌리지 않음 (우유: 떡볶이·브리오슈만)
       // 메뉴 변화 몫: 메뉴 교체·신메뉴로 B가 바뀐 비율 (늘거나 줄거나). A(지난 수불)는 이 변화를 모르니, 이 몫이 크면 B를 더 믿음 (calc)
       { const t1 = blend.theo.get(it.key) || 0, t0 = blend.theo0.get(it.key) || 0; it.newShare = Math.max(t0, t1) > 0 ? Math.min(1, Math.abs(t1 - t0) / Math.max(t0, t1)) : 0; }
-      // 반은 최근 28영업일 날짜별 메뉴 판매로 (rollB). 메뉴 교체·신메뉴로 바뀐 몫이 큰 품목(newShare > 0.3)은 달 비율 그대로 (지난 판매가 옛 메뉴라서)
-      if (it.rateB != null && rollB && rollB.get(it.key) > 0 && !(it.newShare > 0.3)) it.rateB = 0.5 * it.rateB + 0.5 * rollB.get(it.key);
-      // 레시피로만 계산하는 품목(itemCfg.recipeOnly)은 최근 28영업일 메뉴 × 레시피 그대로 (11/15 KM "레시피 계산으로"). 리가토니: 10월에 늘어난 메뉴라 달 평균(0.081)이 뒤처짐, 28일 0.118 = 10/19~11/14 센 값·입고 22팩(레시피 22팩)
-      if (it.recipeOnly && rollB && rollB.get(it.key) > 0) it.rateB = rollB.get(it.key);
       it.loss = it.noLoss ? 1 : lossOf(it.key);
-      if (it.rateB != null) it.rateB *= it.loss;
       it.weKm = weMenu.has(it.key) ? weMenu.get(it.key) : null; // { we, wd }
-      // 최근 달 실제가 레시피의 3배 넘게 차이 나면 레시피 밖 사용(튀김기름 등)이나 단위 문제라 B를 안 씀
       const aLast = lastB && lastB.actual && lastB.actual.get(it.key);
-      if (tb && aLast && (aLast / (tb * it.loss) > 3 || aLast / (tb * it.loss) < 1 / 3)) it.rateB = null;
-      // 최근 달 수불현황이 아직 없으면(월 중간) A와 B를 직접 비교해서 3배 넘게 차이 나면 B를 안 씀
-      if (it.rateB != null && it.rateA != null && !(it.newShare > 0.3) && (it.rateA / it.rateB > 3 || it.rateA / it.rateB < 1 / 3)) it.rateB = null; // 메뉴 변화 몫이 크면 A와 달라도 B를 씀
-      // 달 비율 B가 A와 3배 넘게 달라 꺼졌어도, 최근 28영업일 날짜별 메뉴(rollB)로 본 B가 A와 3배 안이면 그것을 B로 (11/14: 레드파프리카 — 달 비율 B는 A의 4배라 꺼지고
-      //  A만으로 실제 사용의 절반만 예상. 날짜별 메뉴 × 레시피 × 로스는 센 값과 거의 같음(하루 2.09 vs 2.21). 예상 재고 평균 오차 3.31→2.69 · 덜 시킬 위험 6→5. 수불현황에만 있는 품목은 그대로, 지금 바뀌는 품목은 이것 하나)
-      if (it.rateB == null && it.rateA != null && !it.ledgerOnly && rollB && rollB.get(it.key) > 0) { const rb = rollB.get(it.key) * it.loss; if (it.rateA / rb <= 3 && it.rateA / rb >= 1 / 3) it.rateB = rb; }
+      // B 한 줄기(roll = 최근 28영업일 날짜별 판매, A = 견줄 A. A를 안 주면 A와 견주는 검사는 건너뜀). 순서·기준은 예전 그대로:
+      //  달 비율 → 반은 28영업일(메뉴 변화 몫 > 0.3이면 달 비율 그대로) → 레시피로만 계산 품목은 28영업일 그대로 → × 로스
+      //  → 최근 달 실제가 레시피의 3배 넘게 차이 나면 B 안 씀(레시피 밖 사용·단위 문제) → A와 3배 넘게 다르면 B 안 씀(메뉴 변화 몫이 크면 씀)
+      //  → 그래서 꺼졌어도 28영업일 B가 A와 3배 안이면 그것을 B로 (11/14 레드파프리카)
+      const bOf = (roll, A) => {
+        let B = goneB ? 0 : tb ? bt || tb / (lastB.gross / 1e6) : bt || null;
+        const rv = roll ? roll.get(it.key) || 0 : 0;
+        if (B != null && rv > 0 && !(it.newShare > 0.3)) B = 0.5 * B + 0.5 * rv;
+        if (it.recipeOnly && rv > 0) B = rv;
+        if (B != null) B *= it.loss;
+        if (tb && aLast && (aLast / (tb * it.loss) > 3 || aLast / (tb * it.loss) < 1 / 3)) B = null;
+        if (A === undefined) return B;
+        if (B != null && A != null && !(it.newShare > 0.3) && (A / B > 3 || A / B < 1 / 3)) B = null;
+        if (B == null && A != null && !it.ledgerOnly && rv > 0) { const rb = rv * it.loss; if (A / rb <= 3 && A / rb >= 1 / 3) B = rb; }
+        return B;
+      };
+      it.rateB = bOf(rollB, it.rateA);
+      // 11/28: 삭제 메뉴 몫을 빼면서 3배 검사의 경계에 걸려 B가 켜지거나 꺼지는 품목이 생김(레드어니언 A 0.056 → 0.049로 B가 꺼져 사용량 −58%, 홀그레인머스타드 +188%)
+      //  → A·B 중 무엇을 쓸지는 빼기 전 값으로 본 판정을 그대로 따르고, 값만 삭제 메뉴를 뺀 것으로
+      if (it.goneShare > 0 || it.goneFrom) { const bOld = bOf(rollBFull, aOld); if ((bOld == null) !== (it.rateB == null)) it.rateB = bOld == null ? null : bOf(rollB); }
       // E: 지난 달들로 A·B 채점 → 오차 제곱 역수로 비중
       const errA = [], errB = [];
       it.ledgerScores = [];
@@ -1402,7 +1436,11 @@
       acc.miss = [...new Set(miss)];
       return acc.size || acc.miss.length ? acc : null;
     };
-    cache = { items, line, prep, prepSheet, monthRows, withA, withB, blend, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf, salesOf, prepToRaw };
+    // 11/28 지금 파는 레시피: 삭제 메뉴(goneRec)와, 삭제 메뉴만 쓰던 프랩은 뺌 (연결 확인·데이터 요청 화면이 씀)
+    const liveLine = line.filter((r) => !goneRec.has(r.name)), livePrepNames = new Set(), gonePrepNames = new Set();
+    line.forEach((r) => { let pm; try { pm = perMenu(r); } catch (e) { return; } pm.prepAcc.forEach((v, k) => { if (v > 0) (goneRec.has(r.name) ? gonePrepNames : livePrepNames).add(k.replace(/\|ea$/, "")); }); });
+    const goneNames = [...goneRec.keys()], livePrep = prep.filter((r) => livePrepNames.has(r.name) || !(gonePrepNames.has(r.name) || goneNames.some((g) => r.name.startsWith(g + "_")))); /* 이름이 '삭제 메뉴_…'인 프랩(재료 연결이 끊겨 prepAcc에 안 잡히는 것)도 뺌 */
+    cache = { items, line, prep, liveLine, livePrep, prepSheet, monthRows, withA, withB, blend, goneRec, resolveMenu, resolveIng, ingCands, perMenu, directRaw, mapCfg, shares, pairTbG, yieldOf, salesOf, prepToRaw };
     applyScores(cache);
     return cache;
   }
@@ -1535,6 +1573,8 @@
       const unit = countStepOf(it) || 1;
       if (!(g > 0) || !(used >= 3 * unit)) return null;
       it._rr = used / (g / 1e6);
+      // 11/28: 구간에 삭제 메뉴가 팔리던 날(삭제일 전)이 섞여 있으면 그 기간 비율만큼 삭제 메뉴 몫을 덜어 냄 (구간이 삭제일 뒤로 넘어가면 저절로 실제 그대로)
+      if (it.goneShare > 0 && it.goneFrom && d0 < it.goneFrom) { const span = parseISO(d1) - parseISO(d0), pre = span > 0 ? Math.min(1, Math.max(0, (parseISO(d1 < it.goneFrom ? d1 : it.goneFrom) - parseISO(d0)) / span)) : 1; it._rrRaw = it._rr; it._rr *= 1 - it.goneShare * pre; }
     } catch (e) { it._rr = null; }
     return it._rr;
   }
@@ -4549,12 +4589,13 @@
     if (!M.line.length || !lastSales) { box.innerHTML = '<div class="empty">Line 레시피와 메뉴별 매출현황을 올리면 여기서 연결을 확인할 수 있어요.</div>'; $("mapCount").textContent = ""; return; }
     const sales = mget(lastSales.m).sales.rows.slice().sort((a, b) => b.qty - a.qty);
     const menuRows = sales.map((s) => ({ s, r: M.resolveMenu(s.menu, s.cat) }));
-    const ingNames = [...new Set(M.line.concat(M.prep).flatMap((r) => r.ing.map((i) => i.n)))];
+    // 11/28 KM "삭제 메뉴 전체 삭제": 삭제 메뉴 레시피와 삭제 메뉴만 쓰던 프랩의 재료는 연결 확인에서 뺌
+    const ingNames = [...new Set(M.liveLine.concat(M.livePrep).flatMap((r) => r.ing.map((i) => i.n)))];
     const ingRows = ingNames.map((n) => ({ n, r: M.resolveIng(n) }));
     const badMenu = menuRows.filter((x) => !x.r || x.r.auto);
     const badIng = ingRows.filter((x) => !x.r);
     $("mapCount").textContent = `메뉴 ${Math.round(lastSales.menuMapped / Math.max(1, lastSales.menuQty) * 100)}% 연결 · 재료 ${ingRows.length - badIng.length}/${ingRows.length}`;
-    const recipeOpts = (sel) => `<option value="">연결 안 함 (계산 제외)</option>` + M.line.map((r) => `<option value="${esc(r.name)}"${sel === r.name ? " selected" : ""}>${esc(r.short || r.name)} · ${esc(r.name)}</option>`).join("");
+    const recipeOpts = (sel) => `<option value="">연결 안 함 (계산 제외)</option>` + M.line.filter((r) => !M.goneRec.has(r.name) || r.name === sel).map((r) => `<option value="${esc(r.name)}"${sel === r.name ? " selected" : ""}>${esc(r.short || r.name)} · ${esc(r.name)}</option>`).join("");
     const ingOpts = (sel) => `<option value="">선택…</option><option value="skip"${sel === "skip" ? " selected" : ""}>계산에서 빼기</option>` + M.ingCands.map((c) => `<option value="${esc(c.kind + ":" + c.id)}"${sel === c.kind + ":" + c.id ? " selected" : ""}>${esc(c.label)}</option>`).join("");
     const lim = mapMore ? 999 : 8;
     let html = `<div class="cell kv"><span>메뉴 → 레시피<small>자동 연결은 맞는지 확인만 하면 돼요</small></span></div>`;
@@ -4800,7 +4841,7 @@
   function dataRequests(M) {
     const ic = db.itemCfg || {}, pc = db.prepCfg || {}, skip = (db.settings || {}).reqSkip || {}, out = new Map();
     const add = (id, o) => { if (skip[id]) return; const x = out.get(id) || { ...o, n: 0, ex: [] }; x.n++; if (x.ex.length < 2 && o.line && !x.ex.includes(o.line)) x.ex.push(o.line); out.set(id, x); };
-    [...M.line, ...M.prep].forEach((rc) => rc.ing.forEach((ing) => {
+    [...M.liveLine, ...M.livePrep].forEach((rc) => rc.ing.forEach((ing) => { /* 11/28: 삭제 메뉴 레시피는 묻지 않음 */
       const t = M.resolveIng(ing.n); if (!t || t.skip) return;
       const q = parseQty(ing.w, ing.v); if (!q) return;
       const it = t.kind === "item" ? M.items.find((i) => i.key === t.id) : null;
