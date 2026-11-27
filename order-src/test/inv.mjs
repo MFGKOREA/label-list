@@ -25,7 +25,7 @@ await p.goto("file://" + html);
 await p.waitForFunction(() => window.__orderCalc && window.__orderCalc.model().items.length, null, { timeout: 60000 });
 
 const dock = await p.$$eval("#dock [data-dock]", (a) => a.map((x) => x.dataset.dock));
-ok(dock.indexOf("inv") === dock.indexOf("prep") + 1 && dock.indexOf("forecast") === dock.indexOf("inv") + 1, "독: 프랩 | 인벤토리 | Forecast 순서 " + dock.join(","));
+ok(dock.indexOf("inv") === dock.indexOf("prep") + 1 && dock.indexOf("set") === dock.indexOf("inv") + 1 && dock.length === 5, "독 5개: 프랩 | 인벤토리 | 설정 순서 " + dock.join(","));
 const rows = await p.$$eval("#dock button", (a) => new Set(a.map((x) => Math.round(x.getBoundingClientRect().top))).size);
 ok(rows === 1, "독이 한 줄 (390px)");
 

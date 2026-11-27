@@ -39,7 +39,7 @@ async function open(tweak, hm = "09:30") {
   await p.addStyleTag({ content: "#dock{display:none!important}" });
   return { p, ctx, errs, posts, data };
 }
-const dock = async (p, v) => { await p.evaluate((v) => document.querySelector(`#dock [data-dock="${v}"]`).click(), v); await p.waitForTimeout(800); }; // 사진에서 가리지 않게 아래 메뉴는 숨겨 두고 직접 누름
+const dock = async (p, v) => { await p.evaluate((v) => { const b = document.querySelector(`#dock [data-dock="${v}"]`); if (b) b.click(); else window.__go(v === "report" ? "report:hlth" : v); }, v); /* 11/28: 하단 메뉴 5개 — Forecast·리포트는 설정에서 들어가는 화면 */ await p.waitForTimeout(800); }; // 사진에서 가리지 않게 아래 메뉴는 숨겨 두고 직접 누름
 const report = (p) => dock(p, "report");
 const board = (p) => p.evaluate(() => ({ sum: document.getElementById("hlthSum").textContent, sumCls: document.getElementById("hlthSum").className, rows: [...document.querySelectorAll("#hlth .kv.hl")].map((r) => ({ t: r.querySelector("span").firstChild.nextSibling.textContent, dot: r.querySelector(".dot").className.replace("dot ", ""), v: r.querySelector("b").textContent, cls: r.querySelector("b").className })) }));
 
@@ -137,7 +137,7 @@ for (const [log, want, label] of [
 // ---------- 3c) BOH 수원컨벤션점 발주시트 (11/16 KM: 주차별 · 날짜·요일 · Forecast · 재고 안 넣은 날은 예상 재고 · 발주는 앱 먼저, 없으면 GW · 발주품목순 · 설명 없이) ----------
 {
   const L = await open(null, "10:00");
-  await L.p.evaluate(() => document.querySelector('[data-go="log"]').click()); await L.p.waitForTimeout(800);
+  await L.p.evaluate(() => window.__go("log")); await L.p.waitForTimeout(800);
   const lv = await L.p.evaluate(() => {
     const C = window.__orderCalc, M = C.model(), db = C.db(), items = M.items.filter((i) => !i.ledgerOnly);
     const wk = document.querySelector("#v-log .logwk"), hs = [...wk.querySelectorAll("thead th.dh")].map((x) => x.textContent);

@@ -41,10 +41,10 @@ const r = await page.evaluate(() => {
       sponge: C.catOf(by("평판수세미")),
     },
     sheetTitle: document.querySelector("#v-log h2") && document.querySelector("#v-log h2").textContent,
-    sheetBtn: [...document.querySelectorAll(".locentry b")].map((b) => b.textContent).find((t) => t.includes("발주시트")),
+    sheetBtn: [...document.querySelectorAll("#v-set .st-row b")].map((b) => b.textContent).find((t) => t.includes("발주시트")),
     deptBtns: [...document.querySelectorAll("#depts button")].map((b) => b.textContent.replace(/\d+/g, "").trim()),
     title: document.querySelector("#v-loc h2") && document.querySelector("#v-loc h2").textContent,
-    entry: document.querySelector(".locentry b") && document.querySelector(".locentry b").textContent,
+    entry: (document.querySelector('#v-set .st-row[data-go="loc"] b') || {}).textContent,
   };
 });
 let pass = 0, fail = 0;
@@ -57,7 +57,7 @@ ok("화면 이름이 발주 품목 설정", r.title === "발주 품목 설정" &
 ok("업체:소모품 숨김이어도 평판수세미는 설정에 있음", r.sponge && r.sponge.sheetHide && r.sponge.hidden && !r.sponge.foh, JSON.stringify(r.sponge));
 ok("소모품 머리글 줄은 품목이 아님", r.junk === false);
 ok("분류: 양파·감자는 식자재, 콜라는 주류/음료, 장갑·수세미는 소모품", r.dept && r.dept.potato === "food" && r.dept.onion === "food" && r.dept.coke === "bev" && r.dept.glove === "sup" && r.dept.sponge === "sup", JSON.stringify(r.dept));
-ok("발주시트 제목에 BOH가 없음", r.sheetTitle === "수원컨벤션점 발주시트" && r.sheetBtn === "수원컨벤션점 발주시트", r.sheetTitle + "/" + r.sheetBtn);
+ok("발주시트 제목에 BOH가 없음", r.sheetTitle === "수원컨벤션점 발주시트" && r.sheetBtn === "발주시트", r.sheetTitle + "/" + r.sheetBtn);
 ok("발주 화면 분류는 식자재·주류/음료·소모품·세제", ["식자재", "주류/음료", "소모품", "세제"].every((t) => r.deptBtns.includes(t)), JSON.stringify(r.deptBtns));
 const day = await page.evaluate(() => {
   const cards = [...document.querySelectorAll("#orderList .cell .c-name")].map((n) => n.textContent);
@@ -71,9 +71,7 @@ ok("발주일인 상추는 월 발주 배지", (dow === 1) === (day.sang.include
 ok("발주일 아닌 품목은 아래 숨김", dow === 2 || /숨김/.test(day.hide), day.hide || "없음");
 ok("콘솔 오류 없음", errs.length === 0, errs.join(" | "));
 await page.evaluate(() => {
-  document.querySelector("#tileFiles").click();
-  document.querySelector('#v-files button[data-cat="order"]').click();
-  document.querySelector('[data-go="loc"]').click();
+  window.__go("loc"); /* 11/28: 설정 › 발주 품목 설정 */
   document.querySelector('#locScope button[data-s="foh"]').click();
   document.querySelector('#locTabs button[data-t="bar"]').click();
 });

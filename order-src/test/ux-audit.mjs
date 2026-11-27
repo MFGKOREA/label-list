@@ -9,12 +9,15 @@ const SCREENS = [
   ["order", async (p) => { await p.click('#dock [data-dock="order"]'); }],
   ["foh", async (p) => { await p.click('#dock [data-dock="foh"]'); }],
   ["prep", async (p) => { await p.click('#dock [data-dock="prep"]'); }],
-  ["forecast", async (p) => { await p.click('#dock [data-dock="forecast"]'); }],
-  ["report", async (p) => { await p.click('#dock [data-dock="report"]'); }],
-  ["files", async (p) => { await p.evaluate(() => { const g = [...document.querySelectorAll('[data-go="loc"]')][0]; }); await p.evaluate(() => window.__go && window.__go("files")); }],
-  ["loc-boh", async (p) => { await p.evaluate(() => document.querySelector('[data-go="loc"]').click()); }],
-  ["loc-foh", async (p) => { await p.evaluate(() => document.querySelector('[data-go="loc"]').click()); await p.waitForTimeout(400); await p.click('#locScope button[data-s="foh"]'); }],
-  ["log", async (p) => { await p.evaluate(() => document.querySelector('[data-go="log"]').click()); }],
+  ["set", async (p) => { await p.click('#dock [data-dock="set"]'); }],
+  ["forecast", async (p) => { await p.evaluate(() => window.__go("forecast")); }],
+  ["report", async (p) => { await p.evaluate(() => window.__go("report:acc")); }],
+  ["hlth", async (p) => { await p.evaluate(() => window.__go("report:hlth")); }],
+  ["alerts", async (p) => { await p.evaluate(() => window.__go("alerts")); }],
+  ["files", async (p) => { await p.evaluate(() => window.__go("files:month")); }],
+  ["loc-boh", async (p) => { await p.evaluate(() => window.__go("loc")); }],
+  ["loc-foh", async (p) => { await p.evaluate(() => window.__go("loc")); await p.waitForTimeout(400); await p.click('#locScope button[data-s="foh"]'); }],
+  ["log", async (p) => { await p.evaluate(() => window.__go("log")); }],
 ];
 const out = [];
 for (const w of [360, 390, 430]) for (const scheme of ["light", "dark"]) {

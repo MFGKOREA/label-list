@@ -13,7 +13,7 @@ const cur = () => p.locator('#dock [aria-current="page"]').textContent();
 await p.goto(HTML); await p.waitForTimeout(2500);
 await p.click('#dock [data-dock="foh"]'); await p.waitForTimeout(700);
 ok((await cur()) === "FOH 발주" && (await p.textContent("#mainTitle")) === "FOH 발주", "FOH 탭: 독·제목");
-await p.click('#dock [data-dock="forecast"]'); await p.waitForTimeout(500);
+await p.click('#v-main .tile[data-go="forecast"]'); await p.waitForTimeout(500); /* 11/28: Forecast는 발주 화면 타일·설정에서 들어감. 뒤로가기는 온 길(발주)로 */
 await p.evaluate(() => document.querySelector('.view:not([hidden]) .back').click()); await p.waitForTimeout(500);
 ok((await cur()) === "FOH 발주" && (await p.textContent("#mainTitle")) === "FOH 발주" && (await p.evaluate(() => document.querySelectorAll("#orderList .cell").length + [...document.querySelectorAll("#orderList details.offday summary small")].reduce((a, x) => a + (+x.textContent || 0), 0))) > 40, "Forecast 갔다 뒤로: 독·제목·목록이 FOH 그대로(보이는 것 + 발주일 아닌 업체 '숨김') · 독=" + (await cur()));
 await p.fill("#q", "테너"); await p.waitForTimeout(500);

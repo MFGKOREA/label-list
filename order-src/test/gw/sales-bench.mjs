@@ -98,7 +98,7 @@ async function world(variant, sc) {
     post("btnLock", { salt: "s", hash: "h" });
     const pg = await ctx.newPage(); pg.on("dialog", (d) => d.accept().catch(() => {})); pg.on("pageerror", (e) => log.push("앱 오류: " + e.message));
     await pg.goto("https://app.test/order.html"); await pg.evaluate(() => localStorage.setItem("order-calc-pin", "h")); await pg.reload(); await sleep(900);
-    await pg.click('#dock [data-dock="forecast"]'); await sleep(400);
+    await pg.evaluate(() => window.__go("forecast")); await sleep(400);
     const bar = async (id) => ({ text: ((await pg.locator(`#${id} .mis-s`).textContent().catch(() => "")) || "").trim(), disabled: await pg.locator(`#${id} button.btn`).isDisabled().catch(() => null) });
     const settle = async () => { for (let i = 0; i < 16; i++) { const g = await bar("salesBar"), m = await bar("menuBar"); if (/^[✓⚠]/.test(g.text) && /^[✓⚠]/.test(m.text)) return; await sleep(500); } };
     return { pg, settle, gross: () => bar("salesBar"), menu: () => bar("menuBar"), pressGross: () => pg.evaluate(() => document.getElementById("salesGo").click()), pressMenu: () => pg.evaluate(() => document.getElementById("menuGo").click()) };

@@ -684,7 +684,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* ---------- 하단 독 (11/3): 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ---------- */
 .dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   max-width: 480px; margin: 0 auto;
   padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px));
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -704,8 +704,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .dock button:active svg { transform: scale(.94); }
 @media (prefers-reduced-motion: reduce) { .dock button svg { transition: none; } }
 .view { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
-/* 독이 대신하는 것: 발주/프랩 탭, 상단 리포트 버튼, 하위 화면의 "< 발주" 뒤로가기 */
-#v-main > .seg, .topbtns .tb.report, .view .nav .back { display: none; }
+/* 독이 대신하는 것: 발주/프랩 탭, 상단 리포트 버튼. 하위 화면(설정에서 들어가는 화면)은 뒤로가기 화살표를 보임(11/28) */
+#v-main > .seg, .topbtns .tb.report { display: none; }
 .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 
 /* ---------- 스테이지쇼 다듬기 시안 (11/4) ----------
@@ -772,7 +772,6 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .rloc button { border: 0; background: none; width: 36px; height: 36px; border-radius: 8px; font-size: 14px; font-weight: 800; color: var(--muted); }
 .rloc button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
-#v-loc .nav .back { display: flex; } /* 이 화면은 독에 없어서 뒤로가기(파일) 남김 */
 
 /* 발주 필요 칸 안 작은 머리글 (11/12): 덜 넣음 · 발주완료 */
 .subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
@@ -1013,14 +1012,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .mdlg .md-row.miss .md-r, .mdlg .md-row.miss .md-d { font-weight: 800; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mdlg .md-blue, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-r, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-d { color: #7aa7ff; } }
 :root[data-theme="dark"] .mdlg .md-blue, :root[data-theme="dark"] .mdlg .md-row.miss .md-r, :root[data-theme="dark"] .mdlg .md-row.miss .md-d { color: #7aa7ff; }
-/* 리포트·데이터 파일 분류 카드 (11/19 KM "HR 운영 설정처럼"): 2×2 카드, 고른 카드는 검정 */
-.catgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 22px; }
-.catgrid button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 600; text-align: left; touch-action: manipulation; transition: transform .1s ease, background-color .15s ease; }
-.catgrid button svg { flex: none; color: var(--muted); }
-.catgrid button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catgrid button.on { background: var(--fg); color: var(--surface); border-color: var(--fg); }
-.catgrid button.on svg { color: var(--surface); }
-.catgrid button:active { transform: scale(.97); }
+/* 리포트·자료 화면의 묶음: 설정에서 고른 하나만 보임 (11/28 분류 카드 없앰) */
 .catpane[hidden] { display: none !important; }
 .catempty { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); }
 details.adv { margin-top: 8px; }
@@ -1114,7 +1106,6 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 #pOrder .frow > .chips:has(> button:nth-child(5)) { display: flex; overflow-x: auto; scrollbar-width: none; }
 #pOrder .frow > .chips:has(> button:nth-child(5))::-webkit-scrollbar { display: none; }
 #pOrder .frow > .chips:has(> button:nth-child(5)) > button { flex: 1 0 72px; grid-column: auto; }
-.catgrid { margin-bottom: 14px; }
 .tiles .misbar.mistile { padding: 12px 10px 10px 11px; } /* Forecast 카드와 글자 시작(왼쪽 11px)·제목 높이 맞춤 */
 .chips#sorts button { min-height: 40px; } /* 업체·위치 칩과 같은 높이 */
 /* 예상이 섞인 안내 줄(.banner.soft)은 바탕이 화면색과 같아(#f4f4f4) 글자만 떠 보였음 → 다른 카드처럼 흰 카드 + 얇은 테두리, 글자색만 옅게 */
@@ -1166,7 +1157,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 .inv-t td small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 500; }
 #invSeg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* 독 7칸 (11/26 인벤토리 추가): 390px 폭에 한 줄로 — 글자·아이콘 여백을 조금 줄임 */
-.dock button { font-size: 11px; }
+.dock button { font-size: 12px; } /* 11/28: 메뉴 7개 → 5개라 글씨를 다시 12px로 */
 .dock button svg { padding: 3px 9px; }
 .inv-row .inv-in select { width: 64px; font: inherit; font-size: 14px; padding: 7px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; }
 .inv-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 12px; background: var(--fill); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -1223,7 +1214,8 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 fieldset.set-card legend.set-head { float: left; width: 100%; margin-bottom: 2px; }
 .set-note { margin: 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; text-wrap: pretty; }
 .set-note.pad { padding: 0 0 12px; }
-.sw { flex: 0 0 auto; width: 52px; height: 32px; padding: 3px; border: 0; border-radius: 16px; background: var(--chick-line); display: flex; justify-content: flex-start; touch-action: manipulation; transition: background-color .15s ease; }
+.sw { position: relative; flex: 0 0 auto; width: 52px; height: 32px; padding: 3px; border: 0; border-radius: 16px; background: var(--chick-line); display: flex; justify-content: flex-start; touch-action: manipulation; transition: background-color .15s ease; }
+.sw::before { content: ""; position: absolute; inset: -6px -4px; } /* 누름 자리 44px */
 .sw i { width: 26px; height: 26px; border-radius: 13px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .15s ease; }
 .sw[aria-checked="true"] { background: var(--accent-text); }
 .sw[aria-checked="true"] i { transform: translateX(20px); }
@@ -1287,6 +1279,38 @@ details.lc-adv .set-row { padding: 10px 0; }
 .lc-day li.h { color: var(--muted); font-size: 12.5px; font-weight: 700; }
 .lc-day .set-note { padding-bottom: 10px; }
 
+/* ---------- 설정 화면 (11/28 KM "하나로 합치고 설정 · 깔끔하고 직관적으로") ---------- */
+/* 하위 화면 머리: 화살표(44px 누름 자리) + 제목. 제목은 조금 작게 */
+.view .nav .back { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; margin: -6px -6px -6px -12px; padding: 0; border-radius: 12px; color: var(--fg); touch-action: manipulation; }
+.view .nav .back:active { background: var(--fill); }
+.view .nav .back + h2 { font-size: 22px; }
+#v-loc .nav { margin-left: 2px; }
+.st-h { margin: 22px 4px 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.nav + .st-h { margin-top: 6px; }
+.st-need + .st-h { margin-top: 18px; }
+.st-group { background: var(--surface); border-radius: 16px; overflow: hidden; }
+.st-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 14px; border: 0; background: none; color: var(--fg); font: inherit; text-align: left; touch-action: manipulation; -webkit-tap-highlight-color: transparent; position: relative; }
+.st-row + .st-row::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; border-top: 1px solid var(--line); }
+button.st-row:active { background: var(--fill); }
+.st-ic { flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--fill-2); color: var(--muted); }
+.st-t { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.st-t b { font-size: 16px; font-weight: 700; }
+.st-t small { color: var(--muted); font-size: 12.5px; line-height: 1.35; font-variant-numeric: tabular-nums; text-wrap: pretty; } /* 상태 글은 자르지 않고 두 줄까지 내려 씀(잘리면 '숨김 23'·'확인 필요' 같은 끝이 안 보임) */
+.st-t small:empty { display: none; }
+.st-badge { flex: 0 0 auto; font-style: normal; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--rose); color: var(--rose-ink); font-variant-numeric: tabular-nums; }
+.st-badge.soft { background: var(--fill-2); color: var(--muted); }
+.st-row .chev { flex: 0 0 auto; color: var(--muted); opacity: .7; }
+.st-fld { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.st-fld input { width: 72px; height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: inherit; font: inherit; font-size: 16px; font-weight: 700; text-align: right; padding: 0 10px; font-variant-numeric: tabular-nums; }
+.st-fld i { font-style: normal; color: var(--muted); font-size: 14px; }
+.st-need { display: grid; margin: 0 0 4px; padding: 12px 14px 4px; border-radius: 16px; background: var(--rose); color: var(--rose-ink); }
+.st-need > b { font-size: 13px; font-weight: 800; }
+.st-need button { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 700; text-align: left; touch-action: manipulation; }
+.st-need button + button { border-top: 1px solid var(--rose-line); }
+.st-need button span { min-width: 0; text-wrap: pretty; }
+#setStore { font-size: 13px; color: var(--muted); }
+@media (hover: hover) and (pointer: fine) { button.st-row:hover { background: var(--fill); } }
+
 </style>
 </head>
 <body>
@@ -1315,7 +1339,7 @@ details.lc-adv .set-row { padding: 10px 0; }
       </button>
       <!-- 11/19 KM "오른쪽 위 데이터 파일 카드는 없어도 됨 → 같은 크기로 그룹웨어 자동입력·전송": GW 칸이 보일 땐 데이터 파일 카드를 숨김(일요일·사전발주·시트 없음이면 데이터 파일 카드) -->
       <div class="misbar mistile" id="misBar" hidden></div>
-      <button type="button" class="tile" data-go="files" id="tileFiles">
+      <button type="button" class="tile" data-go="files:month" id="tileFiles">
         <span class="ic df"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
         <span class="t">데이터 파일</span>
         <svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg>
@@ -1365,7 +1389,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   <!-- Forecast -->
   <section class="view" id="v-forecast" aria-label="Forecast" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2>Forecast</h2>
       <span class="right"><span class="gs">Gross Sales · 원</span></span>
     </div>
@@ -1387,7 +1411,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   <!-- 보관 위치 · 순서 (11/6 KM): 품목마다 드라이·워크인·프리저, 손잡이를 끌어 선반 순서대로 -->
   <section class="view" id="v-loc" aria-label="발주 품목 설정" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2>발주 품목 설정</h2>
       <span class="right"></span>
     </div>
@@ -1401,7 +1425,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   <!-- BOH 수원컨벤션점 발주시트 (11/16 KM: 과거 2주치 재고·발주량 조회·인쇄, 점검용 → 주차별·Forecast·발주품목순, 설명 문구 없이) -->
   <section class="view" id="v-veg" aria-label="야채 입고일" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2 class="logtitle">야채 입고일</h2>
       <span class="right"><button type="button" class="printbtn" id="vegPrint">인쇄</button></span>
     </div>
@@ -1433,7 +1457,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   <!-- 품목 설정 (11/28 KM 시안 3): 발주 품목 설정 목록에서 [설정] → 보이기·소분·레시피만 스위치, 여유분 슬라이더, 보관 위치, 고급 설정 -->
   <section class="view" id="v-item" aria-label="품목 설정" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="loc" aria-label="발주 품목 설정으로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <button type="button" class="back" data-go="loc" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2 class="logtitle" id="itemTitle">품목 설정</h2>
       <span class="right"></span>
     </div>
@@ -1442,7 +1466,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   <!-- 알림 · 자동 실행 (11/28 KM 시안 5): 라인체크 시각·구역, 인벤토리 → MIS 방식, 매장 PC 자동 수집 상태 -->
   <section class="view" id="v-alerts" aria-label="알림 · 자동 실행" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="report" aria-label="데이터 리포트로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2 class="logtitle">알림 · 자동 실행</h2>
       <span class="right"></span>
     </div>
@@ -1450,7 +1474,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   </section>
   <section class="view" id="v-log" aria-label="수원컨벤션점 발주시트" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2 class="logtitle">수원컨벤션점 발주시트</h2>
       <span class="right"><button type="button" class="printbtn" id="logPrint">인쇄</button></span>
     </div>
@@ -1459,17 +1483,11 @@ details.lc-adv .set-row { padding: 10px 0; }
   </section>
   <section class="view" id="v-files" aria-label="데이터 파일" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
-      <h2>데이터 파일</h2>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <h2 id="filesTitle">월별 자료</h2>
       <span class="right"></span>
     </div>
     <div class="conn" id="connState"></div>
-    <div class="catgrid" data-view="files" role="tablist" aria-label="분류">
-      <button type="button" role="tab" data-cat="month"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M9 3.5v4M15 3.5v4"/></svg><span>월별 자료</span></button>
-      <button type="button" role="tab" data-cat="recipe"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7h11M9 12h11M9 17h11"/><path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg><span>레시피 · 품목</span></button>
-      <button type="button" role="tab" data-cat="order"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.8 12 3.5l8.5 4.3v8.4L12 20.5l-8.5-4.3z"/><path d="M3.5 7.8 12 12l8.5-4.2M12 12v8.5"/></svg><span>발주 설정</span></button>
-      <button type="button" role="tab" data-cat="learn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg><span>학습 상태</span></button>
-    </div>
     <div class="catpane" data-cat="month">
 
     <div class="sect"><span>월별 데이터</span></div>
@@ -1488,25 +1506,7 @@ details.lc-adv .set-row { padding: 10px 0; }
     <div class="sect"><span>품목 목록</span></div>
     <div class="group" id="masters"></div>
     </div>
-    <div class="catpane" data-cat="order">
-    <button type="button" class="locentry" data-go="loc"><span><b>발주 품목 설정</b><small id="locSum"></small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-    <button type="button" class="locentry" data-go="log"><span><b>수원컨벤션점 발주시트</b></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-    <button type="button" class="locentry" data-go="veg"><span><b>야채 입고일</b><small>새싹농산 · 남은 재고의 입고일과 사용기한</small></span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
-
-    <div class="sect"><span>발주 설정</span></div>
-    <div class="group">
-      <div class="cell gross">
-        <span class="kv"><span>주말 여유분</span></span>
-        <label class="fld"><span>%</span><input id="wkIn" type="number" inputmode="numeric" min="0" max="200" step="5" aria-label="주말 여유분 퍼센트"></label>
-      </div>
-    </div>
-    </div>
-    <div class="catpane" data-cat="learn">
-    <div class="sect"><span>학습 상태</span><small id="learnRange"></small></div>
-    <div class="group" id="learnState"></div>
-
-    </div>
-    <details class="adv"><summary>고급</summary>
+    <div class="catpane" data-cat="conn">
     <div class="sect"><span>구글 시트 연결</span></div>
     <div class="group">
       <div class="cell set">
@@ -1519,21 +1519,15 @@ details.lc-adv .set-row { padding: 10px 0; }
         <div class="row"><select id="bkSel" aria-label="백업 날짜"><option value="">불러오는 중…</option></select><button type="button" class="btn ghost" id="bkGo">되돌리기</button></div>
       </div>
     </div>
-    </details>
+    </div>
   </section>
 
   <!-- 데이터 리포트 -->
   <section class="view" id="v-report" aria-label="데이터 리포트" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
-      <h2>데이터 리포트</h2>
-      <span class="right"><button type="button" class="printbtn" data-go="alerts">알림 설정</button></span>
-    </div>
-    <div class="catgrid" data-view="report" role="tablist" aria-label="분류">
-      <button type="button" role="tab" data-cat="hlth"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg><span>상황판</span></button>
-      <button type="button" role="tab" data-cat="acc"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg><span>정확도</span></button>
-      <button type="button" role="tab" data-cat="learn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15l3.5-4 3 2.5L19 8"/></svg><span>학습</span></button>
-      <button type="button" role="tab" data-cat="req"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h4.5l1 2h5l1-2H20"/></svg><span>데이터 요청</span></button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <h2 id="reportTitle">GW 상황판</h2>
+      <span class="right"></span>
     </div>
     <div class="catpane" data-cat="hlth">
     <!-- GW 상황판 (11/15 KM "2주안 기획들 실행해", 기획안 14번): 자료마다 마지막으로 들어온 날 · PC 신호 · 합계 대조 · 학습 기록 · 오늘 86 · 품절 -->
@@ -1549,6 +1543,8 @@ details.lc-adv .set-row { padding: 10px 0; }
       <button type="button" class="xp-more" id="xpMore" aria-expanded="false" aria-controls="xpLog" aria-label="학습 기록 펼치기"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l5.5 5 5.5-5"/></svg></button>
       <div class="xp-log" id="xpLog" hidden></div>
     </div>
+    <div class="sect"><span>자료별 학습 상태</span><small id="learnRange"></small></div>
+    <div class="group" id="learnState"></div>
     </div>
     <div class="catpane" data-cat="acc">
     <div class="wkpick" hidden>
@@ -1580,10 +1576,53 @@ details.lc-adv .set-row { padding: 10px 0; }
     </div>
   </section>
 
+  <!-- 설정 (11/28 KM "Forecast·리포트·데이터 파일을 하나로 합치고 설정 · 깔끔하고 직관적으로"): 하단 메뉴 5개. 묶음마다 줄 = 이름 + 지금 상태 한 줄 + 확인할 것 표시 -->
+  <section class="view" id="v-set" aria-label="설정" hidden>
+    <div class="nav">
+      <h2>설정</h2>
+      <span class="right" id="setStore"></span>
+    </div>
+    <div class="st-need" id="setNeed" hidden></div>
+
+    <div class="st-h">매출 · 자료</div>
+    <div class="st-group">
+      <button type="button" class="st-row" data-go="forecast"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span><span class="st-t"><b>Forecast</b><small id="stFc"></small></span><em class="st-badge" id="stFcB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="files:month"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><span class="st-t"><b>월별 자료</b><small id="stMonth"></small></span><em class="st-badge" id="stMonthB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="files:recipe"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h9l3 3v14H6z"/><path d="M9 11h6M9 15h6"/></svg></span><span class="st-t"><b>레시피 · 품목 연결</b><small id="stRecipe"></small></span><em class="st-badge" id="stRecipeB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    </div>
+
+    <div class="st-h">발주</div>
+    <div class="st-group">
+      <button type="button" class="st-row" data-go="loc"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.8 12 3.5l8.5 4.3v8.4L12 20.5l-8.5-4.3z"/><path d="M3.5 7.8 12 12l8.5-4.2M12 12v8.5"/></svg></span><span class="st-t"><b>발주 품목 설정</b><small id="locSum"></small></span><em class="st-badge" id="locSumB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="log"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span class="st-t"><b>발주시트</b><small id="stLog">주별 재고 · 발주 기록 · 인쇄</small></span><em class="st-badge" id="stLogB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="veg"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-4 0-7-3-7-7 0-5 7-11 7-11s7 6 7 11c0 4-3 7-7 7z"/><path d="M12 21v-9"/></svg></span><span class="st-t"><b>야채 입고일</b><small id="stVeg">남은 재고의 입고일과 사용기한</small></span><em class="st-badge" id="stVegB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <label class="st-row st-in"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span><span class="st-t"><b>주말 여유분</b><small>주말 앞 발주에 더 얹는 양</small></span><span class="st-fld"><input id="wkIn" type="number" inputmode="numeric" min="0" max="200" step="5" aria-label="주말 여유분 퍼센트"><i>%</i></span></label>
+    </div>
+
+    <div class="st-h">알림 · 매장 PC</div>
+    <div class="st-group">
+      <button type="button" class="st-row" data-go="alerts"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></span><span class="st-t"><b>라인체크 알림</b><small id="stLc"></small></span><em class="st-badge" id="stLcB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="report:hlth"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></svg></span><span class="st-t"><b>GW 상황판</b><small id="stPc"></small></span><em class="st-badge" id="stPcB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    </div>
+
+    <div class="st-h">리포트</div>
+    <div class="st-group">
+      <button type="button" class="st-row" data-go="report:acc"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><span class="st-t"><b>발주 정확도</b><small id="stAcc"></small></span><em class="st-badge" id="stAccB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="report:learn"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-4.5L21 9l-9 4.5z"/><path d="M7 11.5V16c1.5 1.5 3.2 2 5 2s3.5-.5 5-2v-4.5"/></svg></span><span class="st-t"><b>학습 상태</b><small id="stLearn"></small></span><em class="st-badge" id="stLearnB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="report:req"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v10.5H9l-5 4z"/></svg></span><span class="st-t"><b>데이터 요청</b><small id="stReq"></small></span><em class="st-badge" id="stReqB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    </div>
+
+    <div class="st-h">연결 · 도움말</div>
+    <div class="st-group">
+      <button type="button" class="st-row" data-go="files:conn"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span><span class="st-t"><b>구글 시트 연결 · 백업</b><small id="stConn"></small></span><em class="st-badge" id="stConnB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+      <button type="button" class="st-row" data-go="help"><span class="st-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.5a2.4 2.4 0 1 1 3.5 2.100c-.8.5-1.200 1-1.200 1.900M12 16.7v.1"/></svg></span><span class="st-t"><b>사용방법</b><small id="stHelp">매일 · 매주 · 매달 할 일</small></span><em class="st-badge" id="stHelpB" hidden></em><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>
+    </div>
+  </section>
+
   <!-- 사용방법 -->
   <section class="view" id="v-help" aria-label="사용방법" hidden>
     <div class="nav">
-      <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
+      <button type="button" class="back" data-go="set" aria-label="뒤로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
       <h2>사용방법</h2>
       <span class="right"></span>
     </div>
@@ -1595,14 +1634,14 @@ details.lc-adv .set-row { padding: 10px 0; }
       <li><i>3</i><div><b>발주수량 입력</b><span>실제로 발주한 양. 14:30 마감.</span><span class="ex"><span class="exf"><small>발주 PK</small>2</span></span></div></li>
     </ol>
 
-    <div class="sect"><span>일주일에 한 번</span><small>Forecast</small></div>
+    <div class="sect"><span>일주일에 한 번</span><small>설정 › Forecast</small></div>
     <div class="group">
       <div class="cell guide"><span class="gi c2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span><div><b>Forecast</b><span>이번 주·다음 주 하루 예상 매출. 지난 날은 실제 매출. 엔터 → 아래 칸.</span></div></div>
     </div>
 
-    <div class="sect"><span>한 달에 한 번</span><small>데이터 파일</small></div>
+    <div class="sect"><span>한 달에 한 번</span><small>설정 › 월별 자료</small></div>
     <div class="group">
-      <div class="cell guide"><span class="gi c3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><div><b>데이터 파일</b><span>레시피 · 메뉴별 매출 · 수불현황 올리기. 빨간 <b class="bang">!</b> = 아직 안 올린 파일.</span></div></div>
+      <div class="cell guide"><span class="gi c3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><div><b>월별 자료</b><span>레시피 · 메뉴별 매출 · 수불현황 올리기. 빨간 <b class="bang">!</b> = 아직 안 올린 파일.</span></div></div>
     </div>
 
     <div class="sect"><span>표시 뜻</span></div>
@@ -1628,7 +1667,7 @@ details.lc-adv .set-row { padding: 10px 0; }
     <div class="sect"><span>프랩 · 리포트</span></div>
     <div class="group">
       <div class="cell guide"><span class="gi c1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span><div><b>프랩</b><span>재고(On Hand) 입력 → 오늘 만들 양. 2days = 쉘프라이프.</span></div></div>
-      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>데이터 리포트</b><span>주별 발주 예측 정확도. 오차 범위 큰 품목 10개.</span></div></div>
+      <div class="cell guide"><span class="gi c4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg></span><div><b>리포트</b><span>설정 › 발주 정확도. 주별 예측 정확도 · 오차 범위 큰 품목 10개.</span></div></div>
     </div>
 
     <div class="tipcard">
@@ -1643,9 +1682,7 @@ details.lc-adv .set-row { padding: 10px 0; }
   <button type="button" data-dock="foh"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12l-1.5 17h-9z"/><path d="M6.6 9.5h10.8"/></svg><span>FOH 발주</span></button>
   <button type="button" data-dock="prep"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h16v4.5a4.5 4.5 0 0 1-4.5 4.5h-7A4.5 4.5 0 0 1 4 15.5z"/><path d="M2.5 11h19"/><path d="M9 3.5c-.8.9-.8 2 0 3M12 3c-.8.9-.8 2.4 0 3.5M15 3.5c-.8.9-.8 2 0 3"/></svg><span>프랩</span></button>
   <button type="button" data-dock="inv"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 3.5v2h6v-2"/><path d="M8.5 10.5l1.5 1.5 3-3M8.5 16h7"/></svg><span>인벤토리</span></button>
-  <button type="button" data-dock="forecast"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Forecast</span></button>
-  <button type="button" data-dock="report"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg><span>리포트</span></button>
-  <button type="button" data-dock="files"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>데이터 파일</span></button>
+  <button type="button" data-dock="set"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>설정</span></button>
 </nav>
 <dialog id="misDlg" class="mdlg" aria-label="GW 전송 확인"></dialog>
 <dialog id="a2hsDlg" class="mdlg a2" aria-label="홈 화면에 추가"></dialog>
@@ -3671,7 +3708,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv", item: "v-item", alerts: "v-alerts" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv", item: "v-item", alerts: "v-alerts", set: "v-set" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -3692,29 +3729,46 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   }
   // 데이터 리포트를 열 때만 학습량 숫자가 0부터 올라가며 게이지가 참
   let xpAnim = false, xpTok = 0;
-  function go(to) {
+  // 11/28 KM "Forecast·리포트·데이터 파일을 하나로 합치고 설정": 하단 메뉴는 발주·FOH 발주·프랩·인벤토리·설정 5개.
+  //  나머지 화면은 모두 설정에서 들어가는 하위 화면. 데이터 파일·리포트의 2×2 분류 카드는 없애고 묶음(.catpane) 하나가 화면 하나 — go("files:month")처럼 "화면:묶음"으로 감
+  //  뒤로가기(.back): 온 길로 돌아감(prevOf). 발주 화면의 Forecast 타일로 들어왔으면 발주로, 설정에서 들어왔으면 설정으로
+  const PANE = { files: { month: "월별 자료", recipe: "레시피 · 품목 연결", conn: "구글 시트 연결 · 백업" }, report: { hlth: "GW 상황판", acc: "발주 정확도", learn: "학습 상태", req: "데이터 요청" } };
+  const paneCur = { files: "month", report: "hlth" }, TOP = new Set(["main", "inv", "set"]), prevOf = {};
+  let curView = "main";
+  const dockKeyOf = (v) => (v === "main" ? ($("pPrep").hidden ? (scope === "foh" ? "foh" : "order") : "prep") : v === "inv" ? "inv" : "set");
+  function go(dest, back) {
+    const [to, cat] = String(dest).split(":");
+    if (!views[to]) return;
+    if (cat && PANE[to] && PANE[to][cat]) paneCur[to] = cat;
+    if (!back && !TOP.has(to) && to !== curView && prevOf[curView] !== to) prevOf[to] = curView;
+    curView = to;
     if (to === "report") xpAnim = true;
     Object.entries(views).forEach(([k, id]) => {
       const v = $(id); v.hidden = k !== to; v.classList.remove("push", "pop");
-      if (k === to) { void v.offsetWidth; v.classList.add(to === "main" ? "pop" : "push"); }
+      if (k === to) { void v.offsetWidth; v.classList.add(back || TOP.has(to) ? "pop" : "push"); }
     });
     window.scrollTo(0, 0);
+    if (PANE[to]) catSync();
     if (to === "main") renderMain();
     if (to === "forecast") renderForecast();
-    if (to === "files") renderFiles();
-    if (to === "report") renderReport();
+    if (to === "files" || (to === "report" && paneCur.report === "learn")) renderFiles(); /* 자료별 학습 상태(#learnState)는 renderFiles가 그림 */
+    if (to === "report") { renderReport(); catSync(); }
     if (to === "loc") renderLocEdit();
     if (to === "log") renderStockLog();
     if (to === "veg") renderVeg();
     if (to === "inv") renderInv();
     if (to === "item") renderItem();
     if (to === "alerts") renderAlerts();
-    if (to === "files") locSumUpdate();
+    if (to === "set") renderSet();
+    try { dockOn(dockKeyOf(to)); } catch (e) {}
   }
+  window.__go = go;
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-go]"); if (!b) return;
-    if (b.dataset.go === "files") { unlock().then((ok) => ok && go("files")); return; } // 데이터 파일은 버튼 비밀번호와 같은 번호
-    go(b.dataset.go);
+    const dest = b.dataset.go, to = dest.split(":")[0];
+    if (b.classList.contains("back")) { go(prevOf[curView] || dest, true); return; }
+    if (/^(files|loc|log|veg)$/.test(to) && curView !== "item") { unlock().then((ok) => ok && go(dest)); return; } // 자료 올리기·발주 설정 쪽은 버튼 비밀번호와 같은 번호 (예전 '데이터 파일' 잠금 그대로)
+    go(dest);
   });
   // FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 정리해서 · 발주품목순대로")
   //  품목 = 시트 master.foh (MIS 주문현황 10/19~11/17에서 발주 시트에 없는 품목, 업체 → 이름순 = 주문현황 순서). 재고 계산은 없음: 최근 발주(misOrder)와 오늘 발주 수량만.
@@ -3766,24 +3820,15 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     if (t === "tabPrep") renderPrep();
   }));
 
-  // ---------- 리포트·데이터 파일 분류 카드 (11/19 KM "기능·카드가 너무 많아, HR 운영 설정처럼 카테고리별로") ----------
-  //  화면 위 2×2 카드 중 하나를 고르면 그 묶음(.catpane)만 보임. 고른 것은 이 기기에 기억. 데이터 요청은 요청·옵션 비율이 없으면 "요청할 자료가 없어요"
+  // ---------- 리포트·자료 화면의 묶음(.catpane): 설정에서 고른 묶음 하나만 보이고 제목도 그 이름 (11/28 분류 카드 없앰). 데이터 요청은 요청·옵션 비율이 없으면 "요청할 자료가 없어요" ----------
   function catSync() {
-    document.querySelectorAll(".catgrid").forEach((g) => {
-      const view = g.closest(".view"), panes = [...view.querySelectorAll(".catpane")], keys = panes.map((p) => p.dataset.cat);
-      let cur = ""; try { cur = localStorage.getItem("cat-" + g.dataset.view) || ""; } catch (e) {}
-      if (!keys.includes(cur)) cur = keys[0];
-      g.querySelectorAll("button[data-cat]").forEach((b) => { const on = b.dataset.cat === cur; b.setAttribute("aria-selected", on); b.classList.toggle("on", on); });
-      panes.forEach((p) => { p.hidden = p.dataset.cat !== cur; });
-      const req = view.querySelector('.catpane[data-cat="req"]');
-      if (req) { const has = [...req.querySelectorAll("#rReqH, #rSharesH")].some((x) => !x.hidden); const em = req.querySelector(".catempty"); if (em) em.hidden = has; }
+    Object.keys(PANE).forEach((v) => {
+      $(views[v]).querySelectorAll(".catpane").forEach((p) => { p.hidden = p.dataset.cat !== paneCur[v]; });
+      const h = $(v + "Title"); if (h) h.textContent = PANE[v][paneCur[v]];
     });
+    const req = $("v-report").querySelector('.catpane[data-cat="req"]');
+    if (req) { const has = [...req.querySelectorAll("#rReqH, #rSharesH")].some((x) => !x.hidden); const em = req.querySelector(".catempty"); if (em) em.hidden = has; }
   }
-  document.querySelectorAll(".catgrid").forEach((g) => g.addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-cat]"); if (!b) return;
-    try { localStorage.setItem("cat-" + g.dataset.view, b.dataset.cat); } catch (er) {}
-    catSync();
-  }));
   catSync();
   $("preBtn")?.addEventListener("click", () => { setPre(!preMode); renderMain(); });
   // 맨 위로 (11/20 KM "맨 위로 버튼 좋은데"): 화면을 한 화면 반 넘게 내리면 독 위 오른쪽에 [↑ 맨 위로] + 지금 보는 품목 순번(발주·FOH 목록에서만)
@@ -3826,7 +3871,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   }
   setTimeout(() => { if (!document.querySelector("dialog[open]")) a2hsShow(/[?&]a2hs=1/.test(location.search)); }, 1800);
 
-  // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
+  // ---------- 하단 독: 발주 · FOH 발주 · 프랩 · 인벤토리 · 설정 (11/28: 7개 → 5개) ----------
   // 11/12 KM 화면: 아이폰에서 숫자를 입력하고 키보드를 닫으면 하단 독이 키보드가 있던 자리(화면 중간)에 떠서 내용을 가림 (iOS 고정 위치 버그)
   //  → 키보드가 떠 있는 동안은 독을 숨기고, 입력이 끝나면 화면 위치를 한 번 다시 잡아 독을 바닥으로 돌려놓음
   (() => {
@@ -3847,14 +3892,9 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
       setScope(k === "foh" ? "foh" : "boh");
       window.scrollTo(0, 0); dockOn(k); return;
     }
-    if (k === "files") { unlock().then((ok) => { if (ok) { go("files"); dockOn("files"); } }); return; } // 데이터 파일은 버튼 비밀번호
     go(k); dockOn(k);
   });
-  // 타일·상단 버튼 같은 다른 길로 화면이 바뀌어도 독 표시를 맞춤
-  document.addEventListener("click", (e) => {
-    const g = e.target.closest("[data-go]"); if (!g) return;
-    const to = g.dataset.go; setTimeout(() => { if (!$("v-" + to)?.hidden) dockOn(to === "main" ? ($("pPrep").hidden ? (scope === "foh" ? "foh" : "order") : "prep") : to); }, 0); // 11/19 UI 점검: FOH 탭에서 다른 화면에 갔다 뒤로 오면 독이 "발주"로 켜지던 것
-  });
+  // 타일·줄·뒤로가기 같은 다른 길로 화면이 바뀌어도 하단 메뉴 표시는 go()가 맞춤 (dockKeyOf)
 
   // ---------- 행간: 2줄 이상인 글만 150% (1줄은 auto) ----------
   // 같은 글도 화면 폭에 따라 줄 수가 달라서, 그려진 뒤 실제 줄 수를 재서 data-ml을 붙임
@@ -5480,6 +5520,42 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
   });
   $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
   $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
+  // ---------- 설정 (허브) ----------
+  //  줄마다 '지금 상태' 한 줄. 손봐야 하는 줄은 빨간 표시(.st-badge)와 맨 위 '확인할 것' 카드에. 느린 계산(리포트)은 화면을 먼저 그린 뒤에
+  function renderSet() {
+    const put = (id, txt, badge, soft) => { const el = $(id); if (el && txt != null) el.textContent = txt; const b = $(id + "B"); if (b) { b.hidden = !badge; b.textContent = badge || ""; b.classList.toggle("soft", !!soft); } return badge ? { id, badge } : null; }; /* soft = 급하지 않은 개수(회색) — '확인할 것'에는 안 올림 */
+    $("setStore").textContent = ($("storeName") || {}).textContent || "";
+    if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
+    try { renderTop(); } catch (e) {}
+    locSumUpdate();
+    const need = [];
+    const fill = () => {
+      need.length = 0;
+      const add = (go, t, r) => { if (r) need.push({ go, t }); };
+      const fcNeed = /입력 필요/.test($("tileFcSum").textContent);
+      add("forecast", "이번 주 Forecast 입력", put("stFc", `${$("tileFcWeek").textContent.split(" · ")[0]} · ${$("tileFcSum").textContent}`, fcNeed ? "입력" : ""));
+      const d1 = $("tileData1").textContent.trim(), d2 = $("tileData2").textContent.trim(), mNeed = /필요/.test(d1) || /필요/.test(d2);
+      add("files:month", /필요/.test(d1) ? d1 : d2, put("stMonth", `${d1} · ${d2}`, mNeed ? "필요" : ""));
+      const mc = $("mapCount").textContent, mm = /재료 (\d+)\/(\d+)/.exec(mc), ingBad = mm ? +mm[2] - +mm[1] : 0;
+      put("stRecipe", mc || "레시피와 매출현황을 올리면 연결을 확인해요", ingBad ? String(ingBad) : "", 1);
+      const c = lcCfg(), lk = lcDays()[0], lr = lk ? db[lk] : null, ln = lr ? Object.values(lr.why || {}).reduce((t, w) => t + (w.items != null ? w.items : lcUniq(w.miss).length), 0) : 0;
+      put("stLc", `${c.on ? "켬" : "꺼짐"} · ${c.lunch ? `런치 ${c.lunch} · ` : ""}마지막 확인 ${c.time}${lr ? ` · ${lk.slice(15).replace("-", "/")} ${(lr.x || []).length ? "X " + lr.x.length : ln ? "빠짐 " + ln : "이상 없음"}` : ""}`, "");
+      const ag = db.misAgent || {}, ago = ag.at ? Math.round((Date.now() - ag.at) / 60e3) : null, hs = $("hlthSum").textContent, hBad = /확인 필요/.test(hs);
+      add("report:hlth", ag.auto === 0 ? "매장 PC 자동 수집이 꺼져 있음" : `GW 상황판 ${hs}`, put("stPc", `${ago == null ? "매장 PC 신호 없음" : `매장 PC 신호 ${ago < 60 ? ago + "분" : Math.round(ago / 60) + "시간"} 전`}${ag.auto === 0 ? " · 자동 수집 꺼짐" : ""}${hs ? " · " + hs : ""}`, ag.auto === 0 || hBad ? "확인" : ""));
+      const acc = $("rAcc").textContent.trim();
+      put("stAcc", acc && acc !== "–" ? `이번 주 ${acc}${$("rDelta").textContent ? " · " + $("rDelta").textContent.trim() : ""}` : "채점할 기록이 아직 없어요", "");
+      put("stLearn", $("xpPct").textContent ? `데이터 학습량 ${$("xpPct").textContent}${$("learnRange").textContent ? " · " + $("learnRange").textContent : ""}` : "", "");
+      const rq = $("rReqH").hidden ? 0 : parseInt($("rReqN").textContent, 10) || 0;
+      put("stReq", rq ? "무게·용량을 알려 주면 더 정확해져요" : "요청할 자료가 없어요", rq ? String(rq) : "", 1);
+      const on = !!API && online;
+      add("files:conn", "구글 시트에 연결되지 않음", put("stConn", !API ? "시트 주소 없음 · 이 기기에만 저장 중" : on ? "구글 시트에 연결됨" : "연결되지 않음 · 이 기기에만 저장 중", on ? "" : "확인"));
+      const box = $("setNeed"); box.hidden = !need.length;
+      box.innerHTML = need.length ? `<b>확인할 것 ${need.length}</b>` + need.map((n) => `<button type="button" data-go="${n.go}"><span>${esc(n.t)}</span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>`).join("") : "";
+    };
+    fill();
+    clearTimeout(renderSet.t);
+    renderSet.t = setTimeout(() => { if ($("v-set").hidden) return; try { renderFiles(); renderReport(); } catch (e) {} fill(); }, 30);
+  }
   function locSumUpdate() {
     const all = model().items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden);
     const hid = model().items.filter((i) => !i.ledgerOnly && i.hidden).length;
@@ -6734,6 +6810,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = OrderPipe;
     if (!$("v-report").hidden) renderReport();
     if (!$("v-files").hidden && !typing("v-files")) renderFiles();
     if (!$("v-alerts").hidden && !typing("v-alerts")) renderAlerts();
+    if (!$("v-set").hidden && !typing("v-set")) renderSet();
   }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(refreshVisible); });
   // 다른 기기에서 넣은 재고·Forecast도 10~30초 안에 반영 (리포트의 오차 범위 큰 품목 등)

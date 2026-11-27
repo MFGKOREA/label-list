@@ -420,3 +420,16 @@ KM에게 먼저 묻는다:
   - 147·148 "해동중 Sweet Garlic Spread"가 이틀 연속 빠짐. 사워도우(11/25 삭제)와 같은 메뉴용이면 제외 낱말에 넣으면 됨(KM 판단).
 - 시험: `order-src/test/settings.mjs <kv.json>` 33개 · `gw/e2e-sales.mjs` 101개(라인체크 조건 16개 추가) · 실제 11/27 상세 410줄로 옛 규칙 ↔ 새 규칙 대조(저장소 밖): 옛 코드가 실제 기록(빠짐 10줄)을 그대로 재현, 새 기본값은 같은 줄을 잡음.
 - 매장 PC 자동 수집이 꺼져 있으면(misAgent.auto 0) 정해진 시각 확인은 안 돎 → 화면에 그렇게 적고 [지금 확인]으로만.
+
+## 11/28 설정 탭 — Forecast·리포트·데이터 파일을 하나로 (KM "하나로 합치고 설정 · 대대적인 정리 · 깔끔하고 직관적으로 · UI/UX 스킬 반영")
+- 하단 메뉴 7개 → 5개: 발주 · FOH 발주 · 프랩 · 인벤토리 · **설정**(`data-dock="set"`, `#v-set`). 근거: ui-ux-pro-max `bottom-nav-limit`(하단 메뉴 5개까지) · `nav-hierarchy`(매일 쓰는 것과 가끔 쓰는 것 가르기). 글씨는 다시 12px.
+- 설정 화면 = 5묶음 13줄 + 입력 1줄. 줄마다 이름 · **지금 상태 한 줄** · 필요하면 표시:
+  - 매출·자료: Forecast / 월별 자료 / 레시피·품목 연결 · 발주: 발주 품목 설정 / 발주시트 / 야채 입고일 / 주말 여유분(여기서 바로 입력, `#wkIn`)
+  - 알림·매장 PC: 라인체크 알림 / GW 상황판 · 리포트: 발주 정확도 / 학습 상태 / 데이터 요청 · 연결·도움말: 구글 시트 연결·백업 / 사용방법
+  - 맨 위 '확인할 것' 카드(`#setNeed`)는 급한 것만: Forecast 입력 필요 · 월별 자료 필요 · 매장 PC 자동 수집 꺼짐/상황판 확인 필요 · 시트 연결 안 됨. 개수뿐인 것(레시피 재료 연결 안 됨 · 데이터 요청)은 줄에 회색 숫자만(`.st-badge.soft`).
+- 2×2 분류 카드(`.catgrid`)는 없앰. 묶음(`.catpane`) 하나가 화면 하나: `go("files:month"|"files:recipe"|"files:conn")`, `go("report:hlth"|"report:acc"|"report:learn"|"report:req")`. 제목은 `PANE` 표에서(`#filesTitle`·`#reportTitle`).
+  - 파일 쪽 '학습 상태'(`#learnState`)는 리포트 '학습 상태'로 합침(같은 이름이 두 곳에 있었음). '발주 설정' 묶음은 설정 화면 줄로 풀고, '고급'(시트 주소·백업)은 `files:conn`.
+- 뒤로가기: 하위 화면은 모두 화살표(44px, `aria-label="뒤로"`)가 보임. 온 길로 돌아감(`prevOf`): 설정에서 들어오면 설정으로, 발주 화면 Forecast 타일로 들어오면 발주로, 품목 설정 → 발주 품목 설정 → 설정. 하단 메뉴 표시는 `go()`가 `dockKeyOf`로 맞춤.
+- 잠금(버튼 비밀번호)은 예전 '데이터 파일'과 같은 범위: `files:*` · 발주 품목 설정 · 발주시트 · 야채 입고일. Forecast·리포트·알림은 그대로 열림.
+- 시험에서 화면을 바로 열 때는 `window.__go("report:acc")` 식으로. `#dock [data-dock=forecast|report|files]`는 이제 없음.
+- 시험: settings 42 · inv 21 · itemset 19 · smoke · health · states · ux-flow · ux-align · ux-audit(설정 화면 360·390·430 × 밝게·어둡게: 가로 넘침 0 · 글 잘림 0 · 작은 누름 자리 0) · gw e2e-loading·order·auto·key·bookmark 통과. regress 발주량 바뀐 품목 0.

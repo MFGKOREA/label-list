@@ -138,7 +138,7 @@ const pendIds = (w, key) => [...new Set(w.posts.filter((x) => x.key === key).map
 // ── 2) Gross Sales 불러오기 ─────────────────────────────────
 {
   const w = await world(), pg = w.pg;
-  await pg.click('#dock [data-dock="forecast"]'); await sleep(400);
+  await pg.evaluate(() => window.__go("forecast")); await sleep(400);
   await pg.evaluate(() => document.getElementById("salesGo").click());
   await sleep(120);
   const b1 = await bar(pg, "#salesBar"), v1 = await btn(pg, "salesGo");
@@ -161,7 +161,7 @@ const pendIds = (w, key) => [...new Set(w.posts.filter((x) => x.key === key).map
 // ── 3) 메뉴 판매 불러오기 + 실패(error) ─────────────────────
 {
   const w = await world({ salesError: true }), pg = w.pg;
-  await pg.click('#dock [data-dock="forecast"]'); await sleep(400);
+  await pg.evaluate(() => window.__go("forecast")); await sleep(400);
   await pg.evaluate(() => document.getElementById("menuGo").click());
   await sleep(120);
   const b1 = await bar(pg, "#menuBar"), v1 = await btn(pg, "menuGo");
@@ -179,7 +179,7 @@ const pendIds = (w, key) => [...new Set(w.posts.filter((x) => x.key === key).map
 // ── 4) PC가 응답을 안 적을 때 (시간 초과) ────────────────────
 {
   const w = await world({ salesNever: true, spTest: { runMax: 2500 } }), pg = w.pg;
-  await pg.click('#dock [data-dock="forecast"]'); await sleep(400);
+  await pg.evaluate(() => window.__go("forecast")); await sleep(400);
   await pg.evaluate(() => document.getElementById("salesGo").click());
   const bad = await until(async () => { const x = await bar(pg, "#salesBar"); return x && x.live === "bad" ? x : null; }, 9000);
   ok(!!bad, "응답 없음: 시간이 지나면 막대가 빨강으로 바뀜 (" + (bad && bad.text) + ")");

@@ -1894,7 +1894,7 @@
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv", item: "v-item", alerts: "v-alerts" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv", item: "v-item", alerts: "v-alerts", set: "v-set" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -1915,29 +1915,46 @@
   }
   // 데이터 리포트를 열 때만 학습량 숫자가 0부터 올라가며 게이지가 참
   let xpAnim = false, xpTok = 0;
-  function go(to) {
+  // 11/28 KM "Forecast·리포트·데이터 파일을 하나로 합치고 설정": 하단 메뉴는 발주·FOH 발주·프랩·인벤토리·설정 5개.
+  //  나머지 화면은 모두 설정에서 들어가는 하위 화면. 데이터 파일·리포트의 2×2 분류 카드는 없애고 묶음(.catpane) 하나가 화면 하나 — go("files:month")처럼 "화면:묶음"으로 감
+  //  뒤로가기(.back): 온 길로 돌아감(prevOf). 발주 화면의 Forecast 타일로 들어왔으면 발주로, 설정에서 들어왔으면 설정으로
+  const PANE = { files: { month: "월별 자료", recipe: "레시피 · 품목 연결", conn: "구글 시트 연결 · 백업" }, report: { hlth: "GW 상황판", acc: "발주 정확도", learn: "학습 상태", req: "데이터 요청" } };
+  const paneCur = { files: "month", report: "hlth" }, TOP = new Set(["main", "inv", "set"]), prevOf = {};
+  let curView = "main";
+  const dockKeyOf = (v) => (v === "main" ? ($("pPrep").hidden ? (scope === "foh" ? "foh" : "order") : "prep") : v === "inv" ? "inv" : "set");
+  function go(dest, back) {
+    const [to, cat] = String(dest).split(":");
+    if (!views[to]) return;
+    if (cat && PANE[to] && PANE[to][cat]) paneCur[to] = cat;
+    if (!back && !TOP.has(to) && to !== curView && prevOf[curView] !== to) prevOf[to] = curView;
+    curView = to;
     if (to === "report") xpAnim = true;
     Object.entries(views).forEach(([k, id]) => {
       const v = $(id); v.hidden = k !== to; v.classList.remove("push", "pop");
-      if (k === to) { void v.offsetWidth; v.classList.add(to === "main" ? "pop" : "push"); }
+      if (k === to) { void v.offsetWidth; v.classList.add(back || TOP.has(to) ? "pop" : "push"); }
     });
     window.scrollTo(0, 0);
+    if (PANE[to]) catSync();
     if (to === "main") renderMain();
     if (to === "forecast") renderForecast();
-    if (to === "files") renderFiles();
-    if (to === "report") renderReport();
+    if (to === "files" || (to === "report" && paneCur.report === "learn")) renderFiles(); /* 자료별 학습 상태(#learnState)는 renderFiles가 그림 */
+    if (to === "report") { renderReport(); catSync(); }
     if (to === "loc") renderLocEdit();
     if (to === "log") renderStockLog();
     if (to === "veg") renderVeg();
     if (to === "inv") renderInv();
     if (to === "item") renderItem();
     if (to === "alerts") renderAlerts();
-    if (to === "files") locSumUpdate();
+    if (to === "set") renderSet();
+    try { dockOn(dockKeyOf(to)); } catch (e) {}
   }
+  window.__go = go;
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-go]"); if (!b) return;
-    if (b.dataset.go === "files") { unlock().then((ok) => ok && go("files")); return; } // 데이터 파일은 버튼 비밀번호와 같은 번호
-    go(b.dataset.go);
+    const dest = b.dataset.go, to = dest.split(":")[0];
+    if (b.classList.contains("back")) { go(prevOf[curView] || dest, true); return; }
+    if (/^(files|loc|log|veg)$/.test(to) && curView !== "item") { unlock().then((ok) => ok && go(dest)); return; } // 자료 올리기·발주 설정 쪽은 버튼 비밀번호와 같은 번호 (예전 '데이터 파일' 잠금 그대로)
+    go(dest);
   });
   // FOH 발주 (11/19 KM "발주 프랩 사이에 FOH 발주 탭 · 발주현황에서 넣는 품목인데 앱에 없던 품목 정리해서 · 발주품목순대로")
   //  품목 = 시트 master.foh (MIS 주문현황 10/19~11/17에서 발주 시트에 없는 품목, 업체 → 이름순 = 주문현황 순서). 재고 계산은 없음: 최근 발주(misOrder)와 오늘 발주 수량만.
@@ -1989,24 +2006,15 @@
     if (t === "tabPrep") renderPrep();
   }));
 
-  // ---------- 리포트·데이터 파일 분류 카드 (11/19 KM "기능·카드가 너무 많아, HR 운영 설정처럼 카테고리별로") ----------
-  //  화면 위 2×2 카드 중 하나를 고르면 그 묶음(.catpane)만 보임. 고른 것은 이 기기에 기억. 데이터 요청은 요청·옵션 비율이 없으면 "요청할 자료가 없어요"
+  // ---------- 리포트·자료 화면의 묶음(.catpane): 설정에서 고른 묶음 하나만 보이고 제목도 그 이름 (11/28 분류 카드 없앰). 데이터 요청은 요청·옵션 비율이 없으면 "요청할 자료가 없어요" ----------
   function catSync() {
-    document.querySelectorAll(".catgrid").forEach((g) => {
-      const view = g.closest(".view"), panes = [...view.querySelectorAll(".catpane")], keys = panes.map((p) => p.dataset.cat);
-      let cur = ""; try { cur = localStorage.getItem("cat-" + g.dataset.view) || ""; } catch (e) {}
-      if (!keys.includes(cur)) cur = keys[0];
-      g.querySelectorAll("button[data-cat]").forEach((b) => { const on = b.dataset.cat === cur; b.setAttribute("aria-selected", on); b.classList.toggle("on", on); });
-      panes.forEach((p) => { p.hidden = p.dataset.cat !== cur; });
-      const req = view.querySelector('.catpane[data-cat="req"]');
-      if (req) { const has = [...req.querySelectorAll("#rReqH, #rSharesH")].some((x) => !x.hidden); const em = req.querySelector(".catempty"); if (em) em.hidden = has; }
+    Object.keys(PANE).forEach((v) => {
+      $(views[v]).querySelectorAll(".catpane").forEach((p) => { p.hidden = p.dataset.cat !== paneCur[v]; });
+      const h = $(v + "Title"); if (h) h.textContent = PANE[v][paneCur[v]];
     });
+    const req = $("v-report").querySelector('.catpane[data-cat="req"]');
+    if (req) { const has = [...req.querySelectorAll("#rReqH, #rSharesH")].some((x) => !x.hidden); const em = req.querySelector(".catempty"); if (em) em.hidden = has; }
   }
-  document.querySelectorAll(".catgrid").forEach((g) => g.addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-cat]"); if (!b) return;
-    try { localStorage.setItem("cat-" + g.dataset.view, b.dataset.cat); } catch (er) {}
-    catSync();
-  }));
   catSync();
   $("preBtn")?.addEventListener("click", () => { setPre(!preMode); renderMain(); });
   // 맨 위로 (11/20 KM "맨 위로 버튼 좋은데"): 화면을 한 화면 반 넘게 내리면 독 위 오른쪽에 [↑ 맨 위로] + 지금 보는 품목 순번(발주·FOH 목록에서만)
@@ -2049,7 +2057,7 @@
   }
   setTimeout(() => { if (!document.querySelector("dialog[open]")) a2hsShow(/[?&]a2hs=1/.test(location.search)); }, 1800);
 
-  // ---------- 하단 독: 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ----------
+  // ---------- 하단 독: 발주 · FOH 발주 · 프랩 · 인벤토리 · 설정 (11/28: 7개 → 5개) ----------
   // 11/12 KM 화면: 아이폰에서 숫자를 입력하고 키보드를 닫으면 하단 독이 키보드가 있던 자리(화면 중간)에 떠서 내용을 가림 (iOS 고정 위치 버그)
   //  → 키보드가 떠 있는 동안은 독을 숨기고, 입력이 끝나면 화면 위치를 한 번 다시 잡아 독을 바닥으로 돌려놓음
   (() => {
@@ -2070,14 +2078,9 @@
       setScope(k === "foh" ? "foh" : "boh");
       window.scrollTo(0, 0); dockOn(k); return;
     }
-    if (k === "files") { unlock().then((ok) => { if (ok) { go("files"); dockOn("files"); } }); return; } // 데이터 파일은 버튼 비밀번호
     go(k); dockOn(k);
   });
-  // 타일·상단 버튼 같은 다른 길로 화면이 바뀌어도 독 표시를 맞춤
-  document.addEventListener("click", (e) => {
-    const g = e.target.closest("[data-go]"); if (!g) return;
-    const to = g.dataset.go; setTimeout(() => { if (!$("v-" + to)?.hidden) dockOn(to === "main" ? ($("pPrep").hidden ? (scope === "foh" ? "foh" : "order") : "prep") : to); }, 0); // 11/19 UI 점검: FOH 탭에서 다른 화면에 갔다 뒤로 오면 독이 "발주"로 켜지던 것
-  });
+  // 타일·줄·뒤로가기 같은 다른 길로 화면이 바뀌어도 하단 메뉴 표시는 go()가 맞춤 (dockKeyOf)
 
   // ---------- 행간: 2줄 이상인 글만 150% (1줄은 auto) ----------
   // 같은 글도 화면 폭에 따라 줄 수가 달라서, 그려진 뒤 실제 줄 수를 재서 data-ml을 붙임
@@ -3703,6 +3706,42 @@
   });
   $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
   $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
+  // ---------- 설정 (허브) ----------
+  //  줄마다 '지금 상태' 한 줄. 손봐야 하는 줄은 빨간 표시(.st-badge)와 맨 위 '확인할 것' 카드에. 느린 계산(리포트)은 화면을 먼저 그린 뒤에
+  function renderSet() {
+    const put = (id, txt, badge, soft) => { const el = $(id); if (el && txt != null) el.textContent = txt; const b = $(id + "B"); if (b) { b.hidden = !badge; b.textContent = badge || ""; b.classList.toggle("soft", !!soft); } return badge ? { id, badge } : null; }; /* soft = 급하지 않은 개수(회색) — '확인할 것'에는 안 올림 */
+    $("setStore").textContent = ($("storeName") || {}).textContent || "";
+    if (document.activeElement !== $("wkIn")) $("wkIn").value = Math.round(weekendPlus() * 100);
+    try { renderTop(); } catch (e) {}
+    locSumUpdate();
+    const need = [];
+    const fill = () => {
+      need.length = 0;
+      const add = (go, t, r) => { if (r) need.push({ go, t }); };
+      const fcNeed = /입력 필요/.test($("tileFcSum").textContent);
+      add("forecast", "이번 주 Forecast 입력", put("stFc", `${$("tileFcWeek").textContent.split(" · ")[0]} · ${$("tileFcSum").textContent}`, fcNeed ? "입력" : ""));
+      const d1 = $("tileData1").textContent.trim(), d2 = $("tileData2").textContent.trim(), mNeed = /필요/.test(d1) || /필요/.test(d2);
+      add("files:month", /필요/.test(d1) ? d1 : d2, put("stMonth", `${d1} · ${d2}`, mNeed ? "필요" : ""));
+      const mc = $("mapCount").textContent, mm = /재료 (\d+)\/(\d+)/.exec(mc), ingBad = mm ? +mm[2] - +mm[1] : 0;
+      put("stRecipe", mc || "레시피와 매출현황을 올리면 연결을 확인해요", ingBad ? String(ingBad) : "", 1);
+      const c = lcCfg(), lk = lcDays()[0], lr = lk ? db[lk] : null, ln = lr ? Object.values(lr.why || {}).reduce((t, w) => t + (w.items != null ? w.items : lcUniq(w.miss).length), 0) : 0;
+      put("stLc", `${c.on ? "켬" : "꺼짐"} · ${c.lunch ? `런치 ${c.lunch} · ` : ""}마지막 확인 ${c.time}${lr ? ` · ${lk.slice(15).replace("-", "/")} ${(lr.x || []).length ? "X " + lr.x.length : ln ? "빠짐 " + ln : "이상 없음"}` : ""}`, "");
+      const ag = db.misAgent || {}, ago = ag.at ? Math.round((Date.now() - ag.at) / 60e3) : null, hs = $("hlthSum").textContent, hBad = /확인 필요/.test(hs);
+      add("report:hlth", ag.auto === 0 ? "매장 PC 자동 수집이 꺼져 있음" : `GW 상황판 ${hs}`, put("stPc", `${ago == null ? "매장 PC 신호 없음" : `매장 PC 신호 ${ago < 60 ? ago + "분" : Math.round(ago / 60) + "시간"} 전`}${ag.auto === 0 ? " · 자동 수집 꺼짐" : ""}${hs ? " · " + hs : ""}`, ag.auto === 0 || hBad ? "확인" : ""));
+      const acc = $("rAcc").textContent.trim();
+      put("stAcc", acc && acc !== "–" ? `이번 주 ${acc}${$("rDelta").textContent ? " · " + $("rDelta").textContent.trim() : ""}` : "채점할 기록이 아직 없어요", "");
+      put("stLearn", $("xpPct").textContent ? `데이터 학습량 ${$("xpPct").textContent}${$("learnRange").textContent ? " · " + $("learnRange").textContent : ""}` : "", "");
+      const rq = $("rReqH").hidden ? 0 : parseInt($("rReqN").textContent, 10) || 0;
+      put("stReq", rq ? "무게·용량을 알려 주면 더 정확해져요" : "요청할 자료가 없어요", rq ? String(rq) : "", 1);
+      const on = !!API && online;
+      add("files:conn", "구글 시트에 연결되지 않음", put("stConn", !API ? "시트 주소 없음 · 이 기기에만 저장 중" : on ? "구글 시트에 연결됨" : "연결되지 않음 · 이 기기에만 저장 중", on ? "" : "확인"));
+      const box = $("setNeed"); box.hidden = !need.length;
+      box.innerHTML = need.length ? `<b>확인할 것 ${need.length}</b>` + need.map((n) => `<button type="button" data-go="${n.go}"><span>${esc(n.t)}</span><svg class="chev" width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg></button>`).join("") : "";
+    };
+    fill();
+    clearTimeout(renderSet.t);
+    renderSet.t = setTimeout(() => { if ($("v-set").hidden) return; try { renderFiles(); renderReport(); } catch (e) {} fill(); }, 30);
+  }
   function locSumUpdate() {
     const all = model().items.filter((i) => !i.ledgerOnly && !i.foh && !i.hidden);
     const hid = model().items.filter((i) => !i.ledgerOnly && i.hidden).length;
@@ -4957,6 +4996,7 @@
     if (!$("v-report").hidden) renderReport();
     if (!$("v-files").hidden && !typing("v-files")) renderFiles();
     if (!$("v-alerts").hidden && !typing("v-alerts")) renderAlerts();
+    if (!$("v-set").hidden && !typing("v-set")) renderSet();
   }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(refreshVisible); });
   // 다른 기기에서 넣은 재고·Forecast도 10~30초 안에 반영 (리포트의 오차 범위 큰 품목 등)

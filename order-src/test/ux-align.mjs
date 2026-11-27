@@ -6,7 +6,7 @@ const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" })
 const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: "Asia/Seoul" }); const p = await ctx.newPage();
 await p.route("https://script.google.com/**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: r.request().method() === "GET" ? kv : '{"ok":true,"data":{}}' }));
 await p.goto("file://" + new URL("../../order.html", import.meta.url).pathname); await p.waitForTimeout(2500);
-const go = { order: async () => p.click('#dock [data-dock="order"]'), foh: async () => p.click('#dock [data-dock="foh"]'), prep: async () => p.click('#dock [data-dock="prep"]'), forecast: async () => p.click('#dock [data-dock="forecast"]'), report: async () => p.click('#dock [data-dock="report"]'), files: async () => p.click('#dock [data-dock="files"]'), loc: async () => p.evaluate(() => document.querySelector('[data-go="loc"]').click()), log: async () => p.evaluate(() => document.querySelector('[data-go="log"]').click()) };
+const go = { order: async () => p.click('#dock [data-dock="order"]'), foh: async () => p.click('#dock [data-dock="foh"]'), prep: async () => p.click('#dock [data-dock="prep"]'), set: async () => p.click('#dock [data-dock="set"]'), forecast: async () => p.evaluate(() => window.__go("forecast")), report: async () => p.evaluate(() => window.__go("report:acc")), files: async () => p.evaluate(() => window.__go("files:month")), loc: async () => p.evaluate(() => window.__go("loc")), log: async () => p.evaluate(() => window.__go("log")) };
 const out = {};
 for (const [n, f] of Object.entries(go)) {
   await f(); await p.waitForTimeout(n === "log" ? 2000 : 900); await p.evaluate(() => scrollTo(0, 0));

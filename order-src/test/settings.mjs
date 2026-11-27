@@ -29,10 +29,40 @@ const NAME = "샐러드믹스베이스(해성)";
 const ssOf = () => p.evaluate((n) => { const C = window.__orderCalc, it = C.model().items.find((i) => i.name === n); const r = C.calc(it, C.orderWindowFor(it, C.TODAY), 0, 0); return { ss: r.ss, use: r.use, need: r.need, hidden: !!it.hidden, lv: it.ssLv, cap: it.ssCap }; }, NAME);
 const postOf = (key) => posts.filter((x) => x.key === key).pop();
 
-// 1) 발주 품목 설정 목록 → [설정] → 품목 설정 화면
-await p.click("#dock [data-dock=files]"); await p.waitForTimeout(400);
-await p.click('#v-files [role=tab][data-cat="order"]'); await p.waitForTimeout(300);
-await p.click('.locentry[data-go="loc"]'); await p.waitForTimeout(400);
+// 0) 설정 화면 (11/28 KM "Forecast·리포트·데이터 파일을 하나로 합치고 설정 · 깔끔하고 직관적으로")
+const vis = () => p.evaluate(() => document.querySelector(".view:not([hidden])").id);
+const dockNow = () => p.evaluate(() => (document.querySelector("#dock [aria-current]") || { dataset: {} }).dataset.dock);
+ok((await p.$$eval("#dock [data-dock]", (a) => a.map((x) => x.dataset.dock).join(","))) === "order,foh,prep,inv,set" && (await p.$$eval("#dock button", (a) => Math.min(...a.map((x) => x.getBoundingClientRect().width)))) >= 60, "하단 메뉴 5개: 발주 · FOH 발주 · 프랩 · 인벤토리 · 설정 (칸 폭 60px 이상)");
+await p.click("#dock [data-dock=set]"); await p.waitForTimeout(700);
+const rows = await p.$$eval("#v-set .st-row[data-go]", (a) => a.map((x) => x.dataset.go));
+ok((await vis()) === "v-set" && rows.join(",") === "forecast,files:month,files:recipe,loc,log,veg,alerts,report:hlth,report:acc,report:learn,report:req,files:conn,help", "설정: 5묶음 13줄 — " + rows.join(" · "));
+ok((await p.$$eval("#v-set .st-row", (a) => Math.min(...a.map((x) => x.getBoundingClientRect().height)))) >= 56 && (await p.$$eval("#v-set .st-row[data-go] small", (a) => a.filter((x) => !x.textContent.trim()).length)) === 0, "줄마다 누름 높이 56px 이상 · 지금 상태 한 줄이 비어 있지 않음");
+console.log("   상태:", (await p.$$eval("#v-set .st-row[data-go]", (a) => a.map((x) => x.querySelector("b").textContent + " = " + x.querySelector("small").textContent + (x.querySelector(".st-badge:not([hidden])") ? " [" + x.querySelector(".st-badge").textContent + "]" : "")))).join("\n         "));
+const need = await p.$$eval("#setNeed button", (a) => a.map((x) => x.textContent.trim()));
+ok(!(await p.$eval("#setNeed", (x) => x.hidden)) && need.some((t) => /자동 수집/.test(t)) && !need.some((t) => /데이터 요청|레시피 재료/.test(t)), "'확인할 것' 카드: 급한 것만(매장 PC 자동 수집 꺼짐), 개수뿐인 것은 안 올림 — " + need.join(" / "));
+ok((await p.inputValue("#wkIn")) !== "" && (await p.$eval("#wkIn", (i) => i.closest("#v-set") !== null)), "주말 여유분은 설정 화면에서 바로 고침: " + (await p.inputValue("#wkIn")) + "%");
+// 줄 → 화면 → 뒤로가기: 제목 · 하단 메뉴 '설정' 표시 · 설정으로 돌아옴
+const want = { forecast: "Forecast", "files:month": "월별 자료", "files:recipe": "레시피 · 품목 연결", "files:conn": "구글 시트 연결 · 백업", "report:hlth": "GW 상황판", "report:acc": "발주 정확도", "report:learn": "학습 상태", "report:req": "데이터 요청", loc: "발주 품목 설정", log: "수원컨벤션점 발주시트", veg: "야채 입고일", alerts: "알림 · 자동 실행", help: "사용방법" };
+let navBad = [];
+for (const g of rows) {
+  await p.click(`#v-set .st-row[data-go="${g}"]`); await p.waitForTimeout(350);
+  const st = await p.evaluate(() => { const v = document.querySelector(".view:not([hidden])"), bk = v.querySelector(".back"), r = bk && bk.getBoundingClientRect(); return { id: v.id, h2: (v.querySelector("h2") || {}).textContent, back: r ? Math.min(r.width, r.height) : 0, panes: v.querySelectorAll(".catpane:not([hidden])").length, allPanes: v.querySelectorAll(".catpane").length, grid: v.querySelectorAll(".catgrid").length }; });
+  if (st.id !== "v-" + g.split(":")[0] || st.h2 !== want[g] || st.back < 44 || (await dockNow()) !== "set" || (st.allPanes && st.panes !== 1) || st.grid) navBad.push(g + ":" + JSON.stringify(st));
+  await p.click(".view:not([hidden]) .back"); await p.waitForTimeout(250);
+  if ((await vis()) !== "v-set") navBad.push(g + " 뒤로가기 → " + (await vis()));
+}
+ok(!navBad.length, "13줄 모두: 맞는 화면·제목 · 묶음 하나만 보임(분류 카드 없음) · 뒤로가기 44px · 하단 메뉴는 '설정' · 뒤로가면 설정 " + navBad.join(" | "));
+ok((await p.textContent("#learnState")).length > 20 && (await p.$eval("#learnState", (x) => x.closest('#v-report .catpane[data-cat="learn"]') !== null)), "자료별 학습 상태는 리포트의 '학습 상태' 한 곳에");
+// 발주 화면의 Forecast 타일로 들어가면 뒤로가기는 발주로
+await p.click("#dock [data-dock=order]"); await p.waitForTimeout(300);
+await p.click('#v-main .tile[data-go="forecast"]'); await p.waitForTimeout(350);
+const d1 = await dockNow();
+await p.click("#v-forecast .back"); await p.waitForTimeout(300);
+ok(d1 === "set" && (await vis()) === "v-main" && (await dockNow()) === "order", "발주 화면 Forecast 타일 → 뒤로가기는 온 길(발주)로 · 하단 메뉴 표시도 따라감");
+
+// 1) 설정 › 발주 품목 설정 → [설정] → 품목 설정 화면
+await p.click("#dock [data-dock=set]"); await p.waitForTimeout(400);
+await p.click('#v-set .st-row[data-go="loc"]'); await p.waitForTimeout(400);
 await p.fill("#locQ", "샐러드믹스"); await p.waitForTimeout(400);
 ok((await p.locator("#locList .lrow [data-item]").count()) >= 1, "발주 품목 설정 목록에 [설정] 단추");
 await p.click("#locList .lrow [data-item]"); await p.waitForTimeout(400);
@@ -71,8 +101,9 @@ await p.click('#itemBody .inv-cta'); await p.waitForTimeout(300);
 ok(!(await p.$eval("#v-loc", (v) => v.hidden)), "[완료] → 발주 품목 설정으로");
 
 // 5) 알림 · 자동 실행 (11/28 라인체크 조건·기능 추가)
-await p.click("#dock [data-dock=report]"); await p.waitForTimeout(400);
-await p.click('#v-report [data-go="alerts"]'); await p.waitForTimeout(300);
+await p.click("#v-loc .back"); await p.waitForTimeout(300);
+ok((await vis()) === "v-set", "품목 설정 [완료] → 발주 품목 설정 → 뒤로가기 → 설정 (돌아오는 길이 꼬이지 않음)");
+await p.click('#v-set .st-row[data-go="alerts"]'); await p.waitForTimeout(300);
 const A = "#alertsBody", cfgPost = () => (postOf("lineCheckCfg") || {}).value || (postOf("lineCheckCfg") || {}).patch || {};
 ok(!(await p.$eval("#v-alerts", (v) => v.hidden)) && (await p.inputValue("#lcTime")) === "20:00" && (await p.inputValue("#lcLunch")) === "" && (await p.isChecked('[data-sec="FOH"]')) && (await p.isChecked('[data-sec="BOH2"]')) && !(await p.isChecked('[data-sec="BOH"]')), "기본값: 켬 · 마지막 확인 20:00 · 런치 먼저 확인 안 함 · FOH·BOH2");
 ok((await p.isChecked('[data-kind="x"]')) && (await p.isChecked('[data-kind="chk"]')) && (await p.isChecked('[data-kind="inp"]')) && (await p.isChecked('[data-kind="pic"]')), "알릴 것 기본: X · 체크 · 온도·입력 · 사진 모두");

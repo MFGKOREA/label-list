@@ -664,7 +664,7 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 /* ---------- 하단 독 (11/3): 발주 · 프랩 · Forecast · 리포트 · 데이터 파일 ---------- */
 .dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   max-width: 480px; margin: 0 auto;
   padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px));
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -684,8 +684,8 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .dock button:active svg { transform: scale(.94); }
 @media (prefers-reduced-motion: reduce) { .dock button svg { transition: none; } }
 .view { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
-/* 독이 대신하는 것: 발주/프랩 탭, 상단 리포트 버튼, 하위 화면의 "< 발주" 뒤로가기 */
-#v-main > .seg, .topbtns .tb.report, .view .nav .back { display: none; }
+/* 독이 대신하는 것: 발주/프랩 탭, 상단 리포트 버튼. 하위 화면(설정에서 들어가는 화면)은 뒤로가기 화살표를 보임(11/28) */
+#v-main > .seg, .topbtns .tb.report { display: none; }
 .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 
 /* ---------- 스테이지쇼 다듬기 시안 (11/4) ----------
@@ -752,7 +752,6 @@ button:not(:disabled):active { transform: scale(0.97); filter: brightness(0.96);
 .rloc button { border: 0; background: none; width: 36px; height: 36px; border-radius: 8px; font-size: 14px; font-weight: 800; color: var(--muted); }
 .rloc button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
-#v-loc .nav .back { display: flex; } /* 이 화면은 독에 없어서 뒤로가기(파일) 남김 */
 
 /* 발주 필요 칸 안 작은 머리글 (11/12): 덜 넣음 · 발주완료 */
 .subhead { margin: 14px 4px 8px; font-size: 14px; font-weight: 800; letter-spacing: -0.03em; color: var(--ok-ink); line-height: normal; }
@@ -993,14 +992,7 @@ details.weekly[open] .wk-s::before { content: "접기 ▴"; }
 .mdlg .md-row.miss .md-r, .mdlg .md-row.miss .md-d { font-weight: 800; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mdlg .md-blue, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-r, :root:not([data-theme="light"]) .mdlg .md-row.miss .md-d { color: #7aa7ff; } }
 :root[data-theme="dark"] .mdlg .md-blue, :root[data-theme="dark"] .mdlg .md-row.miss .md-r, :root[data-theme="dark"] .mdlg .md-row.miss .md-d { color: #7aa7ff; }
-/* 리포트·데이터 파일 분류 카드 (11/19 KM "HR 운영 설정처럼"): 2×2 카드, 고른 카드는 검정 */
-.catgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 22px; }
-.catgrid button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 600; text-align: left; touch-action: manipulation; transition: transform .1s ease, background-color .15s ease; }
-.catgrid button svg { flex: none; color: var(--muted); }
-.catgrid button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catgrid button.on { background: var(--fg); color: var(--surface); border-color: var(--fg); }
-.catgrid button.on svg { color: var(--surface); }
-.catgrid button:active { transform: scale(.97); }
+/* 리포트·자료 화면의 묶음: 설정에서 고른 하나만 보임 (11/28 분류 카드 없앰) */
 .catpane[hidden] { display: none !important; }
 .catempty { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); }
 details.adv { margin-top: 8px; }
@@ -1094,7 +1086,6 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 #pOrder .frow > .chips:has(> button:nth-child(5)) { display: flex; overflow-x: auto; scrollbar-width: none; }
 #pOrder .frow > .chips:has(> button:nth-child(5))::-webkit-scrollbar { display: none; }
 #pOrder .frow > .chips:has(> button:nth-child(5)) > button { flex: 1 0 72px; grid-column: auto; }
-.catgrid { margin-bottom: 14px; }
 .tiles .misbar.mistile { padding: 12px 10px 10px 11px; } /* Forecast 카드와 글자 시작(왼쪽 11px)·제목 높이 맞춤 */
 .chips#sorts button { min-height: 40px; } /* 업체·위치 칩과 같은 높이 */
 /* 예상이 섞인 안내 줄(.banner.soft)은 바탕이 화면색과 같아(#f4f4f4) 글자만 떠 보였음 → 다른 카드처럼 흰 카드 + 얇은 테두리, 글자색만 옅게 */
@@ -1146,7 +1137,7 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 .inv-t td small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 500; }
 #invSeg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* 독 7칸 (11/26 인벤토리 추가): 390px 폭에 한 줄로 — 글자·아이콘 여백을 조금 줄임 */
-.dock button { font-size: 11px; }
+.dock button { font-size: 12px; } /* 11/28: 메뉴 7개 → 5개라 글씨를 다시 12px로 */
 .dock button svg { padding: 3px 9px; }
 .inv-row .inv-in select { width: 64px; font: inherit; font-size: 14px; padding: 7px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; }
 .inv-sub { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 12px; background: var(--fill); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -1203,7 +1194,8 @@ body:has(.dock.kb) .totop, body:has(.dock.kb) .totop-pos { display: none; }
 fieldset.set-card legend.set-head { float: left; width: 100%; margin-bottom: 2px; }
 .set-note { margin: 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; text-wrap: pretty; }
 .set-note.pad { padding: 0 0 12px; }
-.sw { flex: 0 0 auto; width: 52px; height: 32px; padding: 3px; border: 0; border-radius: 16px; background: var(--chick-line); display: flex; justify-content: flex-start; touch-action: manipulation; transition: background-color .15s ease; }
+.sw { position: relative; flex: 0 0 auto; width: 52px; height: 32px; padding: 3px; border: 0; border-radius: 16px; background: var(--chick-line); display: flex; justify-content: flex-start; touch-action: manipulation; transition: background-color .15s ease; }
+.sw::before { content: ""; position: absolute; inset: -6px -4px; } /* 누름 자리 44px */
 .sw i { width: 26px; height: 26px; border-radius: 13px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .15s ease; }
 .sw[aria-checked="true"] { background: var(--accent-text); }
 .sw[aria-checked="true"] i { transform: translateX(20px); }
@@ -1266,3 +1258,35 @@ details.lc-adv .set-row { padding: 10px 0; }
 .lc-day li { padding: 3px 0; }
 .lc-day li.h { color: var(--muted); font-size: 12.5px; font-weight: 700; }
 .lc-day .set-note { padding-bottom: 10px; }
+
+/* ---------- 설정 화면 (11/28 KM "하나로 합치고 설정 · 깔끔하고 직관적으로") ---------- */
+/* 하위 화면 머리: 화살표(44px 누름 자리) + 제목. 제목은 조금 작게 */
+.view .nav .back { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; margin: -6px -6px -6px -12px; padding: 0; border-radius: 12px; color: var(--fg); touch-action: manipulation; }
+.view .nav .back:active { background: var(--fill); }
+.view .nav .back + h2 { font-size: 22px; }
+#v-loc .nav { margin-left: 2px; }
+.st-h { margin: 22px 4px 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.nav + .st-h { margin-top: 6px; }
+.st-need + .st-h { margin-top: 18px; }
+.st-group { background: var(--surface); border-radius: 16px; overflow: hidden; }
+.st-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 14px; border: 0; background: none; color: var(--fg); font: inherit; text-align: left; touch-action: manipulation; -webkit-tap-highlight-color: transparent; position: relative; }
+.st-row + .st-row::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; border-top: 1px solid var(--line); }
+button.st-row:active { background: var(--fill); }
+.st-ic { flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--fill-2); color: var(--muted); }
+.st-t { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.st-t b { font-size: 16px; font-weight: 700; }
+.st-t small { color: var(--muted); font-size: 12.5px; line-height: 1.35; font-variant-numeric: tabular-nums; text-wrap: pretty; } /* 상태 글은 자르지 않고 두 줄까지 내려 씀(잘리면 '숨김 23'·'확인 필요' 같은 끝이 안 보임) */
+.st-t small:empty { display: none; }
+.st-badge { flex: 0 0 auto; font-style: normal; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--rose); color: var(--rose-ink); font-variant-numeric: tabular-nums; }
+.st-badge.soft { background: var(--fill-2); color: var(--muted); }
+.st-row .chev { flex: 0 0 auto; color: var(--muted); opacity: .7; }
+.st-fld { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.st-fld input { width: 72px; height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: inherit; font: inherit; font-size: 16px; font-weight: 700; text-align: right; padding: 0 10px; font-variant-numeric: tabular-nums; }
+.st-fld i { font-style: normal; color: var(--muted); font-size: 14px; }
+.st-need { display: grid; margin: 0 0 4px; padding: 12px 14px 4px; border-radius: 16px; background: var(--rose); color: var(--rose-ink); }
+.st-need > b { font-size: 13px; font-weight: 800; }
+.st-need button { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 700; text-align: left; touch-action: manipulation; }
+.st-need button + button { border-top: 1px solid var(--rose-line); }
+.st-need button span { min-width: 0; text-wrap: pretty; }
+#setStore { font-size: 13px; color: var(--muted); }
+@media (hover: hover) and (pointer: fine) { button.st-row:hover { background: var(--fill); } }
