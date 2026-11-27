@@ -160,7 +160,7 @@
   function light(key) {
     if (/^soldout\./.test(key)) return; // 품절 기록(11/15)은 계산에 안 씀
     if (/^(prepOnhand\.|prepLog$)/.test(key)) { if (cache) cache.plan = null; return; }
-    if (/^inv\./.test(key)) return; // 인벤토리(월재고 세기)는 계산에 안 씀
+    if (/^(inv\.|lineCheckCfg$|invCfg$)/.test(key)) return; // 인벤토리(월재고 세기)·알림 설정은 계산에 안 씀
     if (/^(input\.|onhand$)/.test(key) && cache) { applyScores(cache); return; }
     invalidate();
   }
@@ -831,7 +831,7 @@
       it.thaw = (c && c.thaw) || 0; // 냉동 품목 해동 일수: 입고 다음 날부터 쓸 수 있음 (고기·폭립·부라타·스프 등 24시간)
       it.recipeOnly = !!(c && c.recipeOnly); // 레시피에만 쓰는 품목 (파마산=라인, 설탕=프랩): 수불(A) 대신 레시피(B)로만 계산
       it.noLoss = !!(c && c.noLoss); // 수불 로스를 안 곱함 (11/15 KM "레시피 계산으로": 리가토니는 10월 수불 51팩인데 센 값·입고로는 레시피와 같음)
-      it.ssCap = c && c.ssCap !== "" && c.ssCap != null && num(c.ssCap) >= 0 ? num(c.ssCap) : null; /* 0 = 여유분 없음 (11/26 KM "샐러드는 여유분 제외") */ // 11/26 KM "샐러드 30팩 심하다": 여유분 상한(사용량 대비 비율). 유통 짧은 잎채소 등
+      it.ssCap = c && c.ssCap !== "" && c.ssCap != null && num(c.ssCap) >= 0 ? num(c.ssCap) : null; it.ssLv = c && (c.ssLv === 1 || c.ssLv === 3) ? c.ssLv : null; /* 11/28 품목 설정 여유분 슬라이더: 1 = 절반, 3 = 1.5배 (없음은 ssCap 0, 보통은 그대로) */ /* 0 = 여유분 없음 (11/26 KM "샐러드는 여유분 제외") */ // 11/26 KM "샐러드 30팩 심하다": 여유분 상한(사용량 대비 비율). 유통 짧은 잎채소 등
       if (c && num(c.shelf) > 0) it.shelf = num(c.shelf); // 11/26 KM "샐러드 30팩 심하다": 유통 짧은 품목은 품목 설정(itemCfg.shelf, 일)으로도 — 발주가 하루 사용 × 그 일수를 넘지 않음
       it.useK = (c && num(c.useK) > 0 && num(c.useK)) || 1; // KM이 정한 사용량 반영률 (라구소스 1.2 = 계산보다 20% 더)
       it.countStep = (c && num(c.countStep) > 0 && num(c.countStep)) || 0; // 재고를 박스째로만 세는 품목의 셈 단위 (없으면 최근 기록으로 짐작)
@@ -1571,7 +1571,7 @@
     const fcRel = win.fcVar != null && win.gross > 0 ? Math.sqrt(win.fcVar) / win.gross : fcErr() / Math.sqrt(nd);
     const wkPlus = win.wkGross > 0 && win.gross > 0 ? weekendPlus() * useAvg * Math.min(1, win.wkGross / win.gross) : 0;
     const guard = OrderPipe.safetyStock(useAvg, sigma, nd, fcRel, ba ? ba.varS : 0, wkPlus);
-    const relErr = guard.rel, relErrSS = guard.relSS, ss = it.ssCap != null ? Math.min(guard.ss, it.ssCap * useAvg) : guard.ss;
+    const relErr = guard.rel, relErrSS = guard.relSS, ss = (it.ssCap != null ? Math.min(guard.ss, it.ssCap * useAvg) : guard.ss) * (it.ssLv === 1 ? 0.5 : it.ssLv === 3 ? 1.5 : 1);
     let need = use + ss;
     if (it.shelf) need = Math.min(need, (useAvg / win.days) * it.shelf);
     // 한 번에 쓰는 품목(useStep): 교체 시점을 모르니 이 기간에 쓸 양이 조금이라도 있으면 한 번은 통째로 들어갈 수 있음 → 쓸 횟수(올림) × 한 번 양은 있어야 함
@@ -1894,7 +1894,7 @@
   // =========================================================
   // 화면
   // =========================================================
-  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv" };
+  const views = { main: "v-main", forecast: "v-forecast", files: "v-files", report: "v-report", help: "v-help", loc: "v-loc", log: "v-log", veg: "v-veg", inv: "v-inv", item: "v-item", alerts: "v-alerts" };
   // ---------- 모션 (폰 설정에서 "동작 줄이기"면 전부 끔) ----------
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const CK = '<svg class="ck" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4 4.9 9 9.8 3.4"/></svg>';
@@ -1930,6 +1930,8 @@
     if (to === "log") renderStockLog();
     if (to === "veg") renderVeg();
     if (to === "inv") renderInv();
+    if (to === "item") renderItem();
+    if (to === "alerts") renderAlerts();
     if (to === "files") locSumUpdate();
   }
   document.addEventListener("click", (e) => {
@@ -3096,7 +3098,7 @@
         ? `<button type="button" class="lbtn" data-use>발주에 보이기</button><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span>`
         : it.hidden
         ? `<button type="button" class="lbtn" data-show>다시 보이기</button>`
-        : `${q ? "" : `<button type="button" class="lbtn" data-mv="-1" aria-label="${esc(it.name)} 위로">위로</button><button type="button" class="lbtn" data-mv="1" aria-label="${esc(it.name)} 아래로">아래로</button>`}<button type="button" class="lbtn" data-hide>숨김</button><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span>`;
+        : `${q ? "" : `<button type="button" class="lbtn" data-mv="-1" aria-label="${esc(it.name)} 위로">위로</button><button type="button" class="lbtn" data-mv="1" aria-label="${esc(it.name)} 아래로">아래로</button>`}<button type="button" class="lbtn" data-item>설정</button><button type="button" class="lbtn" data-hide>숨김</button><span class="rloc">${LS.map(([k, t]) => `<button type="button" data-loc="${k}" aria-pressed="${L === k}" aria-label="${t}">${t.slice(0, 1)}</button>`).join("")}</span>`;
       return `<div class="cell lrow${it.hidden ? " is-hide" : ""}" data-key="${esc(it.key)}"><button type="button" class="grip" aria-label="${esc(it.name)} 끌어서 옮기기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg></button><span class="lnm">${esc(it.name)}<small>${esc(it.vendor || "")}${q ? " · " + where : ""}${it.sheetHide ? " · 발주 목록에서 빠짐" : it.hidden ? " · 숨김" : c.loc ? "" : " · <b>추정</b>"}</small></span><button type="button" class="sidebtn" data-side>${it.foh ? "BOH로" : "FOH로"}</button><div class="ltools">${tools}</div></div>`;
     }).join("") || `<div class="empty">${q ? "찾는 품목이 없어요" : locTab === "hide" ? "숨긴 품목이 없어요" : "이 위치 품목이 없어요"}</div>`;
     locSumUpdate();
@@ -3525,6 +3527,180 @@
     const nn = nextSel && document.querySelector(nextSel);
     if (nn) { nn.focus({ preventScroll: true }); nn.scrollIntoView({ block: "center", behavior: calm() ? "auto" : "smooth" }); } else if (document.activeElement) document.activeElement.blur();
   });
+  // ---------- 품목 설정 (11/28 KM 시안 3번): 발주 품목 설정 목록의 [설정] → 한 품목의 설정을 한 화면에서 ----------
+  //  보이기(itemCfg.hide) · 소분으로 셈(sub) · 레시피로만 계산(recipeOnly) 스위치, 여유분 슬라이더(ssLv·ssCap), 보관 위치(loc), 고급(tbG·shelf·useK·vegDays)
+  //  바꾸면 바로 저장(saveLoc → itemCfg). 말로 시키던 "여유분 빼 줘 · 숨겨 줘 · 소분으로"를 KM이 직접
+  let itemEditKey = null, itemAdvOpen = false;
+  const SS_LV = [["없음", "쓰는 만큼만"], ["조금", "여유 절반"], ["보통", "앱이 계산한 여유"], ["넉넉히", "여유 1.5배"]];
+  const ssLvOf = (it) => { const c = (db.itemCfg || {})[it.key] || {}; return c.ssLv === 1 || c.ssLv === 3 ? c.ssLv : it.ssCap === 0 ? 0 : 2; };
+  function openItem(key) { itemEditKey = key; itemAdvOpen = false; go("item"); }
+  function renderItem() {
+    const M = model(), it = M.items.find((i) => i.key === itemEditKey), box = $("itemBody");
+    if (!it) { $("itemTitle").textContent = "품목 설정"; box.innerHTML = '<div class="empty">품목을 찾지 못했어요</div>'; return; }
+    const c = (db.itemCfg || {})[it.key] || {}, per = it.pk.g || it.pk.ml, u = it.pk.stock || it.unit || "";
+    $("itemTitle").textContent = it.name;
+    const LS = it.foh ? LOCS_FOH : LOCS, L = locOf(it);
+    const sw = (id, on, t, sub) => `<div class="set-row"><span class="set-t">${t}<small>${sub}</small></span><button type="button" class="sw" role="switch" aria-checked="${!!on}" data-sw="${id}" aria-label="${t}"><i></i></button></div>`;
+    const sg = invSubG(M, it), subOn = invSubOn(it);
+    const subTxt = sg ? (sg.ea ? `낱개로 셈 · 1${esc(u)} = ${it.pk.ea}개` : `1포션 ${Math.round(sg.g * 10) / 10}g${per ? ` · 1${esc(u)} = ${invF(per / sg.g)}포션` : ""}`) : "1포션 g은 인벤토리 소분 칸에서 넣어요";
+    const lv = ssLvOf(it);
+    let ssLine = "";
+    if (!it.hidden && !it.foh) { try { const w = orderWindowFor(it, TODAY), r = calc(it, w, 0, 0); if (!r.none) ssLine = `${w.days}일 사용 ${invF(r.use)}${esc(u)} + 여유 ${invF(r.ss)} = 필요 ${invF(r.need)}${esc(u)}`; } catch (e) {} }
+    const numIn = (f, t, sub, ph, v) => `<label class="set-row"><span class="set-t">${t}<small>${sub}</small></span><input type="number" inputmode="decimal" step="any" min="0" class="set-num" data-num="${f}" value="${v == null ? "" : esc(String(v))}" placeholder="${ph}" aria-label="${t}"></label>`;
+    box.innerHTML =
+      `<p class="set-meta">${esc(String(it.code || ""))}${per ? ` · 1${esc(u)} ${won(per)}g` : u ? ` · ${esc(u)}` : ""} · ${it.foh ? "FOH" : "BOH"} ${esc((LS.find(([k]) => k === L) || [, L])[1])}</p>` +
+      `<div class="set-card">` +
+        sw("show", !it.hidden, "발주 목록에 보이기", "끄면 추천·86 알림에서 빠져요") +
+        (it.foh ? "" : sw("sub", subOn, "인벤토리에서 소분으로 셈", subTxt)) +
+        (it.foh ? "" : sw("ro", !!c.recipeOnly, "레시피로만 계산", "수불현황 대신 메뉴 판매 × 레시피")) +
+      `</div>` +
+      (it.foh ? "" : `<div class="set-card pad"><div class="set-head"><label for="ssRange">여유분</label><b id="ssNow">${SS_LV[lv][0]} · ${SS_LV[lv][1]}</b></div>` +
+        `<input id="ssRange" type="range" min="0" max="3" step="1" value="${lv}" aria-valuetext="${SS_LV[lv][0]}">` +
+        `<div class="set-ticks">${SS_LV.map(([t]) => `<span>${t}</span>`).join("")}</div>` +
+        (ssLine ? `<p class="set-note" id="ssLine">${ssLine}</p>` : "") + `</div>`) +
+      `<div class="set-card pad"><label class="set-head" for="itemLoc">보관 위치</label><select id="itemLoc">${LS.map(([k, t]) => `<option value="${k}"${k === L ? " selected" : ""}>${t}</option>`).join("")}</select></div>` +
+      (it.foh ? "" : `<details class="set-card adv"${itemAdvOpen ? " open" : ""}><summary>고급 설정</summary>` +
+        numIn("tbG", "1TB 무게", "g · 레시피의 TB·tsp·컵을 무게로", "레시피 값", c.tbG) +
+        numIn("shelf", "유통기한", "일 · 발주가 이 기간 사용량을 넘지 않게", "없음", c.shelf) +
+        numIn("useK", "사용량 배수", "1 = 계산 그대로, 1.2 = 20% 더", "1", c.useK) +
+        numIn("vegDays", "채소 보관일", "일 · 야채 입고일 표의 사용기한", "기본값", c.vegDays) +
+      `</details>`) +
+      `<button type="button" class="inv-cta" data-go="loc">완료</button>`;
+  }
+  $("itemBody").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-sw]"); if (!b) return;
+    const it = model().items.find((i) => i.key === itemEditKey); if (!it) return;
+    const on = b.getAttribute("aria-checked") !== "true", id = b.dataset.sw;
+    if (id === "show") saveLoc(it.key, on ? (it.sheetHide ? { show: 1, hide: null } : { hide: null }) : { hide: 1, show: null });
+    else if (id === "sub") saveLoc(it.key, { sub: on ? 1 : 0 });
+    else if (id === "ro") saveLoc(it.key, { recipeOnly: on ? true : null });
+    renderItem(); toast("저장했어요");
+  });
+  $("itemBody").addEventListener("toggle", (e) => { if (e.target.matches && e.target.matches("details.adv")) itemAdvOpen = e.target.open; }, true);
+  $("itemBody").addEventListener("input", (e) => { if (e.target.id !== "ssRange") return; const lv = +e.target.value; $("ssNow").textContent = `${SS_LV[lv][0]} · ${SS_LV[lv][1]}`; });
+  $("itemBody").addEventListener("change", (e) => {
+    const it = model().items.find((i) => i.key === itemEditKey); if (!it) return;
+    if (e.target.id === "ssRange") { const lv = +e.target.value; saveLoc(it.key, { ssLv: lv === 1 || lv === 3 ? lv : null, ssCap: lv === 0 ? 0 : null }); renderItem(); toast(`여유분 ${SS_LV[lv][0]}`); return; }
+    if (e.target.id === "itemLoc") { saveLoc(it.key, { loc: e.target.value }); renderItem(); toast("저장했어요"); return; }
+    const f = e.target.dataset && e.target.dataset.num; if (!f) return;
+    const v = num(e.target.value); saveLoc(it.key, { [f]: v > 0 ? v : null }); renderItem(); toast("저장했어요");
+  });
+
+  // ---------- 알림 · 자동 실행 (11/28 KM 시안 5번) ----------
+  //  라인체크: 확인 시각·볼 구역·일요일 쉬기 → 시트 lineCheckCfg = { time: "20:00", secs: { FOH: 1, BOH2: 1, BOH: 0 }, skipSun: 1 } (mis-sales.js가 읽음).
+  //   매장 PC는 12·16·20시에만 도니(gw-plan 당일 되풀이), 고른 시각 뒤 첫 번째 도는 때에 확인함 — 화면에 그 시각을 그대로 보여 줌
+  //  인벤토리 → MIS: 지금은 복사만. 채워 두기·저장까지는 KM이 고르면 그 방식으로 만듦(invCfg.misMode에 고른 값만 적어 둠)
+  //  매장 PC 자동 수집: 확장 설정이라 여기서 못 켬 → 상태만 (misAgent.auto, 마지막 신호)
+  const LC_RUNS = [12, 16, 20]; // gw-plan.json 당일 되풀이(now): 12:00부터 4시간마다, 21시 전까지
+  const LABEL_HUB = "https://script.google.com/macros/s/AKfycbzEZuoBNiHYs_kkxODw3WEqmLALuTG4mpvzgncyehOkNQ2v-a4qusrm-dPH2iNne77LKw/exec"; // 한글표시사항 앱 매장모음 — 시험 알림(store suwon)만 보냄
+  // 11/28 KM "라인체크 알림에 조건·기능 더" — 시트 lineCheckCfg (mis-sales.js runLineCheck가 같은 기본값으로 읽음):
+  //  on 알림 켬 · time 마지막 확인(런치+디너+사진) · lunch 런치 먼저 확인("" = 안 함, 그 시각엔 런치 칸만) · secs 볼 구역 · x X 알림 · kinds 빠짐 종류(chk 체크·inp 온도·입력·pic 사진)
+  //  min 빠짐 몇 개부터 · names 알림에 보일 항목 수(0 = 전부) · skip 제외 낱말 · qp Quality Page·교육 줄도 · okNote 이상 없어도 알림 · skipSun 일요일 쉬기(기본 끔: 수원은 일요일도 영업)
+  const lcCfg = () => { const c = db.lineCheckCfg || {}, hm = (v) => /^\d\d:\d\d$/.test(v || ""); return { on: c.on === 0 ? 0 : 1, time: hm(c.time) ? c.time : "20:00", lunch: hm(c.lunch) ? c.lunch : "", secs: { FOH: 1, BOH2: 1, BOH: 0, ...(c.secs || {}) }, x: c.x === 0 ? 0 : 1, kinds: { chk: 1, inp: 1, pic: 1, ...(c.kinds || {}) }, min: Math.max(1, +c.min || 1), names: c.names === 0 ? 0 : Math.max(1, +c.names || 3), skip: c.skip == null ? "BRUNCH, 사워도우" : String(c.skip), qp: c.qp ? 1 : 0, okNote: c.okNote ? 1 : 0, skipSun: c.skipSun === 1 ? 1 : 0 }; };
+  const lcRunAt = (time) => { const h = +time.slice(0, 2) + +time.slice(3) / 60; const r = LC_RUNS.find((x) => x >= h); return r == null ? null : r; };
+  let lcAdvOpen = false, lcHistOpen = false, lcBusy = "";
+  const lcDays = () => Object.keys(db).filter((k) => /^lineCheck\.\d{4}-\d\d-\d\d$/.test(k) && db[k] && db[k].status).sort().reverse();
+  const lcUniq = (miss) => [...new Set((miss || []).map((m) => m.replace(/^\d+ /, "")))];
+  const lcMarks = (st) => { const g = {}; Object.entries(st || {}).forEach(([k, v]) => { const [sec, t] = k.split(" "); (g[sec] = g[sec] || {})[t || ""] = v; }); return Object.entries(g).map(([sec, o]) => `${sec} ${["런치", "디너"].map((t) => o[t] || "–").join("·")}`).join("  "); };
+  function renderAlerts() {
+    const c = lcCfg(), run = lcRunAt(c.time), box = $("alertsBody"), off = c.on ? "" : " disabled";
+    const chk = (attr, t, on, sub) => `<label class="set-check"><input type="checkbox" ${attr}${on ? " checked" : ""}${off}><span>${t}${sub ? `<small>${sub}</small>` : ""}</span></label>`;
+    const sel = (id, opts, cur, label) => `<select id="${id}" class="set-sel" aria-label="${label}"${off}>${opts.map(([v, t]) => `<option value="${v}"${String(v) === String(cur) ? " selected" : ""}>${t}</option>`).join("")}</select>`;
+    const lunchOpts = [["", "안 함"], ...LC_RUNS.filter((h) => run != null && h < run).map((h) => [`${h}:00`, `${h}:00`])];
+    const days = lcDays(), last = days[0], lc = last ? db[last] : null, sp = db.salesPush || {};
+    const fmtAt = (at) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const lastTxt = lc ? `마지막 확인 ${last.slice(15).replace("-", "/")} ${lc.at ? fmtAt(lc.at) : ""}${lc.phase === "lunch" ? " (런치)" : ""} · ${lcMarks(lc.status) || "표시 없음"}${Object.keys(lc.why || {}).map((k) => ` · ${k} 빠짐 ${lc.why[k].items != null ? lc.why[k].items : lcUniq(lc.why[k].miss).length}`).join("")}` : "아직 확인한 기록이 없어요";
+    const live = sp.kind === "linecheck" && Date.now() - (sp.at || 0) < 18 * 3600e3;
+    const state = live && sp.status === "pending" ? (agAlive() ? "지금 확인 · 매장 PC를 기다리는 중…" : "지금 확인 · 매장 PC가 꺼져 있어요. 켜지면 확인해요")
+      : live && sp.status === "running" ? "지금 확인 · 매장 PC가 MIS를 읽는 중…"
+      : live && sp.status === "error" ? `<b class="inv-bad">지금 확인을 못 했어요</b> · ${esc(sp.text || "")}`
+      : esc(lastTxt);
+    const nowHM = (() => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; })();
+    // 자주 빠지는 항목: 최근 7번 기록에서 같은 줄이 빠진 횟수 (마지막 확인 기록만)
+    const rec7 = days.filter((k) => db[k].phase !== "lunch").slice(0, 7), freq = new Map();
+    rec7.forEach((k) => Object.entries(db[k].why || {}).forEach(([sec, w]) => { const seen = new Set(); (w.miss || []).forEach((m) => { const n = +m.split(" ")[0], id = sec + ":" + (n % 2 ? n : n - 1); if (seen.has(id)) return; seen.add(id); const f = freq.get(id) || { n: 0, name: m.replace(/^\d+ /, "") }; f.n++; freq.set(id, f); }); }));
+    const often = [...freq.values()].filter((f) => f.n >= 2).sort((x, y) => y.n - x.n).slice(0, 3);
+    const hist = days.slice(0, 7).map((k) => { const r = db[k], day = k.slice(10), n = Object.values(r.why || {}).reduce((t, w) => t + (w.items != null ? w.items : lcUniq(w.miss).length), 0), bad = (r.x || []).length || n;
+      return `<details class="lc-day"><summary><b>${day.slice(5).replace("-", "/")} ${"일월화수목금토"[dow(day)]}</b><span>${esc(lcMarks(r.status))}${r.phase === "lunch" ? " · 런치만" : ""}</span><em class="${bad ? "bad" : "ok"}">${(r.x || []).length ? "X " + r.x.length : n ? "빠짐 " + n : "이상 없음"}</em></summary>` +
+        (Object.entries(r.why || {}).map(([sec, w]) => { const u = lcUniq(w.miss); return u.length ? `<ul><li class="h">${esc(sec)}${w.ask ? ` · 확인만 ${w.ask}줄` : ""}</li>${u.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>` : ""; }).join("") || "") +
+        `<p class="set-note">${r.sent ? "보낸 알림: " + esc(r.sent) : r.say ? "알림 안 보냄: " + esc(r.say) : "알림 없음"}</p></details>`; }).join("");
+    const mode = ((db.invCfg || {}).misMode) || "copy";
+    const rad = (k, t, sub) => `<label class="set-radio${mode === k ? " on" : ""}"><input type="radio" name="misMode" value="${k}"${mode === k ? " checked" : ""}><span><b>${t}</b><small>${sub}</small></span></label>`;
+    const ag = db.misAgent || {}, ago = ag.at ? Math.round((Date.now() - ag.at) / 60e3) : null, autoOff = ag.auto === 0;
+    box.innerHTML =
+      `<div class="set-card pad${c.on ? "" : " lc-off"}">` +
+        `<div class="set-row flat"><span class="set-t">라인체크 알림<small>X이거나 빠진 항목이 있으면 수원 한글표시사항 앱으로 알려요</small></span><button type="button" class="sw" role="switch" data-lc="on" aria-checked="${c.on ? "true" : "false"}" aria-label="라인체크 알림"><i></i></button></div>` +
+        `<label class="set-row"><span class="set-t">마지막 확인 시각<small>${run == null ? '<b class="inv-bad">20시 뒤에는 매장 PC가 돌지 않아 확인 못 해요</b>' : `런치·디너·사진까지 봄 · 매장 PC가 도는 12·16·20시 중 <b>${run}:00</b>에 확인`}</small></span><input type="time" id="lcTime" class="set-time" value="${c.time}" aria-label="라인체크 마지막 확인 시각"${off}></label>` +
+        `<label class="set-row"><span class="set-t">런치 먼저 확인<small>${c.lunch ? "그 시각부터 마지막 확인 전까지는 런치 칸만 봐요 (사진은 마지막 확인 때)" : "켜면 런치 칸이 비었을 때 낮에 먼저 알려요"}</small></span>${sel("lcLunch", lunchOpts, lunchOpts.some(([v]) => v === c.lunch) ? c.lunch : "", "런치 먼저 확인")}</label>` +
+        `<div class="set-sub">볼 구역</div><div class="set-checks two">${chk('data-sec="FOH"', "FOH", c.secs.FOH)}${chk('data-sec="BOH2"', "BOH2", c.secs.BOH2)}${chk('data-sec="BOH"', "BOH (수원은 안 함)", c.secs.BOH)}</div>` +
+        `<div class="set-sub">알릴 것</div><div class="set-checks two">${chk('data-kind="x"', "X · 아예 안 함", c.x)}${chk('data-kind="chk"', "체크 빠짐", c.kinds.chk)}${chk('data-kind="inp"', "온도·입력 빠짐", c.kinds.inp)}${chk('data-kind="pic"', "사진 빠짐", c.kinds.pic)}</div>` +
+        `<details class="lc-adv"${lcAdvOpen ? " open" : ""}><summary>세부 조건</summary>` +
+          `<label class="set-row"><span class="set-t">몇 개부터 알릴까<small>구역마다 빠진 항목이 이 수보다 적으면 조용히 기록만</small></span>${sel("lcMin", [[1, "1개"], [2, "2개"], [3, "3개"], [5, "5개"]], c.min, "빠짐 몇 개부터 알릴지")}</label>` +
+          `<label class="set-row"><span class="set-t">알림에 보일 항목<small>며칠째 빠진 것부터 · 나머지는 '외 N'</small></span>${sel("lcNames", [[3, "3개"], [5, "5개"], [0, "전부"]], c.names, "알림에 보일 항목 수")}</label>` +
+          `<label class="set-col"><span class="set-t">제외할 낱말<small>쉼표로 나눠요 · 대분류·항목 이름에 들어 있으면 안 봐요 (안 파는 메뉴 등)</small></span><input type="text" id="lcSkip" class="set-text" value="${esc(c.skip)}" autocapitalize="none" autocorrect="off" enterkeyhint="done" aria-label="제외할 낱말"${off}></label>` +
+          `<div class="set-checks">${chk('id="lcQp"', "Quality Page·교육 줄도 보기", c.qp, "BOH2 1~36번 · 409~410번 줄 (지금은 '확인만'으로 셈)")}${chk('id="lcOk"', "이상 없어도 알림", c.okNote, "빠진 게 없으면 '이상 없음'을 보내요")}${chk('id="lcSun"', "일요일은 쉬기", c.skipSun)}</div>` +
+        `</details>` +
+        `<div class="set-acts"><button type="button" class="lbtn" data-act="lcNow"${lcBusy ? " disabled" : ""}>지금 확인<small>${nowHM < c.time ? "지금은 런치 칸만" : "런치·디너·사진"}</small></button><button type="button" class="lbtn" data-act="lcTest"${lcBusy ? " disabled" : ""}>시험 알림<small>수원 휴대폰으로</small></button></div>` +
+        `<p class="set-note" id="lcState">${state}</p></div>` +
+      `<details class="set-card adv" id="lcHist"${lcHistOpen ? " open" : ""}><summary>최근 기록${days.length ? ` <small>${Math.min(7, days.length)}일</small>` : ""}</summary>` +
+        (often.length ? `<p class="set-note pad"><b>자주 빠짐</b> · ${often.map((f) => `${esc(f.name)} ${f.n}번`).join(" · ")}</p>` : "") +
+        (hist || '<p class="set-note pad">아직 기록이 없어요</p>') + `</details>` +
+      `<fieldset class="set-card pad"><legend class="set-head">인벤토리 → MIS 실사재고</legend>` +
+        rad("copy", "복사해서 직접 입력", "합계를 MIS 순서로 복사 (지금 방식)") +
+        rad("fill", "PC가 채워만 두기", "재고수량 칸만 채우고 [저장]은 내가 누름 · 준비 중") +
+        rad("save", "PC가 저장까지", "저장 뒤 다시 읽어 대조하고 결과를 알림 · 준비 중") +
+        (mode === "copy" ? "" : '<p class="set-note">이 방식은 아직 만들지 않았어요. 고른 방식으로 만들고, 다 되면 여기서 바로 쓰여요. 그때까지는 복사로 넣어 주세요.</p>') + `</fieldset>` +
+      `<div class="set-card"><div class="set-row"><span class="set-t">매장 PC 자동 수집<small>${ago == null ? "매장 PC 신호 없음" : autoOff ? '<b class="inv-bad">꺼져 있음 · 매출·라인체크를 스스로 안 받아요</b>' : "켜져 있음"}${ago != null ? ` · 마지막 신호 ${ago < 60 ? ago + "분" : Math.round(ago / 60) + "시간"} 전` : ""}</small></span><span class="set-state${autoOff || ago == null ? " off" : ""}">${ago == null ? "모름" : autoOff ? "꺼짐" : "켜짐"}</span></div>` +
+        `<p class="set-note pad">매장 PC 크롬의 GW Agent 확장에서 켜고 끕니다 (여기서는 못 바꿔요)${autoOff ? " · 꺼져 있는 동안은 [지금 확인]으로만 볼 수 있어요" : ""}</p></div>`;
+  }
+  const lcSave = (patch) => { const c = lcCfg(), n = { ...c, ...patch, secs: { ...c.secs, ...(patch.secs || {}) }, kinds: { ...c.kinds, ...(patch.kinds || {}) }, at: Date.now() }; const run = lcRunAt(n.time); if (n.lunch && (run == null || +n.lunch.slice(0, 2) >= run)) n.lunch = ""; setKey("lineCheckCfg", n); renderAlerts(); toast("저장했어요"); };
+  // [지금 확인]: 매장 PC에 오늘 라인체크 조회를 부탁(시트 salesPush kind linecheck). 다른 요청이 도는 중이면 덮지 않음. 다른 버튼의 최근 결과(parts)는 들고 감
+  async function lcNow() {
+    if (!API) { toast("구글 시트에 연결돼 있지 않아요"); return; }
+    if (!(await unlock())) return;
+    lcBusy = "now"; renderAlerts();
+    try {
+      await pull(true).catch(() => {});
+      const p = db.salesPush;
+      if (p && spLive(p)) { toast(p.kind === "linecheck" ? "이미 확인하는 중이에요" : "매장 PC가 다른 일을 받는 중이에요 · 끝나면 다시 눌러 주세요"); return; }
+      const keep = {}, fresh = (x) => x && x.doneAt && Date.now() - x.doneAt < 12 * 3600e3;
+      Object.keys((p || {}).parts || {}).forEach((k) => { if (k !== "linecheck" && fresh(p.parts[k])) keep[k] = p.parts[k]; });
+      if (!(await salesSend({ set: { id: Date.now(), at: Date.now(), status: "pending", kind: "linecheck", to: TODAY, ...(Object.keys(keep).length ? { parts: keep } : {}) } }))) return;
+      misFastUntil = Date.now() + 6 * 60e3;
+      toast(agAlive() ? "PC로 보냈어요 · 1~2분 뒤 결과가 보여요" : "보냈어요 · 매장 PC가 켜지면 확인해요");
+    } finally { lcBusy = ""; renderAlerts(); }
+  }
+  // [시험 알림]: 수원 휴대폰(알림 켠 기기)에 정해진 글 하나만. 보내기 전에 물어봄 (알림 발송은 KM 확인 뒤 — 규칙 6)
+  async function lcTest() {
+    if (!(await unlock())) return;
+    if (!confirm("수원 매장 휴대폰(알림 켠 기기)에 시험 알림을 보낼까요?")) return;
+    lcBusy = "test"; renderAlerts();
+    try {
+      const j = await (await fetch(LABEL_HUB, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "push_notice", store: "suwon", text: "라인체크 알림 시험 · 이 알림이 보이면 정상이에요" }) })).json();
+      toast(j && j.sent != null ? `시험 알림을 보냈어요 · ${j.sent}대` : "못 보냈어요 · " + String((j && (j.error || j.msg)) || "30초 뒤에 다시 눌러 주세요").slice(0, 60));
+    } catch (e) { toast("못 보냈어요 · 인터넷을 확인해 주세요"); }
+    finally { lcBusy = ""; renderAlerts(); }
+  }
+  $("alertsBody").addEventListener("toggle", (e) => { const t = e.target; if (!t.matches) return; if (t.matches("details.lc-adv")) lcAdvOpen = t.open; if (t.id === "lcHist") lcHistOpen = t.open; }, true);
+  $("alertsBody").addEventListener("click", (e) => {
+    const sw = e.target.closest('[data-lc="on"]'); if (sw) { lcSave({ on: lcCfg().on ? 0 : 1 }); return; }
+    const act = e.target.closest("[data-act]"); if (!act || act.disabled) return;
+    if (act.dataset.act === "lcNow") lcNow(); else if (act.dataset.act === "lcTest") lcTest();
+  });
+  $("alertsBody").addEventListener("change", (e) => {
+    const t = e.target, ds = t.dataset || {};
+    if (t.id === "lcTime") { if (/^\d\d:\d\d$/.test(t.value)) lcSave({ time: t.value }); return; }
+    if (t.id === "lcLunch") { lcSave({ lunch: t.value }); return; }
+    if (t.id === "lcMin") { lcSave({ min: +t.value || 1 }); return; }
+    if (t.id === "lcNames") { lcSave({ names: +t.value }); return; }
+    if (t.id === "lcSkip") { lcSave({ skip: t.value.split(/[,\n]/).map((w) => w.trim()).filter(Boolean).join(", ") }); return; }
+    if (t.id === "lcQp") { lcSave({ qp: t.checked ? 1 : 0 }); return; }
+    if (t.id === "lcOk") { lcSave({ okNote: t.checked ? 1 : 0 }); return; }
+    if (t.id === "lcSun") { lcSave({ skipSun: t.checked ? 1 : 0 }); return; }
+    if (ds.sec) { lcSave({ secs: { [ds.sec]: t.checked ? 1 : 0 } }); return; }
+    if (ds.kind) { lcSave(ds.kind === "x" ? { x: t.checked ? 1 : 0 } : { kinds: { [ds.kind]: t.checked ? 1 : 0 } }); return; }
+    if (t.name === "misMode") { setKey("invCfg", { ...(db.invCfg || {}), misMode: t.value, at: Date.now() }); renderAlerts(); toast(t.value === "copy" ? "복사 방식" : "고른 방식을 적어 뒀어요 (준비 중)"); }
+  });
   $("vegTable").addEventListener("change", (e) => { const i = e.target.closest("input.vegd"); if (!i) return; const n = num(i.value); db.itemCfg = { ...(db.itemCfg || {}) }; const c = { ...(db.itemCfg[i.dataset.key] || {}) }; if (n > 0) c.vegDays = n; else delete c.vegDays; db.itemCfg[i.dataset.key] = c; setKey("itemCfg", db.itemCfg); renderVeg(); });
   $("vegPrint").addEventListener("click", () => { const t0 = document.title; document.body.classList.add("veg-print"); document.title = `야채 입고일 ${TODAY}`; window.print(); setTimeout(() => { document.body.classList.remove("veg-print"); document.title = t0; }, 800); });
   function locSumUpdate() {
@@ -3686,6 +3862,7 @@
       saveLoc(k, patch); locFoh = toFoh; if (locTab !== "hide" && !LS.some(([x]) => x === (patch.loc || locOf(it)))) locTab = "dry";
       renderLocEdit(); return;
     }
+    if (e.target.closest("[data-item]")) { openItem(k); return; }
     if (e.target.closest("[data-hide]")) { saveLoc(k, { hide: 1 }); renderLocEdit(); return; }
     if (e.target.closest("[data-show]")) { saveLoc(k, { hide: null }); locTab = (locFoh ? LOCS_FOH : LOCS).some(([x]) => x === locOf(it)) ? locOf(it) : "dry"; renderLocEdit(); return; }
     if (e.target.closest("[data-use]")) { saveLoc(k, { show: 1, hide: null }); renderLocEdit(); return; }
@@ -4779,6 +4956,7 @@
     if (!$("v-forecast").hidden && !typing("v-forecast")) renderForecast();
     if (!$("v-report").hidden) renderReport();
     if (!$("v-files").hidden && !typing("v-files")) renderFiles();
+    if (!$("v-alerts").hidden && !typing("v-alerts")) renderAlerts();
   }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pull().then(refreshVisible); });
   // 다른 기기에서 넣은 재고·Forecast도 10~30초 안에 반영 (리포트의 오차 범위 큰 품목 등)

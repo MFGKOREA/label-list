@@ -138,6 +138,24 @@
     </label>
     <div id="invBody" class="inv-body"></div>
   </section>
+  <!-- 품목 설정 (11/28 KM 시안 3): 발주 품목 설정 목록에서 [설정] → 보이기·소분·레시피만 스위치, 여유분 슬라이더, 보관 위치, 고급 설정 -->
+  <section class="view" id="v-item" aria-label="품목 설정" hidden>
+    <div class="nav">
+      <button type="button" class="back" data-go="loc" aria-label="발주 품목 설정으로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <h2 class="logtitle" id="itemTitle">품목 설정</h2>
+      <span class="right"></span>
+    </div>
+    <div id="itemBody" class="set-body"></div>
+  </section>
+  <!-- 알림 · 자동 실행 (11/28 KM 시안 5): 라인체크 시각·구역, 인벤토리 → MIS 방식, 매장 PC 자동 수집 상태 -->
+  <section class="view" id="v-alerts" aria-label="알림 · 자동 실행" hidden>
+    <div class="nav">
+      <button type="button" class="back" data-go="report" aria-label="데이터 리포트로"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5L2 9l7.5 7.5"/></svg></button>
+      <h2 class="logtitle">알림 · 자동 실행</h2>
+      <span class="right"></span>
+    </div>
+    <div id="alertsBody" class="set-body"></div>
+  </section>
   <section class="view" id="v-log" aria-label="수원컨벤션점 발주시트" hidden>
     <div class="nav">
       <button type="button" class="back" data-go="files"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>파일</button>
@@ -217,7 +235,7 @@
     <div class="nav">
       <button type="button" class="back" data-go="main"><svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L2 9l7 7"/></svg>발주</button>
       <h2>데이터 리포트</h2>
-      <span class="right"></span>
+      <span class="right"><button type="button" class="printbtn" data-go="alerts">알림 설정</button></span>
     </div>
     <div class="catgrid" data-view="report" role="tablist" aria-label="분류">
       <button type="button" role="tab" data-cat="hlth"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg><span>상황판</span></button>

@@ -981,19 +981,30 @@
       // 11/26 KM: O면 O · △면 왜 △인지 확인(△ 칸을 눌러 상세를 읽음) · X면 한글표시사항 앱(수원)에 "X" 알림
       const norm = (v) => (/^[○◯Oo]$/.test(v) ? "O" : /^[Δ△]$/.test(v) ? "△" : /^[XxＸ×]$/.test(v) ? "X" : "");
       const SEC = /FOH|BOH/i, mine = (r, g) => { const st = g.cs.filter((c) => /매장|점포/.test(title(c))).map((c) => txt(r[c.field])); return !st.length || st.some((v) => /수원|1345090/.test(v)) || !st.some((v) => v); };
+      const kvAll = (await get().catch(() => ({}))) || {}, LC = kvAll.lineCheckCfg || {}, lcSecs = LC.secs || {};
+      /* 11/28 KM "라인체크 알림에 조건·기능 더": 시트 lineCheckCfg = { on, time, lunch, secs, x, kinds: { chk, inp, pic }, min, names, skip, qp, okNote, skipSun }
+         단계: 오늘이고 마지막 확인 시각(time) 전이면 '런치'(런치 칸만 · 사진은 안 따짐), 그 뒤·지난 날은 '마지막'(런치+디너+사진). 요청에 phase가 있으면 그대로 */
+      const kstN = new Date(Date.now() + 9 * 3600e3), hmN = String(kstN.getUTCHours()).padStart(2, "0") + ":" + String(kstN.getUTCMinutes()).padStart(2, "0");
+      const finT = /^\d\d:\d\d$/.test(LC.time || "") ? LC.time : "20:00";
+      const phase = job.phase === "lunch" || job.phase === "full" ? job.phase : day === kstN.toISOString().slice(0, 10) && hmN < finT ? "lunch" : "full", lunchOnly = phase === "lunch";
+      const judge = (k) => !(lunchOnly && / 디너$/.test(k));
+      const kindOn = (k) => !(LC.kinds && LC.kinds[k] === 0);
+      const skipWords = (LC.skip == null ? "BRUNCH, 사워도우, sourdough" : String(LC.skip)).split(/[,\n]/).map((w) => w.trim().toLowerCase()).filter(Boolean);
+      const skipRow = (r) => { const t = [r.KINDNAME, r.CATEGORYNAME, r.ITEMNAME].map((v) => String(v ?? "").toLowerCase()).join(" "); return skipWords.some((w) => t.includes(w)); };
+      const secOn = (key) => { const k = key.split(" ")[0]; return k in lcSecs ? !!lcSecs[k] : k === "FOH" || k === "BOH2"; };
       const status = {}, sum = [], fieldOf = {};
-      L.grids().forEach((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); (L.raw(g) || []).forEach((r) => { if (!mine(r, { cs })) return; cs.forEach((c) => { const v = norm(txt(r[c.field])); if (!v) return; const m = /^(FOH|BOH\d*)_(LUNCH|DINNER)$/i.exec(c.field), key = m ? `${m[1].toUpperCase()} ${m[2].toUpperCase() === "LUNCH" ? "런치" : "디너"}` : SEC.test(title(c)) ? title(c) : ""; sum.push(`${key || title(c) || c.field}=${v}`); if (key && /^(FOH|BOH2) /.test(key)) { status[key] = v; fieldOf[key] = c.field; } /* 11/26 KM "BOH는 우리는 안 해" → FOH·BOH2만 */ }); }); });
+      L.grids().forEach((g) => { const o = $(g).datagrid("options"), cs = [].concat(...(o.frozenColumns || []), ...(o.columns || [])).filter((c) => c.field); (L.raw(g) || []).forEach((r) => { if (!mine(r, { cs })) return; cs.forEach((c) => { const v = norm(txt(r[c.field])); if (!v) return; const m = /^(FOH|BOH\d*)_(LUNCH|DINNER)$/i.exec(c.field), key = m ? `${m[1].toUpperCase()} ${m[2].toUpperCase() === "LUNCH" ? "런치" : "디너"}` : SEC.test(title(c)) ? title(c) : ""; sum.push(`${key || title(c) || c.field}=${v}`); if (key && secOn(key)) { status[key] = v; fieldOf[key] = c.field; } /* 11/26 KM "BOH는 우리는 안 해" → 기본 FOH·BOH2만. 11/28: 알림 설정 화면에서 고름(lineCheckCfg.secs) */ }); }); });
       // 실제 화면(11/26 첫 조회): 열 = DATE · BOH_LUNCH · BOH_DINNER · FOH_LUNCH · FOH_DINNER · BOH2_LUNCH · BOH2_DINNER (+ 마지막 저장일자·시간), 머리글은 LUNCH/DINNER뿐이라 칸 이름(field)으로 구역을 앎
       // △ 상세: 칸 속 링크를 눌러 열린 표·입력칸을 그대로 모양만 남김(규칙은 첫 실제 화면을 본 뒤 붙임). 저장·확인 단추는 안 누름
-      const tri = Object.keys(status).filter((k) => status[k] === "△"), detail = {};
+      const tri = Object.keys(status).filter((k) => status[k] === "△" && judge(k)), detail = {};
       const mainG = new Set(L.grids());
       const evs = L.grids().map((g) => { const o = $(g).datagrid("options"); return ["onClickCell", "onDblClickCell", "onClickRow", "onDblClickRow", "onSelect"].map((k) => (o[k] && !/^function\s*\(\w*(,\s*\w+)*\)\s*\{\s*\}$/.test(String(o[k])) ? `${k}:${String(o[k]).slice(0, 400)}` : "")).filter(Boolean); });
       const detailRows = {};
       const triSec = [...new Set(tri.map((k) => k.split(" ")[0]))]; // 런치·디너는 같은 팝업(fn_LineChk_Pop(index, "BOH2")) → 구역마다 한 번
       for (const sec of triSec.slice(0, 3)) {
         try {
-          // △ 칸 누르기: 칸 속 링크가 있으면 그것, 없으면 표의 그 칸(td[field]) — easyui 표는 칸 누름(onClickCell)으로 상세를 엶
-          const td = d.querySelector(`.datagrid-body td[field="${fieldOf[sec + " 런치"] || fieldOf[sec + " 디너"] || fieldOf[sec]}"]`), a = (td && td.querySelector("a, [onclick]")) || (td && (td.querySelector(".datagrid-cell") || td));
+          // △ 칸 누르기(11/28: 런치 O · 디너 △면 △인 디너 칸을 누름 — 예전엔 런치 칸부터 눌러 상세를 못 읽을 수 있었음): 칸 속 링크가 있으면 그것, 없으면 표의 그 칸(td[field]) — easyui 표는 칸 누름(onClickCell)으로 상세를 엶
+          const td = d.querySelector(`.datagrid-body td[field="${fieldOf[tri.find((k) => k.split(" ")[0] === sec)] || fieldOf[sec + " 런치"] || fieldOf[sec + " 디너"] || fieldOf[sec]}"]`), a = (td && td.querySelector("a, [onclick]")) || (td && (td.querySelector(".datagrid-cell") || td));
           if (!a) { detail[sec] = { err: "△ 링크 없음" }; continue; }
           const pre = new Set(frames()), opened = []; const hook = (w) => { try { const f = w.open; w.open = function (u) { opened.push(String(u || "").slice(0, 200)); return f.apply(this, arguments); }; return () => { w.open = f; }; } catch (e) { return () => {}; } }; const un = [hook(R), hook(window.top)];
           press(R, a); await sleep(2500); await L.idle(T.q); un.forEach((f) => f());
@@ -1007,36 +1018,70 @@
       // △ 이유 (11/26 KM 규칙, 실제 상세 팝업 PopdataGrid: KINDNAME 대분류 · ITEMNAME 체크항목 · VALUE1 런치체크 · VALUE2 디너체크 · VALUE3 런치입력 · VALUE4 디너입력 · VALUE6 프라잉오일 · VALUE7 이미지, 줄 번호 = 화면 순서 1부터)
       //  37~72 = 체크 아닌 입력(런치·디너 둘 다), 71·72 = 런치 100이면 됨 · 67~72·179~180·227~228 = 사진 필요 · 407~408 = 사진 + 런치입력 사유 · 프라잉오일 Y/N은 따지지 않음
       //  브런치는 판매 안 함(뺌) · 사워도우는 11/25 삭제 메뉴(뺌) · 1~36(Quality Page·교육)과 409~410은 KM 답 전까지 '확인'으로만 적음(알림 안 함)
-      const why = {};
+      const why = {}, itemsOf = {};
+      const nameOf = (r) => String(r.ITEMNAME || r.CATEGORYNAME || r.KINDNAME || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 24);
       for (const sec of triSec) {
         const D = detailRows[sec]; if (!D) continue;
-        const miss = [], ask = [];
+        const miss = [], ask = [], items = [];
         D.forEach((r, i) => {
-          const n = i + 1, it = txt(r.ITEMNAME || r.CATEGORYNAME || r.KINDNAME).slice(0, 18), has = (v) => txt(v) !== "";
-          if (/BRUNCH/i.test(r.KINDNAME) || /사워도우|sourdough/i.test(r.ITEMNAME)) return;
-          const need = [];
-          if (n >= 37 && n <= 72) { if (n >= 71) { if (txt(r.VALUE3) !== "100") need.push("런치 100"); } else { if (!has(r.VALUE3)) need.push("런치입력"); if (!has(r.VALUE4)) need.push("디너입력"); } }
-          else if (n >= 407 && n <= 408) { if (!has(r.VALUE3)) need.push("런치입력 사유"); }
-          else if (txt(r.VALUE1) !== "Y" || txt(r.VALUE2) !== "Y") need.push(txt(r.VALUE1) !== "Y" && txt(r.VALUE2) !== "Y" ? "체크" : txt(r.VALUE1) !== "Y" ? "런치체크" : "디너체크");
-          if (((n >= 67 && n <= 72) || n === 179 || n === 180 || n === 227 || n === 228 || n === 407 || n === 408) && !has(r.VALUE7)) need.push("사진");
-          if (!need.length) return;
-          (n <= 36 || (n >= 409 && n <= 410) ? ask : miss).push(`${n} ${it} ${need.join("·")}`);
+          const n = i + 1, it = nameOf(r), has = (v) => txt(v) !== "";
+          if (skipRow(r)) return;
+          const need = []; /* [종류, 글] 종류: chk 체크 · inp 온도·입력·사유 · pic 사진 */
+          const chk = () => { const l = txt(r.VALUE1) !== "Y", dn = !lunchOnly && txt(r.VALUE2) !== "Y"; if (l || dn) need.push(["chk", lunchOnly ? "런치체크" : l && dn ? "체크" : l ? "런치체크" : "디너체크"]); };
+          if (sec !== "BOH2") { /* 번호 규칙은 BOH2 상세표 기준. 다른 구역(FOH 등)의 △는 체크 안 된 줄만 (입력 칸이 있는 줄은 뺌) */
+            if (has(r.VALUE3) || has(r.VALUE4)) return; chk();
+          } else {
+            if (n >= 37 && n <= 72) { if (n >= 71) { if (txt(r.VALUE3) !== "100") need.push(["inp", "런치 100"]); } else { if (!has(r.VALUE3)) need.push(["inp", "런치입력"]); if (!lunchOnly && !has(r.VALUE4)) need.push(["inp", "디너입력"]); } }
+            else if (n >= 407 && n <= 408) { if (!has(r.VALUE3)) need.push(["inp", "런치입력 사유"]); }
+            else chk();
+            if (!lunchOnly && ((n >= 67 && n <= 72) || n === 179 || n === 180 || n === 227 || n === 228 || n === 407 || n === 408) && !has(r.VALUE7)) need.push(["pic", "사진"]);
+          }
+          const nd = need.filter((x) => kindOn(x[0])).map((x) => x[1]);
+          if (!nd.length) return;
+          const line = `${n} ${it} ${nd.join("·")}`;
+          if (sec === "BOH2" && !LC.qp && (n <= 36 || (n >= 409 && n <= 410))) { ask.push(line); return; }
+          miss.push(line);
+          const key = it + "|" + nd.join("·"), old = items.find((x) => x.key === key);
+          if (old) old.ns.push(n); else items.push({ key, ns: [n], name: it, need: nd.join("·") });
         });
-        why[sec] = { n: D.length, miss: miss.slice(0, 40), ask: ask.length };
+        /* 며칠째: 앞선 날들의 마지막 확인 기록(lineCheck.날짜)에서 같은 줄 번호가 하루도 안 끊기고 빠졌는지(기록이 없는 날에서 끊음 — 확인 못 한 날을 빠진 날로 세지 않음). 런치 단계는 안 셈 */
+        const again = {};
+        if (!lunchOnly) items.forEach((x) => {
+          let run = 1;
+          for (let b = 1; b <= 30; b++) {
+            const pd = new Date(Date.parse(day + "T00:00:00Z") - b * 864e5).toISOString().slice(0, 10), pr = kvAll["lineCheck." + pd];
+            if (!pr || pr.phase === "lunch" || !pr.status) break;
+            const pm = ((pr.why || {})[sec] || {}).miss || [];
+            if (!x.ns.some((n) => pm.some((m) => m.startsWith(n + " ")))) break;
+            run++;
+          }
+          if (run > 1) { x.again = run; again[x.ns[0]] = run; }
+        });
+        itemsOf[sec] = items;
+        why[sec] = { n: D.length, miss: miss.slice(0, 40), ask: ask.length, items: items.length, ...(Object.keys(again).length ? { again } : {}) };
       }
-      const xs = Object.keys(status).filter((k) => status[k] === "X");
-      const prev = (await get().catch(() => ({})))["lineCheck." + day] || {};
+      const xs = LC.x === 0 ? [] : Object.keys(status).filter((k) => status[k] === "X" && judge(k));
+      const prev = kvAll["lineCheck." + day] || {};
       let sent = prev.sent || "";
-      const md = day.slice(5).replace("-", "/"), missSec = Object.keys(why).filter((k) => why[k].miss.length);
-      const parts = [xs.length ? `X · ${xs.join(", ")} 체크 안 됨` : "", ...missSec.map((k) => `${k} △ 빠짐: ${(() => { const u = [...new Set(why[k].miss.map((m) => m.replace(/^\d+ /, "")))]; return u.slice(0, 3).join(", ") + (u.length > 3 ? " 외" : ""); })()}`)].filter(Boolean);
-      const say = parts.length ? `라인체크 ${md} · ${parts.join(" / ")}`.slice(0, 200) : "";
-      if (say && sent !== say && !T.noPush) {
+      const md = day.slice(5).replace("-", "/"), minN = Math.max(1, +LC.min || 1), showN = LC.names === 0 ? 99 : Math.max(1, +LC.names || 3);
+      const missSec = Object.keys(why).filter((k) => why[k].items >= minN);
+      /* 알림 글: 괄호 속 한글 이름이 있으면 그것(Mushroom Soup (머쉬룸 수프) → 머쉬룸 수프), 아니면 괄호 설명은 뺌(프라이어 1 (180˚C) → 프라이어 1). 며칠째 빠진 것부터 */
+      const shortName = (nm) => { const m = /^([^(]*)\(([^)]*)\)?/.exec(nm); if (!m) return nm; const out = m[1].trim(), inn = m[2].trim(); return /[가-힣]/.test(inn) && !/[가-힣]/.test(out) ? inn : out || inn; };
+      const secText = (k) => { const its = itemsOf[k].slice().sort((a, b) => (b.again || 0) - (a.again || 0)); return `${k} △ 빠짐 ${its.length}: ` + its.slice(0, showN).map((x) => `${shortName(x.name)} ${x.need}${x.again ? `(${x.again}일째)` : ""}`).join(", ") + (its.length > showN ? ` 외 ${its.length - showN}` : ""); };
+      const parts = [xs.length ? `X · ${xs.join(", ")} 체크 안 됨` : "", ...missSec.map(secText)].filter(Boolean);
+      const head = `라인체크 ${md}${lunchOnly ? " 런치" : ""} · `;
+      /* 깨끗함 = 볼 칸이 다 읽혔고 X 없음 + △ 구역은 상세를 읽었고 빠짐 0 (△ 자체는 브런치처럼 뺀 줄 때문에 늘 남을 수 있음) */
+      const judged = Object.keys(status).filter(judge), triRead = triSec.every((k) => why[k]);
+      const clean = judged.length > 0 && !judged.some((k) => status[k] === "X") && triRead && !Object.keys(why).some((k) => why[k].items > 0);
+      let say = parts.length ? (head + parts.join(" / ")).slice(0, 200) : "";
+      if (!say && clean) say = sent && !/모두 채워짐|이상 없음/.test(sent) ? head + "빠진 항목 모두 채워짐" : LC.okNote ? head + "이상 없음 (" + [...new Set(judged.map((k) => k.split(" ")[0]))].join("·") + ")" : "";
+      if (say && sent !== say && !T.noPush && LC.on !== 0) {
         try { const r = await fetch(LABEL_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "push_notice", store: "suwon", text: say }) }); const j = await r.json(); if (j && j.sent != null) sent = say; } catch (e) {}
       }
       await set("lineCheckProbe", { at: Date.now(), day, url: R.location.href.slice(0, 160), grids, evs, detail });
-      await set("lineCheck." + day, { at: Date.now(), status, marks: sum.slice(0, 40), tri, x: xs, why, sent });
+      await set("lineCheck." + day, { at: Date.now(), phase, status, marks: sum.slice(0, 40), tri, x: xs, why, sent, say });
       const line = Object.keys(status).map((k) => `${k} ${status[k]}`).join(" · ") || "표시 없음";
-      return finish(true, `LineCheck현황 ${day.slice(5)} · ${line}${Object.keys(why).map((k) => ` · ${k} △ 이유: ${why[k].miss.length ? "빠짐 " + why[k].miss.length + "개" : "규칙상 빠짐 없음"}${why[k].ask ? " (확인 " + why[k].ask + "줄)" : ""}`).join("")}${say ? (sent === say ? " · 알림 보냄" : " · 알림 못 보냄") : ""}`, {});
+      return finish(true, `LineCheck현황 ${day.slice(5)}${lunchOnly ? " 런치" : ""} · ${line}${Object.keys(why).map((k) => ` · ${k} △ 이유: ${why[k].miss.length ? "빠짐 " + why[k].miss.length + "개" : "규칙상 빠짐 없음"}${why[k].ask ? " (확인 " + why[k].ask + "줄)" : ""}`).join("")}${say ? (sent === say ? " · 알림 보냄" : LC.on === 0 ? " · 알림 꺼짐" : " · 알림 못 보냄") : ""}`, {});
     } catch (e) {
       return finish(false, `${step}에서 멈춤: ${e && e.message ? e.message : e}`);
     }
@@ -1180,7 +1225,13 @@
   //  1.17.0: today(오늘 중간값)도 종류마다 같이 넘겨야 함. 예전엔 also로 덧붙인 sets의 today:1이 job을 만들 때 빠져서
   //   오늘 중간값이 완결된 하루 기록(setDay.날짜)에 섞였음(매시간 :40 수집). 지금은 req.today → job.today로 그대로 전달
   const queue = [[k0, { from: base.from, to: base.to, force: base.force, today: base.today }]];
-  { const t = new Date(Date.now() + 9 * 3600e3); if (k0 === "now" && base.today && t.getUTCDay() !== 0 && t.getUTCHours() >= 20) queue.push(["linecheck", { to: t.toISOString().slice(0, 10) }]); } // 11/26 KM 라인체크 "20:00으로": 당일 되풀이 20:00 창에 덧붙여 조회 (일요일 빼고)
+  // 11/26 KM 라인체크 · 11/28 알림 설정 화면(시트 lineCheckCfg = { time, secs, skipSun }): 당일 되풀이(12·16·20시) 중 고른 시각 뒤에 도는 때마다 덧붙여 조회. 기본 20:00 · 런치 먼저 확인(lunch)을 켜면 그 시각부터도 · 일요일 쉬기는 켰을 때만
+  if (k0 === "now" && base.today) {
+    const t = new Date(Date.now() + 9 * 3600e3), c = ((await get().catch(() => ({}))) || {}).lineCheckCfg || {};
+    const tm = /^\d\d:\d\d$/.test(c.time || "") ? c.time : "20:00", hm = String(t.getUTCHours()).padStart(2, "0") + ":" + String(t.getUTCMinutes()).padStart(2, "0");
+    const lu = /^\d\d:\d\d$/.test(c.lunch || "") ? c.lunch : "";
+    if (!(c.skipSun === 1 && t.getUTCDay() === 0) && (hm >= tm || (lu && hm >= lu))) queue.push(["linecheck", { to: t.toISOString().slice(0, 10) }]);
+  }
   try {
     while (queue.length && !replaced) {
       const [kind, req] = queue.shift();

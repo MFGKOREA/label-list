@@ -168,10 +168,50 @@ ok(lcw[0] === 0 && lcw[1] && lcw[1].day === "2026-11-26" && lcw[1].store === "13
 ok(lc.status && lc.status["FOH 런치"] === "O" && !("BOH 디너" in lc.status) && lc.status["BOH2 런치"] === "△" && lc.status["BOH2 디너"] === "△", "칸 상태(실제 열 이름 BOH2_LUNCH 등): FOH O · BOH2 △ · BOH(1번)는 안 봄 (KM: 수원은 BOH 안 함)");
 ok(lcw[2] === 1 && d.lineCheckProbe.detail.BOH2 && d.lineCheckProbe.detail.BOH2.grids[0].n === 410 && d.lineCheckProbe.evs[0].some((e) => /onClickCell/.test(e)), "△ 칸을 눌러 상세 410줄을 읽음 (칸 누름 onClickCell)");
 ok(lc.why && lc.why.BOH2 && lc.why.BOH2.miss.length === 1 && /^179 .*사진$/.test(lc.why.BOH2.miss[0]) && lc.why.BOH2.ask === 38, "△ 이유: 179 사진 빠짐만 (37~72 입력·71·72 런치 100·407~408 사유+사진은 됨, 브런치·사워도우 뺌, 1~36·409~410은 확인으로만)");
-ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /BOH2 △ 빠짐: 항목179 사진/.test(pushes[0].text) && !/BOH 런치|BOH 디너/.test(pushes[0].text) && lc.sent === pushes[0].text, "△ 빠짐이 있으면 수원 앱(store suwon)에만 알림 한 번: " + (pushes[0] || {}).text);
+ok(pushes.length === 1 && pushes[0].action === "push_notice" && pushes[0].store === "suwon" && /BOH2 △ 빠짐 1: 항목179 사진$/.test(pushes[0].text) && !/BOH 런치|BOH 디너/.test(pushes[0].text) && lc.sent === pushes[0].text, "△ 빠짐이 있으면 수원 앱(store suwon)에만 알림 한 번: " + (pushes[0] || {}).text);
 ok(!JSON.stringify(d).includes("홍길동") && !JSON.stringify(d).includes("MG수원") && d.lineCheckProbe.grids[0].drop === 2 && !JSON.stringify(d.lineCheckProbe).includes("작성자=") , "작성자·매장명 칸은 저장 안 함");
 d = await run({ kind: "linecheck", to: "2026-11-26" }, "lc-main.html");
 ok(pushes.length === 1, "같은 날 같은 X는 다시 알리지 않음");
+// 6-3b) 라인체크 알림 조건 (11/28 KM "조건·기능 더", 시트 lineCheckCfg — 앱 알림 설정 화면에서 고름). 가짜 상세표는 179 사진 하나만 빠짐
+const lcCfgSet = (c) => gas.post({ action: "set", key: "lineCheckCfg", value: c });
+const lcRun = async (day, c, job = {}) => { lcCfgSet(c); const n = pushes.length; d = await run({ kind: "linecheck", to: day, ...job }, "lc-main.html"); return { rec: d["lineCheck." + day] || {}, sent: pushes.length - n, text: pushes.length > n ? pushes[pushes.length - 1].text : "", part: d.salesPush.parts.linecheck.text }; };
+let q = await lcRun("2026-11-27", {});
+ok(q.sent === 1 && /^라인체크 11\/27 · BOH2 △ 빠짐 1: 항목179 사진\(2일째\)$/.test(q.text) && q.rec.why.BOH2.again["179"] === 2 && q.rec.phase === "full", "며칠째: 전날(11/26)에도 빠진 줄은 '(2일째)' · " + q.text);
+q = await lcRun("2026-11-30", {});
+ok(q.sent === 1 && !/일째/.test(q.text) && !q.rec.why.BOH2.again, "기록이 없는 날에서 며칠째가 끊김 (11/30 ← 11/28·29 기록 없음)");
+q = await lcRun("2026-12-01", { min: 2 });
+ok(q.sent === 0 && q.rec.why.BOH2.items === 1 && !q.rec.say && !q.rec.sent, "몇 개부터(min 2): 1개 빠짐은 알림 없이 기록만");
+q = await lcRun("2026-12-02", { kinds: { pic: 0 } });
+ok(q.sent === 0 && q.rec.why.BOH2.items === 0, "사진 빠짐 끔: 179 사진은 안 따짐 → 알림 없음");
+q = await lcRun("2026-12-02", { kinds: { pic: 0 }, okNote: 1 });
+ok(q.sent === 1 && q.text === "라인체크 12/02 · 이상 없음 (FOH·BOH2)", "이상 없어도 알림 켬: " + q.text);
+q = await lcRun("2026-12-03", { on: 0 });
+ok(q.sent === 0 && /BOH2 △ 빠짐 1/.test(q.rec.say) && !q.rec.sent && /알림 꺼짐/.test(q.part), "알림 끔: 조회·기록만, 보내지 않음 · " + q.part);
+q = await lcRun("2026-12-04", {}, { phase: "lunch" });
+ok(q.sent === 0 && q.rec.phase === "lunch" && q.rec.why.BOH2.items === 0 && /12-04 런치/.test(q.part), "런치 단계: 런치 칸만 봄(사진·디너는 마지막 확인 때) → 빠짐 없음");
+q = await lcRun("2026-12-04", {});
+ok(q.sent === 1 && q.rec.phase === "full" && /^라인체크 12\/04 · BOH2 △ 빠짐 1: 항목179 사진/.test(q.text), "같은 날 마지막 확인: 사진 빠짐 알림 · " + q.text);
+q = await lcRun("2026-12-05", { skip: "BRUNCH, 사워도우, 항목179" });
+ok(q.sent === 0 && q.rec.why.BOH2.items === 0, "제외 낱말에 넣은 항목은 안 봄");
+q = await lcRun("2026-12-06", { skip: "" });
+ok(q.sent === 1 && q.rec.why.BOH2.items === 1 + 1 + 12 && /빠짐 14/.test(q.text), "제외 낱말을 비우면 브런치 12·사워도우 1도 빠짐으로: " + q.text);
+q = await lcRun("2026-12-07", { qp: 1, names: 5 });
+ok(q.sent === 1 && q.rec.why.BOH2.ask === 0 && q.rec.why.BOH2.items === 39 && / 외 34$/.test(q.text) && q.text.length <= 200, "Quality Page·교육 줄도 보기 + 5개 보임: " + q.text);
+q = await lcRun("2026-12-08", { secs: { BOH: 1 }, x: 0 });
+ok(q.sent === 1 && q.rec.status["BOH 런치"] === "X" && !/X ·/.test(q.text), "BOH 켬 + X 알림 끔: BOH X는 기록만 · " + q.text);
+q = await lcRun("2026-12-08", { secs: { BOH: 1 } });
+ok(q.sent === 1 && /^라인체크 12\/08 · X · BOH 런치, BOH 디너 체크 안 됨 \/ BOH2 △/.test(q.text), "X 알림 켬: " + q.text);
+lcCfgSet(null);
+// 6-3c) 당일 되풀이(now)에 라인체크 덧붙이기: 마지막 확인 시각 뒤, 또는 '런치 먼저 확인' 시각 뒤 (시각은 실제 시계 → 00:00/23:59로 갈라 봄)
+const kToday = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), nowJob = { kind: "now", today: 1, from: kToday, to: kToday }, sun = new Date(Date.now() + 9 * 3600e3).getUTCDay() === 0;
+lcCfgSet({ time: "23:59" }); d = await run(nowJob);
+ok(!(d.salesPush.parts || {}).linecheck, "마지막 확인 시각 전(런치 먼저 확인 없음)에는 라인체크를 덧붙이지 않음");
+lcCfgSet({ time: "23:59", lunch: "00:00" }); d = await run(nowJob);
+ok(!!(d.salesPush.parts || {}).linecheck, "런치 먼저 확인 시각 뒤에는 덧붙임: " + ((d.salesPush.parts || {}).linecheck || {}).text);
+lcCfgSet({ time: "00:00", skipSun: 1 }); d = await run(nowJob);
+ok(!!(d.salesPush.parts || {}).linecheck === !sun, "마지막 확인 시각 뒤에는 덧붙임 · 일요일 쉬기를 켠 일요일만 건너뜀 (오늘 " + "일월화수목금토"[new Date(Date.now() + 9 * 3600e3).getUTCDay()] + ")");
+lcCfgSet(null);
+gas.post({ action: "set", key: "salesDiag", value: null }); // 가짜 화면에서 '지금 Gross'가 남긴 진단 기록은 뒤 시험과 섞이지 않게 지움
 // 6-4) 재고마감관리 살펴보기 (11/26 KM 인벤토리 → MIS 월재고): 1.실사재고등록·8.실사재고조회만 열어 [조회]만, 2.재고마감은 안 엶, 수량·금액·이름 저장 안 함
 let stw = null;
 d = await run({ kind: "stockscout" }, "st-main.html", async (p) => { stw = await p.evaluate(() => [window.__stWrite || 0, window.__closeOpened || 0]); });
