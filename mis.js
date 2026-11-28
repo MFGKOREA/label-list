@@ -82,7 +82,9 @@ const fill = async (auto) => {
   if (!groups.length) return stop("주문그룹 버튼을 못 찾았어요. 매장을 먼저 선택해 주세요.");
   const vendors = new Set([...want.values()].map((w) => w.vendor));
   // 11/12 KM: 온세물류·새싹농산(+ 오늘 앱 업체)만 열어 봄 — 예전엔 모든 그룹을 열어 느렸음.
-  //  나머지 그룹은 그 둘에서 못 찾은 품목이 있을 때만 열고, 거기선 잔여 수량을 0으로 지우지 않음(MIS에만 넣은 다른 업체 발주가 지워지지 않게)
+  //  나머지 그룹은 그 둘에서 못 찾은 품목이 있을 때만 엶
+  //  11/28 KM "앱에서 0이면 MIS에 따로 넣은 발주가 날아가면 안 돼": 앱 오늘 발주에 없는 품목의 MIS 수량은 어느 그룹에서도 0으로 지우지 않음(예전엔 온세물류·새싹농산 등에서 지웠음).
+  //   앱은 앱에 수량이 있는 품목만 그 수량으로 넣음. MIS에만 있는 발주는 그대로 두고 결과 글에 'MIS에만 있는 발주 N개 그대로 둠'으로 알림
   const MAIN = new Set(["온세물류", "새싹농산", ...vendors]);
   const order = [...groups.filter((x) => MAIN.has(x.name))], extra = groups.filter((x) => !MAIN.has(x.name));
 
@@ -105,10 +107,10 @@ const fill = async (auto) => {
     return origAjax.apply(this, arguments);
   };
   W.__appFillRunning = true;
-  const left = new Map(want), report = [], bad = []; let done = 0;
+  const left = new Map(want), report = [], bad = [], keep = []; let done = 0;
   quiet();
   try {
-    // 모든 그룹을 열어 봄: 오늘 발주 품목을 넣는 것뿐 아니라, 앱 목록에 없는데 MIS에 수량이 남아 있는 품목(지난 발주·시험 데이터)을 0으로 정리하려면
+    // 온세물류·새싹농산·오늘 앱 업체 그룹을 열어 오늘 발주 품목을 넣음 (MIS에만 있는 수량은 세기만 함)
     for (const grp of [...order, ...extra]) {
       const main = MAIN.has(grp.name);
       if (!main && !left.size) break; // 찾을 품목이 남았을 때만 다른 그룹을 엶
@@ -117,19 +119,17 @@ const fill = async (auto) => {
       const here = [];
       left.forEach((w, code) => { const idx = rows.findIndex((r) => String(r.CD_ITEM) === code); if (idx >= 0) here.push({ idx, code, ...w }); });
       here.forEach((h) => left.delete(h.code));
-      // 잔여 품목: 오늘 앱 발주에 없는데 MIS에 수량이 남아 있는 칸 → 0으로 지움 (남아 있으면 그대로 발주가 나감)
+      // MIS에만 있는 발주: 오늘 앱 발주에 없는데 MIS에 수량이 있는 칸 → 건드리지 않고 알리기만 (11/28)
       const resid = [];
       rows.forEach((r, idx) => {
         const code = String(r.CD_ITEM ?? "");
         if (!code || code === "null" || code === "undefined") return;
-        if (main && num(r.QT_ORDER) > 0 && !want.has(code)) resid.push({ idx, code, name: rowName(r), old: num(r.QT_ORDER) });
+        if (num(r.QT_ORDER) > 0 && !want.has(code)) resid.push({ idx, code, name: rowName(r), old: num(r.QT_ORDER) });
       });
-      const todo = [
-        ...here.filter((h) => num(rows[h.idx].QT_ORDER) !== h.q).map((h) => ({ idx: h.idx, q: h.q })),
-        ...resid.map((h) => ({ idx: h.idx, q: 0 })),
-      ];
+      resid.forEach((h) => keep.push(`[${grp.name}] ${h.name} ${h.old}`));
+      const todo = here.filter((h) => num(rows[h.idx].QT_ORDER) !== h.q).map((h) => ({ idx: h.idx, q: h.q }));
       if (todo.length) {
-        prog(`${grp.name} ${here.length ? here.length + "개 " : ""}넣는 중${resid.length ? ` (남은 칸 ${resid.length}개 0으로)` : ""}`);
+        prog(`${grp.name} ${here.length}개 넣는 중`);
         // 사람이 칸에 입력한 것처럼: 편집 시작 → 값 넣기 → 편집 끝 (MIS가 금액·입고일 다시 계산)
         todo.forEach((h) => inEvent(() => {
           g.datagrid("beginEdit", h.idx);
@@ -146,13 +146,6 @@ const fill = async (auto) => {
       }
       const miss = here.filter((h) => { const r = rows.find((x) => String(x.CD_ITEM) === h.code); return !r || num(r.QT_ORDER) !== h.q; });
       miss.forEach((h) => bad.push(`[${grp.name}] ${h.name} 앱 ${h.q} / MIS ${(rows.find((x) => String(x.CD_ITEM) === h.code) || {}).QT_ORDER ?? "없음"}`));
-      // 잔여 품목이 0이 됐는지 확인
-      resid.forEach((h) => {
-        const r = rows.find((x) => String(x.CD_ITEM) === h.code);
-        if (!r) return;
-        if (num(r.QT_ORDER) !== 0) bad.push(`[${grp.name}] 잔여 품목 ${h.name} 0으로 못 지움 (MIS ${r.QT_ORDER} 남음)`);
-        else report.push(`[${grp.name}] 잔여 품목 ${h.name} (기존 ${h.old}개) -> 0개로 정리`);
-      });
       if (here.length) report.push(`${grp.name}: ${here.length - miss.length}/${here.length}개 저장${todo.length ? "" : " (이미 같음)"}`);
       if (here.length) { done += here.length - miss.length; prog(`${grp.name} 저장됨 · 전체 ${done}/${list.length}개`); }
     }
@@ -172,6 +165,7 @@ const fill = async (auto) => {
   const text = (
     (bad.length ? "⚠ 확인 필요\n" + bad.join("\n") + "\n\n" : "✓ 모두 저장됐어요\n\n") +
     report.join("\n") +
+    (keep.length ? `\n\nMIS에만 있는 발주 ${keep.length}개는 그대로 둠:\n${keep.join("\n")}` : "") +
     (left.size ? `\n\nMIS 주문그룹에서 못 찾은 품목 ${left.size}개:\n${[...left.values()].map((w) => `${w.name} ${w.q}`).join("\n")}` : "") +
     (warn.length ? `\n\nMIS 안내:\n${warn.slice(0, 6).join("\n")}` : "") +
     (RECORD && rec.length ? `\n\n다운로드 폴더의 mis_기록_${TODAY}.txt 파일을 채팅에 보내 주세요 (폰 자동 입력 만들 때 씀).` : "")

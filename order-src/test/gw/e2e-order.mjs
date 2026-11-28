@@ -50,7 +50,7 @@ const srv = https.createServer({ key: fs.readFileSync(TMP + "/key.pem"), cert: f
     if (f === "Main.do") {
       if (u.searchParams.get("sso") === "1") { rs.writeHead(302, { location: "https://mis.madforgarlic.com:8443/MainFrame/Main.do", "set-cookie": "misS=1; Path=/" }); return rs.end(); }
       if (!/misS=1/.test(ck)) return html(rs, `<!doctype html><meta charset="utf-8"><body><input type="text" id="uid" value=""><input type="password" id="upw"><a href="#" id="go">LOGIN</a><script>document.getElementById("go").onclick=function(e){e.preventDefault();if(document.getElementById("upw").value==="pw123"&&document.getElementById("uid").value==="tester"){document.cookie="misS=1;path=/";location.reload();}}</script></body>`);
-      return html(rs, `<!doctype html><meta charset="utf-8"><title>MIS</title><body style="margin:0"><iframe src="menu.html" style="width:200px;height:400px"></iframe><div id="tabs"></div><script>window.__master=${JSON.stringify(master)};window.__saved={};function openTab(s){var f=document.createElement("iframe");f.src=s;f.style.cssText="width:600px;height:400px";document.getElementById("tabs").appendChild(f);}</script></body>`);
+      return html(rs, `<!doctype html><meta charset="utf-8"><title>MIS</title><body style="margin:0"><iframe src="menu.html" style="width:200px;height:400px"></iframe><div id="tabs"></div><script>window.__master=${JSON.stringify(master)};window.__saved={"46492":{"900011":4},"49212":{"900015":2}};function openTab(s){var f=document.createElement("iframe");f.src=s;f.style.cssText="width:600px;height:400px";document.getElementById("tabs").appendChild(f);}</script></body>`);
     }
     const file = path.join(HERE, "mock", path.basename(f));
     if (fs.existsSync(file)) { rs.writeHead(200, { "Content-Type": f.endsWith(".js") ? "text/javascript" : "text/html; charset=utf-8" }); return rs.end(fs.readFileSync(file)); }
@@ -94,6 +94,9 @@ const P = store.misPush, sec = Math.round(((P.doneAt || Date.now()) - t0) / 1000
 ok(P.status === "done", `폰 전송 → 확장이 받아 MIS에 저장까지 끝냄 (${sec}초, 상태 ${P.status})`, JSON.stringify(P).slice(0, 400));
 ok(P.saved === 3 && P.total === 3, `저장 결과 3/3개 (saved ${P.saved} / total ${P.total})`, String(P.text || "").slice(0, 300));
 const flat = Object.assign({}, ...Object.values(saved || {}));
+// 11/28 KM "앱에서 0이면 MIS에 따로 넣은 발주가 날아가면 안 돼": MIS에만 있던 발주(온세물류 품목11 = 4 · 새싹농산 품목15 = 2)는 그대로
+ok(Number(flat["900011"]) === 4 && Number(flat["900015"]) === 2, `MIS에 직접 넣은 발주는 그대로 (품목11 = ${flat["900011"]} · 품목15 = ${flat["900015"]})`, JSON.stringify(saved));
+ok(/MIS에만 있는 발주 2개는 그대로 둠/.test(String(P.text || "")) && !/0개로 정리|0으로/.test(String(P.text || "")), "결과 글에 'MIS에만 있는 발주 2개는 그대로 둠'", String(P.text || "").slice(0, 400));
 ok(Number(flat["900001"]) === 3 && Number(flat["900002"]) === 5 && Number(flat["900005"]) === 2 && !flat["900007"], `MIS에 들어간 수량: 품목1 = 3 · 품목2 = 5 · 품목5(새싹농산) = 2 · 발주 안 넣은 품목7은 없음`, JSON.stringify(saved));
 ok(saved && saved["46492"] && saved["49212"], "업체(주문그룹) 두 곳 모두에 나눠 저장", JSON.stringify(Object.keys(saved || {})));
 ok(sawMode && steps.size >= 2, `확장이 진행 단계를 시트에 남김 (${steps.size}단계: ${[...steps].slice(0, 4).join(" → ")})`, JSON.stringify(store.misAgent).slice(0, 300));
