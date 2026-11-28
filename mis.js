@@ -107,7 +107,10 @@ const fill = async (auto) => {
     return origAjax.apply(this, arguments);
   };
   W.__appFillRunning = true;
-  const left = new Map(want), report = [], bad = [], keep = []; let done = 0;
+  const left = new Map(want), report = [], bad = [], keep = [], follow = [], known = {}, adopt = {}; let done = 0;
+  const knownPrev = db.misKnown && db.misKnown.date === TODAY && db.misKnown.q ? db.misKnown.q : null;
+  const kOf = (code) => (knownPrev && code in knownPrev ? num(knownPrev[code]) : undefined);
+  const appOf = (code) => { const m = byCode.get(code); return m ? num((inp[m.name] || {}).o) : null; }; // 앱 품목이 아니면 null
   quiet();
   try {
     // 온세물류·새싹농산·오늘 앱 업체 그룹을 열어 오늘 발주 품목을 넣음 (MIS에만 있는 수량은 세기만 함)
@@ -119,17 +122,21 @@ const fill = async (auto) => {
       const here = [];
       left.forEach((w, code) => { const idx = rows.findIndex((r) => String(r.CD_ITEM) === code); if (idx >= 0) here.push({ idx, code, ...w }); });
       here.forEach((h) => left.delete(h.code));
-      // MIS에만 있는 발주: 오늘 앱 발주에 없는데 MIS에 수량이 있는 칸 → 건드리지 않고 알리기만 (11/28)
-      const resid = [];
+      // 11/28 KM "앱이 MIS를 따라가야지": 칸마다 MIS 값 · 앱 값 · 지난번 전송 때 둘이 맞춰진 값(misKnown)을 견줌
+      //  MIS가 지난번 값과 다르면(오늘 처음이면 MIS에 이미 수량이 있으면) MIS에서 직접 넣은 것 → MIS를 따르고 앱 발주칸도 그 값으로(adopt)
+      //  MIS가 지난번 그대로인데 앱이 다르면 앱에서 바꾼 것 → 앱 값을 넣음(앱에서 0으로 지운 것도 0으로). 앱 품목이 아닌 MIS 발주는 건드리지 않음
+      const todo = [];
       rows.forEach((r, idx) => {
         const code = String(r.CD_ITEM ?? "");
         if (!code || code === "null" || code === "undefined") return;
-        if (num(r.QT_ORDER) > 0 && !want.has(code)) resid.push({ idx, code, name: rowName(r), old: num(r.QT_ORDER) });
+        const mis = num(r.QT_ORDER), app = appOf(code), k = kOf(code), name = rowName(r);
+        if (app == null) { if (mis > 0) keep.push(`[${grp.name}] ${name} ${mis}`); return; }
+        const misMoved = k === undefined ? mis > 0 : mis !== k;
+        if (misMoved && mis !== app) { const nm = byCode.get(code).name; follow.push(`[${grp.name}] ${nm} MIS ${mis} (앱 ${app || 0} → ${mis})`); adopt[nm] = mis; return; }
+        if (app !== mis) todo.push({ idx, code, q: app, name });
       });
-      resid.forEach((h) => keep.push(`[${grp.name}] ${h.name} ${h.old}`));
-      const todo = here.filter((h) => num(rows[h.idx].QT_ORDER) !== h.q).map((h) => ({ idx: h.idx, q: h.q }));
       if (todo.length) {
-        prog(`${grp.name} ${here.length}개 넣는 중`);
+        prog(`${grp.name} ${todo.length}개 넣는 중`);
         // 사람이 칸에 입력한 것처럼: 편집 시작 → 값 넣기 → 편집 끝 (MIS가 금액·입고일 다시 계산)
         todo.forEach((h) => inEvent(() => {
           g.datagrid("beginEdit", h.idx);
@@ -144,10 +151,12 @@ const fill = async (auto) => {
         prog(`${grp.name} 저장 확인 중`);
         rows = await loadGroup(grp.code);
       }
-      const miss = here.filter((h) => { const r = rows.find((x) => String(x.CD_ITEM) === h.code); return !r || num(r.QT_ORDER) !== h.q; });
+      const miss = todo.filter((h) => { const r = rows.find((x) => String(x.CD_ITEM) === h.code); return !r || num(r.QT_ORDER) !== h.q; });
       miss.forEach((h) => bad.push(`[${grp.name}] ${h.name} 앱 ${h.q} / MIS ${(rows.find((x) => String(x.CD_ITEM) === h.code) || {}).QT_ORDER ?? "없음"}`));
-      if (here.length) report.push(`${grp.name}: ${here.length - miss.length}/${here.length}개 저장${todo.length ? "" : " (이미 같음)"}`);
-      if (here.length) { done += here.length - miss.length; prog(`${grp.name} 저장됨 · 전체 ${done}/${list.length}개`); }
+      rows.forEach((r) => { const c = String(r.CD_ITEM ?? ""); if (c && c !== "null" && c !== "undefined") known[c] = num(r.QT_ORDER); }); // 이번에 맞춰진 값 → 다음 전송 때 'MIS에서 바꿨나' 판단
+      const missN = here.filter((h) => miss.some((m) => m.code === h.code)).length;
+      if (here.length || todo.length) report.push(`${grp.name}: ${here.length - missN}/${here.length}개 저장${todo.length ? "" : " (이미 같음)"}${todo.some((h) => !h.q) ? ` · 앱에서 지운 ${todo.filter((h) => !h.q).length}개 0으로` : ""}`);
+      if (here.length) { done += here.length - missN; prog(`${grp.name} 저장됨 · 전체 ${done}/${list.length}개`); }
     }
   } catch (e) {
     bad.push("중간에 멈춤: " + (e && e.message ? e.message : e));
@@ -165,12 +174,13 @@ const fill = async (auto) => {
   const text = (
     (bad.length ? "⚠ 확인 필요\n" + bad.join("\n") + "\n\n" : "✓ 모두 저장됐어요\n\n") +
     report.join("\n") +
-    (keep.length ? `\n\nMIS에만 있는 발주 ${keep.length}개는 그대로 둠:\n${keep.join("\n")}` : "") +
+    (follow.length ? `\n\nMIS 기준으로 맞춤 ${follow.length}개 (MIS에서 직접 넣은 값 · 앱 발주칸도 이 값으로):\n${follow.join("\n")}` : "") +
+    (keep.length ? `\n\n앱에 없는 품목의 MIS 발주 ${keep.length}개는 그대로 둠:\n${keep.join("\n")}` : "") +
     (left.size ? `\n\nMIS 주문그룹에서 못 찾은 품목 ${left.size}개:\n${[...left.values()].map((w) => `${w.name} ${w.q}`).join("\n")}` : "") +
     (warn.length ? `\n\nMIS 안내:\n${warn.slice(0, 6).join("\n")}` : "") +
     (RECORD && rec.length ? `\n\n다운로드 폴더의 mis_기록_${TODAY}.txt 파일을 채팅에 보내 주세요 (폰 자동 입력 만들 때 씀).` : "")
   );
-  return { ok: !bad.length && !left.size, text, saved: list.length - left.size - bad.length, total: list.length };
+  return { ok: !bad.length && !left.size, text, saved: list.length - left.size - bad.length, total: list.length, known, adopt };
 };
 let called = false;
 window.__misFill = (auto) => { called = true; return fill(auto); };

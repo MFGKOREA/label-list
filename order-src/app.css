@@ -1290,3 +1290,6 @@ button.st-row:active { background: var(--fill); }
 .st-need button span { min-width: 0; text-wrap: pretty; }
 #setStore { font-size: 13px; color: var(--muted); }
 @media (hover: hover) and (pointer: fine) { button.st-row:hover { background: var(--fill); } }
+
+/* 11/28 MIS에서 직접 넣은 발주를 따라온 칸 */
+.mis-tag { font-style: normal; font-size: 10.5px; font-weight: 800; padding: 1px 5px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-text); vertical-align: 1px; }

@@ -160,7 +160,7 @@
   function light(key) {
     if (/^soldout\./.test(key)) return; // 품절 기록(11/15)은 계산에 안 씀
     if (/^(prepOnhand\.|prepLog$)/.test(key)) { if (cache) cache.plan = null; return; }
-    if (/^(inv\.|lineCheckCfg$|invCfg$)/.test(key)) return; // 인벤토리(월재고 세기)·알림 설정은 계산에 안 씀
+    if (/^(inv\.|lineCheckCfg$|invCfg$|misKnown$)/.test(key)) return; // 인벤토리(월재고 세기)·알림 설정은 계산에 안 씀
     if (/^(input\.|onhand$)/.test(key) && cache) { applyScores(cache); return; }
     invalidate();
   }
@@ -2864,7 +2864,7 @@
       `<div class="c-bot"><span class="c-meta"><span>${esc(it.vendor || "업체 미지정")}</span>${estGap ? `<span class="boxnote">입고 확인 필요</span>` : ""}${balGap ? `<span class="boxnote" title="시작재고+입고−사용−로스가 기말−미충족과 맞지 않습니다">수지</span>` : ""}${unitGap ? `<span class="boxnote" title="묶음 올림이 리드타임 사용량과 안전재고를 못 덮습니다">단위</span>` : ""}${it.packN ? `<span class="boxnote">재고는 ${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}으로<br>1${it.boxLabel === "PK" ? "박스" : esc(it.pk.order || unit)} = ${it.packN}${it.boxLabel === "PK" ? "팩" : esc(it.boxLabel)}</span>` : it.box ? `<span class="boxnote">재고는 박스로<br>1박스 = ${it.box}${esc(unit === "PK" ? "팩" : unit)}</span>` : `<span>${esc(it.unit || unit)}</span>`}${inc ? incHtml(it, TODAY, unit) : ""}<span class="incnote wipnote"${wipTxt() ? "" : " hidden"}>${wipTxt()}</span><span class="boxnote cutnote"${cutTxt() ? "" : " hidden"}>${esc(cutTxt())}</span>${vc.days && vc.note ? `<span class="boxnote">${esc(vc.note)}</span>` : ""}${it.thaw ? `<span class="boxnote">해동 ${it.thaw}일</span>` : ""}${it.useK !== 1 ? `<span class="boxnote">반영 ${it.useK > 1 ? "+" : ""}${Math.round((it.useK - 1) * 100)}%</span>` : ""}${showSold ? '<button type="button" class="soldbtn" aria-pressed="false">품절 기록</button>' : ""}</span>` +
       // 재고칸 + 그 위 예상 재고 상자 (11/15 KM "예상 재고는 원래 위치에서 진하게") + 그 아래 작은 [어제와 같음 N] (11/19 KM "카드 재고칸 아래로 작게": 오늘 안 셌고 어제 센 값이 있을 때만, 누르면 그 값이 들어가 저장)
       (() => `<div class="stk">${estTxt ? `<span class="estchip${estGap ? " gap" : ""}" title="${estGap ? "이 구간 발주·입고 기록을 몰라 숫자를 두지 않아요" : ""}">${estTxt}</span>` : ""}<label class="fld"><span>재고</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.s)}" aria-label="${esc(it.name)} 재고(${it.box ? it.boxLabel : esc(unit)})"></label>${sameBtn}</div>`)() +
-      `<label class="fld fld-ord"><span>발주 ${esc(ou)}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
+      `<label class="fld fld-ord"><span>발주 ${esc(ou)}${v.mis ? ' <em class="mis-tag" title="MIS에서 직접 넣은 값을 따라옴 (11/28)">MIS</em>' : ""}</span><input type="number" step="any" min="0" enterkeyhint="next" placeholder="–" value="${esc(v.o)}" aria-label="${esc(it.name)} 발주수량(${esc(ou)})"></label>` +
       `<span class="needbox">${draw()}</span></div>`;
     const [si, ii] = d.querySelectorAll("input");
     const sb = d.querySelector(".soldbtn");
@@ -2878,7 +2878,7 @@
         toast(m[it.key] ? `${it.name} 품절 ${m[it.key]} 기록` : `${it.name} 품절 기록 지움`);
       });
     }
-    const live = () => { v.s = si.value.trim(); v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const wn = d.querySelector(".wipnote"); if (wn) { const t = wipTxt(); wn.textContent = t; wn.hidden = !t; } const cn = d.querySelector(".cutnote"); if (cn) { const t = cutTxt(); cn.textContent = t; cn.hidden = !t; } const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
+    const live = () => { v.s = si.value.trim(); if (v.mis && ii.value.trim() !== String(v.o ?? "")) { v.mis = 0; const t = d.querySelector(".mis-tag"); if (t) t.remove(); } v.o = ii.value.trim(); swapNeed(d.querySelector(".needbox"), draw()); const wn = d.querySelector(".wipnote"); if (wn) { const t = wipTxt(); wn.textContent = t; wn.hidden = !t; } const cn = d.querySelector(".cutnote"); if (cn) { const t = cutTxt(); cn.textContent = t; cn.hidden = !t; } const e1 = estFor(it, v); si.parentElement.classList.toggle("est", !!e1); si.parentElement.firstElementChild.textContent = e1 ? "예상 재고" : "재고"; };
     si.addEventListener("input", live); ii.addEventListener("input", live);
     si.addEventListener("input", () => { const sb = d.querySelector(".samebtn"); if (sb) sb.hidden = si.value.trim() !== ""; });
     d.querySelector(".samebtn")?.addEventListener("click", (e) => { si.value = e.currentTarget.dataset.s; si.dispatchEvent(new Event("input", { bubbles: true })); si.dispatchEvent(new Event("change", { bubbles: true })); });

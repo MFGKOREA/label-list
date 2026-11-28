@@ -25,7 +25,7 @@ function fn_Search(code) {
 }
 function fn_Save() {
   var s = top.__saved[cur] = top.__saved[cur] || {};
-  $("#dataGrid1").datagrid("getRows").forEach(function (r) { if (+r.QT_ORDER) s[r.CD_ITEM] = +r.QT_ORDER; });
+  $("#dataGrid1").datagrid("getRows").forEach(function (r) { if (+r.QT_ORDER) s[r.CD_ITEM] = +r.QT_ORDER; else delete s[r.CD_ITEM]; }); // 0으로 저장하면 지워짐 (11/28: 앱에서 지운 발주 시험)
   top.__saveCalls = (top.__saveCalls || 0) + 1;
 }
 </script></body></html>

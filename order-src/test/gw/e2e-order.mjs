@@ -96,14 +96,14 @@ ok(P.saved === 3 && P.total === 3, `저장 결과 3/3개 (saved ${P.saved} / tot
 const flat = Object.assign({}, ...Object.values(saved || {}));
 // 11/28 KM "앱에서 0이면 MIS에 따로 넣은 발주가 날아가면 안 돼": MIS에만 있던 발주(온세물류 품목11 = 4 · 새싹농산 품목15 = 2)는 그대로
 ok(Number(flat["900011"]) === 4 && Number(flat["900015"]) === 2, `MIS에 직접 넣은 발주는 그대로 (품목11 = ${flat["900011"]} · 품목15 = ${flat["900015"]})`, JSON.stringify(saved));
-ok(/MIS에만 있는 발주 2개는 그대로 둠/.test(String(P.text || "")) && !/0개로 정리|0으로/.test(String(P.text || "")), "결과 글에 'MIS에만 있는 발주 2개는 그대로 둠'", String(P.text || "").slice(0, 400));
+ok(/MIS 기준으로 맞춤 2개/.test(String(P.text || "")) && !/0개로 정리/.test(String(P.text || "")) && store["input." + T]["시험품목11"].o === "4" && store["input." + T]["시험품목15"].o === "2", "결과 글 'MIS 기준으로 맞춤 2개' · 앱 발주칸도 MIS 값(품목11 = 4 · 품목15 = 2)", String(P.text || "").slice(0, 400));
 ok(Number(flat["900001"]) === 3 && Number(flat["900002"]) === 5 && Number(flat["900005"]) === 2 && !flat["900007"], `MIS에 들어간 수량: 품목1 = 3 · 품목2 = 5 · 품목5(새싹농산) = 2 · 발주 안 넣은 품목7은 없음`, JSON.stringify(saved));
 ok(saved && saved["46492"] && saved["49212"], "업체(주문그룹) 두 곳 모두에 나눠 저장", JSON.stringify(Object.keys(saved || {})));
 ok(sawMode && steps.size >= 2, `확장이 진행 단계를 시트에 남김 (${steps.size}단계: ${[...steps].slice(0, 4).join(" → ")})`, JSON.stringify(store.misAgent).slice(0, 300));
 const progs = writes.filter((w) => w.key === "misPush" && w.patch && w.patch.prog).map((w) => w.patch.prog); // 11/17 KM "로딩바 위에 어떤 상황인지"
 ok(progs.some((x) => /화면 띄움/.test(x)) && progs.some((x) => /넣는 중/.test(x)) && progs.some((x) => /저장 중/.test(x)) && progs.some((x) => /저장됨 · 전체 3\/3개/.test(x)) && !("prog" in (writes.filter((w) => w.key === "misPush").pop().patch || {})), `폰에 보일 단계 글: ${progs.join(" → ")}`);
 const keys = [...new Set(writes.map((w) => w.key))];
-ok(keys.every((k) => ["misAgent", "misPush"].includes(k)), `시트에 쓴 칸은 misAgent · misPush뿐 (${keys.join(", ")})`);
+ok(keys.every((k) => ["misAgent", "misPush", "misKnown", "input." + T].includes(k)), `시트에 쓴 칸은 misAgent · misPush · misKnown(맞춰진 MIS 값) · 오늘 입력(MIS를 따라온 발주칸)뿐 (${keys.join(", ")})`);
 ok(hits.some((h) => h.startsWith("gw.madforgarlic.com")) && hits.some((h) => h.startsWith("mis.madforgarlic.com")) && hits.some((h) => h.startsWith("script.google.com")), "GW · MIS · 시트 요청이 모두 가짜 서버로 옴");
 let leftP = []; for (let i = 0; i < 10; i++) { leftP = ctx.pages().filter((p) => /madforgarlic/.test(p.url())); if (!leftP.length) break; await sleep(1000); }
 const left = leftP.length;

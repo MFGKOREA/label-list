@@ -91,7 +91,10 @@
         // 결과를 적기 직전에 요청이 아직 내 것인지 다시 봄 (11/16 #16): 입력하는 사이 새 요청이 들어왔으면 이 결과는 넘김 — 덮어써서 새 요청이 사라지지 않게
         const q2 = (await get()).misPush || {};
         if (q2.id !== p.id || q2.by !== ME) { state = "새 요청이 들어와 이 결과는 넘김"; badge(); return; }
-        await merge("misPush", { status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, saved: r.saved, total: r.total });
+        // 11/28 KM "앱이 MIS를 따라가야지": 이번에 맞춰진 MIS 값(misKnown) · MIS에서 직접 넣은 값을 앱 오늘 발주칸에(adopt, 바뀐 칸만)
+        if (r.known && Object.keys(r.known).length) await set("misKnown", { date: today(), at: Date.now(), q: r.known }).catch(() => {});
+        if (r.adopt && Object.keys(r.adopt).length) { const patch = {}; Object.entries(r.adopt).forEach(([n, q]) => { patch[n] = { o: q > 0 ? String(q) : "", mis: 1 }; }); await merge("input." + today(), patch).catch(() => {}); }
+        await merge("misPush", { status: r.ok ? "done" : "error", doneAt: Date.now(), text: r.text, saved: r.saved, total: r.total, adopt: r.adopt && Object.keys(r.adopt).length ? Object.keys(r.adopt).length : 0 });
         state = r.ok ? `${hm(Date.now())} 저장 완료` : `${hm(Date.now())} 확인 필요`;
       }
       // MIS 로그인 유지: 10분마다 지금 화면 주소를 다시 요청 (화면은 안 바뀜)
