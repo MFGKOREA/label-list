@@ -1077,7 +1077,7 @@ li.expired .name { text-decoration: none; }
   const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
     gen: 1, fev: 2, fév: 2, avr: 4, mai: 5, mag: 5, juin: 6, giu: 6, juil: 7, lug: 7, aou: 8, aoû: 8, ago: 8, set: 9, ott: 10, okt: 10, dic: 12, dez: 12, ene: 1, abr: 4, mrz: 3, mär: 3 };
   const EXP_RE = /(소비\s*기한|유통\s*기한|품질\s*유지\s*기한|까지|best\s*before|best\s*by|\bbbe?\b|\bexp|use\s*by|\bdlc\b|\bddm\b|\bdluo\b|\bmhd\b|\btmc\b|consumir|scad|da\s*consumarsi|à\s*consommer|\bbb\b)/i;
-  const MFG_RE = /(제조\s*일|제조\s*년\s*월\s*일|생산\s*일|포장\s*일|\bmfg|\bmfd|\bprod|\bpd\b|packed|\bpkd|\bfab|fabbricazione|fabricación|herstell)/i;
+  const MFG_RE = /(제조\s*일|제조\s*[년연]\s*월\s*일|생산\s*일|포장\s*일|\bmfg|\bmfd|\bprod|\bpd\b|packed|\bpkd|\bfab|fabbricazione|fabricación|herstell)/i;
   function validYMD(y, m, d) {
     if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return "";
     const dt = new Date(y, m - 1, d);
@@ -1092,6 +1092,9 @@ li.expired .name { text-decoration: none; }
     // 2026.01.05 / 2026-1-5 / 2026년 1월 5일 / 2026 01 05
     const reY = /(20\d{2})\s*[.\-\/년\s]\s*(\d{1,2})\s*[.\-\/월\s]\s*(\d{1,2})\s*일?/g;
     while ((m = reY.exec(L))) { const iso = validYMD(+m[1], +m[2], +m[3]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
+    // 2026년 C6월 26일: 글자 읽기가 월 앞에 잡음 한 글자를 끼운 경우
+    const reYn = /(20\d{2})\s*년\s*[a-z]\s*(\d{1,2})\s*월\s*(\d{1,2})/g;
+    while ((m = reYn.exec(L))) { const iso = validYMD(+m[1], +m[2], +m[3]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
     // 20260105
     const re8 = /(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)/g;
     while ((m = re8.exec(L))) { const iso = validYMD(+m[1], +m[2], +m[3]); if (iso) out.push({ at: m.index, opts: [{ iso, tag: "" }] }); }
@@ -1122,15 +1125,26 @@ li.expired .name { text-decoration: none; }
     const lines = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
     const res = { mode: "", expiry: "", mfg: "", num: 0, unit: "", choices: [], role: "", found: false };
     // 제조일로부터 N개월 / N년 / N일
-    const per = String(text || "").match(/제조\s*일?\s*(?:자|로)?\s*(?:로)?\s*부터\s*(\d{1,3})\s*(개월|달|년|일)/) || String(text || "").match(/(\d{1,3})\s*(months?|years?|days?)\s*(?:from|after)\s*(?:the\s*)?(?:date\s*of\s*)?(?:production|manufactur)/i);
+    const per = String(text || "").match(/(?:제조|포장|생산)\s*일?\s*(?:자|로)?\s*(?:로)?\s*부터\s*(\d{1,3})\s*(개월|달|년|일)/) || String(text || "").match(/(\d{1,3})\s*(months?|years?|days?)\s*(?:from|after)\s*(?:the\s*)?(?:date\s*of\s*)?(?:production|manufactur)/i);
     if (per) { res.num = +per[1]; const u = per[2].toLowerCase(); res.unit = /^(개월|달|month)/.test(u) ? "m" : /^(년|year)/.test(u) ? "y" : "d"; }
     const todayIso = toISO(t0);
     const far = toISO(new Date(t0.getFullYear() + 8, t0.getMonth(), t0.getDate()));
     const old = toISO(new Date(t0.getFullYear() - 6, t0.getMonth(), t0.getDate()));
     const plausible = (iso, role) => role === "mfg" ? iso >= old && iso <= todayIso : iso >= old && iso <= far;
     let exp = null, mfg = null, loose = null;
+    const dated = lines.map(datesIn);
+    // 표처럼 읽힌 라벨: "제조일자 / 소비기한" 두 줄 뒤에 날짜 두 줄 → 순서대로 짝짓는다
+    const forced = {};
+    const kw = (l) => { const e = EXP_RE.test(l), g = MFG_RE.test(l); return e === g ? "" : e ? "exp" : "mfg"; };
+    for (let i = 0; i + 3 < lines.length; i++) {
+      if (dated[i].length || dated[i + 1].length || dated[i + 2].length !== 1 || dated[i + 3].length !== 1) continue;
+      const a = kw(lines[i]), b = kw(lines[i + 1]);
+      if (a && b && a !== b && lines[i].length < 16 && lines[i + 1].length < 16 && !lines[i + 2].slice(0, dated[i + 2][0].at).trim() && !lines[i + 3].slice(0, dated[i + 3][0].at).trim()) { forced[i + 2] = a; forced[i + 3] = b; }
+    }
+    const sure = new Set(); // 한 가지로만 읽히는 날짜 (일/월 순서가 애매한 날짜를 가릴 때 씀)
+    dated.forEach((ds) => ds.forEach((d) => { if (d.opts.length === 1 && !d.six) sure.add(d.opts[0].iso); }));
     lines.forEach((line, i) => {
-      const ds = datesIn(line);
+      const ds = dated[i];
       if (!ds.length) return;
       const prev = lines[i - 1] || "";
       ds.forEach((d) => {
@@ -1139,6 +1153,7 @@ li.expired .name { text-decoration: none; }
         const isMfg = MFG_RE.test(before) || (!before.trim() && MFG_RE.test(prev));
         // 키워드가 둘 다 있으면 날짜에 더 가까운 쪽
         let role = isExp && isMfg ? (before.search(EXP_RE) > before.search(MFG_RE) ? "exp" : "mfg") : isExp ? "exp" : isMfg ? "mfg" : "";
+        if (forced[i]) role = forced[i];
         const opts = d.opts.filter((o) => plausible(o.iso, role || "exp"));
         if (!opts.length) return;
         if (role === "exp" && !exp) exp = opts;
@@ -1148,9 +1163,13 @@ li.expired .name { text-decoration: none; }
     });
     // 한글 라벨의 26.10.30 같은 두 자리 연도는 년.월.일이 기본: 먼저 채우고, 다른 해석도 버튼으로 남김
     const ko = /[가-힣]/.test(String(text || ""));
+    // "포장일로부터 36개월"인데 날짜에 제조·포장 글자가 안 붙어 있으면: 지난 날짜를 제조일로 본다
+    if (res.num && !mfg && !exp && loose && loose.every((o) => o.iso <= todayIso)) { mfg = loose; loose = null; }
     const pick = (opts) => {
       if (opts.length === 1) return opts[0].iso;
       res.choices = opts;
+      const same = opts.find((o) => sure.has(o.iso)); // 같은 날짜가 년.월.일로 또 적혀 있으면 그쪽
+      if (same) { res.pre = same.iso; res.choices = [same, ...opts.filter((o) => o !== same)]; return same.iso; }
       const pre = ko && opts.find((o) => o.tag === "년/월/일");
       if (pre) { res.pre = pre.iso; res.choices = [pre, ...opts.filter((o) => o !== pre)]; return pre.iso; }
       return "";
@@ -1158,9 +1177,22 @@ li.expired .name { text-decoration: none; }
     if (mfg && res.num) { res.mode = "period"; res.mfg = pick(mfg); res.role = "mfg"; }
     else if (exp) { res.mode = "date"; res.expiry = pick(exp); res.role = "exp"; }
     else if (mfg) { res.mode = "period"; res.mfg = pick(mfg); res.role = "mfg"; }
-    else if (loose) { res.mode = "date"; res.expiry = pick(loose); res.role = "exp"; }
+    else if (loose) {
+      res.mode = "date"; res.role = "exp";
+      // 한 달 넘게 지난 날짜에 '소비기한' 글자가 없으면 제조일일 수 있다: 채우지 않고 고르게 한다
+      const stale = toISO(new Date(t0.getFullYear(), t0.getMonth(), t0.getDate() - 30)); // 한 달 넘게 지난 날짜만 (며칠 지난 건 진짜 소비기한일 수 있음)
+      if (loose.every((o) => o.iso < stale)) { res.stale = true; res.choices = loose.map((o) => ({ iso: o.iso, tag: o.tag || "지난 날짜" })); }
+      else res.expiry = pick(loose);
+    }
     else if (res.num) res.mode = "period";
     res.found = !!(res.expiry || res.mfg || res.choices.length || res.num);
+    // 날짜가 다른 면에 찍힌 라벨: "전면 별도 표시일까지" → 어디를 다시 찍을지 알려 준다
+    if (!res.expiry && !res.mfg && !res.choices.length) {
+      const flat = String(text || "").replace(/\s+/g, " ");
+      const side = flat.match(/(전면|후면|뒷면|앞면|상단|하단|측면|옆면|윗면|밑면|바닥|뚜껑)\s*(?:에|의)?\s*(?:별도)?\s*(?:표시|표기)/);
+      if (side) res.elsewhere = side[1];
+      else if (/별도\s*(?:표시|표기)|(?:표시|표기)\s*일\s*까지/.test(flat)) res.elsewhere = "다른 면";
+    }
     return res;
   }
 
@@ -1434,15 +1466,18 @@ li.expired .name { text-decoration: none; }
       else catApply(true);
     } else if (r.expiry) $("fExpiry").value = r.expiry;
     updatePreview();
+    const where = r.elsewhere ? `라벨에 날짜가 ${r.elsewhere}에 따로 찍혀 있다고 써 있어요. 날짜 찍힌 곳을 [다시 찍기] 하거나 직접 입력해 주세요` : "";
     if (!r.found) {
       const heard = String(text || "").replace(/\s+/g, " ").trim().slice(0, 40);
-      show({ img: data, title: "날짜를 찾지 못했어요", err: true, note: (heard ? "읽은 글자: " + heard + ". " : "") + "날짜는 직접 입력해 주세요" + (bcLine ? " · " + bcLine : "") });
+      show({ img: data, title: where ? "날짜가 다른 곳에 있어요" : "날짜를 찾지 못했어요", err: true, note: (where || (heard ? "읽은 글자: " + heard + ". " : "") + "날짜는 직접 입력해 주세요") + (bcLine ? " · " + bcLine : "") });
       return;
     }
+    if (where && !r.expiry && !r.mfg && !r.choices.length) { show({ img: data, title: "날짜가 다른 곳에 있어요", err: true, note: "기간은 채웠어요. " + where + (bcLine ? " · " + bcLine : "") }); return; }
     show({
       img: data, title: "사진에서 읽었어요", sub: roleText(r) || (r.role === "mfg" ? "제조일자를 골라 주세요" : "유통기한을 골라 주세요"),
       note: (prepped ? "구김·그림자를 편 사본에서 읽었어요. " : "") + (r.pre
         ? "년.월.일 순서로 채웠어요. 라벨과 다르면 다른 날짜를 눌러 주세요"
+        : r.stale ? "한 달 넘게 지난 날짜예요. 소비기한이 맞으면 눌러 주세요 (제조일일 수 있어요)"
         : r.choices.length ? "날짜 순서가 나라마다 달라요. 라벨과 맞는 날짜를 눌러 주세요"
           : (r.mode === "period" ? "제조일+기간으로 채웠어요. " : "") + "맞는지 보고 [" + $("submit").textContent + "]") + (bcLine ? " · " + bcLine : ""),
       choices: r.choices, role: r.role, pre: r.pre,
